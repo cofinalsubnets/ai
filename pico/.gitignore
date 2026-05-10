@@ -1,0 +1,15 @@
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+/CMakeFiles
+/generated
+/main.elf.map
+/pico-sdk
+/pico_flash_region.ld
+/pioasm
+/pioasm-install
+*.bin
+*.dis
+*.elf
+*.hex
+*.uf2
