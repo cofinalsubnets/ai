@@ -1,5 +1,5 @@
 #include "g.h"
-_Static_assert(sizeof(union u) == sizeof(intptr_t));
+_Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size");
 _Static_assert(-1 >> 1 == -1, "sign extended shift");
 #define nilp(_) (word(_)==g_nil)
 #define A(o) two(o)->a
@@ -65,16 +65,16 @@ enum g_vec_type { g_vect_u8, };
 static struct g
  *g_please(struct g*, uintptr_t),
  *g_have(struct g*, uintptr_t),
- *g_tput(struct g *f),
+ *g_tput(struct g*),
  *mktbl(struct g*),
  *g_intern(struct g*),
  *g_reads(struct g*, struct g_in*),
- *g_read1(struct g*f, struct g_in* i);
+ *g_read1(struct g*, struct g_in*);
 static g_vm(g_vm_gc, uintptr_t);
 static g_vm_t
  g_vm_data,  g_vm_putn,   g_vm_nomsym, g_vm_info, g_vm_dot,    g_vm_clock,
  g_vm_nilp,  g_vm_symnom, g_vm_read,   g_vm_putc, g_vm_gensym, g_vm_twop,
- g_vm_len, g_vm_tget2,
+ g_vm_len, g_vm_tget,
  g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_bnot, g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
@@ -85,11 +85,11 @@ static g_vm_t
  g_vm_sub,   g_vm_mul,    g_vm_quot,   g_vm_rem,  g_vm_arg,
  g_vm_quote, g_vm_freev,  g_vm_eval,   g_vm_cond, g_vm_jump,   g_vm_defglob,
  g_vm_ap,    g_vm_tap,    g_vm_apn,    g_vm_tapn, g_vm_ret,    g_vm_lazyb;
-static uintptr_t g_hash(struct g*, word), g_vec_bytes(struct g_vec*);
+static uintptr_t g_hash(word), g_vec_bytes(struct g_vec*);
 static int g_putn(struct g *f, struct g_out *o, intptr_t n, uintptr_t base);
-static void ini_vec(struct g_vec*, uintptr_t, uintptr_t, ...);
+static struct g_vec *ini_vec(struct g_vec*, uintptr_t, uintptr_t, ...);
 static word g_tget(struct g*, word, word, struct g_tab*);
-static struct g_atom *g_intern_r(struct g*, struct g_vec*, struct g_atom **y);
+static struct g_atom *g_intern_r(struct g*, struct g_vec*);
 static g_inline struct g_tag { union u *null, *head, end[]; } *ttag(union u *k) {
  while (k->x) k++;
  return (struct g_tag*) k; }
@@ -122,14 +122,16 @@ static g_inline struct g *encode(struct g*f, enum g_status s) { return
   (struct g*) ((uintptr_t) f | s); }
 static g_inline void *bump(struct g *f, uintptr_t n) {
   void *x = f->hp; f->hp += n; return x; }
-static g_inline void ini_anon(struct g_atom *y, uintptr_t code) {
-  y->ap = g_vm_data; y->typ = sym_q; y->nom = 0; y->code = code; }
-static g_inline void ini_str(struct g_vec *s, uintptr_t len) {
-  ini_vec((struct g_vec*) s, g_vect_char, 1, len); }
-static g_inline void ini_tab(struct g_tab *t, size_t len, size_t cap, struct g_kvs**tab) {
-  t->ap = g_vm_data; t->typ = tbl_q; t->len = len; t->cap = cap; t->tab = tab; }
-static g_inline void ini_two(struct g_pair *w, intptr_t a, intptr_t b) {
-  w->ap = g_vm_data; w->typ = two_q; w->a = a; w->b = b; }
+static g_inline struct g_atom *ini_anon(struct g_atom *y, uintptr_t code) {
+ return y->ap = g_vm_data, y->typ = sym_q, y->nom = 0, y->code = code, y; }
+static g_inline struct g_atom *ini_sym(struct g_atom *y, struct g_vec *nom, uintptr_t code) {
+ return y->ap = g_vm_data, y->typ = sym_q, y->nom = nom, y->code = code, y->l = y->r = 0, y; }
+static g_inline struct g_vec *ini_str(struct g_vec *s, uintptr_t len) {
+ return ini_vec(s, g_vect_char, 1, len), s; }
+static g_inline struct g_tab *ini_tab(struct g_tab *t, size_t len, size_t cap, struct g_kvs**tab) {
+ return t->ap = g_vm_data, t->typ = tbl_q, t->len = len, t->cap = cap, t->tab = tab, t; }
+static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b) {
+ return w->ap = g_vm_data, w->typ = two_q, w->a = a, w->b = b, w; }
 
 static int g_stdin_getc  (struct g *f, struct g_in *_)        { return ggetc(f); }
 static int g_stdin_ungetc(struct g *f, int c, struct g_in *_) { return gungetc(f, c); }
@@ -650,8 +652,7 @@ g_vm(g_vm_tnew) {
  return
   Hp += Width(struct g_tab) + 1,
   tab[0] = 0,
-  ini_tab(t, 0, 1, tab),
-  Sp[0] = (intptr_t) t,
+  Sp[0] = word(ini_tab(t, 0, 1, tab)),
   Ip++,
   Continue(); }
 
@@ -659,7 +660,7 @@ op11(g_vm_tblp, tblp(Sp[0]) ? putnum(-1) : g_nil)
 
 // relies on table capacity being a power of 2
 static g_inline uintptr_t index_of_key(struct g *f, struct g_tab *t, intptr_t k) {
- return (t->cap - 1) & g_hash(f, k); }
+ return (t->cap - 1) & g_hash(k); }
 
 static g_noinline struct g *g_tput(struct g *f) {
  if (!g_ok(f)) return f;
@@ -694,7 +695,7 @@ static g_noinline struct g *g_tput(struct g *f) {
   for (struct g_kvs *e, *es = tab0[cap0]; es;
    e = es,
    es = es->next,
-   i = (cap1-1) & g_hash(f, e->key),
+   i = (cap1-1) & g_hash(e->key),
    e->next = tab1[i],
    tab1[i] = e);
 
@@ -720,14 +721,14 @@ static g_noinline intptr_t gtabdel(struct g *f, struct g_tab *t, intptr_t k, int
     y = x, x = x->next, y->next = coll, coll = y;
   t->cap = cap >>= 1;
   for (intptr_t i; coll;)
-   i = (cap - 1) & g_hash(f, coll->key),
+   i = (cap - 1) & g_hash(coll->key),
    x = coll->next,
    coll->next = t->tab[i],
    t->tab[i] = coll,
    coll = x; }
  return v; }
 
-g_vm(g_vm_tget2) {
+g_vm(g_vm_tget) {
   word z = Sp[0], k = Sp[1], x = Sp[2], n;
   if (even(x) && datp(x)) switch (typ(x)) {
     case tbl_q: z = g_tget(f, z, k, tbl(x)); break;
@@ -778,7 +779,7 @@ static struct g *mktbl(struct g*f) {
  return f; }
 
 // general g_hashing method...
-static uintptr_t g_hash(struct g *f, intptr_t x) {
+static uintptr_t g_hash(intptr_t x) {
  int const shift = sizeof(word) << 2;
  if (nump(x)) return (x*mix << shift) | (x*mix >> shift);
  if (!datp(x)) {
@@ -787,7 +788,7 @@ static uintptr_t g_hash(struct g *f, intptr_t x) {
    while (*y++) r ^= r * mix;
    return r; }
  switch (typ(x)) {
-   case two_q: return g_hash(f, A(x)) * mix ^ g_hash(f, B(x)) * mix * mix;
+   case two_q: return g_hash(A(x)) * mix ^ g_hash(B(x)) * mix * mix;
    case sym_q: return sym(x)->code;
    case tbl_q: return mix;
    case vec_q: {
@@ -881,11 +882,12 @@ static void ini_vecv(struct g_vec *v, uintptr_t type, uintptr_t rank, va_list xs
  v->rank = rank;
  while (rank--) *shape++ = va_arg(xs, uintptr_t); }
 
-static void ini_vec(struct g_vec *v, uintptr_t type, uintptr_t rank, ...) {
+static struct g_vec *ini_vec(struct g_vec *v, uintptr_t type, uintptr_t rank, ...) {
  va_list xs;
  va_start(xs, rank);
  ini_vecv(v, type, rank, xs);
- va_end(xs); }
+ va_end(xs);
+ return v; }
 
 static struct g *vec0(struct g*f, uintptr_t type, uintptr_t rank, ...) {
  uintptr_t len = vt_size[type];
@@ -931,35 +933,31 @@ g_vm(g_vm_symnom) {
   Ip += 1,
   Continue(); }
 
+static  g_noinline struct g_atom *g_intern_r(struct g *v, struct g_vec *b) {
+ uintptr_t h = g_hash(putnum(g_hash(word(b))));
+ for (struct g_atom **y = &v->symbols, *z;;) {
+  if (!(z = *y)) return *y = ini_sym(bump(v, Width(struct g_atom)), b, h);
+  struct g_vec *a = z->nom;
+  intptr_t i = z->code < h ? -1 : z->code > h ? 1 : 0;
+  if (i == 0) i = len(a) - len(b);
+  if (i == 0) i = memcmp(txt(a), txt(b), len(b));
+  if (i == 0) return z;
+  y = i < 0 ? &z->l : &z->r; } }
+
 op11(g_vm_symp, symp(Sp[0]) ? putnum(-1) : g_nil)
+
 static struct g *g_intern(struct g*f) {
  f = g_have(f, Width(struct g_atom));
- if (g_ok(f)) f->sp[0] = (word) g_intern_r(f, (struct g_vec*) f->sp[0], &f->symbols);
+ if (g_ok(f)) f->sp[0] = (word) g_intern_r(f, (struct g_vec*) f->sp[0]);
  return f; }
 
-static  g_noinline struct g_atom *g_intern_r(struct g *v, struct g_vec *b, struct g_atom **y) {
- struct g_atom *z = *y;
- if (!z) return // found an empty spot, insert new symbol
-  z = bump(v, Width(struct g_atom)),
-  z->ap = g_vm_data,
-  z->typ = sym_q,
-  z->nom = b,
-  z->code = g_hash(v, putnum(g_hash(v, (intptr_t) b))),
-  z->l = z->r = 0,
-  *y = z;
- struct g_vec *a = z->nom;
- int i = len(a) < len(b) ? -1 :
-         len(a) > len(b) ? 1 :
-         memcmp(txt(a), txt(b), len(a));
- return i == 0 ? z :
-  g_intern_r(v, b, i < 0 ? &z->l : &z->r); }
 
 g_vm(g_vm_nomsym) {
  Have(Width(struct g_atom));
  struct g_atom *y;
  return
   Pack(f),
-  y = g_intern_r(f, (struct g_vec*) f->sp[0], &f->symbols),
+  y = g_intern_r(f, (struct g_vec*) f->sp[0]),
   Unpack(f),
   Sp[0] = word(y),
   Ip += 1,
@@ -1397,25 +1395,29 @@ static g_noinline struct g *gcg(struct g*g, intptr_t *p1, uintptr_t len1, struct
  g->ip = cell(gcp(g, word(g->ip), p0, t0));
  g->symbols = 0;
 
+ // copy live variables
  for (word i = 0; i < g_nvars; i++) g->v[i] = gcp(g, g->v[i], p0, t0);
+ // copy stack
  for (word n = 0; n < h; n++) g->sp[n] = gcp(g, sp0[n], p0, t0);
+ // copy C protected values
  for (struct g_root *s = g->root; s; s = s->next) *s->ptr = gcp(g, *s->ptr, p0, t0);
+
+ // compact heap with cheney algorithm
  while (g->cp < g->hp)
   if (!datp(g->cp))
-   for (g->cp += 2; g->cp[-2]; g->cp++) g->cp[-2] = gcp(g, g->cp[-2], p0, t0);
+   for (g->cp += 2; g->cp[-2]; g->cp[-2] = gcp(g, g->cp[-2], p0, t0), g->cp++);
   else switch (typ(g->cp)) {
+   default: __builtin_unreachable();
+   case vec_q:
+     g->cp += b2w(g_vec_bytes(vec(g->cp))); continue;
+   case sym_q:
+     g->cp += Width(struct g_atom) - (sym(g->cp)->nom ? 0 : 2); continue;
    case two_q: {
      struct g_pair *w = (struct g_pair*) g->cp;
      g->cp += Width(struct g_pair);
      w->a = gcp(g, w->a, p0, t0);
      w->b = gcp(g, w->b, p0, t0);
      continue; }
-   case vec_q:
-     g->cp += b2w(g_vec_bytes(vec(g->cp)));
-     continue;
-   case sym_q:
-     g->cp += Width(struct g_atom) - (sym(g->cp)->nom ? 0 : 2);
-     continue;
    case tbl_q: {
      struct g_tab *t = (struct g_tab*) g->cp;
      g->cp += Width(struct g_tab) + t->cap + t->len * Width(struct g_kvs);
@@ -1423,9 +1425,8 @@ static g_noinline struct g *gcg(struct g*g, intptr_t *p1, uintptr_t len1, struct
       for (struct g_kvs*e = t->tab[i]; e;
        e->key = gcp(g, e->key, p0, t0),
        e->val = gcp(g, e->val, p0, t0),
-       e = e->next);
-     continue; }
-   default: __builtin_unreachable(); }
+       e = e->next); } }
+ // done
  return g; }
 
 
@@ -1468,43 +1469,43 @@ static g_noinline intptr_t gcp(struct g *f, word x, word const *p0, word const *
  // if it contains a pointer to the new space then return the pointer
  if (even(x) && ptr(f) <= ptr(x) && ptr(x) < ptr(f) + f->len) return x;
  if (x != (word) g_vm_data) {
-   // it's a thread, find the end to find the head
-   struct g_tag *t = ttag(src);
-   union u *ini = t->head, *d = bump(f, t->end - ini), *dst = d;
-   // copy source contents to dest and write dest addresses to source
-   for (union u*s = ini; (d->x = s->x); s++->x = (word) d++);
-   ((struct g_tag*) d)->head = dst;
-   return (word) (dst + (src - ini)); }
+  // it's a thread, find the end to find the head
+  struct g_tag *t = ttag(src);
+  union u *ini = t->head, *d = bump(f, t->end - ini), *dst = d;
+  // copy source contents to dest and write dest addresses to source
+  for (union u*s = ini; (d->x = s->x); s++->x = (word) d++);
+  ((struct g_tag*) d)->head = dst;
+  return (word) (dst + (src - ini)); }
  switch (typ(src)) {
-   case two_q: {
-     struct g_pair *dst = bump(f, Width(struct g_pair));
-     ini_two(dst, A(src), B(src));
-     src->ap = (g_vm_t*) dst;
-     return word(dst); }
-   case vec_q: {
-     uintptr_t bytes = g_vec_bytes(vec(src));
-     struct g_vec *dst = bump(f, b2w(bytes));
-     src->ap = memcpy(dst, src, bytes);
-     return word(dst); }
-   case sym_q: {
-     struct g_atom *dst;
-     if (sym(src)->nom) dst = g_intern_r(f, (struct g_vec*) gcp(f, word(sym(src)->nom), p0, t0), &f->symbols);
-     else dst = bump(f, Width(struct g_atom) - 2),
-          ini_anon(dst, sym(src)->code);
-     return (intptr_t) (src->ap = (g_vm_t*) dst); }
-   case tbl_q: {
-     uintptr_t len = tbl(src)->len, cap = tbl(src)->cap;
-     struct g_tab *dst = bump(f, Width(struct g_tab) + cap + Width(struct g_kvs) * len);
-     struct g_kvs **tab = (struct g_kvs**) (dst + 1),
-                  *dd = (struct g_kvs*) (tab + cap);
-     ini_tab(dst, len, cap, tab);
-     src->ap = (g_vm_t*) dst;
-     for (struct g_kvs *d, *s, *last; cap--; tab[cap] = last)
-       for (s = tbl(src)->tab[cap], last = NULL; s;
-         d = dd++, d->key = s->key, d->val = s->val, d->next = last,
-         last = d, s = s->next);
-     return word(dst); }
-   default: __builtin_unreachable(); } }
+  default: __builtin_unreachable();
+  case two_q: {
+   struct g_pair *dst = bump(f, Width(struct g_pair));
+   ini_two(dst, A(src), B(src));
+   src->ap = (g_vm_t*) dst;
+   return word(dst); }
+  case vec_q: {
+   uintptr_t bytes = g_vec_bytes(vec(src));
+   struct g_vec *dst = bump(f, b2w(bytes));
+   src->ap = memcpy(dst, src, bytes);
+   return word(dst); }
+  case sym_q: {
+   struct g_atom *dst;
+   if (sym(src)->nom) dst = g_intern_r(f, (struct g_vec*) gcp(f, word(sym(src)->nom), p0, t0));
+   else dst = bump(f, Width(struct g_atom) - 2),
+        ini_anon(dst, sym(src)->code);
+   return word(src->ap = (g_vm_t*) dst); }
+  case tbl_q: {
+   uintptr_t len = tbl(src)->len, cap = tbl(src)->cap;
+   struct g_tab *dst = bump(f, Width(struct g_tab) + cap + Width(struct g_kvs) * len);
+   struct g_kvs **tab = (struct g_kvs**) (dst + 1),
+                *dd = (struct g_kvs*) (tab + cap);
+   ini_tab(dst, len, cap, tab);
+   src->ap = (g_vm_t*) dst;
+   for (struct g_kvs *d, *s, *last; cap--; tab[cap] = last)
+    for (s = tbl(src)->tab[cap], last = NULL; s;
+     d = dd++, d->key = s->key, d->val = s->val, d->next = last,
+     last = d, s = s->next);
+   return word(dst); } } }
 
 #include <stdarg.h>
 
@@ -1518,8 +1519,10 @@ enum g_status g_fin(struct g *f) {
 #define S3(i) {{g_vm_cur},{.x=putnum(3)},{i}, {g_vm_ret0}}
 #define bifs(_) \
  _(bif_clock, "clock", S1(g_vm_clock)) _(bif_addr, "vminfo", S1(g_vm_info))\
- _(bif_add, "+", S2(g_vm_add)) _(bif_sub, "-", S2(g_vm_sub)) _(bif_mul, "*", S2(g_vm_mul)) _(bif_quot, "/", S2(g_vm_quot)) _(bif_rem, "%", S2(g_vm_rem)) \
- _(bif_lt, "<", S2(g_vm_lt))  _(bif_le, "<=", S2(g_vm_le)) _(bif_eq, "=", S2(g_vm_eq)) _(bif_ge, ">=", S2(g_vm_ge))  _(bif_gt, ">", S2(g_vm_gt)) \
+ _(bif_add, "+", S2(g_vm_add)) _(bif_sub, "-", S2(g_vm_sub)) _(bif_mul, "*", S2(g_vm_mul))\
+ _(bif_quot, "/", S2(g_vm_quot)) _(bif_rem, "%", S2(g_vm_rem)) \
+ _(bif_lt, "<", S2(g_vm_lt))  _(bif_le, "<=", S2(g_vm_le)) _(bif_eq, "=", S2(g_vm_eq))\
+ _(bif_ge, ">=", S2(g_vm_ge))  _(bif_gt, ">", S2(g_vm_gt)) \
  _(bif_bnot, "~", S1(g_vm_bnot)) _(bif_bsl, "<<", S2(g_vm_bsl)) _(bif_bsr, ">>", S2(g_vm_bsr))\
  _(bif_band, "&", S2(g_vm_band)) _(bif_bor, "|", S2(g_vm_bor)) _(bif_bxor, "^", S2(g_vm_bxor))\
  _(bif_cons, "X", S2(g_vm_cons)) _(bif_g_vm_car, "A", S1(g_vm_car)) _(bif_g_vm_cdr, "B", S1(g_vm_cdr)) \
@@ -1528,14 +1531,16 @@ enum g_status g_fin(struct g *f) {
  _(bif_g_vm_dot, ".", S1(g_vm_dot)) _(bif_read, "read", S1(g_vm_read)) _(bif_getc, "getc", S1(g_vm_getc))\
  _(bif_putc, "putc", S1(g_vm_putc)) _(bif_prn, "putn", S2(g_vm_putn)) _(bif_puts, "puts", S1(g_vm_puts))\
  _(bif_sym, "sym", S1(g_vm_gensym)) _(bif_nom, "nom", S1(g_vm_symnom)) _(bif_thd, "thd", S1(g_vm_thda))\
- _(bif_peek, "peek", S2(g_vm_peek2)) _(bif_poke, "poke", S3(g_vm_poke2)) _(bif_trim, "trim", S1(g_vm_trim)) _(bif_g_vm_seek, "seek", S2(g_vm_seek)) \
- _(bif_len, "len", S1(g_vm_len)) _(bif_get, "get", S3(g_vm_tget2)) _(bif_put, "put", S3(g_vm_tset2))\
- _(bif_tnew, "new", S1(g_vm_tnew)) _(bif_tabkeys, "tkeys", S1(g_vm_tkeys)) _(bif_tabdel, "tdel", S3(g_vm_tdel))\
- _(bif_twop, "twop", S1(g_vm_twop)) _(bif_strp, "strp", S1(g_vm_strp)) _(bif_symp, "symp", S1(g_vm_symp)) _(bif_tblp, "tblp", S1(g_vm_tblp)) _(bif_nump, "nump", S1(g_vm_nump)) _(bif_nilp, "nilp", S1(g_vm_nilp))\
- _(bif_ev, "ev", S1(g_vm_eval))
+ _(bif_peek, "peek", S2(g_vm_peek2)) _(bif_poke, "poke", S3(g_vm_poke2)) _(bif_trim, "trim", S1(g_vm_trim))\
+ _(bif_g_vm_seek, "seek", S2(g_vm_seek)) _(bif_len, "len", S1(g_vm_len)) _(bif_get, "get", S3(g_vm_tget))\
+ _(bif_put, "put", S3(g_vm_tset2)) _(bif_tnew, "new", S1(g_vm_tnew)) _(bif_tabkeys, "tkeys", S1(g_vm_tkeys))\
+ _(bif_tabdel, "tdel", S3(g_vm_tdel)) _(bif_twop, "twop", S1(g_vm_twop)) _(bif_strp, "strp", S1(g_vm_strp))\
+ _(bif_symp, "symp", S1(g_vm_symp)) _(bif_tblp, "tblp", S1(g_vm_tblp)) _(bif_nump, "nump", S1(g_vm_nump))\
+ _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))
 #define built_in_function(n, _, d) static union u const n[] = d;
 bifs(built_in_function);
-#define insts(_) _(g_vm_unc) _(g_vm_freev) _(g_vm_ret) _(g_vm_ap) _(g_vm_tap) _(g_vm_apn) _(g_vm_tapn) _(g_vm_jump) _(g_vm_cond) _(g_vm_arg) _(g_vm_quote) _(g_vm_cur) _(g_vm_defglob) _(g_vm_lazyb) _(g_vm_ret0)
+#define insts(_) _(g_vm_unc) _(g_vm_freev) _(g_vm_ret) _(g_vm_ap) _(g_vm_tap) _(g_vm_apn) _(g_vm_tapn)\
+  _(g_vm_jump) _(g_vm_cond) _(g_vm_arg) _(g_vm_quote) _(g_vm_cur) _(g_vm_defglob) _(g_vm_lazyb) _(g_vm_ret0)
 #define biff(b, n, _) {n, (intptr_t) b},
 #define i_entry(i) {#i, (intptr_t) i},
 

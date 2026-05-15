@@ -58,10 +58,10 @@ struct g {
  struct g_atom {
   g_vm_t *ap;
   g_word typ;
+  uintptr_t code;
   struct g_vec {
    g_vm_t *ap;
    uintptr_t typ, type, rank, shape[]; } *nom;
-  uintptr_t code;
   struct g_atom *l, *r; } *symbols;
  uintptr_t len;
  struct g *pool;
