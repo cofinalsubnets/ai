@@ -91,14 +91,14 @@ b/h/$n.1: b/h/$n h/manpage.$x
 	@echo GEN	$@
 	@$m < h/manpage.$x > $@
 
-k_c=$(g_c) $(f_c) $(wildcard k/*.c) $(wildcard k/arch/$a/*.c)
-k_h=$(g_h) $(wildcard k/*.h) $(wildcard k/arch/$a/*.h)
-k_S=$(wildcard k/*.S) $(wildcard k/arch/$a/*.S)
-k_asm=$(wildcard k/*.asm) $(wildcard k/arch/$a/*.asm)
+k_c=$(g_c) $(f_c) $(wildcard k/*.c k/$a/*.c)
+k_h=$(g_h) $(wildcard k/*.h k/$a/*.h)
+k_S=$(wildcard k/$a/*.S)
+k_asm=$(wildcard k/$a/*.asm)
 k_o=$(addprefix b/k/$a/, $(k_c:.c=.o) $(k_S:.S=.o) $(k_asm:.asm=.o))
 
 kcflags=$(g_cflags)	-nostdinc -ffreestanding -fno-lto -fno-PIC -ffunction-sections -fdata-sections
-kldflags := -static -nostdlib --gc-sections -T k/arch/$a/$a.lds -z max-page-size=0x1000
+kldflags := -static -nostdlib --gc-sections -T k/$a/$a.lds -z max-page-size=0x1000
 kcppflags := \
 	-Ik  -Ib -If -Ig\
 	-I k/include/ \
@@ -106,7 +106,7 @@ kcppflags := \
 	$(kcppflags) \
 	-DLIMINE_API_REVISION=3
 
-b/k/$n-$a.elf: k/arch/$a/$a.lds $(k_o)
+b/k/$n-$a.elf: k/$a/$a.lds $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(LD) $(kldflags) $(k_o) -o $@
@@ -131,7 +131,6 @@ kcc_aarch64=-target aarch64-unknown-none-elf
 k_nasmflags := -f elf64 -g -F dwarf -Wall -w-reloc-abs-qword -w-reloc-abs-dword -w-reloc-rel-dword
 
 
-
 b/k/$a/%.o: %.c $(g_h) b/boot.h
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
@@ -142,12 +141,12 @@ b/k/$a/g/cga_8x8.o: f/cga_8x8.c
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
 
-b/k/$a/%.o: k/%.S $(g_h)
+b/k/$a/%.o: %.S $(g_h)
 	@echo AS	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
 
-b/k/$a/k/arch/$a/%.o: k/arch/$a/%.asm
+b/k/$a/%.o: %.asm $(g_h)
 	@echo AS	$@
 	@mkdir -p "$(dir $@)"
 	@nasm $< -o $@ $(k_nasmflags)

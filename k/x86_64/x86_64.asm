@@ -2,8 +2,10 @@ global keyboard_isr
 global timer_isr
 global archinit
 global k_reset
+global k_halt
 extern kticks
 extern kb_int
+extern k_exception            ; C exception dispatcher -- fill this out
 
 %define INTERRUPT 0x8e
 %define TRAP 0x8f
@@ -51,6 +53,25 @@ extern kb_int
   iretq
 %endmacro
 
+; --- CPU exception stubs ---------------------------------------------
+; vectors 0..31. on a fault some vectors push a CPU error code and some
+; don't; each stub normalizes the stack to a uniform frame -- the
+; no-error vectors push a dummy 0 -- then records the vector number and
+; funnels to exc_common. error-code vectors: 8 10 11 12 13 14 17 21 29 30.
+
+%macro exc_noerr 1
+exc_stub_%1:
+  push 0                      ; dummy error code: keep every frame uniform
+  push %1                     ; vector number
+  jmp exc_common
+%endmacro
+
+%macro exc_err 1
+exc_stub_%1:
+  push %1                     ; vector number (CPU already pushed error code)
+  jmp exc_common
+%endmacro
+
 section .bss
 align 8
 idt:
@@ -63,10 +84,14 @@ kbq_len:
 section .rodata
 align 8
 isrs:
-  times 32 dq k_reset
-  times  1 dq timer_isr
-  times  1 dq keyboard_isr
-  times 14 dq k_reset
+%assign v 0
+%rep 32
+  dq exc_stub_ %+ v           ; vectors 0..31: CPU exceptions
+%assign v v+1
+%endrep
+  dq timer_isr                ; vector 32: IRQ0
+  dq keyboard_isr             ; vector 33: IRQ1
+  times 14 dq k_reset         ; vectors 34..47: unused IRQs -> reboot
 
 align 8
 isr_types:
@@ -77,6 +102,33 @@ isr_types:
   times 14 db TRAP
 
 section .text
+
+; generate exc_stub_0 .. exc_stub_31
+%assign v 0
+%rep 32
+  %if v == 8 || v == 10 || v == 11 || v == 12 || v == 13 || v == 14 || v == 17 || v == 21 || v == 29 || v == 30
+    exc_err v
+  %else
+    exc_noerr v
+  %endif
+%assign v v+1
+%endrep
+
+; common tail for every CPU exception. after push15 the stack from rsp
+; upward is the k_frame the C handler receives in rdi:
+;   r15 r14 r13 r12 r11 r10 r9 r8 rdi rsi rdx rcx rbx rax rbp  (push15)
+;   vector  error                                              (stub)
+;   rip cs rflags rsp ss                                       (CPU)
+; rsp is 16-byte aligned at the call: the CPU aligns it on entry, and
+; the exception frame + push15 preserve that, satisfying the SysV ABI.
+align 8
+exc_common:
+  push15
+  mov rdi, rsp                ; rdi -> k_frame
+  call k_exception            ; <-- fill out in C; switch on frame->vector
+  pop15
+  add rsp, 16                 ; discard vector + error code
+  iretq                       ; resume (a fatal handler simply never returns)
 
 align 8
 timer_isr:
@@ -177,3 +229,7 @@ k_reset:
   push 0
   lidt [rsp]
   int 0
+k_halt:
+  cli
+  hlt
+  jmp k_halt

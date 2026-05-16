@@ -12,7 +12,7 @@ static struct mem {
   uintptr_t _[];
 } *kmem;
 
-static struct cb *kcb;
+struct cb *kcb;
 
 static struct {
   volatile uint32_t *_;
@@ -33,7 +33,6 @@ static g_inline void kwait(void) { asm volatile (
 #endif
   ); }
 
-void k_logf(const char*, ...), k_vlogf(const char*, va_list), k_log_char(char);
 #include "cb.h"
 #include <stdarg.h>
 __attribute__((used, section(".limine_requests_start")))
@@ -204,10 +203,10 @@ void free(void *x) { return kfree(x); }
 
 static g_vm(g_kreset) { return k_reset(), f; }
 
+
 #define font_x 8
 #define font_y 8
-static g_vm(draw) {
-  // draw framebuffer
+void fbdraw(void) {
   for (uint8_t i = 0, rows = kcb->rows; i < rows; i++)
     for (uint8_t j = 0, cols = kcb->cols; j < cols; j++) {
       uint16_t pos = i * cols + j;
@@ -219,7 +218,10 @@ static g_vm(draw) {
       uintptr_t y = i * font_y, x = j * font_x;
       for (uint8_t r = 0; r < font_y; r++)
         for (uint8_t o = bmp[r], c = font_x; c--; o >>= 1)
-          kfb._[(y + r) * kfb.pitch + x + c] = o & 1 ? fg : bg; }
+          kfb._[(y + r) * kfb.pitch + x + c] = o & 1 ? fg : bg; } }
+
+static g_vm(draw) {
+  fbdraw();
   Ip += 1;
   return Continue(); }
 
@@ -270,8 +272,7 @@ static bool fbinit(void) {
 static bool cbinit(void) {
   const uintptr_t rows = kfb.height / font_y,
                   cols = kfb.width / font_x;
-  kcb = malloc(sizeof(struct cb) + rows * cols);
-  if (!kcb) return false;
+  if (!(kcb = malloc(sizeof(struct cb) + rows * cols))) return false;
   kcb->rows = rows;
   kcb->cols = cols;
   kcb->rpos = kcb->wpos = 0;
@@ -295,6 +296,5 @@ void kmain(void) {
         "(ep x)(: _(.(ev x))(putc 10))"
         "(go k)(go(key(wait(draw(: _(? k(putc k))(?(= k 10)(ps1(each(rs(read E))ep))))))))"
        "(go(key(ps1(: _(putn(clock(: _ (puts\"\x02 \")0))10)(putc 10))))))");
-   // */
 
   k_reset(); }

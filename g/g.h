@@ -116,7 +116,14 @@ int
  gungetc(struct g*, int),
  geof(struct g*),
  gputc(struct g*, int),
+ gputx(struct g*, intptr_t),
+ gputn(struct g*, intptr_t, uint8_t),
  gflush(struct g*);
+
+static g_inline int gputs(struct g*f, char const*s) {
+ int n = 0;
+ while (*s) n += gputc(f, *s++);
+ return n; }
 
 struct g
  *g_ini(void),

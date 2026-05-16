@@ -92,7 +92,7 @@ static g_vm_t
  g_vm_quote, g_vm_freev,  g_vm_eval,   g_vm_cond, g_vm_jump,   g_vm_defglob,
  g_vm_ap,    g_vm_tap,    g_vm_apn,    g_vm_tapn, g_vm_ret,    g_vm_lazyb;
 static uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
-static int g_putn(struct g *f, struct g_out *o, intptr_t n, uintptr_t base);
+static int g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t base);
 static struct g_vec *ini_vec(struct g_vec*, uintptr_t, uintptr_t, ...);
 static word g_tget(struct g*, word, word, struct g_tab*);
 static struct g_atom *intern_checked(struct g*, struct g_vec*);
@@ -1088,10 +1088,12 @@ static g_vm(g_vm_getc) {
  Ip += 1;
  return Continue(); }
 
-static int g_putn(struct g *f, struct g_out *o, intptr_t n, uintptr_t base) {
- if (n < 0) o->putc(f, '-', o), n = -n;
- uintptr_t q = n / base, r = n % base;
- if (q) g_putn(f, o, q, base);
+static int g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t b) {
+ uintptr_t
+  m = n >= 0 || b != 10 ? (uintptr_t) n : (o->putc(f, '-', o), -(uintptr_t) n),
+  q = m / b,
+  r = m % b;
+ if (q) g_putn(f, o, q, b);
  return o->putc(f, g_digits[r], o); }
 
 static int gvfprintf(struct g*f, struct g_out*o, char const *fmt, va_list xs) {
@@ -1114,6 +1116,7 @@ static int gfprintf(struct g *f, struct g_out *o, char const *fmt, ...) {
  int r = gvfprintf(f, o, fmt, xs);
  va_end(xs);
  return r; }
+
 
 
 static int gfputx(struct g *f, struct g_out *o, intptr_t x) {
@@ -1150,6 +1153,11 @@ static int gfputx(struct g *f, struct g_out *o, intptr_t x) {
      else r = gfprintf(f, o, "#sym@%x", x);
      return r; }
    case tbl_q: return gfprintf(f, o, "#tab:%d/%d@%x", tbl(x)->len, tbl(x)->cap, x); } }
+
+int gputx(struct g*f, word x) {
+ return gfputx(f, &g_stdout, x); }
+int gputn(struct g*f, intptr_t n, uint8_t b) {
+  return g_putn(f, &g_stdout, n, b); }
 
 static g_vm(g_vm_putc) {
  gputc(f, getnum(*Sp));
