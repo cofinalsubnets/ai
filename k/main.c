@@ -43,7 +43,7 @@ static void palette_init(void) {
 
 
 void k_reset(void);
-bool archinit(void);
+void archinit(void);
 
 static g_inline void kwait(void) { asm volatile (
 #if defined (__x86_64__)
@@ -225,16 +225,17 @@ void free(void *x) { return kfree(x); }
 
 static g_vm(g_kreset) { return k_reset(), f; }
 
-
 void fbdraw(void) {
   for (uint8_t i = 0, rows = kcb->rows; i < rows; i++)
     for (uint8_t j = 0, cols = kcb->cols; j < cols; j++) {
-      uint16_t const pos = i * cols + j;
-      uint32_t const _g = kcb->cb[pos];
+      uint32_t const
+       pos = i * cols + j,
+       _g = kcb->cb[pos];
       struct font *ff = fonts[cb_font(_g)];
-      uint8_t const g = _g, *bmp = ff->glyphs + ff->h * (g == '\n' ? 0 : g);
-      bool //select = kcb->rpos <= pos && pos < kcb->wpos,
-           invert = kcb->flag & show_cursor && kcb->wpos == pos && kticks & 64;
+      uint8_t const
+       g = _g,
+       *bmp = ff->glyphs + ff->h * (g == '\n' ? 0 : g);
+      bool invert = kcb->flag & show_cursor && kcb->wpos == pos && kticks & 64;
       uint32_t fg = palette[cb_fg(_g)], bg = palette[cb_bg(_g)];
       if (invert) fg ^= bg, bg ^= fg, fg ^= bg;
       uintptr_t y = i * ff->h, x = j * ff->w;
@@ -244,6 +245,7 @@ void fbdraw(void) {
 
 static g_vm(draw) {
   fbdraw();
+  kwait();
   Ip += 1;
   return Continue(); }
 
@@ -253,6 +255,13 @@ static g_vm(key) {
  kkb.k = 0;
  Ip += 1;
  return Continue(); }
+
+static g_vm(color) {
+ uint8_t fg = g_getnum(*Sp++), bg = g_getnum(*Sp++);
+ cb_attr(kcb, fg, bg, 0);
+ for (uint32_t i = 0, j = kcb->rows * kcb->cols; i < j; i++)
+  kcb->cb[i] = cb_cell(cb_ch(kcb->cb[i]), fg, bg, 0);
+ return Ip += 1, Continue(); }
 
 // (fault n) -- deliberately raise CPU exception n to exercise the
 // handler in arch.c. the handler reports and halts, so this does not
@@ -288,6 +297,7 @@ static union u
   bif_reset[] = {{g_kreset}},
   bif_draw[] = {{draw}, {g_vm_ret0}},
   bif_key[] = {{key}, {g_vm_ret0}},
+  bif_color[] = {{g_vm_cur}, {.x = g_putnum(2)}, {color}, {g_vm_ret0}},
   bif_fault[] = {{fault}, {g_vm_ret0}};
 
 static bool meminit(void) {
@@ -320,7 +330,7 @@ static bool cbinit(void) {
   kcb->cols = cols;
   kcb->rpos = kcb->wpos = 0;
   kcb->flag = show_cursor;
-  cb_attr(kcb, 183, 233, 0);
+  cb_attr(kcb, 47, 56, 0);
   cb_fill(kcb, 0);
   return true; }
 
@@ -329,18 +339,20 @@ static struct g_def defs[] = {
   {"draw", (intptr_t) bif_draw},
   {"key", (intptr_t) bif_key},
   {"fault", (intptr_t) bif_fault},
+  {"color", (intptr_t) bif_color},
   {0}, };
 
 void kmain(void) {
-  if (archinit() && meminit() && fbinit() && cbinit()) for (palette_init();;) {
-    struct g *k = g_defs(g_ini(), defs);
-    k = g_evals_(k,
+ archinit();
+  if (fbinit() && meminit() && cbinit())
+    palette_init(),
+    g_evals_(g_defs(g_ini(), defs),
 #include "boot.h"
         "(:(ps1 _)(puts\" ;; \")E(sym()))"
         "(:(rs x)(?(= x E)0(X x(rs(read E)))))"
         "(:(ep x)(: _(.(ev x))(putc 10)))"
         "(puts\"\x02 \")(putn(clock())10)(ps1(putc 10))"
-        "(:(go _)(draw(: k(key())(? k(: _(putc k)_(?(= k 10)(ps1(each(rs(read E))ep)))k)))))");
-    while (g_ok(k)) k = g_evals_(k, "(go())"), kwait(); }
+        "(:(go _)(go(draw(: k(key())(? k(: _(putc k)_(?(= k 10)(ps1(each(rs(read E))ep)))k)))))(go()))"
+        );
 
   k_reset(); }

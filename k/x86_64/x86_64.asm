@@ -221,7 +221,6 @@ archinit:
 
   ; enable interrupts
   sti
-  mov al, 1
   ret
 
 k_reset:
