@@ -20,6 +20,28 @@ static struct {
 
 static struct { uint8_t k, f; } kkb;
 
+static uint32_t palette[256];
+static struct font
+ kfont = { .glyphs = (uint8_t*) moderndos_8x16, .w = 8, .h = 16, },
+ *fonts[16] = { &kfont };
+
+static void palette_init(void) {
+  static const uint32_t base[16] = {              // 0..15: the standard 16
+    0x000000, 0x800000, 0x008000, 0x808000,
+    0x000080, 0x800080, 0x008080, 0xc0c0c0,
+    0x808080, 0xff0000, 0x00ff00, 0xffff00,
+    0x0000ff, 0xff00ff, 0x00ffff, 0xffffff };
+  static const uint8_t cube[6] = { 0, 95, 135, 175, 215, 255 };  // xterm levels
+
+  for (int i = 0; i < 16; i++) palette[i] = base[i];
+  for (int i = 0; i < 216; i++) {                  // 16..231: 6x6x6 cube
+    int r = i / 36, g = i / 6 % 6, b = i % 6;
+    palette[16 + i] = cube[r] << 16 | cube[g] << 8 | cube[b]; }
+  for (int i = 0; i < 24; i++) {                   // 232..255: grey ramp
+    uint32_t v = 8 + 10 * i;
+    palette[232 + i] = v << 16 | v << 8 | v; } }
+
+
 void k_reset(void);
 bool archinit(void);
 
@@ -204,19 +226,20 @@ void free(void *x) { return kfree(x); }
 static g_vm(g_kreset) { return k_reset(), f; }
 
 
-static struct font kfont = { .glyphs = (uint8_t*) moderndos_8x16, .w = 8, .h = 16, };
 void fbdraw(void) {
   for (uint8_t i = 0, rows = kcb->rows; i < rows; i++)
     for (uint8_t j = 0, cols = kcb->cols; j < cols; j++) {
       uint16_t const pos = i * cols + j;
-      uint8_t const g = kcb->cb[pos], *bmp = kfont.glyphs + kfont.h * (g == '\n' ? 0 : g);
-      bool select = kcb->rpos <= pos && pos < kcb->wpos,
+      uint32_t const _g = kcb->cb[pos];
+      struct font *ff = fonts[cb_font(_g)];
+      uint8_t const g = _g, *bmp = ff->glyphs + ff->h * (g == '\n' ? 0 : g);
+      bool //select = kcb->rpos <= pos && pos < kcb->wpos,
            invert = kcb->flag & show_cursor && kcb->wpos == pos && kticks & 64;
-      uint32_t fg = select ? console_sel : console_fg, bg = console_bg;
+      uint32_t fg = palette[cb_fg(_g)], bg = palette[cb_bg(_g)];
       if (invert) fg ^= bg, bg ^= fg, fg ^= bg;
-      uintptr_t y = i * kfont.h, x = j * kfont.w;
-      for (uint8_t r = 0; r < kfont.h; r++)
-        for (uint8_t o = bmp[r], c = kfont.w; c--; o >>= 1)
+      uintptr_t y = i * ff->h, x = j * ff->w;
+      for (uint8_t r = 0; r < ff->h; r++)
+        for (uint8_t o = bmp[r], c = ff->w; c--; o >>= 1)
           kfb._[(y + r) * kfb.pitch + x + c] = o & 1 ? fg : bg; } }
 
 static g_vm(draw) {
@@ -224,16 +247,12 @@ static g_vm(draw) {
   Ip += 1;
   return Continue(); }
 
-static g_vm(wait) {
-  kwait();
-  Ip += 1;
-  return Continue(); }
 
 static g_vm(key) {
-    Sp[0] = g_putnum(kkb.k);
-    kkb.k = 0;
-    Ip += 1;
-    return Continue(); }
+ Sp[0] = g_putnum(kkb.k);
+ kkb.k = 0;
+ Ip += 1;
+ return Continue(); }
 
 // (fault n) -- deliberately raise CPU exception n to exercise the
 // handler in arch.c. the handler reports and halts, so this does not
@@ -269,7 +288,6 @@ static union u
   bif_reset[] = {{g_kreset}},
   bif_draw[] = {{draw}, {g_vm_ret0}},
   bif_key[] = {{key}, {g_vm_ret0}},
-  bif_wait[] = {{wait}, {g_vm_ret0}},
   bif_fault[] = {{fault}, {g_vm_ret0}};
 
 static bool meminit(void) {
@@ -297,11 +315,12 @@ static bool fbinit(void) {
 static bool cbinit(void) {
   const uintptr_t rows = kfb.height / kfont.h,
                   cols = kfb.width / kfont.w;
-  if (!(kcb = malloc(sizeof(struct cb) + rows * cols))) return false;
+  if (!(kcb = malloc(sizeof(struct cb) + rows * cols * sizeof(uint32_t)))) return false;
   kcb->rows = rows;
   kcb->cols = cols;
   kcb->rpos = kcb->wpos = 0;
   kcb->flag = show_cursor;
+  cb_attr(kcb, 183, 233, 0);
   cb_fill(kcb, 0);
   return true; }
 
@@ -309,18 +328,19 @@ static struct g_def defs[] = {
   {"reset", (intptr_t) bif_reset},
   {"draw", (intptr_t) bif_draw},
   {"key", (intptr_t) bif_key},
-  {"wait", (intptr_t) bif_wait},
   {"fault", (intptr_t) bif_fault},
   {0}, };
 
 void kmain(void) {
-  if (archinit() && meminit() && fbinit() && cbinit())
-    g_evals_(g_defs(g_ini(), defs),
+  if (archinit() && meminit() && fbinit() && cbinit()) for (palette_init();;) {
+    struct g *k = g_defs(g_ini(), defs);
+    k = g_evals_(k,
 #include "boot.h"
-      "(:(ps1 _)(puts\" ;; \")E(sym())"
-        "(rs x)(?(= x E)0(X x(rs(read E))))"
-        "(ep x)(: _(.(ev x))(putc 10))"
-        "(go k)(go(key(wait(draw(: _(? k(putc k))(?(= k 10)(ps1(each(rs(read E))ep))))))))"
-       "(go(key(ps1(: _(putn(clock(: _ (puts\"\x02 \")0))10)(putc 10))))))");
+        "(:(ps1 _)(puts\" ;; \")E(sym()))"
+        "(:(rs x)(?(= x E)0(X x(rs(read E)))))"
+        "(:(ep x)(: _(.(ev x))(putc 10)))"
+        "(puts\"\x02 \")(putn(clock())10)(ps1(putc 10))"
+        "(:(go _)(draw(: k(key())(? k(: _(putc k)_(?(= k 10)(ps1(each(rs(read E))ep)))k)))))");
+    while (g_ok(k)) k = g_evals_(k, "(go())"), kwait(); }
 
   k_reset(); }

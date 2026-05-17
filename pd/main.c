@@ -24,7 +24,7 @@ static struct k {
   } *mode;
   union {
     struct cb cb;
-    uint8_t cb_bytes[sizeof(struct cb) + NROWS * NCOLS]; };
+    uint8_t cb_bytes[sizeof(struct cb) + sizeof(uint32_t) * NROWS * NCOLS]; };
 } K;
 
 static int k_update(void *_) {
