@@ -96,7 +96,6 @@ static g_inline bool twop(g_word x) { return even(x) && typ(x) == two_q; }
 // a character back onto it. there is no separate line buffer here.
 #define BUF 4096           // render scratch buffer size
 static bool in_eof;        // ^D pressed, or stdin ended
-static int  pushback = -1; // one-slot ungetc (gungetc must not allocate)
 static int  rendered;      // terminal cursor column relative to the start
                            // of the edit region (just after the prompt)
 
@@ -130,8 +129,6 @@ static struct g *edit_line(struct g *f) {
 // ggetc serves the next input character. interactively it runs the line
 // editor to refill once a line is used up; otherwise it raw-reads stdin.
 struct g *ggetc(struct g *f) {
-  if (pushback >= 0)                             // an ungot character
-    return f->b = pushback, pushback = -1, f;
   if (twop(f->edr))                              // the edited line, char by char
     return f->b = g_getnum(A(f->edr)), f->edr = B(f->edr), f;
   if (!isatty(STDIN_FILENO)) {                   // non-tty: raw bytes
@@ -147,11 +144,13 @@ struct g *ggetc(struct g *f) {
   if (!twop(f->edr)) return f->b = EOF, f;
   return f->b = g_getnum(A(f->edr)), f->edr = B(f->edr), f; }
 
-// hold one character for the next ggetc. this can't push onto edr --
-// that would allocate, and an allocating ungetc would let a collection
-// dangle the buffer pointer the parser's token reader caches across it.
+// push a character back onto the editor buffer: edr := (c . edr). this
+// allocates -- g_read1's token reader refreshes its cached buffer
+// pointer from f->sp[0] after the ungetc call, so the relocation is safe.
 struct g *gungetc(struct g *f, int c) {
-  return pushback = c, f; }
+  f = gxl(g_push(f, 2, g_putnum(c), f->edr));    // gxl: (sp[0] . sp[1])
+  if (g_ok(f)) f->edr = g_pop1(f);
+  return f; }
 
 struct g *geof(struct g *f) {
   return f->b = in_eof, f; }

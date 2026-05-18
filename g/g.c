@@ -1166,6 +1166,8 @@ static struct g *g_read1(struct g*f, struct g_in *i) {
      case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
      case '(': case ')': case '"': case '\'': case 0 : case EOF:
       f = i->ungetc(f, c, i);
+      if (!g_ok(f)) return f;
+      b = (struct g_vec*) f->sp[0]; // ungetc may allocate and relocate
       len(b) = n;
       txt(b)[n] = 0; // zero terminate for strtol ; n < lim so this is safe
       char *e;
