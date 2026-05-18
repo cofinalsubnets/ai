@@ -13,8 +13,8 @@ g_noinline uintptr_t g_clock(void) {
  int s = clock_gettime(CLOCK_MONOTONIC, &ts);
  return s ? 0 : ts.tv_sec  * 1e3 + ts.tv_nsec / 1e6; }
 
-int gputc(struct g*f, int c) { return putc(c, stdout); }
-int gflush(struct g*) { return fflush(stdout); }
+struct g*gputc(struct g*f, int c) { return putc(c, stdout), f; }
+struct g*gflush(struct g*f) { return fflush(stdout), f; }
 struct g*ggetc(struct g*f) { return !g_ok(f) ? f : (f->b = getc(stdin), f); }
 struct g*gungetc(struct g*f, int c) { return !g_ok(f) ? f : (f->b = ungetc(c, stdin), f); }
 struct g*geof(struct g*f) { return !g_ok(f) ? f : (f->b = feof(stdin), f); }

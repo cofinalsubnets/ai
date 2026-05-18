@@ -306,8 +306,8 @@ static g_vm(cur_put) {
   Ip += 1;
   return Continue(); }
 
-int gputc(struct g*f, int c) { return cb_putc(kcb, c), c; }
-int gflush(struct g*f) { return 0; }
+struct g* gputc(struct g*f, int c) { return cb_putc(kcb, c), f; }
+struct g*gflush(struct g*f) { return f; }
 struct g *ggetc(struct g*f) { return f->b = cb_getc(kcb), f; }
 struct g *gungetc(struct g*f, int c) { return f->b = cb_ungetc(kcb, c), f; }
 struct g *geof(struct g*f) { return f->b = cb_eof(kcb), f; }

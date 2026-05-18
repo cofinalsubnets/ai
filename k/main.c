@@ -88,13 +88,10 @@ static volatile LIMINE_REQUESTS_END_MARKER;
 #define kb_flag_ctl (kb_flag_lctl|kb_flag_rctl)
 #define kb_flag_shift (kb_flag_lshift|kb_flag_rshift)
 void g_stdout_putc(struct g*f, int c) { cb_putc(kcb, c); }
-int gputc(struct g*f, int c) { return cb_putc(kcb, c), c; }
-struct g* ggetc(struct g*f) {
-  return g_core_of(f)->b = cb_getc(kcb), f; }
-struct g* gungetc(struct g*f, int c) {
-  return g_core_of(f)->b = cb_ungetc(kcb, c), f; }
-struct g*geof(struct g*f) {
-  return g_core_of(f)->b = cb_eof(kcb), f; }
+struct g*gputc(struct g*f, int c) { return cb_putc(kcb, c), f; }
+struct g* ggetc(struct g*f) { return g_core_of(f)->b = cb_getc(kcb), f; }
+struct g* gungetc(struct g*f, int c) { return g_core_of(f)->b = cb_ungetc(kcb, c), f; }
+struct g*geof(struct g*f) { return g_core_of(f)->b = cb_eof(kcb), f; }
 uintptr_t g_clock(void) { return kticks; }
 
 #define show_cursor 1
@@ -291,9 +288,9 @@ static g_vm(fault) {
   Ip += 1;                 // unreachable unless the fault did not fire
   return Continue(); }
 
-int gflush(struct g*f) {
+struct g*gflush(struct g*f) {
  kcb->rpos = kcb->wpos;
- return 0; }
+ return f; }
 
 
 static union u

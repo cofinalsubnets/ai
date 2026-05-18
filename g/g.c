@@ -92,7 +92,7 @@ static g_vm_t
  g_vm_quote, g_vm_freev,  g_vm_eval,   g_vm_cond, g_vm_jump,   g_vm_defglob,
  g_vm_ap,    g_vm_tap,    g_vm_apn,    g_vm_tapn, g_vm_ret,    g_vm_lazyb;
 static uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
-static int g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t base);
+static struct g*g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t base);
 static struct g_vec *ini_vec(struct g_vec*, uintptr_t, uintptr_t, ...);
 static word g_tget(struct g*, word, word, struct g_tab*);
 static struct g_atom *intern_checked(struct g*, struct g_vec*);
@@ -146,7 +146,7 @@ static g_inline uintptr_t rot(uintptr_t x) {
 static struct g*g_stdin_getc  (struct g *f, struct g_in *_)        { return ggetc(f); }
 static struct g*g_stdin_ungetc(struct g *f, int c, struct g_in *_) { return gungetc(f, c); }
 static struct g*g_stdin_eof   (struct g *f, struct g_in *_)        { return geof(f); }
-static int g_stdout_putc (struct g *f, int c, struct g_out *_){ return gputc(f, c); }
+static struct g*g_stdout_putc (struct g *f, int c, struct g_out *_){ return gputc(f, c); }
 static struct g_in  g_stdin  = { g_stdin_getc, g_stdin_ungetc, g_stdin_eof };
 static struct g_out g_stdout = { g_stdout_putc, gflush };
 static struct g *c0(struct g *f, g_vm_t *y);
@@ -1095,12 +1095,11 @@ static g_vm(g_vm_getc) {
  Ip += 1;
  return Continue(); }
 
-int gputs(struct g*f, char const*s) {
- int n = 0;
- while (*s) n += gputc(f, *s++);
- return n; }
+struct g*gputs(struct g*f, char const*s) {
+ while (*s) f = gputc(f, *s++);
+ return f; }
 
-static int g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t b) {
+static struct g*g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t b) {
  uintptr_t
   m = n >= 0 || b != 10 ? (uintptr_t) n : (o->putc(f, '-', o), -(uintptr_t) n),
   q = m / b,
@@ -1108,30 +1107,29 @@ static int g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t b) {
  if (q) g_putn(f, o, q, b);
  return o->putc(f, g_digits[r], o); }
 
-static int gvfprintf(struct g*f, struct g_out*o, char const *fmt, va_list xs) {
- int c;
- while ((c = *fmt++)) {
+static struct g*gvfprintf(struct g*f, struct g_out*o, char const *fmt, va_list xs) {
+ for (int c; (c = *fmt++);) {
   if (c != '%') o->putc(f, c, o);
   else pass: switch ((c = *fmt++)) {
-   case 0: return c;
+   case 0: return f;
    case 'l': goto pass;
-   case 'b': c = g_putn(f, o, va_arg(xs, uintptr_t), 2); continue;
-   case 'o': c = g_putn(f, o, va_arg(xs, uintptr_t), 8); continue;
-   case 'd': c = g_putn(f, o, va_arg(xs, uintptr_t), 10); continue;
-   case 'x': c = g_putn(f, o, va_arg(xs, uintptr_t), 16); continue;
-   default: c = o->putc(f, c, o); } }
- return c; }
+   case 'b': f = g_putn(f, o, va_arg(xs, uintptr_t), 2); continue;
+   case 'o': f = g_putn(f, o, va_arg(xs, uintptr_t), 8); continue;
+   case 'd': f = g_putn(f, o, va_arg(xs, uintptr_t), 10); continue;
+   case 'x': f = g_putn(f, o, va_arg(xs, uintptr_t), 16); continue;
+   default: f = o->putc(f, c, o); } }
+ return f; }
 
-static int gfprintf(struct g *f, struct g_out *o, char const *fmt, ...) {
+static struct g*gfprintf(struct g *f, struct g_out *o, char const *fmt, ...) {
  va_list xs;
  va_start(xs, fmt);
- int r = gvfprintf(f, o, fmt, xs);
+ f = gvfprintf(f, o, fmt, xs);
  va_end(xs);
- return r; }
+ return f; }
 
 
 
-static int gfputx(struct g *f, struct g_out *o, intptr_t x) {
+static struct g *gfputx(struct g *f, struct g_out *o, intptr_t x) {
  if (nump(x)) return gfprintf(f, o, "%d", getnum(x));
  if (!datp(x)) return gfprintf(f, o, "#%lx", (long) x);
  switch (typ(x)) {
@@ -1145,30 +1143,28 @@ static int gfputx(struct g *f, struct g_out *o, intptr_t x) {
       if (!twop(B(x))) return o->putc(f, ')', o); } }
    case vec_q: {
      struct g_vec *v = vec(x);
-     int r = 0;
      if (!vec_strp(v)) {
       uintptr_t type = v->type, rank = v->rank, *shape = v->shape;
-      r = gfprintf(f, o, "#vec@%x:%d.%d", v, type, rank);
-      for (uintptr_t i = rank, *j = shape; i--; r = gfprintf(f, o, ".%d", (intptr_t) *j++)); }
+      f = gfprintf(f, o, "#vec@%x:%d.%d", v, type, rank);
+      for (uintptr_t i = rank, *j = shape; i-- && g_ok(f = gfprintf(f, o, ".%d", (intptr_t) *j++));); }
      else {
       uintptr_t len = len(v);
       char *text = txt(v);
-      o->putc(f, '"', o);
-      for (char c; len--; o->putc(f, c, o))
-       if ((c = *text++) == '\\' || c == '"') o->putc(f, '\\', o);
-      r = o->putc(f, '"', o); }
-     return r; }
+      f = o->putc(f, '"', o);
+      for (char c; g_ok(f) && len--; f = o->putc(f, c, o))
+       if ((c = *text++) == '\\' || c == '"') f = o->putc(f, '\\', o);
+      f = o->putc(f, '"', o); }
+     return f; }
    case sym_q: {
-     int r = 0;
      struct g_vec *s = sym(x)->nom;
-     if (s && vec_strp(s)) for (uintptr_t i = 0; i < len(s); r = o->putc(f, txt(s)[i++], o));
-     else r = gfprintf(f, o, "#sym@%x", x);
-     return r; }
+     if (s && vec_strp(s)) for (uintptr_t i = 0; i < len(s); f = o->putc(f, txt(s)[i++], o));
+     else f = gfprintf(f, o, "#sym@%x", x);
+     return f; }
    case tbl_q: return gfprintf(f, o, "#tab:%d/%d@%x", tbl(x)->len, tbl(x)->cap, x); } }
 
-int gputx(struct g*f, word x) {
+struct g*gputx(struct g*f, word x) {
  return gfputx(f, &g_stdout, x); }
-int gputn(struct g*f, intptr_t n, uint8_t b) {
+struct g*gputn(struct g*f, intptr_t n, uint8_t b) {
   return g_putn(f, &g_stdout, n, b); }
 
 static g_vm(g_vm_putc) {

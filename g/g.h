@@ -91,8 +91,8 @@ struct g_in {
          *(*eof)(struct g*, struct g_in*); };
 
 struct g_out {
- int (*putc)(struct g*, int, struct g_out*),
-     (*flush)(struct g*); };
+ struct g*(*putc)(struct g*, int, struct g_out*),
+         *(*flush)(struct g*); };
 
 enum g_status {
  g_status_ok  = 0,
@@ -113,15 +113,14 @@ uintptr_t g_clock(void); // used by garbage collector
 struct g
  *ggetc(struct g*),
  *gungetc(struct g*, int),
- *geof(struct g*);
-int
- gputc(struct g*, int),
- gflush(struct g*);
+ *geof(struct g*),
 
-int
- gputx(struct g*, intptr_t),
- gputn(struct g*, intptr_t, uint8_t),
- gputs(struct g*, char const*);
+ *gputc(struct g*, int),
+ *gflush(struct g*),
+
+ *gputx(struct g*, intptr_t),
+ *gputn(struct g*, intptr_t, uint8_t),
+ *gputs(struct g*, char const*);
 
 struct g
  *g_ini_m(g_malloc_t*, g_free_t*),
