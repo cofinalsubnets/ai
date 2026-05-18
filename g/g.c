@@ -1168,30 +1168,37 @@ struct g*gputn(struct g*f, intptr_t n, uint8_t b) {
   return g_putn(f, &g_stdout, n, b); }
 
 static g_vm(g_vm_putc) {
- gputc(f, getnum(*Sp));
+ Pack(f);
+ if(!g_ok(f = gputc(f, getnum(*Sp)))) return f;
+ Unpack(f);
  Ip += 1;
  return Continue(); }
 
 static g_vm(g_vm_puts) {
  if (strp(Sp[0])) {
-  struct g_vec *s = vec(Sp[0]);
-  for (uintptr_t i = 0; i < len(s);) gputc(f, txt(s)[i++]);
-  gflush(f); }
+  Pack(f);
+  for (uintptr_t i = 0; i < len(vec(f->sp[0]));) f = gputc(f, txt(vec(f->sp[0]))[i++]);
+  if (!g_ok(f = gflush(f))) return f;
+  Unpack(f); }
  Ip += 1;
  return Continue(); }
 
 static g_vm(g_vm_putn) {
+ Pack(f);
  uintptr_t n = getnum(Sp[0]), b = getnum(Sp[1]);
- g_putn(f, &g_stdout, n, b);
+ if (!g_ok(f = g_putn(f, &g_stdout, n, b))) return f;
+ Unpack(f);
  Sp[1] = Sp[0];
  Sp += 1;
  Ip += 1;
  return Continue(); }
 
-static g_vm(g_vm_dot) { return
- gfputx(f, &g_stdout, Sp[0]),
- Ip += 1,
- Continue(); }
+static g_vm(g_vm_dot) {
+ Pack(f);
+ if (!g_ok(f = gfputx(f, &g_stdout, Sp[0]))) return f;
+ Unpack(f);
+ Ip += 1;
+ return Continue(); }
 
 static g_noinline bool eqv(struct g *f, word a, word b) {
  word *base = off_pool(f), *top = base + f->len, *w = base;
