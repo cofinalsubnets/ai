@@ -81,13 +81,18 @@ b/h/lcat: h/lcat.c b/h/$x/$x.o
 	@echo CC $@
 	@$(cc) -o $@ $^
 
-# raw-mode zipper-editor demo front end (h/tui.c); no ncurses
-tui: b/h/tui b/boot.h
+# line-editor REPL front end (h/tui.c): the line editor lives behind
+# ggetc, the REPL itself is h/repl.g embedded via b/repl.h
+tui: b/h/tui
 .PHONY: tui
-b/h/tui: h/tui.c b/h/lib$n.a
+b/h/tui: h/tui.c b/h/lib$n.a b/boot.h b/repl.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(cc) -o $@ h/tui.c b/h/lib$n.a
+
+b/repl.h: b/h/lcat h/repl.g
+	@echo GEN	$@
+	@cat h/repl.g | b/h/lcat >$@
 
 
 # sed command to escape lisp text into C string format

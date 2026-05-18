@@ -14,7 +14,7 @@ g_noinline uintptr_t g_clock(void) {
  return s ? 0 : ts.tv_sec  * 1e3 + ts.tv_nsec / 1e6; }
 
 struct g*gputc(struct g*f, int c) {
-  if (c == '\\' || c == '"') putc(c, stdout);
+  if (c == '\\' || c == '"') putc('\\', stdout);  // C-escape backslash & quote
   putc(c, stdout);
   return f; }
 struct g*ggetc(struct g*f) { return g_core_of(f)->b = getc(stdin), f; }
