@@ -1,17 +1,3 @@
-// h/tui.c -- host front end: a line editor behind ggetc.
-//
-// ggetc IS the line editor. When its served line runs dry it raw-reads
-// keystrokes, edits a line with the zipper editor (g_edit), renders it,
-// and on Enter hands that line's characters (plus a newline) back one at
-// a time. So the `read`/`getc` builtins -- and the REPL script h/repl.g
-// running on top of them -- get line-edited input transparently, with no
-// REPL logic hardcoded here. ggetc returns struct g* because the editing
-// allocates and may relocate the heap; the threaded I/O hooks make that
-// safe.
-//
-// A non-tty stdin (pipe/file) bypasses the editor -- ggetc just raw-reads
-// bytes -- so the same binary doubles as a batch interpreter.
-
 #include "../g/g.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,8 +20,10 @@ g_noinline uintptr_t g_clock(void) {
   return clock_gettime(CLOCK_REALTIME, &ts) ? (uintptr_t) -1
        : (uintptr_t) (ts.tv_sec * 1000 + ts.tv_nsec / 1000000); }
 
-struct g *gputc(struct g *f, int c) { return putchar(c), f; }
-struct g *gflush(struct g *f)       { return fflush(stdout), f; }
+
+static struct g *_putc(struct g *f, int c, struct g_out*) { return putchar(c), f; }
+static struct g *_flush(struct g *f, struct g_out*)       { return fflush(stdout), f; }
+struct g_out g_stdout = { _putc, _flush };
 
 // --- raw terminal mode -----------------------------------------------
 static struct termios saved_termios;
@@ -100,10 +88,6 @@ struct g_pair { g_vm_t *ap; uintptr_t typ; intptr_t a, b; };
 enum { two_q };
 static g_inline bool twop(g_word x) { return even(x) && typ(x) == two_q; }
 
-// --- the line editor (behind ggetc) ----------------------------------
-// the edited line IS the editor buffer: edr (on struct g, alongside edl)
-// holds the characters not yet read. ggetc consumes edr; gungetc pushes
-// a character back onto it. there is no separate line buffer here.
 static bool in_eof;        // ^D pressed, or stdin ended
 static int  rendered;      // terminal cursor column relative to the start
                            // of the edit region (just after the prompt)
@@ -135,7 +119,7 @@ static void render(struct g *f) {
 // edit one line: a keystroke loop until Enter (or ^D). on return the
 // editor buffer (f->edl/f->edr) holds the line. threads f -- g_edit
 // allocates and the collection it may trigger relocates the runtime.
-static struct g *edit_line(struct g *f) {
+static g_inline struct g *edit_line(struct g *f) {
   rendered = 0;                            // cursor sits at the region start
   for (;;) {
     render(f);
@@ -145,9 +129,9 @@ static struct g *edit_line(struct g *f) {
     if (!g_ok(f = g_edit(f, ev))) return f; } }
 
 // --- host input hooks ------------------------------------------------
-// ggetc serves the next input character. interactively it runs the line
+// _getc serves the next input character. interactively it runs the line
 // editor to refill once a line is used up; otherwise it raw-reads stdin.
-struct g *ggetc(struct g *f) {
+static struct g *_getc(struct g *f, struct g_in*) {
   if (twop(f->edr))                              // the edited line, char by char
     return f->b = g_getnum(A(f->edr)), f->edr = B(f->edr), f;
   if (!isatty(STDIN_FILENO)) {                   // non-tty: raw bytes
@@ -166,13 +150,14 @@ struct g *ggetc(struct g *f) {
 // push a character back onto the editor buffer: edr := (c . edr). this
 // allocates -- g_read1's token reader refreshes its cached buffer
 // pointer from f->sp[0] after the ungetc call, so the relocation is safe.
-struct g *gungetc(struct g *f, int c) {
+static struct g *_ungetc(struct g *f, int c, struct g_in*) {
   f = gxl(g_push(f, 2, g_putnum(c), f->edr));    // gxl: (sp[0] . sp[1])
   if (g_ok(f)) f->edr = g_pop1(f);
   return f; }
 
-struct g *geof(struct g *f) {
-  return f->b = in_eof, f; }
+static struct g *_eof(struct g *f, struct g_in*) { return f->b = in_eof, f; }
+
+struct g_in g_stdin = { _getc, _ungetc, _eof };
 
 // --- main: load the prelude and run the REPL script ------------------
 int main(int argc, char const **argv) {
