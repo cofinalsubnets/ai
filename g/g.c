@@ -143,12 +143,14 @@ static g_inline uintptr_t rot(uintptr_t x) {
   int const s = sizeof(uintptr_t) * 4; // shift bits = word bits / 2 = sizeof(word) * 4
   return (x << s) | (x >> s); }
 
+  /*
 static struct g*g_stdin_getc  (struct g *f, struct g_in *_)        { return ggetc(f); }
 static struct g*g_stdin_ungetc(struct g *f, int c, struct g_in *_) { return gungetc(f, c); }
 static struct g*g_stdin_eof   (struct g *f, struct g_in *_)        { return geof(f); }
 static struct g*g_stdout_putc (struct g *f, int c, struct g_out *_){ return gputc(f, c); }
 struct g_in  g_stdin  = { g_stdin_getc, g_stdin_ungetc, g_stdin_eof };
 struct g_out g_stdout = { g_stdout_putc, gflush };
+*/
 static struct g *c0(struct g *f, g_vm_t *y);
 
 // function state using this type
@@ -1760,3 +1762,14 @@ static word g_tget(struct g *f, word zero, word k, struct g_tab *t) {
  struct g_kvs *e = t->tab[i];
  while (e && !eql(f, k, e->key)) e = e->next;
  return e ? e->val : zero; }
+
+struct g *ggetc(struct g*f) {
+  return !g_ok(f) ? f : f->in->getc(f, f->in); }
+struct g *gungetc(struct g*f, int c) {
+  return !g_ok(f) ? f : f->in->ungetc(f, c, f->in); }
+struct g *geof(struct g*f) {
+  return !g_ok(f) ? f : f->in->eof(f, f->in); }
+struct g *gputc(struct g*f, int c) {
+  return !g_ok(f) ? f : f->out->putc(f, c, f->out); }
+struct g *gflush(struct g*f) {
+  return !g_ok(f) ? f : f->out->flush(f); }

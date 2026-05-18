@@ -95,7 +95,7 @@ struct g_in {
 
 struct g_out {
  struct g*(*putc)(struct g*, int, struct g_out*),
-         *(*flush)(struct g*); };
+         *(*flush)(struct g*); }; // FIXME should take g_out arg
 
 
 enum g_status {

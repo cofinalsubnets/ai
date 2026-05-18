@@ -87,11 +87,14 @@ static volatile LIMINE_REQUESTS_END_MARKER;
 #define kb_flag_alt (kb_flag_lalt|kb_flag_ralt)
 #define kb_flag_ctl (kb_flag_lctl|kb_flag_rctl)
 #define kb_flag_shift (kb_flag_lshift|kb_flag_rshift)
-void g_stdout_putc(struct g*f, int c) { cb_putc(kcb, c); }
-struct g*gputc(struct g*f, int c) { return cb_putc(kcb, c), f; }
-struct g* ggetc(struct g*f) { return g_core_of(f)->b = cb_getc(kcb), f; }
-struct g* gungetc(struct g*f, int c) { return g_core_of(f)->b = cb_ungetc(kcb, c), f; }
-struct g*geof(struct g*f) { return g_core_of(f)->b = cb_eof(kcb), f; }
+
+static struct g *_putc(struct g*f, int c, struct g_out*) { return cb_putc(kcb, c), f; }
+static struct g* _flush(struct g*f) { kcb->rpos = kcb->wpos; return f; }
+static struct g*_getc(struct g*f, struct g_in*) { return g_core_of(f)->b = cb_getc(kcb), f; }
+static struct g* _ungetc(struct g*f, int c, struct g_in*) { return g_core_of(f)->b = cb_ungetc(kcb, c), f; }
+static struct g* _eof(struct g*f, struct g_in*) { return g_core_of(f)->b = cb_eof(kcb), f; }
+struct g_in g_stdin = { .getc = _getc, .ungetc = _ungetc, .eof = _eof, };
+struct g_out g_stdout = { .putc = _putc, .flush = _flush, };
 uintptr_t g_clock(void) { return kticks; }
 
 #define show_cursor 1
@@ -288,9 +291,6 @@ static g_vm(fault) {
   Ip += 1;                 // unreachable unless the fault did not fire
   return Continue(); }
 
-struct g*gflush(struct g*f) {
- kcb->rpos = kcb->wpos;
- return f; }
 
 
 static union u

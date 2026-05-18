@@ -13,14 +13,18 @@ g_noinline uintptr_t g_clock(void) {
  int s = clock_gettime(CLOCK_MONOTONIC, &ts);
  return s ? 0 : ts.tv_sec  * 1e3 + ts.tv_nsec / 1e6; }
 
-struct g*gputc(struct g*f, int c) {
+static struct g *lcat_putc(struct g*f, int c, struct g_out*) {
   if (c == '\\' || c == '"') putc('\\', stdout);  // C-escape backslash & quote
   putc(c, stdout);
   return f; }
-struct g*ggetc(struct g*f) { return g_core_of(f)->b = getc(stdin), f; }
-struct g* gungetc(struct g*f, int c) { return g_core_of(f)->b = ungetc(c, stdin), f; }
-struct g* geof(struct g*f) { return g_core_of(f)->b = feof(stdin), f; }
-struct g* gflush(struct g*f) { fflush(stdout); return f; }
+static struct g* lcat_flush(struct g*f) { fflush(stdout); return f; }
+
+static struct g*lcat_getc(struct g*f, struct g_in*) {
+  return g_core_of(f)->b = getc(stdin), f; }
+static struct g* lcat_ungetc(struct g*f, int c, struct g_in*) { return g_core_of(f)->b = ungetc(c, stdin), f; }
+static struct g* lcat_eof(struct g*f, struct g_in*) { return g_core_of(f)->b = feof(stdin), f; }
+struct g_in g_stdin = { .getc = lcat_getc, .ungetc = lcat_ungetc, .eof = lcat_eof, };
+struct g_out g_stdout = { .putc = lcat_putc, .flush = lcat_flush, };
 
 int main(int argc, char const **argv) {
  putc('"', stdout);
