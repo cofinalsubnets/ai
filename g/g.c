@@ -1101,15 +1101,15 @@ struct g*gputs(struct g*f, char const*s) {
 
 static struct g*g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t b) {
  uintptr_t
-  m = n >= 0 || b != 10 ? (uintptr_t) n : (o->putc(f, '-', o), -(uintptr_t) n),
+  m = n >= 0 || b != 10 ? (uintptr_t) n : (f = o->putc(f, '-', o), -(uintptr_t) n),
   q = m / b,
   r = m % b;
- if (q) g_putn(f, o, q, b);
+ if (q) f = g_putn(f, o, q, b);
  return o->putc(f, g_digits[r], o); }
 
 static struct g*gvfprintf(struct g*f, struct g_out*o, char const *fmt, va_list xs) {
  for (int c; (c = *fmt++);) {
-  if (c != '%') o->putc(f, c, o);
+  if (c != '%') f = o->putc(f, c, o);
   else pass: switch ((c = *fmt++)) {
    case 0: return f;
    case 'l': goto pass;
@@ -1137,9 +1137,9 @@ static struct g *gfputx(struct g *f, struct g_out *o, intptr_t x) {
    case two_q: {
      struct g_vec *n;
      if (symp(A(x)) && (n = sym(A(x))->nom) && len(n) == 1 && txt(n)[0] == '`' && twop(B(x)))
-       return o->putc(f, '\'', o), gfputx(f, o, AB(x));
-     for (o->putc(f, '(', o);; o->putc(f, ' ', o), x = B(x)) {
-      gfputx(f, o, A(x));
+       return f = o->putc(f, '\'', o), gfputx(f, o, AB(x));
+     for (f = o->putc(f, '(', o);; f = o->putc(f, ' ', o), x = B(x)) {
+      f = gfputx(f, o, A(x));
       if (!twop(B(x))) return o->putc(f, ')', o); } }
    case vec_q: {
      struct g_vec *v = vec(x);
