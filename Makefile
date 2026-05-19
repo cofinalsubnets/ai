@@ -28,7 +28,7 @@ perf: b/perf.data
 b/flamegraph.svg: b/perf.data
 	flamegraph -o $@ --perfdata $<
 repl: b/h/$n
-	@cat h/repl.g - | $<
+	@$<
 cloc:
 	cloc --by-file --force-lang=Lisp,$x g h js k p pd t vim
 cat: clean all test
