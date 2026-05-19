@@ -84,7 +84,7 @@ static g_vm_t
  g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_bnot, g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
- g_vm_getc,  g_vm_parse,  g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_gt,  g_vm_ge,
+ g_vm_getc,  g_vm_str,    g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_gt,  g_vm_ge,
  g_vm_put, g_vm_tdel,   g_vm_tnew,   g_vm_tkeys,
  g_vm_unc, g_vm_poke2, g_vm_peek2,
  g_vm_seek,  g_vm_trim,   g_vm_thda,   g_vm_add,
@@ -1122,51 +1122,24 @@ static g_vm(g_vm_read) {
    Ip += 1;
    return Continue(); } }
 
-// (parse charlist eofsym moresym): parse one datum from a charlist (a
-// list of character codes). on success returns a pair (value . rest)
-// where rest is the suffix of the input that the parser did not consume,
-// so the caller can keep draining the buffer one datum at a time. returns
-// moresym when the input ends inside an unclosed list (so the caller can
-// gather more), and eofsym on empty input or a syntactic dead end. the
-// charlist is flattened into a C buffer first and read through the g_in
-// adapter for C strings (struct ti), so the parse -- which allocates and
-// may collect -- never holds a pointer into the gwen heap. transactional:
-// on a non-ok parse the value stack is rewound to its pre-parse depth.
-static g_vm(g_vm_parse) {
+// (str charlist): flatten a list of character codes into a gwen string.
+// the parser uses this to materialize the underlying bytes of symbol
+// names and string literals so they can be interned via sym (or used
+// as-is). vec0 may collect, so the input list is kept on the stack
+// across the allocation.
+static g_vm(g_vm_str) {
  uintptr_t n = 0;
  for (word l = Sp[0]; twop(l); l = B(l)) n++;
- char *buf = f->malloc(f, n + 1);
- if (!buf) { Pack(f); return encode(f, g_status_oom); }
- uintptr_t i = 0;
- for (word l = Sp[0]; twop(l); l = B(l)) buf[i++] = (char) getnum(A(l));
- buf[i] = 0;
- struct ti in = {{(void*) _getc, (void*) _ungetc, (void*) _eof}, buf, 0};
  Pack(f);
- uintptr_t depth = ((word*) f + f->len) - f->sp;
- f = g_read1(f, (struct g_in*) &in);
- enum g_status s = g_code_of(f);
- f = g_core_of(f);
- f->free(f, buf);
- if (s != g_status_ok && s != g_status_eof && s != g_status_more)
-  return encode(f, s);
- if (s != g_status_ok) f->sp = (word*) f + f->len - depth;
- // on ok, replace the original input list (now at f->sp[1]) with the
- // remainder (the suffix in.i chars deep) and cons it with the parsed
- // value. the have() may collect, so write the remainder back to the
- // stack first to keep it traceable.
- if (s == g_status_ok) {
-  word rem = f->sp[1];
-  for (uintptr_t k = in.i; k && twop(rem); k--) rem = B(rem);
-  f->sp[1] = rem;
-  f = have(f, Width(struct g_pair));
-  if (!g_ok(f)) return f;
-  struct g_pair *p = bump(f, Width(struct g_pair));
-  ini_two(p, f->sp[0], f->sp[1]);
-  f->sp[0] = (intptr_t) p; }
+ f = vec0(f, g_vect_char, 1, n);
+ if (!g_ok(f)) return f;
+ // sp[0] is the new string; sp[1] is the original charlist.
+ char *t = txt(f->sp[0]);
+ uintptr_t i = 0;
+ for (word l = f->sp[1]; twop(l); l = B(l)) t[i++] = (char) getnum(A(l));
+ f->sp[1] = f->sp[0];
+ f->sp += 1;
  Unpack(f);
- if (s == g_status_ok)        Sp[3] = Sp[0], Sp += 3;  // (value . rest)
- else if (s == g_status_more) Sp += 2;                 // moresym (Sp[2])
- else                         Sp[2] = Sp[1], Sp += 2;  // eofsym
  Ip += 1;
  return Continue(); }
 
@@ -1669,7 +1642,7 @@ enum g_status g_fin(struct g *f) {
  _(bif_cons2, "cons", S2(g_vm_cons)) _(bif_car2, "car", S1(g_vm_car)) _(bif_cdr2, "cdr", S1(g_vm_cdr)) \
  _(bif_ssub, "ssub", S3(g_vm_ssub)) _(bif_scat, "scat", S2(g_vm_scat)) \
  _(bif_dot, ".", S1(g_vm_dot)) _(bif_read, "read", S1(g_vm_read)) _(bif_getc, "getc", S1(g_vm_getc))\
- _(bif_parse, "parse", S3(g_vm_parse))\
+ _(bif_str, "str", S1(g_vm_str))\
  _(bif_putc, "putc", S1(g_vm_putc)) _(bif_prn, "putn", S2(g_vm_putn)) _(bif_puts, "puts", S1(g_vm_puts))\
  _(bif_sym, "sym", S1(g_vm_gensym)) _(bif_nom, "nom", S1(g_vm_symnom)) _(bif_thd, "thd", S1(g_vm_thda))\
  _(bif_peek, "peek", S2(g_vm_peek2)) _(bif_poke, "poke", S3(g_vm_poke2)) _(bif_trim, "trim", S1(g_vm_trim))\

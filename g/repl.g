@@ -1,16 +1,153 @@
-; the read-eval-print loop and its multi-line line editor. loaded
-; after boot.g by the interactive frontends (host and kernel). the
-; buffer is a four-zipper threaded positionally through the editor
-; functions: u (lines above the cursor, reversed), l (chars left of
-; the cursor on the current line, reversed), r (chars at/after the
+; the read-eval-print loop, its parser, and its multi-line line editor.
+; loaded after boot.g by the interactive frontends (host and kernel).
+;
+; the parser is pure gwen: read1 walks a charlist and returns
+; (value . rest) on success, e on no-datum (top-level EOF or stray
+; closing paren), m on incomplete input (open list, dangling quote,
+; unterminated string). numbers are signed decimal with an optional
+; 0x/0X prefix for hex; octals are not special. the C `str` builtin
+; materializes symbol names and string literals from charlists.
+;
+; the editor buffer is a four-zipper threaded positionally through
+; the editor functions: u (lines above the cursor, reversed), l (chars
+; left of cursor on the current line, reversed), r (chars at/after
 ; cursor on the current line, in order), d (lines below). state is
-; passed and returned through helpers in continuation-passing style,
-; so no table is allocated per keystroke. on each tick the whole
-; multi-line input is redrawn from the cursor position saved by
-; DECSC at the start of edit, then the cursor is positioned with
-; relative escapes.
-(: (revappend a b) (foldl b (flip cons) a)
+; passed through helpers in CPS so no table is allocated per
+; keystroke. on each tick the whole multi-line input is redrawn from
+; the cursor position saved by DECSC at the start of edit.
+(: e (sym 0) m (sym 0) eofsym (sym 0)
+
+   (revappend a b) (foldl b (flip cons) a)
    (append a b) (revappend (rev a) b)
+
+   ; --- parser char classification ---
+   (isws c)    (|| (= c 32) (= c 10) (= c 9) (= c 13) (= c 12) (= c 0))
+   (iscom c)   (|| (= c 35) (= c 59))
+   (isdig c)   (&& (>= c 48) (<= c 57))
+   (ishex c)   (|| (isdig c) (&& (>= c 65) (<= c 70)) (&& (>= c 97) (<= c 102)))
+   (isdelim c) (|| (isws c) (iscom c) (= c 40) (= c 41) (= c 34) (= c 39))
+   (digval c)  (? (isdig c) (- c 48)
+                  (>= c 97) (- c 87)        ; a-f -> 10-15
+                  (- c 55))                  ; A-F -> 10-15
+
+   ; skip a comment to end of physical line (consuming the \n).
+   (skipln cl) (? (twop cl)
+                  (? (|| (= (car cl) 10) (= (car cl) 13)) (cdr cl)
+                     (skipln (cdr cl)))
+                  cl)
+   ; skip whitespace and # / ; comments
+   (skipws cl) (? (twop cl)
+                  (: c (car cl)
+                     (? (isws c)  (skipws (cdr cl))
+                        (iscom c) (skipws (skipln (cdr cl)))
+                        cl))
+                  cl)
+
+   ; --- integer parsing on a charlist ---
+   ; each returns (cons int rest) on success, 0 on failure (no digits).
+   (decimal cl)
+     (: (loop n cl had)
+          (? (&& (twop cl) (isdig (car cl)))
+             (loop (+ (* n 10) (- (car cl) 48)) (cdr cl) -1)
+             (? had (cons n cl) 0))
+        (loop 0 cl 0))
+   (hex cl)
+     (: (loop n cl had)
+          (? (&& (twop cl) (ishex (car cl)))
+             (loop (+ (* n 16) (digval (car cl))) (cdr cl) -1)
+             (? had (cons n cl) 0))
+        (loop 0 cl 0))
+   ; unsigned int with optional 0x / 0X prefix.
+   (uint cl)
+     (? (&& (twop cl) (= (car cl) 48))
+        (: rest (cdr cl)
+           (? (&& (twop rest) (|| (= (car rest) 120) (= (car rest) 88)))
+              (hex (cdr rest))
+              (decimal cl)))
+        (decimal cl))
+   ; signed int.
+   (numof cl)
+     (? (twop cl)
+        (: c (car cl)
+           (? (= c 45) (: r (uint (cdr cl))
+                          (? (twop r) (cons (- 0 (car r)) (cdr r)) 0))
+              (= c 43) (uint (cdr cl))
+              (uint cl)))
+        0)
+
+   ; read one token: a maximal run of non-delimiter chars.
+   ; returns (cons token-charlist rest).
+   (readtok cl)
+     (: (loop acc cl)
+          (? (&& (twop cl) (nilp (isdelim (car cl))))
+             (loop (cons (car cl) acc) (cdr cl))
+             (cons (rev acc) cl))
+        (loop 0 cl))
+
+   ; quote symbol -- gwen's quote special form is named with a backtick.
+   qsym (sym "`")
+
+   ; read one datum from a charlist.
+   (read1 cl)
+     (: cl (skipws cl)
+        (? (nilp cl) e
+           (: c (car cl)
+              (? (= c 40) (rdlist (cdr cl))    ; (
+                 (= c 41) e                     ; ) at top level
+                 (= c 39) (rdquot (cdr cl))    ; '
+                 (= c 34) (rdstr  (cdr cl))    ; "
+                 (rdatom cl)))))
+
+   ; read until a closing paren (already past the opening one).
+   (rdlist cl)
+     (: cl (skipws cl)
+        (? (nilp cl) m
+           (= (car cl) 41) (cons 0 (cdr cl))
+           (: r (read1 cl)
+              (? (= r m) m
+                 (= r e) m
+                 (: rest (rdlist (cdr r))
+                    (? (= rest m) m
+                       (cons (cons (car r) (car rest)) (cdr rest))))))))
+
+   ; read one datum after a quote mark; wrap as (qsym datum).
+   (rdquot cl)
+     (: r (read1 cl)
+        (? (= r m) m
+           (= r e) m
+           (cons (cons qsym (cons (car r) 0)) (cdr r))))
+
+   ; read a string literal until the closing quote, honoring \X.
+   (rdstr cl)
+     (: (loop acc cl)
+          (? (nilp cl) m
+             (: c (car cl)
+                rest (cdr cl)
+                (? (= c 34) (cons (str (rev acc)) rest)        ; closing "
+                   (= c 92) (? (nilp rest) m                    ; trailing \
+                               (loop (cons (car rest) acc) (cdr rest)))
+                   (loop (cons c acc) rest))))
+        (loop 0 cl))
+
+   ; read an atom: a token, then decide number-or-symbol.
+   (rdatom cl)
+     (: tr (readtok cl)
+        tok (car tr)
+        r (numof tok)
+        val (? (&& (twop r) (nilp (cdr r))) (car r) (sym (str tok)))
+        (cons val (cdr tr)))
+
+   ; drain a charlist into a list of all the datums it holds.
+   ; propagates m if anything in the chain is incomplete.
+   (parseall cl)
+     (: r (read1 cl)
+        (? (= r m) m
+           (= r e) 0
+           (: rest (parseall (cdr r))
+              (? (= rest m) m
+                 (cons (car r) rest)))))
+
+   ; --- editor ---
 
    ; intersperse a list of charlists with newlines, in order
    (joinln ls)
@@ -20,21 +157,9 @@
            (car ls))
         0)
 
-   ; flatten the editor state into one charlist suitable for parse
+   ; flatten the editor state into one charlist suitable for parseall
    (flatten u l r d)
      (joinln (revappend u (cons (revappend l r) d)))
-
-   ; drain a charlist into all the datums it contains. parse returns
-   ; (value . rest) on success, m on incomplete input, e on no-datum.
-   ; if anything in the chain is incomplete, propagate m so the caller
-   ; keeps editing the same buffer.
-   (parseall cl e m)
-     (: r (parse cl e m)
-        (? (= r m) m
-           (= r e) 0
-           (: rest (parseall (cdr r) e m)
-              (? (= rest m) m
-                 (cons (car r) rest)))))
 
    ; walk xs forward taking n chars into acc (reversed); when done
    ; call k with (rev (take n xs)) and (drop n xs). stops cleanly at
@@ -115,14 +240,13 @@
         _ (? (< 0 col) (, (putc 27) (putc 91) (putn col 10) (putc 67)) 0)
         (puts ""))
 
-   ; print the prompt, save the cursor (DECSC), dispatch events
-   ; until ^D or until enter at end-of-buffer with the buffer fully
-   ; parsed. enter always splits the current line at the cursor; only
-   ; when the cursor is at end-of-buffer do we try parseall, which
-   ; may yield multiple datums entered on one line. e/m are the empty
-   ; and more sentinels passed to parse; eofsym is returned on ^D so
-   ; the repl can distinguish that from a 0 (empty datum list).
-   (edline e m eofsym)
+   ; print the prompt, save the cursor (DECSC), dispatch events until
+   ; ^D or until enter at end-of-buffer with the buffer fully parsed.
+   ; enter always splits the current line at the cursor; only when
+   ; the cursor is at end-of-buffer do we try parseall, which may
+   ; yield multiple datums entered on one line. returns eofsym on ^D
+   ; (so the repl can distinguish that from a 0 datum list).
+   (edline _)
      (: pl 4
         _ (puts " ;; ") _ (putc 27) _ (putc 55)
         (loop u l r d)
@@ -131,7 +255,7 @@
              (? (= c -7) eofsym
                 (= c 10) (: nu (cons (rev l) u)
                             (? (&& (nilp r) (nilp d))
-                               (: vs (parseall (flatten nu 0 r d) e m)
+                               (: vs (parseall (flatten nu 0 r d))
                                   (? (= vs m) (loop nu 0 r d) vs))
                                (loop nu 0 r d)))
                 (< 0 c)  (loop u (cons c l) r d)
@@ -146,9 +270,8 @@
                 (loop u l r d)))
         (loop 0 0 0 0))
 
-   e (sym 0) m (sym 0) eofsym (sym 0)
    (repl x)
-     (: vs (edline e m eofsym)
+     (: vs (edline 0)
         (? (= vs eofsym) 0
            (: _ (each vs (\ v (: _ (. (ev 'ev v)) (putc 10))))
                (repl 0))))
