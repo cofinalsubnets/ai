@@ -1123,12 +1123,14 @@ static g_vm(g_vm_read) {
    return Continue(); } }
 
 // (parse charlist eofsym moresym): parse one datum from a charlist (a
-// list of character codes). returns the parsed value on success, moresym
-// when the input ends inside an unclosed list (so the caller can gather
-// more), and eofsym on empty input or a syntactic dead end. the charlist
-// is flattened into a C buffer first and read through the g_in adapter
-// for C strings (struct ti), so the parse -- which allocates and may
-// collect -- never holds a pointer into the gwen heap. transactional:
+// list of character codes). on success returns a pair (value . rest)
+// where rest is the suffix of the input that the parser did not consume,
+// so the caller can keep draining the buffer one datum at a time. returns
+// moresym when the input ends inside an unclosed list (so the caller can
+// gather more), and eofsym on empty input or a syntactic dead end. the
+// charlist is flattened into a C buffer first and read through the g_in
+// adapter for C strings (struct ti), so the parse -- which allocates and
+// may collect -- never holds a pointer into the gwen heap. transactional:
 // on a non-ok parse the value stack is rewound to its pre-parse depth.
 static g_vm(g_vm_parse) {
  uintptr_t n = 0;
@@ -1148,8 +1150,21 @@ static g_vm(g_vm_parse) {
  if (s != g_status_ok && s != g_status_eof && s != g_status_more)
   return encode(f, s);
  if (s != g_status_ok) f->sp = (word*) f + f->len - depth;
+ // on ok, replace the original input list (now at f->sp[1]) with the
+ // remainder (the suffix in.i chars deep) and cons it with the parsed
+ // value. the have() may collect, so write the remainder back to the
+ // stack first to keep it traceable.
+ if (s == g_status_ok) {
+  word rem = f->sp[1];
+  for (uintptr_t k = in.i; k && twop(rem); k--) rem = B(rem);
+  f->sp[1] = rem;
+  f = have(f, Width(struct g_pair));
+  if (!g_ok(f)) return f;
+  struct g_pair *p = bump(f, Width(struct g_pair));
+  ini_two(p, f->sp[0], f->sp[1]);
+  f->sp[0] = (intptr_t) p; }
  Unpack(f);
- if (s == g_status_ok)        Sp[3] = Sp[0], Sp += 3;  // parsed value
+ if (s == g_status_ok)        Sp[3] = Sp[0], Sp += 3;  // (value . rest)
  else if (s == g_status_more) Sp += 2;                 // moresym (Sp[2])
  else                         Sp[2] = Sp[1], Sp += 2;  // eofsym
  Ip += 1;

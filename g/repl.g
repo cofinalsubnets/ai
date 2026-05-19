@@ -24,6 +24,18 @@
    (flatten u l r d)
      (joinln (revappend u (cons (revappend l r) d)))
 
+   ; drain a charlist into all the datums it contains. parse returns
+   ; (value . rest) on success, m on incomplete input, e on no-datum.
+   ; if anything in the chain is incomplete, propagate m so the caller
+   ; keeps editing the same buffer.
+   (parseall cl e m)
+     (: r (parse cl e m)
+        (? (= r m) m
+           (= r e) 0
+           (: rest (parseall (cdr r) e m)
+              (? (= rest m) m
+                 (cons (car r) rest)))))
+
    ; walk xs forward taking n chars into acc (reversed); when done
    ; call k with (rev (take n xs)) and (drop n xs). stops cleanly at
    ; end-of-xs even if n exceeds the list length.
@@ -104,12 +116,12 @@
         (puts ""))
 
    ; print the prompt, save the cursor (DECSC), dispatch events
-   ; until ^D or until enter at end-of-buffer with parse OK. enter
-   ; always splits the current line at the cursor; only when the
-   ; cursor was at the end of the whole buffer do we try parse and
-   ; possibly submit. e/m are the empty and more sentinels passed
-   ; to parse; eofsym is returned on ^D so the repl can distinguish
-   ; that from a parsed datum that happens to equal 0.
+   ; until ^D or until enter at end-of-buffer with the buffer fully
+   ; parsed. enter always splits the current line at the cursor; only
+   ; when the cursor is at end-of-buffer do we try parseall, which
+   ; may yield multiple datums entered on one line. e/m are the empty
+   ; and more sentinels passed to parse; eofsym is returned on ^D so
+   ; the repl can distinguish that from a 0 (empty datum list).
    (edline e m eofsym)
      (: pl 4
         _ (puts " ;; ") _ (putc 27) _ (putc 55)
@@ -119,8 +131,8 @@
              (? (= c -7) eofsym
                 (= c 10) (: nu (cons (rev l) u)
                             (? (&& (nilp r) (nilp d))
-                               (: res (parse (flatten nu 0 r d) e m)
-                                  (? (= res m) (loop nu 0 r d) res))
+                               (: vs (parseall (flatten nu 0 r d) e m)
+                                  (? (= vs m) (loop nu 0 r d) vs))
                                (loop nu 0 r d)))
                 (< 0 c)  (loop u (cons c l) r d)
                 (= c -1) (edleft  loop u l r d)
@@ -136,8 +148,8 @@
 
    e (sym 0) m (sym 0) eofsym (sym 0)
    (repl x)
-     (: r (edline e m eofsym)
-        (? (= r eofsym) 0
-           (: _ (? (= r e) 0 (: _ (. (ev 'ev r)) (putc 10)))
+     (: vs (edline e m eofsym)
+        (? (= vs eofsym) 0
+           (: _ (each vs (\ v (: _ (. (ev 'ev v)) (putc 10))))
                (repl 0))))
    (repl 0))
