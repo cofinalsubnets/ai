@@ -33,8 +33,8 @@ static void raw_mode(void) {
   // c_oflag is left alone, so '\n' on output still becomes CR-LF.
 
 // --- host input ------------------------------------------------------
-// raw_stdin is the byte source: non-interactively it is read directly;
-// interactively the line editor (g_read_edit, in g.c) wraps it and reads
+// raw_stdin is the byte source at f->in: non-interactively the parser
+// reads it directly; interactively the gwen line editor (boot.g) reads
 // its keystrokes through it. one byte per getc, delivered in f->b. it
 // never allocates the gwen heap, so f stays valid across a getc.
 static struct g *raw_getc(struct g *f, struct g_in*) {
@@ -59,9 +59,8 @@ repl[] =
 int main(int argc, char const **argv) {
   struct g *f = g_ini();
   bool is_repl = isatty(STDIN_FILENO);
-  if (is_repl) {                           // interactive: raw tty + line editor
-    raw_mode();
-    f = g_read_edit(f); }                  // install the editor at f->in
+  if (is_repl) raw_mode();                 // interactive: raw tty; the line
+                                           // editor is now pure gwen (boot.g)
   for (; *argv; f = g_strof(f, *argv++));
   for (f = g_push(f, 1, g_nil); argc--; f = gxr(f));
   if (g_ok(f)) {

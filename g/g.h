@@ -131,13 +131,11 @@ struct g
  *g_eval(struct g*),
  *g_evals(struct g*, const char*),
  *g_read(struct g*, struct g_in*),
- *g_read_edit(struct g*),
  *g_feed(struct g*),
  *g_defs(struct g*, struct g_def const*),
  *g_push(struct g*, uintptr_t, ...),
  *g_strof(struct g*, const char*),
  *g_pop(struct g*, uintptr_t),
- *g_edit(struct g*, int),
  *gxl(struct g*),
  *gxr(struct g*);
 

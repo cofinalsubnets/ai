@@ -339,12 +339,18 @@ void kmain(void) {
  archinit();
  if (fbinit() && meminit() && cbinit()) {
   palette_init();
-  // install the line editor at f->in (wrapping the keyboard source), then
-  // run a read-eval-print loop -- (read e) is now transparently edited.
-  struct g *f = g_read_edit(g_defs(g_ini(), defs));
+  // run a read-eval-print loop; the line editor is pure gwen (boot.g),
+  // driven here by edline -> parse over a zipper. the keyboard driver
+  // delivers ANSI escape sequences, which the gwen edev decodes.
+  struct g *f = g_defs(g_ini(), defs);
   g_evals_(f,
 #include "boot.h"
-   "(:(g e)(: _(puts\" ;; \") r(read e)"
-   "        (?(= e r)0(: _(.(ev r)) _(putc 10)(g e))))"
-   "  (g(sym 0)))"); }
+   "(: z(new 0) e(sym 0) m(sym 0)"
+   " (loop x)(: cl(edline z\" ;; \")"
+   "  (?(get 0 'eof z) 0"
+   "   (: r(parse cl e m)"
+   "    (?(= r m)(loop 0)"
+   "      (= r e)(: _(edreset z)(loop 0))"
+   "      (: _(.(ev r)) _(putc 10) _(edreset z)(loop 0))))))"
+   " (loop 0))"); }
  k_reset(); }

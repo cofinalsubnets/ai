@@ -64,24 +64,6 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 #define putnum g_putnum
 #define g_strp strp
 
-// line-editor zipper: the line held as two charlists -- l is the items
-// left of the cursor, reversed; r is the focus and the rest, in order.
-// in_eof latches end-of-input. see g_edit and the editor notes in g.c.
-struct g_ed { g_word l, r, in_eof; };
-
-// input editor key events; g_edit takes one of these or, for any value
-// > 0, a character code to insert at the cursor.
-enum g_edit_ev {
- g_ed_left  = -1,  // move the focus one item left
- g_ed_right = -2,  // move the focus one item right
- g_ed_bsp   = -3,  // delete the item left of the cursor
- g_ed_del   = -4,  // delete the focused item
- g_ed_home  = -5,  // move the focus to the first item of this level
- g_ed_end   = -6,  // move the focus to the last item of this level
- g_ed_up    = -7,  // ascend: close this level into its parent's focus
- g_ed_down  = -8,  // descend: open the focused sublist as the level
-};
-
 struct g_pair { g_vm_t *ap; uintptr_t typ; intptr_t a, b; };
 enum q { two_q, vec_q, sym_q, tbl_q, };
 typedef g_word num, word;
@@ -102,7 +84,7 @@ static g_vm_t
  g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_bnot, g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
- g_vm_getc,  g_vm_lt,     g_vm_le,     g_vm_eq,   g_vm_gt,     g_vm_ge,
+ g_vm_getc,  g_vm_parse,  g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_gt,  g_vm_ge,
  g_vm_put, g_vm_tdel,   g_vm_tnew,   g_vm_tkeys,
  g_vm_unc, g_vm_poke2, g_vm_peek2,
  g_vm_seek,  g_vm_trim,   g_vm_thda,   g_vm_add,
@@ -665,7 +647,12 @@ g_vm(g_vm_eval) { return
 struct ti { struct g_in in; char const *t; word i; } ;
 static struct g*_eof(struct g*f, struct ti *i) { return f->b = !i->t[i->i], f; }
 static struct g*_getc(struct g*f, struct ti *i) { return f->b = (!i->t[i->i] ? EOF : i->t[i->i++]), f; }
-static struct g*_ungetc(struct g*f, int _, struct ti *i) { return f->b = i->t[i->i = i->i ? i->i - 1 : i->i], f; }
+// step the cursor back for a real character; an ungetc of EOF leaves it
+// put, so the next getc reports EOF again rather than re-reading a token
+// that ended exactly at end of input.
+static struct g*_ungetc(struct g*f, int c, struct ti *i) {
+ if (c != EOF && i->i) i->i--;
+ return f->b = c, f; }
 g_noinline struct g *g_evals(struct g*f, char const*s) {
  static char const *t = "((:(e a b)(? b(e(ev'ev(A b))(B b))a)e)0)";
  struct ti i = {{(void*)_getc, (void*)_ungetc, (void*)_eof}, t, 0};
@@ -870,192 +857,6 @@ struct g *gxr(struct g *f) {
   struct g_pair *p = bump(f, Width(struct g_pair));
   ini_two(p, f->sp[1], f->sp[0]);
   *++f->sp = (intptr_t) p; }
- return f; }
-
-// --- input editor -----------------------------------------------------
-// A line editor presented as a struct g_in: it edits a whole line, then
-// serves it back one character at a time, so any reader of f->in gets
-// cooked input transparently. The editor is struct g_in_ed, allocated on
-// the heap AS A THREAD (payload cells + a terminating g_tag) and parked
-// in f->in -- so the GC traces it for free: gcg scans v0..end, and a
-// thread is scanned cell by cell, relocating the gwen values (e.l, e.r)
-// and leaving the rest (vtable pointers, the host source, the tagged
-// in_eof) untouched. Every payload cell is non-zero, so ttag/copy_thread
-// find the terminator correctly.
-//
-// Because the collector MOVES the thread, no pointer into it may be held
-// across an allocation: each helper re-derives the zipper from f->in,
-// via e_of(), after every collection, and working values ride the value
-// stack across a cons. The zipper itself: e.l holds the items left of
-// the cursor, REVERSED; e.r holds the focus and the rest, in order;
-// e.in_eof latches end of input.
-struct g_in_ed { struct g_in _i; struct g_in *i; struct g_ed e; };
-
-#define EV_QUIT  (-100)
-#define EV_ENTER (-101)
-
-static struct g *ed_getc(struct g*, struct g_in*),
-                *ed_ungetc(struct g*, int, struct g_in*),
-                *ed_eof(struct g*, struct g_in*);
-
-// re-derive the live zipper from f->in. valid only until the next
-// allocation -- never hold the result across a have()/cons/g_edit().
-static g_inline struct g_ed *e_of(struct g *f) {
- return &((struct g_in_ed*) g_core_of(f)->in)->e; }
-
-// insert c at the cursor: e.l := (c . e.l). c and e.l ride the value
-// stack across the cons, so the collection it may trigger is safe; the
-// zipper is re-derived from f->in afterward.
-static struct g *ed_ins(struct g *f, word c) {
- f = g_push(f, 2, c, e_of(f)->l);
- if (g_ok(f = gxl(f))) { word p = pop1(f); e_of(f)->l = p; }
- return f; }
-
-// move one item across the cursor: the head of one side is consed onto
-// the other. like ed_ins the working values sit on the stack across the
-// cons; the zipper is re-derived after.
-static struct g *ed_shift(struct g *f, bool from_left) {
- struct g_ed *e = e_of(f);
- word from = from_left ? e->l : e->r;
- if (!twop(from)) return f;
- f = g_push(f, 2, A(from), from_left ? e->r : e->l);
- if (!g_ok(f = gxl(f))) return f;
- word moved = pop1(f);
- e = e_of(f);
- if (from_left) e->r = moved, e->l = B(e->l);
- else           e->l = moved, e->r = B(e->r);
- return f; }
-
-// shift every item from one side of the cursor to the other -- home/end.
-static struct g *ed_drain(struct g *f, bool from_left) {
- while (g_ok(f) && twop(from_left ? e_of(f)->l : e_of(f)->r))
-  f = ed_shift(f, from_left);
- return f; }
-
-// apply one key event to the editor at f->in. bsp/del don't allocate;
-// the rest go through the stack-safe helpers above.
-struct g *g_edit(struct g *f, int ev) {
- if (!g_ok(f)) return f;
- struct g_ed *e;
- switch (ev) {
-  default:         return ev > 0 ? ed_ins(f, putnum(ev)) : f;
-  case g_ed_bsp:   e = e_of(f); if (twop(e->l)) e->l = B(e->l); return f;
-  case g_ed_del:   e = e_of(f); if (twop(e->r)) e->r = B(e->r); return f;
-  case g_ed_left:  return ed_shift(f, true);
-  case g_ed_right: return ed_shift(f, false);
-  case g_ed_home:  return ed_drain(f, true);
-  case g_ed_end:   return ed_drain(f, false); } }
-
-// redraw the edit line through f->out. the region start (just after the
-// prompt) is marked with a DECSC save when ed_line begins; each redraw
-// returns there with a DECRC restore. e.l is reversed, so it is drained
-// onto e.r to walk the line in order then rewound -- pure cdr-repointing,
-// no allocation, so the zipper pointer stays valid across the redraw
-// (which assumes f->out->putc does not allocate -- a host writer).
-static struct g *ed_render(struct g *f) {
- struct g_ed *e = e_of(f);
- size_t left = 0, total = 0;
- for (word p; twop(e->l); left++)
-  p = e->l, e->l = B(p), B(p) = e->r, e->r = p;
- f = gputs(gputs(f, "\x1b" "8"), "\x1b[K");           // DECRC, clear to EOL
- for (word l = e->r; twop(l); l = B(l), total++) {
-  int c = getnum(A(l));
-  f = gputc(f, c >= ' ' && c < 127 ? c : ' '); }
- for (size_t i = left; i--; ) {
-  word p = e->r;
-  e->r = B(p), B(p) = e->l, e->l = p; }
- if (total > left) f = gputc(gputn(gputs(f, "\x1b["), total - left, 10), 'D');
- return gflush(f); }
-
-// read one raw byte from the editor's keystroke source; -1 at EOF. that
-// source must not allocate (so f stays valid), which a host raw reader
-// guarantees -- the byte lands in f->b.
-static int ed_rb(struct g *f) {
- struct g_in *i = ((struct g_in_ed*) g_core_of(f)->in)->i;
- return i->getc(f, i), (int) (g_word) g_core_of(f)->b; }
-
-// decode one keystroke into a g_edit_ev, a character (> 0), 0 to ignore,
-// EV_ENTER (submit) or EV_QUIT (^D / EOF).
-static int ed_readev(struct g *f) {
- int c = ed_rb(f);
- switch (c) {
-  case -1: case 4:      return EV_QUIT;
-  case '\r': case '\n': return EV_ENTER;
-  case 8: case 127:     return g_ed_bsp;     // Backspace
-  case 1:               return g_ed_home;    // Ctrl-A
-  case 5:               return g_ed_end;     // Ctrl-E
-  case 27:                                   // ESC: an escape sequence
-   if (ed_rb(f) != '[') return 0;
-   switch (c = ed_rb(f)) {
-    case 'D': return g_ed_left;
-    case 'C': return g_ed_right;
-    case 'A': return g_ed_up;
-    case 'B': return g_ed_down;
-    case 'H': return g_ed_home;
-    case 'F': return g_ed_end;
-    case '1': case '7': return ed_rb(f), g_ed_home;
-    case '4': case '8': return ed_rb(f), g_ed_end;
-    case '3':           return ed_rb(f), g_ed_del;
-    default:            return 0; }
-  default: return c >= ' ' && c < 127 ? c : 0; } }
-
-// edit one line: a keystroke loop until Enter (or ^D). on return the
-// zipper holds the line.
-static struct g *ed_line(struct g *f) {
- f = gputs(f, "\x1b" "7");                    // DECSC: mark the region start
- for (;;) {
-  f = ed_render(f);
-  int ev = ed_readev(f);
-  if (ev == EV_QUIT)  return e_of(f)->in_eof = putnum(1), f;
-  if (ev == EV_ENTER) return f = gputc(f, '\n'), gflush(f);
-  if (!g_ok(f = g_edit(f, ev))) return f; } }
-
-// the editor as a struct g_in: serve the next input character, running
-// the line editor to refill once the current line is spent.
-static struct g *ed_getc(struct g *f, struct g_in *in) {
- struct g_in_ed *ied = (struct g_in_ed*) in;
- if (twop(ied->e.r))                              // the edited line, char by char
-  return f->b = getnum(A(ied->e.r)), ied->e.r = B(ied->e.r), f;
- if (getnum(ied->e.in_eof)) return f->b = EOF, f;
- if (!g_ok(f = ed_line(f))) return f;             // refill: edit a fresh line
- ied = (struct g_in_ed*) g_core_of(f)->in;        // re-derive: ed_line allocated
- if (getnum(ied->e.in_eof)) return f->b = EOF, f; // ^D ended the session
- f = g_edit(f, g_ed_end);                         // flatten the line into e.r,
- f = g_edit(f, '\n');                             //  newline-terminated,
- if (!g_ok(f = g_edit(f, g_ed_home))) return f;   //  in reading order
- ied = (struct g_in_ed*) g_core_of(f)->in;        // re-derive
- if (!twop(ied->e.r)) return f->b = EOF, f;
- return f->b = getnum(A(ied->e.r)), ied->e.r = B(ied->e.r), f; }
-
-// push a character back onto the editor buffer: e.r := (c . e.r).
-static struct g *ed_ungetc(struct g *f, int c, struct g_in *in) {
- struct g_in_ed *ied = (struct g_in_ed*) in;
- f = g_push(f, 2, putnum(c), ied->e.r);
- if (g_ok(f = gxl(f))) {
-  word p = pop1(f);
-  ((struct g_in_ed*) g_core_of(f)->in)->e.r = p; }
- return f; }
-
-static struct g *ed_eof(struct g *f, struct g_in *in) {
- return f->b = getnum(((struct g_in_ed*) in)->e.in_eof), f; }
-
-// install the line editor: allocate it as a heap thread wrapping the
-// current f->in as keystroke source, and park it back in f->in. after
-// this, any read of f->in is transparently line-edited. idempotent.
-struct g *g_read_edit(struct g *f) {
- if (!g_ok(f)) return f;
- if (g_core_of(f)->in->getc == ed_getc) return f;     // already installed
- uintptr_t n = Width(struct g_in_ed);
- if (!g_ok(f = have(f, n + Width(struct g_tag)))) return f;
- struct g_in *src = g_core_of(f)->in;                 // re-derive: have() may collect
- union u *k = bump(f, n + Width(struct g_tag));
- struct g_tag *t = (struct g_tag*) (k + n);
- t->null = NULL, t->head = k;
- struct g_in_ed *ied = (struct g_in_ed*) k;
- ied->_i = (struct g_in) { ed_getc, ed_ungetc, ed_eof };
- ied->i = src;
- ied->e.l = ied->e.r = ied->e.in_eof = nil;
- g_core_of(f)->in = (struct g_in*) k;
  return f; }
 
 op11(g_vm_strp, strp(Sp[0]) ? putnum(-1) : g_nil)
@@ -1320,6 +1121,39 @@ static g_vm(g_vm_read) {
    Sp += 1;
    Ip += 1;
    return Continue(); } }
+
+// (parse charlist eofsym moresym): parse one datum from a charlist (a
+// list of character codes). returns the parsed value on success, moresym
+// when the input ends inside an unclosed list (so the caller can gather
+// more), and eofsym on empty input or a syntactic dead end. the charlist
+// is flattened into a C buffer first and read through the g_in adapter
+// for C strings (struct ti), so the parse -- which allocates and may
+// collect -- never holds a pointer into the gwen heap. transactional:
+// on a non-ok parse the value stack is rewound to its pre-parse depth.
+static g_vm(g_vm_parse) {
+ uintptr_t n = 0;
+ for (word l = Sp[0]; twop(l); l = B(l)) n++;
+ char *buf = f->malloc(f, n + 1);
+ if (!buf) { Pack(f); return encode(f, g_status_oom); }
+ uintptr_t i = 0;
+ for (word l = Sp[0]; twop(l); l = B(l)) buf[i++] = (char) getnum(A(l));
+ buf[i] = 0;
+ struct ti in = {{(void*) _getc, (void*) _ungetc, (void*) _eof}, buf, 0};
+ Pack(f);
+ uintptr_t depth = ((word*) f + f->len) - f->sp;
+ f = g_read1(f, (struct g_in*) &in);
+ enum g_status s = g_code_of(f);
+ f = g_core_of(f);
+ f->free(f, buf);
+ if (s != g_status_ok && s != g_status_eof && s != g_status_more)
+  return encode(f, s);
+ if (s != g_status_ok) f->sp = (word*) f + f->len - depth;
+ Unpack(f);
+ if (s == g_status_ok)        Sp[3] = Sp[0], Sp += 3;  // parsed value
+ else if (s == g_status_more) Sp += 2;                 // moresym (Sp[2])
+ else                         Sp[2] = Sp[1], Sp += 2;  // eofsym
+ Ip += 1;
+ return Continue(); }
 
 static g_vm(g_vm_getc) {
  Pack(f);
@@ -1820,6 +1654,7 @@ enum g_status g_fin(struct g *f) {
  _(bif_cons2, "cons", S2(g_vm_cons)) _(bif_car2, "car", S1(g_vm_car)) _(bif_cdr2, "cdr", S1(g_vm_cdr)) \
  _(bif_ssub, "ssub", S3(g_vm_ssub)) _(bif_scat, "scat", S2(g_vm_scat)) \
  _(bif_dot, ".", S1(g_vm_dot)) _(bif_read, "read", S1(g_vm_read)) _(bif_getc, "getc", S1(g_vm_getc))\
+ _(bif_parse, "parse", S3(g_vm_parse))\
  _(bif_putc, "putc", S1(g_vm_putc)) _(bif_prn, "putn", S2(g_vm_putn)) _(bif_puts, "puts", S1(g_vm_puts))\
  _(bif_sym, "sym", S1(g_vm_gensym)) _(bif_nom, "nom", S1(g_vm_symnom)) _(bif_thd, "thd", S1(g_vm_thda))\
  _(bif_peek, "peek", S2(g_vm_peek2)) _(bif_poke, "poke", S3(g_vm_poke2)) _(bif_trim, "trim", S1(g_vm_trim))\
