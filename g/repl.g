@@ -251,30 +251,34 @@
    ; datums on one line. returns eofsym on ^D (so the repl can tell
    ; that apart from a 0 datum list).
    ;
-   ; the loop carries pra (= rows above the cursor as of the previous
-   ; render). edrender uses pra to move back up to the prompt's row
+   ; the loop carries pra = rows above the cursor as of the previous
+   ; render. edrender uses pra to move back up to the prompt's row
    ; before redrawing, so we never rely on a saved absolute cursor
-   ; position -- terminal scrolling stays consistent. kloop wraps the
-   ; CPS helpers: they hand back a new state, kloop computes the new
-   ; pra from it and feeds it to loop.
+   ; position -- terminal scrolling stays consistent. since nothing
+   ; between renders moves the cursor (no putc except in the submit
+   ; branch which exits), the next render's pra is always (len u) of
+   ; the CURRENT frame, regardless of how the state transitions; we
+   ; cache it as npra and route every recursion through it. kloop
+   ; wraps the CPS helpers with that captured pra so the helpers
+   ; need not know about it.
    (edline _)
      (: ps1 " ;; "
         pr (ps1 _)
         _ (puts pr)
         pl (len pr)
-        (kloop u l r d) (loop (len u) u l r d)
         (loop pra u l r d)
           (: _ (edrender pl pra u l r d)
              c (edev 0)
+             npra (len u)
+             (kloop uu ll rr dd) (loop npra uu ll rr dd)
              (? (= c -7) eofsym
                 (= c 10) (: nu (cons (rev l) u)
-                            nra (len nu)
                             (? (&& (nilp r) (nilp d))
                                (: vs (parseall (flatten nu 0 r d))
-                                  (? (= vs m) (loop nra nu 0 r d)
+                                  (? (= vs m) (loop npra nu 0 r d)
                                      (: _ (putc 10) vs)))
-                               (loop nra nu 0 r d)))
-                (< 0 c)  (loop (len u) u (cons c l) r d)
+                               (loop npra nu 0 r d)))
+                (< 0 c)  (loop npra u (cons c l) r d)
                 (= c -1) (edleft  kloop u l r d)
                 (= c -2) (edright kloop u l r d)
                 (= c -3) (edbsp   kloop u l r d)
@@ -283,7 +287,7 @@
                 (= c -6) (edend   kloop u l r d)
                 (= c -8) (edup    kloop u l r d)
                 (= c -9) (eddown  kloop u l r d)
-                (loop (len u) u l r d)))
+                (loop npra u l r d)))
         (loop 0 0 0 0 0))
 
    (repl x)
