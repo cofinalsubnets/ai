@@ -25,8 +25,7 @@
 ; and the buffer becomes a new entry, so the original survives.
 (: e (sym 0) m (sym 0) eofsym (sym 0)
 
-   (revappend a b) (foldl b (flip cons) a)
-   (append a b) (revappend (rev a) b)
+   (revcat a b) (foldl b (flip cons) a)
 
    ; --- parser char classification ---
    (isws c)    (|| (= c 32) (= c 10) (= c 9) (= c 13) (= c 12) (= c 0))
@@ -161,13 +160,13 @@
    (joinln ls)
      (? (twop ls)
         (? (twop (cdr ls))
-           (append (car ls) (cons 10 (joinln (cdr ls))))
+           (cat (car ls) (cons 10 (joinln (cdr ls))))
            (car ls))
         0)
 
    ; flatten the editor state into one charlist suitable for parseall
    (flatten u l r d)
-     (joinln (revappend u (cons (revappend l r) d)))
+     (joinln (revcat u (cons (revcat l r) d)))
 
    ; walk xs forward taking n chars into acc (reversed); when done
    ; call k with (rev (take n xs)) and (drop n xs). stops cleanly at
@@ -187,11 +186,11 @@
    ; destination line's length.
    (edleft k u l r d)
      (? (twop l) (k u (cdr l) (cons (car l) r) d)
-        (twop u) (k (cdr u) (rev (car u)) 0 (cons (revappend l r) d))
+        (twop u) (k (cdr u) (rev (car u)) 0 (cons (revcat l r) d))
         (k u l r d))
    (edright k u l r d)
      (? (twop r) (k u (cons (car r) l) (cdr r) d)
-        (twop d) (k (cons (revappend l r) u) 0 (car d) (cdr d))
+        (twop d) (k (cons (revcat l r) u) 0 (car d) (cdr d))
         (k u l r d))
    (edbsp k u l r d)
      (? (twop l) (k u (cdr l) r d)
@@ -201,25 +200,25 @@
      (? (twop r) (k u l (cdr r) d)
         (twop d) (k u l (car d) (cdr d))
         (k u l r d))
-   (edhome k u l r d) (k u 0 (revappend l r) d)
-   (edend  k u l r d) (k u (revappend r l) 0 d)
+   (edhome k u l r d) (k u 0 (revcat l r) d)
+   (edend  k u l r d) (k u (revcat r l) 0 d)
    ; edtop / edbot jump across the whole buffer: cursor at the start of
    ; the topmost line / end of the bottommost line. on a single-line
    ; buffer they degenerate to edhome / edend.
    (edtop k u l r d)
      (? (twop u) (: ru (rev u)
-                     (k 0 0 (car ru) (append (cdr ru) (cons (revappend l r) d))))
-        (k u 0 (revappend l r) d))
+                     (k 0 0 (car ru) (cat (cdr ru) (cons (revcat l r) d))))
+        (k u 0 (revcat l r) d))
    (edbot k u l r d)
      (? (twop d) (: rd (rev d)
-                     (k (append (cdr rd) (cons (revappend l r) u)) (revappend (car rd) 0) 0 0))
-        (k u (revappend r l) 0 d))
+                     (k (cat (cdr rd) (cons (revcat l r) u)) (revcat (car rd) 0) 0 0))
+        (k u (revcat r l) 0 d))
    (edup k u l r d)
-     (? (twop u) (splitat (\ ll rr (k (cdr u) ll rr (cons (revappend l r) d)))
+     (? (twop u) (splitat (\ ll rr (k (cdr u) ll rr (cons (revcat l r) d)))
                           0 (len l) (car u))
         (k u l r d))
    (eddown k u l r d)
-     (? (twop d) (splitat (\ ll rr (k (cons (revappend l r) u) ll rr (cdr d)))
+     (? (twop d) (splitat (\ ll rr (k (cons (revcat l r) u) ll rr (cdr d)))
                           0 (len l) (car d))
         (k u l r d))
 
@@ -307,7 +306,7 @@
         _ (? (< 0 pl)  (, (putc 27) (putc 91) (putn pl 10)  (putc 67)) 0)
         _ (putc 27) _ (putc 91) _ (putc 74) ; clear to end of screen
         _ (each (rev u) (\ ln (, (each ln prc) (putc 10))))
-        _ (each (revappend l r) prc)
+        _ (each (revcat l r) prc)
         _ (each d (\ ln (, (putc 10) (each ln prc))))
         ld (len d)
         col (+ (? (twop u) 0 pl) (len l))
@@ -356,9 +355,9 @@
                                   (? (= vs m)
                                      (loop npra nu 0 r d (detach hu cur) hd 0)
                                      (: _ (putc 10)
-                                        nhu (? (nilp vs) (revappend hd (detach hu cur))
-                                               (twop cur) (revappend hd (cons cur hu))
-                                               (revappend hd (cons (mkframe u l r d) hu)))
+                                        nhu (? (nilp vs) (revcat hd (detach hu cur))
+                                               (twop cur) (revcat hd (cons cur hu))
+                                               (revcat hd (cons (mkframe u l r d) hu)))
                                         (cons vs (cons nhu 0)))))
                                (loop npra nu 0 r d (detach hu cur) hd 0)))
                 (< 0 c)  (loop npra u (cons c l) r d (detach hu cur) hd 0)
