@@ -108,6 +108,7 @@ static g_inline bool eql(struct g *f, word a, word b) { return a == b || eqv(f, 
 int memcmp(void const*, void const*, size_t);
 void *malloc(size_t), free(void*),
  *memcpy(void*restrict, void const*restrict, size_t),
+ *memmove(void*restrict, void const*restrict, size_t),
  *memset(void*, int, size_t);
 long strtol(char const*restrict, char**restrict, int);
 size_t strlen(char const*);
@@ -1698,3 +1699,51 @@ struct g *gputc(struct g*f, int c) {
   return !g_ok(f) ? f : f->out->putc(f, c, f->out); }
 struct g *gflush(struct g*f) {
   return !g_ok(f) ? f : f->out->flush(f, f->out); }
+
+static g_vm_t g_vm_kcall;
+
+#define topof(f) ((word*)f+f->len)
+static g_vm(g_vm_kcall) {
+  word x = Sp[0];
+  union u *ip = Ip[1].m,
+          *stack = Ip + 2,
+          *end = (union u*) ttag(stack);
+  uintptr_t height = end - stack;
+  Have(height);
+  Ip = ip;
+  Sp = memmove(topof(f) - height, stack, height * sizeof(word));
+  // the top stack value at construction is the argument to call/cc which we can discard
+  // TODO this will be different for multitasking resume case
+  Sp[0] = x;
+  return Continue(); }
+
+// (call/cc f) -- capture the current continuation as k and tail-apply
+// f to k. f is a one-arg function that receives k. invoking (k v) at
+// any later point reinstates the saved stack and resumes as if
+// (call/cc f) returned v. the snapshot layout matches g_vm_kcall:
+//   [g_vm_kcall, saved-ip, stack..., NULL, HEAD]
+// at entry Sp[0] = f and Sp[1] = the call/cc caller's return address.
+// we copy the entire live stack -- including f at Sp[0] -- into the
+// snapshot's stack slot; that top slot is the call/cc form's return
+// slot, which g_vm_kcall overwrites with v on invocation, so the form
+// resolves to v. saving Ip+1 (the bif thread's trailing g_vm_ret0) as
+// the resume ip means the eventual ret0 returns v to call/cc's caller
+// via the preserved Sp[1].
+static g_vm(g_vm_callk) {
+  word height = topof(f) - Sp;
+  uintptr_t n = 2 + height;                   // w0 + ip + stack cells
+  Have(n + Width(struct g_tag));
+  word f_val = Sp[0];                         // f, the call/cc arg
+  union u *k = (union u*) Hp;
+  Hp += n + Width(struct g_tag);
+  k[0].ap = g_vm_kcall;
+  k[1].m  = Ip + 1;                           // resume at g_vm_ret0
+  for (uintptr_t i = 0; i < (uintptr_t) height; i++)
+    k[2 + i].x = Sp[i];
+  struct g_tag *t = (struct g_tag*) (k + n);
+  t->null = NULL;
+  t->head = k;
+  if (odd(f_val)) Sp[0] = f_val, Ip++;
+  else Sp[0] = word(k), Ip = cell(f_val);
+  return Continue(); }
+
