@@ -1205,6 +1205,7 @@ static struct g *gfputx(struct g *f, struct g_out *o, intptr_t x) {
       f = o->putc(f, '"', o);
       for (char c; g_ok(f) && len--; f = o->putc(f, c, o))
        if ((c = *text++) == '\\' || c == '"') f = o->putc(f, '\\', o);
+       else if (c == '\n') f = o->putc(f, '\\', o), c = 'n';
       f = o->putc(f, '"', o); }
      return f; }
    case sym_q: {
