@@ -91,7 +91,7 @@ static g_vm_t
  g_vm_sub,   g_vm_mul,    g_vm_quot,   g_vm_rem,  g_vm_arg,
  g_vm_quote, g_vm_freev,  g_vm_eval,   g_vm_cond, g_vm_jump,   g_vm_defglob,
  g_vm_ap,    g_vm_tap,    g_vm_apn,    g_vm_tapn, g_vm_ret,    g_vm_lazyb,
- g_vm_callk, g_vm_yield_sw, g_vm_yield_bif, g_vm_task_exit, g_vm_spawn, g_vm_intr;
+ g_vm_callk, g_vm_yield_sw, g_vm_yield_bif, g_vm_task_exit, g_vm_spawn, g_vm_wait, g_vm_intr;
 static uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 static struct g*g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t base);
 static struct g_vec *ini_vec(struct g_vec*, uintptr_t, uintptr_t, ...);
@@ -1661,7 +1661,8 @@ enum g_status g_fin(struct g *f) {
  _(bif_symp, "symp", S1(g_vm_symp)) _(bif_tblp, "tblp", S1(g_vm_tblp)) _(bif_nump, "nump", S1(g_vm_nump))\
  _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))\
  _(bif_callk, "call/cc", S1(g_vm_callk)) _(bif_yield, "yield", S1(g_vm_yield_bif)) \
- _(bif_spawn, "spawn", S1(g_vm_spawn)) _(bif_intr, "intr?", S1(g_vm_intr))
+ _(bif_spawn, "spawn", S2(g_vm_spawn)) _(bif_wait, "wait", S1(g_vm_wait)) \
+ _(bif_intr, "intr?", S1(g_vm_intr))
 #define built_in_function(n, _, d) static union u const n[] = d;
 bifs(built_in_function);
 #define insts(_) _(g_vm_unc) _(g_vm_freev) _(g_vm_ret) _(g_vm_ap) _(g_vm_tap) _(g_vm_apn) _(g_vm_tapn)\
@@ -1744,9 +1745,10 @@ static g_vm(g_vm_kcall) {
 // resume : k = Ip[1] -> Ip = k, Sp = restored stack (cf. g_vm_kcall; no Sp[0] clobber)
 // tail-called by g_vm_yield_sw with Ip pointing at a task node; its Have is
 // guaranteed to pass because yield_sw pre-allocates the restored stack space.
+// Task layout: [next, saved_ip, pid, stack..., tag] — stack at Ip+3.
 static g_vm(g_vm_resume) {
   union u *ip = Ip[1].m,
-          *stack = Ip + 2,
+          *stack = Ip + 3,
           *end = (union u*) ttag(stack);
   uintptr_t height = end - stack;
   Have(height);
@@ -1777,30 +1779,38 @@ static g_vm(g_vm_callk) {
 // yield_sw : snapshot current task, splice into ring in place of f->tasks,
 // advance f->tasks to the next node, tail-call resume. Caller must have set
 // Ip to the desired resume point before tail-calling this op.
+// Skips dormant tasks (saved_ip->ap == g_vm_task_exit). The M placeholder is
+// never the target of this skip-check: it only exists while main is current,
+// and at that point f->tasks == M so the walk starts at M->m and never visits M.
 static g_vm(g_vm_yield_sw) {
   // single-task fast path (no ring or self-loop)
   if (!f->tasks || f->tasks->m == f->tasks) return Continue();
+  // walk forward, skipping dormant tasks; bail if everyone else is dormant
+  union u *next = f->tasks->m;
+  while (next != f->tasks && next[1].m->ap == g_vm_task_exit)
+    next = next->m;
+  if (next == f->tasks) return Continue();
   word my_height = topof(f) - Sp;
-  union u *next = f->tasks->m,
-          *next_stack = next + 2;
+  union u *next_stack = next + 3;
   uintptr_t restore_h = (union u*) ttag(next_stack) - next_stack;
   // one Have for both the snapshot alloc and the restored stack
-  Have(my_height + restore_h + 4);
+  Have(my_height + restore_h + 5);
   // walk the ring to find prev (the node whose next is f->tasks); O(ring size)
   union u *prev = next;
   while (prev->m != f->tasks) prev = prev->m;
   // build snapshot N for the currently-running task
-  uintptr_t snap = 2 + my_height + Width(struct g_tag);
+  uintptr_t snap = 3 + my_height + Width(struct g_tag);
   union u *N = (union u*) Hp;
   Hp += snap;
   N[0].m = next;     // N takes f->tasks's place in the ring
   N[1].m = Ip;       // saved_ip = resume point (caller-supplied via current Ip)
-  for (uintptr_t i = 0; i < (uintptr_t) my_height; i++) N[2 + i].x = Sp[i];
-  struct g_tag *t = (struct g_tag*) (N + 2 + my_height);
+  N[2].x = f->tasks[2].x;  // inherit pid from the node we're replacing
+  for (uintptr_t i = 0; i < (uintptr_t) my_height; i++) N[3 + i].x = Sp[i];
+  struct g_tag *t = (struct g_tag*) (N + 3 + my_height);
   t->null = NULL, t->head = N;
   prev->m = N;       // splice
   // switch to next task; tail-call resume to restore its state.
-  // setting Ip = next makes Ip[1]/Ip[2..] line up with next's saved fields.
+  // setting Ip = next makes Ip[1]/Ip[3..] line up with next's saved fields.
   f->tasks = next;
   f->yield_ctr = YIELD_INTERVAL;
   Ip = next;
@@ -1812,55 +1822,47 @@ static g_vm(g_vm_yield_bif) {
   Ip += 1;
   return Ap(g_vm_yield_sw, f); }
 
-// task_exit : remove the current task from the ring and switch to next.
-// Used as the terminating instruction in a spawned task's bootstrap thread.
-static g_vm(g_vm_task_exit) {
-  union u *current = f->tasks,
-          *next = current->m,
-          *next_stack = next + 2;
-  uintptr_t restore_h = (union u*) ttag(next_stack) - next_stack;
-  Have(restore_h);
-  // Find prev (the ring node whose next is current). O(ring size).
-  union u *prev = next;
-  while (prev->m != current) prev = prev->m;
-  prev->m = next;  // splice current out
-  Sp = memmove(topof(f) - restore_h, next_stack, restore_h * sizeof(word));
-  Ip = next[1].m;
-  // If the splice left next as a self-loop (ring of 1), collapse to NULL ring.
-  f->tasks = (prev == next) ? NULL : next;
-  f->yield_ctr = YIELD_INTERVAL;
-  return Continue(); }
+// task_exit : called when a spawned task's fn returns. Yields without advancing
+// Ip, leaving saved_ip pointing at this instruction inside spawn_body — that's
+// the dormancy marker. If rescheduled, the dormant task re-enters task_exit and
+// yields again; the scheduler also skips dormant tasks. `wait` collects them.
+static g_vm(g_vm_task_exit) { return Ap(g_vm_yield_sw, f); }
 
 // Bootstrap thread for spawned tasks. Inline-static; lives outside the heap so GC
-// leaves it alone. The task starts with stack [arg=0, fn]; g_vm_ap calls fn with
-// return address = &spawn_body[1] = g_vm_task_exit, which removes the task on return.
+// leaves it alone. The task starts with stack [x, fn]; g_vm_ap applies fn to x with
+// return address = &spawn_body[1] = g_vm_task_exit, which marks the task dormant.
 static union u spawn_body[] = { {g_vm_ap}, {.ap = g_vm_task_exit} };
 
-// (spawn fn) : create a new task that will run fn, splice it into the ring.
+// (spawn fn x) : create a new task that will apply fn to x, splice it into the ring.
 // First spawn bootstraps the ring by also creating a placeholder node for the
-// currently-running (main) task. Returns 0.
+// currently-running (main) task (pid=0, reserved). Returns the new task's pid.
 static g_vm(g_vm_spawn) {
-  word fn = Sp[0];
-  uintptr_t need = f->tasks ? 6 : 10;
+  word fn = Sp[0], x = Sp[1];
+  uintptr_t need = f->tasks ? 7 : 12;
   Have(need);
-  // New task node N: layout = [next, saved_ip=spawn_body, stack[0..1]=arg,fn, NULL, HEAD]
+  // New task node N: [next, saved_ip=spawn_body, pid, stack[0..1]=x,fn, NULL, HEAD]
   union u *N = (union u*) Hp;
-  Hp += 6;
+  Hp += 7;
+  uintptr_t pid = ++f->next_pid;
   N[1].m = (union u*) spawn_body;
-  N[2].x = putnum(0);  // dummy arg for (fn 0)
-  N[3].x = fn;
-  ((struct g_tag*) (N + 4))->null = NULL;
-  ((struct g_tag*) (N + 4))->head = N;
+  N[2].x = putnum(pid);
+  N[3].x = x;
+  N[4].x = fn;
+  ((struct g_tag*) (N + 5))->null = NULL;
+  ((struct g_tag*) (N + 5))->head = N;
   if (!f->tasks) {
-    // Bootstrap: also allocate placeholder M for the main task (height 0).
-    // M's saved_ip stays as a non-null sentinel so evac_thd's NULL-terminated walk
+    // Bootstrap: also allocate placeholder M for the main task (height 0, pid=0).
+    // M's saved_ip is a non-null sentinel so evac_thd's NULL-terminated walk
     // doesn't stop early; the cell is overwritten on the first yield from main.
+    // M is only ever the current task and is replaced on first yield, so the
+    // sentinel is never dereferenced as a function pointer.
     union u *M = (union u*) Hp;
-    Hp += 4;
+    Hp += 5;
     M[0].m = N;
-    M[1].x = putnum(0);  // sentinel; replaced on first yield
-    ((struct g_tag*) (M + 2))->null = NULL;
-    ((struct g_tag*) (M + 2))->head = M;
+    M[1].x = putnum(0);   // sentinel; replaced on first yield
+    M[2].x = putnum(0);   // main pid
+    ((struct g_tag*) (M + 3))->null = NULL;
+    ((struct g_tag*) (M + 3))->head = M;
     N[0].m = M;
     f->tasks = M;
   } else {
@@ -1869,7 +1871,38 @@ static g_vm(g_vm_spawn) {
     f->tasks->m = N;
   }
   f->yield_ctr = YIELD_INTERVAL;
-  Sp[0] = putnum(0);  // spawn returns 0
+  Sp[1] = putnum(pid);
+  Sp += 1;
+  Ip += 1;
+  return Continue(); }
+
+// (wait pid) : look up task by pid in the ring; the calling (current) task is
+// skipped, so waiting on your own pid (or pid 0 from main) yields "not found"
+// rather than deadlocking.
+//   not found           -> return 0
+//   dormant (finished)  -> splice out, return the task's return value
+//   still running       -> yield without advancing Ip (re-enters wait on resume)
+static g_vm(g_vm_wait) {
+  word pid_arg = Sp[0];
+  if (!f->tasks || !nump(pid_arg)) {
+    Sp[0] = putnum(0);
+    Ip += 1;
+    return Continue(); }
+  intptr_t target = getnum(pid_arg);
+  for (union u *node = f->tasks->m; node != f->tasks; node = node->m) {
+    if (getnum(node[2].x) != target) continue;
+    if (node[1].m->ap == g_vm_task_exit) {
+      // dormant: dormant task's stack is just [retval] at node[3]
+      word retval = node[3].x;
+      union u *prev = node;
+      while (prev->m != node) prev = prev->m;
+      prev->m = node->m;
+      Sp[0] = retval;
+      Ip += 1;
+      return Continue(); }
+    // still running: yield without advancing Ip (re-enter wait on resume)
+    return Ap(g_vm_yield_sw, f); }
+  Sp[0] = putnum(0);
   Ip += 1;
   return Continue(); }
 
