@@ -55,4 +55,11 @@
  ; top-level (single datum) signed literals
  (= -5        (parse "-5"))
  (= 5         (parse "+5"))
- (= 'x        (parse "x")))
+ (= 'x        (parse "x"))
+ ; parseall threads the boundary across consecutive top-level reads,
+ ; so a line like "2+3" submits as three datums (the repl wraps this
+ ; in (infix ...) in infix mode).
+ (= '(2 + 3)  (parseall (s2cl "2+3")))
+ (= '(2 + 3)  (parseall (s2cl "2 + 3")))
+ (= '(2 3)    (parseall (s2cl "2 +3")))
+ (= '(x - 5)  (parseall (s2cl "x-5"))))

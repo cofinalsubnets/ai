@@ -219,14 +219,20 @@
            (rdalphat (cons (car cl) 0) (cdr cl))))
 
    ; drain a charlist into a list of all the datums it holds.
-   ; propagates m if anything in the chain is incomplete.
+   ; propagates m if anything in the chain is incomplete. threads the
+   ; at-boundary bit across reads (same shape as rdlist's inner loop)
+   ; so e.g. "2+3" parses as `(2 + 3)`, not `(2 3)`.
    (parseall cl)
-     (: r (read1 cl)
-        (? (= r m) m
-           (= r e) 0
-           (: rest (parseall (cdr r))
-              (? (= rest m) m
-                 (cons (car r) rest)))))
+     (: (loop cl at_boundary)
+          (: cl2 (skipws cl)
+             ab (|| at_boundary (!= cl2 cl))
+             r (rd1 cl2 ab)
+             (? (= r m) m
+                (= r e) 0
+                (: rest (loop (cdr r) 0)
+                   (? (= rest m) m
+                      (cons (car r) rest)))))
+        (loop cl -1))
 
    ; --- editor ---
 
