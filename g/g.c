@@ -1697,6 +1697,11 @@ void g_libc_free(struct g*f, void *x) { free(x); }
 // block forever). Frontends with real stdin override with a strong definition.
 __attribute__((weak)) bool g_key(void) { return false; }
 
+// Default deep-sleep: no-op. Frontends override with a real wait (nanosleep,
+// hlt/wfi/idle). Without an override, the scheduler still works — it just
+// busy-yields through the sleep deadline instead of relinquishing the CPU.
+__attribute__((weak)) void g_sleep(uintptr_t ticks) { (void) ticks; }
+
 g_inline struct g *g_pop(struct g*f, uintptr_t n) { return g_core_of(f)->sp += n, f; }
 
 static g_inline struct g *symof(char const *n, struct g *f) {
@@ -1748,10 +1753,10 @@ static g_vm(g_vm_kcall) {
 // resume : k = Ip[1] -> Ip = k, Sp = restored stack (cf. g_vm_kcall; no Sp[0] clobber)
 // tail-called by g_vm_yield_sw with Ip pointing at a task node; its Have is
 // guaranteed to pass because yield_sw pre-allocates the restored stack space.
-// Task layout: [next, saved_ip, pid, stack..., tag] — stack at Ip+3.
+// Task layout: [next, saved_ip, pid, wake_at, stack..., tag] — stack at Ip+4.
 static g_vm(g_vm_resume) {
   union u *ip = Ip[1].m,
-          *stack = Ip + 3,
+          *stack = Ip + 4,
           *end = (union u*) ttag(stack);
   uintptr_t height = end - stack;
   Have(height);
@@ -1782,38 +1787,80 @@ static g_vm(g_vm_callk) {
 // yield_sw : snapshot current task, splice into ring in place of f->tasks,
 // advance f->tasks to the next node, tail-call resume. Caller must have set
 // Ip to the desired resume point before tail-calling this op.
-// Skips dormant tasks (saved_ip->ap == g_vm_task_exit). The M placeholder is
-// never the target of this skip-check: it only exists while main is current,
-// and at that point f->tasks == M so the walk starts at M->m and never visits M.
+// Skips dormant tasks (saved_ip->ap == g_vm_task_exit) and sleeping tasks
+// (wake_at slot > now). When every task is dormant or sleeping, finds min
+// wake_at across the ring and calls the frontend g_sleep(delta) hook so the
+// CPU doesn't busy-yield through deadlines.
+// Caller may set f->next_wake_at to a raw deadline before calling; we read it
+// once and clear, then install it (tagged via putnum) as the current task's
+// wake_at slot at snapshot time. 0 (= default) means "always runnable".
+// The slot is always stored tagged — putnum(0) = 1 is the "always runnable"
+// sentinel; this keeps the slot non-zero so ttag's NULL-terminator walk over
+// the snapshot doesn't stop here.
+//
+// Layout: [next, saved_ip, pid, wake_at, stack..., tag] — stack at offset 4.
 static g_vm(g_vm_yield_sw) {
-  // single-task fast path (no ring or self-loop)
-  if (!f->tasks || f->tasks->m == f->tasks) return Continue();
-  // walk forward, skipping dormant tasks; bail if everyone else is dormant
+  uintptr_t now = g_clock();
+  uintptr_t my_wake = f->next_wake_at;
+  f->next_wake_at = 0;
+  // single-task fast path (no ring or self-loop): just deep-sleep if we have
+  // a deadline, otherwise stay running. Either way the caller's Ip resumes.
+  if (!f->tasks || f->tasks->m == f->tasks) {
+    if (my_wake && my_wake > now) g_sleep(my_wake - now);
+    return Continue(); }
+  // walk forward, skipping dormant AND sleeping tasks
   union u *next = f->tasks->m;
-  while (next != f->tasks && next[1].m->ap == g_vm_task_exit)
+  while (next != f->tasks &&
+         (next[1].m->ap == g_vm_task_exit ||
+          (uintptr_t) getnum(next[3].x) > now))
     next = next->m;
-  if (next == f->tasks) return Continue();
+  if (next == f->tasks) {
+    // No peer runnable. Find the earliest deadline across non-dormant ring
+    // nodes (including our own pending wake_at, which may be 0). The current
+    // task may be yielding-not-sleeping (e.g. main parked in `wait` on a
+    // sleeping worker); in that case we still need to coalesce on the peers'
+    // deadlines, otherwise we'd busy-loop here.
+    uintptr_t min_wake = my_wake;
+    for (union u *n = f->tasks->m; n != f->tasks; n = n->m)
+      if (n[1].m->ap != g_vm_task_exit) {
+        uintptr_t wa = (uintptr_t) getnum(n[3].x);
+        if (wa && (!min_wake || wa < min_wake)) min_wake = wa; }
+    // No deadlines anywhere — everyone is dormant, or we're alone. Run.
+    if (!min_wake) return Continue();
+    if (min_wake > now) g_sleep(min_wake - now);
+    now = g_clock();
+    next = f->tasks->m;
+    while (next != f->tasks &&
+           (next[1].m->ap == g_vm_task_exit ||
+            (uintptr_t) getnum(next[3].x) > now))
+      next = next->m;
+    if (next == f->tasks) return Continue();  // a peer didn't wake; just go
+    my_wake = 0; }  // we slept enough; record as runnable in our snapshot
   word my_height = topof(f) - Sp;
-  union u *next_stack = next + 3;
+  union u *next_stack = next + 4;
   uintptr_t restore_h = (union u*) ttag(next_stack) - next_stack;
   // one Have for both the snapshot alloc and the restored stack
-  Have(my_height + restore_h + 5);
+  Have(my_height + restore_h + 6);
   // walk the ring to find prev (the node whose next is f->tasks); O(ring size)
   union u *prev = next;
   while (prev->m != f->tasks) prev = prev->m;
   // build snapshot N for the currently-running task
-  uintptr_t snap = 3 + my_height + Width(struct g_tag);
+  uintptr_t snap = 4 + my_height + Width(struct g_tag);
   union u *N = (union u*) Hp;
   Hp += snap;
-  N[0].m = next;     // N takes f->tasks's place in the ring
+  N[0].m = f->tasks->m;  // N takes f->tasks's place in the ring; preserve all
+                         // intermediate nodes (the scan skipped sleeping /
+                         // dormant peers but they must stay in the ring so
+                         // wait/kill/done? can still find them).
   N[1].m = Ip;       // saved_ip = resume point (caller-supplied via current Ip)
   N[2].x = f->tasks[2].x;  // inherit pid from the node we're replacing
-  for (uintptr_t i = 0; i < (uintptr_t) my_height; i++) N[3 + i].x = Sp[i];
-  struct g_tag *t = (struct g_tag*) (N + 3 + my_height);
+  N[3].x = putnum((intptr_t) my_wake);  // wake_at slot; putnum(0)=1 is "always runnable" (non-zero so ttag doesn't stop here)
+  for (uintptr_t i = 0; i < (uintptr_t) my_height; i++) N[4 + i].x = Sp[i];
+  struct g_tag *t = (struct g_tag*) (N + 4 + my_height);
   t->null = NULL, t->head = N;
   prev->m = N;       // splice
   // switch to next task; tail-call resume to restore its state.
-  // setting Ip = next makes Ip[1]/Ip[3..] line up with next's saved fields.
+  // setting Ip = next makes Ip[1]/Ip[4..] line up with next's saved fields.
   f->tasks = next;
   f->yield_ctr = YIELD_INTERVAL;
   Ip = next;
@@ -1841,18 +1888,20 @@ static union u spawn_body[] = { {g_vm_ap}, {.ap = g_vm_task_exit} };
 // currently-running (main) task (pid=0, reserved). Returns the new task's pid.
 static g_vm(g_vm_spawn) {
   word fn = Sp[0], x = Sp[1];
-  uintptr_t need = f->tasks ? 7 : 12;
+  uintptr_t need = f->tasks ? 8 : 14;
   Have(need);
-  // New task node N: [next, saved_ip=spawn_body, pid, stack[0..1]=x,fn, NULL, HEAD]
+  // New task node N: [next, saved_ip=spawn_body, pid, wake_at=0, stack[0..1]=x,fn, NULL, HEAD]
   union u *N = (union u*) Hp;
-  Hp += 7;
+  Hp += 8;
   uintptr_t pid = ++f->next_pid;
   N[1].m = (union u*) spawn_body;
   N[2].x = putnum(pid);
-  N[3].x = x;
-  N[4].x = fn;
-  ((struct g_tag*) (N + 5))->null = NULL;
-  ((struct g_tag*) (N + 5))->head = N;
+  N[3].x = putnum(0);        // wake_at: non-zero sentinel for "always runnable"
+                             // (so ttag's NULL-terminator walk doesn't stop here)
+  N[4].x = x;
+  N[5].x = fn;
+  ((struct g_tag*) (N + 6))->null = NULL;
+  ((struct g_tag*) (N + 6))->head = N;
   if (!f->tasks) {
     // Bootstrap: also allocate placeholder M for the main task (height 0, pid=0).
     // M's saved_ip is a non-null sentinel so evac_thd's NULL-terminated walk
@@ -1860,12 +1909,13 @@ static g_vm(g_vm_spawn) {
     // M is only ever the current task and is replaced on first yield, so the
     // sentinel is never dereferenced as a function pointer.
     union u *M = (union u*) Hp;
-    Hp += 5;
+    Hp += 6;
     M[0].m = N;
     M[1].x = putnum(0);   // sentinel; replaced on first yield
     M[2].x = putnum(0);   // main pid
-    ((struct g_tag*) (M + 3))->null = NULL;
-    ((struct g_tag*) (M + 3))->head = M;
+    M[3].x = putnum(0);   // wake_at: non-zero sentinel for "always runnable"
+    ((struct g_tag*) (M + 4))->null = NULL;
+    ((struct g_tag*) (M + 4))->head = M;
     N[0].m = M;
     f->tasks = M;
   } else {
@@ -1895,8 +1945,8 @@ static g_vm(g_vm_wait) {
   for (union u *node = f->tasks->m; node != f->tasks; node = node->m) {
     if (getnum(node[2].x) != target) continue;
     if (node[1].m->ap == g_vm_task_exit) {
-      // dormant: dormant task's stack is just [retval] at node[3]
-      word retval = node[3].x;
+      // dormant: dormant task's stack is just [retval] at node[4]
+      word retval = node[4].x;
       union u *prev = node;
       while (prev->m != node) prev = prev->m;
       prev->m = node->m;
@@ -1954,22 +2004,32 @@ static union u sleep_wait_body[] = { {g_vm_sleep_wait} };
 
 // (sleep n) : block the current task for at least n g_clock() ticks, returning
 // nil. n <= 0 or non-numeric returns nil immediately without yielding.
-// Otherwise: convert n to an absolute deadline, store it at Sp[0], redirect Ip
-// to sleep_wait_body, and tail into the scheduler. The bif's own S1 ret0 cell
-// is skipped — sleep_wait does the return itself when the deadline arrives.
+// Otherwise: convert n to an absolute deadline, store it at Sp[0] (so the GC
+// retry path through sleep_wait can recheck) and at f->next_wake_at (so
+// yield_sw can install it as our snapshot's wake_at slot and the scheduler
+// can skip us until the deadline). The bif's own S1 ret0 cell is skipped —
+// sleep_wait does the return itself when the deadline arrives.
 static g_vm(g_vm_sleep) {
   word n = Sp[0];
   if (!nump(n) || getnum(n) <= 0) {
     Sp[0] = g_nil;
     Ip += 1;
     return Continue(); }
-  Sp[0] = putnum((intptr_t) g_clock() + getnum(n));
+  uintptr_t deadline = (uintptr_t) g_clock() + getnum(n);
+  Sp[0] = putnum((intptr_t) deadline);
+  f->next_wake_at = deadline;
   Ip = sleep_wait_body;
   return Ap(g_vm_yield_sw, f); }
 
+// sleep_wait : runs when the scheduler picks a sleeping task whose wake_at has
+// arrived. Common path: deadline reached, return nil through the saved return
+// address at Sp[1]. Defensive path: GC retry inside yield_sw can route us here
+// before the snapshot was actually taken (Ip is already sleep_wait_body when
+// yield_sw's Have fails). In that case re-arm next_wake_at and yield again.
 static g_vm(g_vm_sleep_wait) {
-  if ((intptr_t) g_clock() < getnum(Sp[0]))
-    return Ap(g_vm_yield_sw, f);
+  if ((intptr_t) g_clock() < getnum(Sp[0])) {
+    f->next_wake_at = (uintptr_t) getnum(Sp[0]);
+    return Ap(g_vm_yield_sw, f); }
   // Wake: return nil through the caller's saved return address at Sp[1].
   Ip = cell(Sp[1]);
   Sp[1] = g_nil;

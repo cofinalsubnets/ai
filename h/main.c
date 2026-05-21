@@ -44,6 +44,13 @@ bool g_key(void) {
   struct pollfd p = { .fd = STDIN_FILENO, .events = POLLIN };
   return poll(&p, 1, 0) > 0; }
 
+// Deep sleep: g_clock() returns milliseconds (CLOCK_REALTIME, ms granularity),
+// so nanosleep is the natural fit. Called by the scheduler when every task is
+// asleep; the delta is `min(wake_at) - now` in ms.
+void g_sleep(uintptr_t ms) {
+  struct timespec ts = { (time_t) (ms / 1000), (long) (ms % 1000) * 1000000L };
+  nanosleep(&ts, NULL); }
+
 // --- host input ------------------------------------------------------
 // raw_stdin is the byte source at f->in: non-interactively the parser
 // reads it directly; interactively the gwen line editor (boot.g) reads

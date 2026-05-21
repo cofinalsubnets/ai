@@ -58,6 +58,7 @@ struct g {
  union u *tasks;       // task ring head (running task's node); NULL = no ring
  uintptr_t yield_ctr;  // ticks before next cooperative yield; reset on swap/spawn
  uintptr_t next_pid;   // monotonic pid counter; pre-incremented, so first spawn returns 1
+ uintptr_t next_wake_at; // raw deadline for next yield_sw snapshot's wake_at slot; 0 = always runnable
  struct g_atom {
   g_vm_t *ap;
   g_word typ;
@@ -117,6 +118,7 @@ g_vm_t g_vm_ret0, g_vm_cur;
 
 uintptr_t g_clock(void); // used by garbage collector
 bool g_key(void);  // per-frontend non-consuming key-ready poll; default = false
+void g_sleep(uintptr_t ticks); // per-frontend deep sleep for at least `ticks` g_clock() units; default = no-op (busy-wait)
 
 struct g
  *ggetc(struct g*),

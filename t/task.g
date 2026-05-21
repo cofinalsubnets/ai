@@ -156,4 +156,43 @@
     _ (kill a)
     rb (wait b)
     (&& (= 0 (wait a)) (= 70 rb)))
+
+ ; --- wake_at scheduler behavior ---
+
+ ; wait on a sleeping task: main has to sleep deeply alongside it, then
+ ; collect the result. Elapsed should be ~30ms, not 0 or much more.
+ (: t0 (clock 0)
+    p (spawn (\ _ (, (sleep 30) 'done)) 0)
+    r (wait p)
+    elapsed (clock t0)
+    (&& (= 'done r) (>= elapsed 30) (< elapsed 80)))
+
+ ; tasks with different sleep durations wake in order: shorter sleep
+ ; finishes first, longer still sleeping when we check, then completes.
+ (: a (spawn (\ _ (, (sleep 10) 1)) 0)
+    b (spawn (\ _ (, (sleep 80) 2)) 0)
+    ra (wait a)               ; ~10ms; b still sleeping
+    db (done? b)              ; b should still be running
+    rb (wait b)               ; ~70ms more
+    (&& (= 1 ra) (nilp db) (= 2 rb)))
+
+ ; kill a sleeping task: scheduler skips it via wake_at, but kill walks the
+ ; ring directly and finds it regardless of state.
+ (: p (spawn (\ _ (, (sleep 10000) 'never)) 0)
+    r (kill p)
+    (&& (= -1 r) (= 0 (wait p))))
+
+ ; sleep tasks coexist with non-sleeping ones: a worker that yields hot
+ ; gets time while another sleeps.
+ (: t (new 0)
+    _ (put 'n 0 t)
+    a (spawn (\ _ (sleep 30)) 0)
+    b (spawn (\ _ (: (loop) (? (< (get 0 'n t) 5)
+                                (, (put 'n (+ 1 (get 0 'n t)) t)
+                                   (yield 0)
+                                   (loop))
+                                'done)
+                    (loop))) 0)
+    _ (wait a) _ (wait b)
+    (= 5 (get 0 'n t)))
 )
