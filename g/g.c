@@ -1046,7 +1046,8 @@ static struct g *g_read1(struct g*f, struct g_in *i) {
      c = f->b;
      if (c == '\\') {                               // escape: take next char
       if (!g_ok(f = i->getc(f, i))) return f;
-      if ((c = f->b) == EOF) return encode(f, g_status_more); }
+      if ((c = f->b) == EOF) return encode(f, g_status_more);
+      if (c == 'n') c = '\n'; }
      else if (c == EOF) return encode(f, g_status_more);  // unterminated
      else if (c == '"') return len(b) = n, f; }           // closing quote
    return f; } }

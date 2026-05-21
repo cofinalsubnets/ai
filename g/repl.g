@@ -130,7 +130,8 @@
                 rest (cdr cl)
                 (? (= c 34) (cons (str (rev acc)) rest)        ; closing "
                    (= c 92) (? (nilp rest) m                    ; trailing \
-                               (loop (cons (car rest) acc) (cdr rest)))
+                               (: nc (car rest)
+                                  (loop (cons (? (= nc 110) 10 nc) acc) (cdr rest))))
                    (loop (cons c acc) rest))))
         (loop 0 cl))
 
