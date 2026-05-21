@@ -75,7 +75,7 @@ static struct g
  *mktbl(struct g*),
  *intern(struct g*),
  *g_reads(struct g*, struct g_in*, bool),
- *g_read1(struct g*, struct g_in*);
+ *g_read1(struct g*, struct g_in*, bool);
 static g_vm(g_vm_gc, uintptr_t);
 static g_vm_t
  g_vm_data,  g_vm_putn,   g_vm_nomsym, g_vm_info, g_vm_dot,    g_vm_clock,
@@ -1015,13 +1015,19 @@ static struct g *grbufg(struct g *f) {
 /// " the parser "
 //
 //
-// get the next significant character from the stream
-static struct g* g_r_getc(struct g*f, struct g_in *i) {
+// get the next significant character from the stream. *skipped is set
+// to true iff at least one whitespace or comment char was consumed
+// while advancing -- callers use this to tell whether a token boundary
+// (whitespace) preceded the returned char.
+static struct g* g_r_getc(struct g*f, struct g_in *i, bool *skipped) {
+ *skipped = false;
  while (g_ok(f = i->getc(f, i))) switch (f->b) {
   default: return f;
   case '#': case ';':
+   *skipped = true;
    while (g_ok(f = i->eof(f, i)) && !f->b && g_ok(f = i->getc(f, i)) && f->b != '\n' && f->b != '\r');
   case 0: case ' ': case '\t': case '\n': case '\r': case '\f':
+   *skipped = true;
    continue; }
  return f; }
 
@@ -1039,8 +1045,11 @@ static struct g* g_r_getc(struct g*f, struct g_in *i) {
 //   `?-`, `?,` etc. read as one symbol while bare `?` (the cond
 //   keyword) still works.
 // Sign handling: a leading '-' or '+' is tentatively punctuation; if
-//   the next char is a digit it switches to numeric. So `-1` is the
-//   number -1, `--` is the symbol --, `x-5` reads as x then -5, etc.
+//   the next char is a digit AND the '-'/'+' is at a token boundary
+//   (preceded by whitespace, comment, the start of input, or a delim
+//   char `( [ { ' "`) it switches to numeric. So `-1`, `(- 5)`, `( -1)`
+//   all yield a negative number, but `x-5` reads as `x - 5` (three
+//   tokens) and `(1+2)` reads as `(1 + 2)`.
 static g_inline int is_alpha_first(int c) {
  if (c == EOF || c == 0) return 0;
  unsigned uc = (unsigned) c & 0xff;
@@ -1058,14 +1067,16 @@ static g_inline int is_punc_chr(int c) {
    return 1;
   default: return 0; } }
 
-static struct g *g_read1(struct g*f, struct g_in *i) {
- if (!g_ok(f = g_r_getc(f, i))) return f;
+static struct g *g_read1(struct g*f, struct g_in *i, bool at_boundary) {
+ bool skipped;
+ if (!g_ok(f = g_r_getc(f, i, &skipped))) return f;
+ if (skipped) at_boundary = true;
  int c = f->b;
  switch (c) {
   case '(':  return g_reads(f, i, true);
   case ')': case EOF:  return encode(f, g_status_eof);
   case '\'':
-   f = g_read1(f, i);
+   f = g_read1(f, i, true);                        // ' is a delim
    if (g_code_of(f) == g_status_eof)               // quote with no operand
     f = encode(g_core_of(f), g_status_more);
    return gxl(pushq(gxr(g_push(f, 1, g_nil))));
@@ -1112,7 +1123,7 @@ static struct g *g_read1(struct g*f, struct g_in *i) {
  if (is_alpha_first(c)) cls = 'A';
  else if (is_dec_digit(c)) { cls = 'N'; if (c == '0') hex_state = 1; }
  else if (c == '?') cls = 'P';
- else if (c == '-' || c == '+') { cls = 'P'; sign_first = 1; }
+ else if (c == '-' || c == '+') { cls = 'P'; sign_first = at_boundary; }
  else if (is_punc_chr(c)) cls = 'P';
  else cls = 'A';                                   // unknown byte: lenient
 
@@ -1154,14 +1165,19 @@ static struct g *g_read1(struct g*f, struct g_in *i) {
 
 static struct g *g_reads(struct g *f, struct g_in* i, bool nested) {
  intptr_t n = 0;
- for (int c; g_ok(f = g_r_getc(f, i)); n++) {
+ bool first = true;                              // first iter is at a boundary
+ for (int c;; n++) {                             // (the '(' or stream start
+  bool skipped;                                  // preceded us)
+  if (!g_ok(f = g_r_getc(f, i, &skipped))) break;
   c = f->b;
   if (c == ')') break;                          // list closed
   if (c == EOF) {                               // end of input...
    if (nested) return encode(f, g_status_more); //  ...inside a list: defer
    break; }                                     //  ...at top level: done
   f = i->ungetc(f, c, i);
-  f = g_read1(f, i); }
+  bool at_boundary = first || skipped;
+  first = false;
+  f = g_read1(f, i, at_boundary); }
  for (f = g_push(f, 1, g_nil); n--; f = gxr(f));
  return f; }
 
@@ -1174,7 +1190,7 @@ static struct g *g_reads(struct g *f, struct g_in* i, bool nested) {
 struct g *g_read(struct g *f, struct g_in *i) {
  if (!g_ok(f)) return f;
  uintptr_t depth = ((word*) f + f->len) - f->sp;
- f = g_read1(f, i);
+ f = g_read1(f, i, true);                          // top-level: at boundary
  if (!g_ok(f)) {
   struct g *c = g_core_of(f);
   c->sp = (word*) c + c->len - depth; }
@@ -1182,7 +1198,7 @@ struct g *g_read(struct g *f, struct g_in *i) {
 
 
 static g_vm(g_vm_read) {
- switch (Pack(f), g_code_of(f = g_read1(f, f->in))) {
+ switch (Pack(f), g_code_of(f = g_read1(f, f->in, true))) {
   default: return f;
   case g_status_more:   // not enough input yet -- treat as nothing read
   case g_status_eof:

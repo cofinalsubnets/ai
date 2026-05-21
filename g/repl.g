@@ -40,7 +40,11 @@
    ;   punct:        [+\-*/<>=!&|~^%:,.\\`]
    ;   leading `?`:  promoted to punct-class so `?-` reads as one token
    ;                 while bare `?` (the cond keyword) still works.
-   ;   leading `-`/`+` + digit: numeric (so x-5 = x, -5).
+   ;   leading `-`/`+` + digit, at a token boundary (preceded by
+   ;                 whitespace/comment, start of input, or a delim
+   ;                 char `( [ { ' "`): numeric. So `(-5)` is a list
+   ;                 holding the number -5, but `(1+2)` reads as
+   ;                 `(1 + 2)` (three tokens) and `x-5` as `x - 5`.
    ; `[ ] { }` are single-char delim tokens (each reads as a 1-char sym).
    (isws c)    (|| (= c 32) (= c 10) (= c 9) (= c 13) (= c 12) (= c 0))
    (iscom c)   (|| (= c 35) (= c 59))
@@ -110,34 +114,46 @@
               (uint cl)))
         0)
 
-   ; read one datum from a charlist.
-   (read1 cl)
-     (: cl (skipws cl)
-        (? (nilp cl) e
-           (: c (car cl)
-              (? (= c 40) (rdlist (cdr cl))    ; (
+   ; read one datum from a charlist. read1 is the public unary entry
+   ; point; rd1 carries the token-boundary bit needed to decide whether
+   ; a leading `-`/`+` should sign-attach to a following digit. callers
+   ; that just want "give me the next datum" stay unary.
+   (read1 cl) (rd1 cl -1)            ; top-level entry: at boundary
+
+   (rd1 cl at_boundary)
+     (: cl2 (skipws cl)
+        ab (|| at_boundary (!= cl2 cl))
+        (? (nilp cl2) e
+           (: c (car cl2)
+              (? (= c 40) (rdlist (cdr cl2))   ; (
                  (= c 41) e                     ; ) at top level
-                 (= c 39) (rdquot (cdr cl))    ; '
-                 (= c 34) (rdstr  (cdr cl))    ; "
-                 (|| (= c 91) (= c 93) (= c 123) (= c 125))  ; [ ] { }
-                     (cons (sym (str (cons c 0))) (cdr cl))
-                 (rdatom cl)))))
+                 (= c 39) (rdquot (cdr cl2))   ; '
+                 (= c 34) (rdstr  (cdr cl2))   ; "
+                 (|| (= c 91) (= c 93) (= c 123) (= c 125))   ; [ ] { }
+                     (cons (sym (str (cons c 0))) (cdr cl2))
+                 (rdatom cl2 ab)))))
 
-   ; read until a closing paren (already past the opening one).
+   ; read until a closing paren (already past the opening one). first
+   ; element is at a boundary (the `(` precedes it); subsequent elements
+   ; are at a boundary iff skipws skipped between them and the previous.
    (rdlist cl)
-     (: cl (skipws cl)
-        (? (nilp cl) m
-           (= (car cl) 41) (cons 0 (cdr cl))
-           (: r (read1 cl)
-              (? (= r m) m
-                 (= r e) m
-                 (: rest (rdlist (cdr r))
-                    (? (= rest m) m
-                       (cons (cons (car r) (car rest)) (cdr rest))))))))
+     (: (loop cl at_boundary)
+          (: cl2 (skipws cl)
+             ab (|| at_boundary (!= cl2 cl))
+             (? (nilp cl2) m
+                (= (car cl2) 41) (cons 0 (cdr cl2))
+                (: r (rd1 cl2 ab)
+                   (? (= r m) m
+                      (= r e) m
+                      (: rest (loop (cdr r) 0)
+                         (? (= rest m) m
+                            (cons (cons (car r) (car rest)) (cdr rest))))))))
+        (loop cl -1))
 
-   ; read one datum after a quote mark; wrap as 'datum.
+   ; read one datum after a quote mark; wrap as 'datum. ' is a delim,
+   ; so the inner read is at a boundary.
    (rdquot cl)
-     (: r (read1 cl)
+     (: r (rd1 cl -1)
         (? (= r m) m
            (= r e) m
            (cons (cons '` (cons (car r) 0)) (cdr r))))
@@ -167,14 +183,15 @@
    ; read an atom: dispatch on first char's class, then read a
    ; maximal run of class-tail chars. returns (value . rest). value is
    ; an interned symbol or a number; numeric is only chosen when the
-   ; first char is a digit or sign-followed-by-digit.
-   (rdatom cl)
+   ; first char is a digit, or a sign-followed-by-digit at a token
+   ; boundary (the at_boundary flag, threaded down from rd1).
+   (rdatom cl at_boundary)
      (: c (car cl) rest (cdr cl)
         (? (isalpha c)   (rdalphat (cons c 0) rest)
            (isdig c)     (rdnum cl)
            (= c 63)      (rdpunct (cons c 0) rest)   ; leading ? as punct
            (|| (= c 45) (= c 43))                    ; - or +
-               (? (&& (twop rest) (isdig (car rest)))
+               (? (&& at_boundary (twop rest) (isdig (car rest)))
                   (rdnum cl)
                   (rdpunct (cons c 0) rest))
            (ispunc c)    (rdpunct (cons c 0) rest)
