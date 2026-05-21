@@ -27,8 +27,8 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 #define mix ((uintptr_t) 0x9e3779b9) // round(2^32 / phi)
 #endif
 
-#define odd(_) ((uintptr_t)(_)&1)
-#define even(_) !odd(_)
+#define oddp(_) ((uintptr_t)(_)&1)
+#define evenp(_) !oddp(_)
 #define typ(_) cell(_)[1].typ
 #define cell(_) ((union u*)(_))
 
@@ -90,7 +90,8 @@ static g_vm_t
  g_vm_seek,  g_vm_trim,   g_vm_thda,   g_vm_add,
  g_vm_sub,   g_vm_mul,    g_vm_quot,   g_vm_rem,  g_vm_arg,
  g_vm_quote, g_vm_freev,  g_vm_eval,   g_vm_cond, g_vm_jump,   g_vm_defglob,
- g_vm_ap,    g_vm_tap,    g_vm_apn,    g_vm_tapn, g_vm_ret,    g_vm_lazyb;
+ g_vm_ap,    g_vm_tap,    g_vm_apn,    g_vm_tapn, g_vm_ret,    g_vm_lazyb,
+ g_vm_callk;
 static uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 static struct g*g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t base);
 static struct g_vec *ini_vec(struct g_vec*, uintptr_t, uintptr_t, ...);
@@ -115,16 +116,16 @@ size_t strlen(char const*);
 
 #define vec(_) ((struct g_vec*)(_))
 #define tbl(_) ((struct g_tab*)(_))
-#define nump odd
+#define nump oddp
 #define two(_) ((struct g_pair*)(_))
 #define sym(_) ((struct g_atom*)(_))
-static g_inline bool twop(word _) { return even(_) && typ(_) == two_q; }
-static g_inline bool tblp(word _) { return even(_) && typ(_) == tbl_q; }
-static g_inline bool symp(word _) { return even(_) && typ(_) == sym_q; }
+static g_inline bool twop(word _) { return evenp(_) && typ(_) == two_q; }
+static g_inline bool tblp(word _) { return evenp(_) && typ(_) == tbl_q; }
+static g_inline bool symp(word _) { return evenp(_) && typ(_) == sym_q; }
 static g_inline bool vec_strp(struct g_vec *s) { return
   s->type == g_vect_char && s->rank == 1; }
 static g_inline bool strp(word _) { return
-  even(_) && typ(_) == vec_q && vec_strp((struct g_vec*)_); }
+  evenp(_) && typ(_) == vec_q && vec_strp((struct g_vec*)_); }
 static g_inline struct g *encode(struct g*f, enum g_status s) { return
   (struct g*) ((uintptr_t) f | s); }
 static g_inline void *bump(struct g *f, uintptr_t n) {
@@ -437,7 +438,7 @@ static struct g *ana_ap(struct g *f, struct env **c, intptr_t x) {
  bool imfp =
   f->sp[0] == (word) c1_ix &&
   f->sp[1] == (word) g_vm_quote &&
-  even(f->sp[2]);
+  evenp(f->sp[2]);
  intptr_t
   ca = llen(x),
   va =
@@ -739,7 +740,7 @@ static g_noinline intptr_t gtabdel(struct g *f, struct g_tab *t, intptr_t k, int
 
 g_vm(g_vm_get) {
   word z = Sp[0], k = Sp[1], x = Sp[2], n;
-  if (even(x) && datp(x)) switch (typ(x)) {
+  if (evenp(x) && datp(x)) switch (typ(x)) {
     case tbl_q: z = g_tget(f, z, k, tbl(x)); break;
     case vec_q:
       if (nump(k) && (n = getnum(k)) >= 0 && n < (word) len(x))
@@ -858,8 +859,8 @@ g_vm(g_vm_ssub) {
  if (!strp(Sp[0])) Sp[2] = g_nil;
  else {
   struct g_vec*s = (struct g_vec*) Sp[0], *t;
-  intptr_t i = odd(Sp[1]) ? getnum(Sp[1]) : 0,
-           j = odd(Sp[2]) ? getnum(Sp[2]) : 0;
+  intptr_t i = oddp(Sp[1]) ? getnum(Sp[1]) : 0,
+           j = oddp(Sp[2]) ? getnum(Sp[2]) : 0;
   i = MAX(i, 0), i = MIN(i, (word) len(s));
   j = MAX(j, i), j = MIN(j, (word) len(s));
   if (i == j) Sp[2] = g_nil;
@@ -1283,7 +1284,7 @@ op(g_vm_bnot, 1, ~Sp[0] | 1)
 op(g_vm_band, 2, (Sp[0] & Sp[1]) | 1)
 op(g_vm_bor, 2, (Sp[0] | Sp[1]) | 1)
 op(g_vm_bxor, 2, (Sp[0] ^ Sp[1]) | 1)
-op(g_vm_nump, 1, odd(Sp[0]) ? putnum(-1) : g_nil)
+op(g_vm_nump, 1, oddp(Sp[0]) ? putnum(-1) : g_nil)
 op11(g_vm_nilp, nilp(Sp[0]) ? putnum(-1) : g_nil)
 
 static g_vm(g_vm_info) {
@@ -1359,7 +1360,7 @@ static g_vm(g_vm_arg) {
 // apply function to one argument
 static g_vm(g_vm_ap) {
  union u *k;
- if (odd(Sp[1])) Ip++, Sp++;
+ if (oddp(Sp[1])) Ip++, Sp++;
  else k = cell(Sp[1]), Sp[1] = word(Ip + 1), Ip = k;
  return Continue(); }
 
@@ -1367,7 +1368,7 @@ static g_vm(g_vm_ap) {
 static g_vm(g_vm_tap) {
  intptr_t x = Sp[0], j = Sp[1];
  Sp += getnum(Ip[1].x) + 1;
- if (even(j)) Ip = cell(j), Sp[0] = x;
+ if (evenp(j)) Ip = cell(j), Sp[0] = x;
  else Sp += 1, Ip = cell(Sp[0]), Sp[0] = j;
  return Continue(); }
 
@@ -1610,7 +1611,7 @@ static g_noinline intptr_t gcp(struct g *f, word x, word const *p0, word const *
  union u *src = cell(x);
  x = src->x; // get its contents
  // if it contains a pointer to the new space then return the pointer
- return even(x) && ptr(f) <= ptr(x) && ptr(x) < ptr(f) + f->len ? x :
+ return evenp(x) && ptr(f) <= ptr(x) && ptr(x) < ptr(f) + f->len ? x :
         x == (word) g_vm_data ? copy_data(f, src, p0, t0) :
                                 copy_thread(f, src, p0, t0); }
 
@@ -1623,6 +1624,7 @@ enum g_status g_fin(struct g *f) {
 #define S1(i) {{i}, {g_vm_ret0}}
 #define S2(i) {{g_vm_cur},{.x=putnum(2)},{i}, {g_vm_ret0}}
 #define S3(i) {{g_vm_cur},{.x=putnum(3)},{i}, {g_vm_ret0}}
+#define S4(i) {{i},{g_vm_ret},{.x=putnum(1)}}
 #define bifs(_) \
  _(bif_clock, "clock", S1(g_vm_clock)) _(bif_addr, "vminfo", S1(g_vm_info))\
  _(bif_add, "+", S2(g_vm_add)) _(bif_sub, "-", S2(g_vm_sub)) _(bif_mul, "*", S2(g_vm_mul))\
@@ -1643,7 +1645,8 @@ enum g_status g_fin(struct g *f) {
  _(bif_put, "put", S3(g_vm_put)) _(bif_tnew, "new", S1(g_vm_tnew)) _(bif_tabkeys, "tkeys", S1(g_vm_tkeys))\
  _(bif_tabdel, "tdel", S3(g_vm_tdel)) _(bif_twop, "twop", S1(g_vm_twop)) _(bif_strp, "strp", S1(g_vm_strp))\
  _(bif_symp, "symp", S1(g_vm_symp)) _(bif_tblp, "tblp", S1(g_vm_tblp)) _(bif_nump, "nump", S1(g_vm_nump))\
- _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))
+ _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))\
+ _(bif_callk, "call/cc", S1(g_vm_callk))
 #define built_in_function(n, _, d) static union u const n[] = d;
 bifs(built_in_function);
 #define insts(_) _(g_vm_unc) _(g_vm_freev) _(g_vm_ret) _(g_vm_ap) _(g_vm_tap) _(g_vm_apn) _(g_vm_tapn)\
@@ -1703,6 +1706,10 @@ struct g *gflush(struct g*f) {
 static g_vm_t g_vm_kcall;
 
 #define topof(f) ((word*)f+f->len)
+#include <stdio.h>
+
+
+// kcall : x = Sp[0], k = Ip[1] -> Ip = k, Sp[0] = x
 static g_vm(g_vm_kcall) {
   word x = Sp[0];
   union u *ip = Ip[1].m,
@@ -1710,40 +1717,29 @@ static g_vm(g_vm_kcall) {
           *end = (union u*) ttag(stack);
   uintptr_t height = end - stack;
   Have(height);
-  Ip = ip;
   Sp = memmove(topof(f) - height, stack, height * sizeof(word));
   // the top stack value at construction is the argument to call/cc which we can discard
   // TODO this will be different for multitasking resume case
   Sp[0] = x;
+  Ip = ip;
   return Continue(); }
 
-// (call/cc f) -- capture the current continuation as k and tail-apply
-// f to k. f is a one-arg function that receives k. invoking (k v) at
-// any later point reinstates the saved stack and resumes as if
-// (call/cc f) returned v. the snapshot layout matches g_vm_kcall:
-//   [g_vm_kcall, saved-ip, stack..., NULL, HEAD]
-// at entry Sp[0] = f and Sp[1] = the call/cc caller's return address.
-// we copy the entire live stack -- including f at Sp[0] -- into the
-// snapshot's stack slot; that top slot is the call/cc form's return
-// slot, which g_vm_kcall overwrites with v on invocation, so the form
-// resolves to v. saving Ip+1 (the bif thread's trailing g_vm_ret0) as
-// the resume ip means the eventual ret0 returns v to call/cc's caller
-// via the preserved Sp[1].
+// callk : i = Sp[0], k = Ip + 1 -> Ip = i, Sp[0] = k
 static g_vm(g_vm_callk) {
-  word height = topof(f) - Sp;
-  uintptr_t n = 2 + height;                   // w0 + ip + stack cells
-  Have(n + Width(struct g_tag));
   word f_val = Sp[0];                         // f, the call/cc arg
+  if (oddp(f_val)) return Ip += 1, Continue();
+  word height = topof(f) - Sp;
+  uintptr_t n = 2 + height;                   // g_vm_kcall + (ip + 1) + stack = thread_contents
+  Have(n + Width(struct g_tag) + 1);          // thread_contents + thread_tag + 1 stack = _mem_req
   union u *k = (union u*) Hp;
-  Hp += n + Width(struct g_tag);
-  k[0].ap = g_vm_kcall;
-  k[1].m  = Ip + 1;                           // resume at g_vm_ret0
-  for (uintptr_t i = 0; i < (uintptr_t) height; i++)
-    k[2 + i].x = Sp[i];
+  Hp += n + Width(struct g_tag);              // thread_contents + thread_tag = _heap_alloc
+  k[0].ap = g_vm_kcall;                       // 
+  k[1].m  = Ip + 1;                           // resume at next instruction
+  for (uintptr_t i = 0; i < (uintptr_t) height; i++) k[2 + i].x = Sp[i];
   struct g_tag *t = (struct g_tag*) (k + n);
   t->null = NULL;
   t->head = k;
-  if (odd(f_val)) Sp[0] = f_val, Ip++;
-  else Sp[0] = word(k), Ip = cell(f_val);
-  return Continue(); }
-
+  Sp -= 1;
+  Sp[0] = word(k);
+  Sp[1] = f_val;
+  return Ap(g_vm_ap, f); }
