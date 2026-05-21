@@ -131,10 +131,16 @@
                 (? (= c 34) (cons (str (rev acc)) rest)        ; closing "
                    (= c 92) (? (nilp rest) m                    ; trailing \
                                (: nc (car rest)
-                                  (loop (cons (? (= nc 110) 10
-                                                 (= nc 116) 9
-                                                 (= nc 114) 13
-                                                 nc) acc) (cdr rest))))
+                                  (? (= nc 120)                   ; \xHH
+                                     (? (|| (nilp (cdr rest)) (nilp (cddr rest))) m
+                                        (: h1 (cadr rest) h2 (caddr rest)
+                                           (loop (cons (+ (* (digval h1) 16) (digval h2)) acc)
+                                                 (cdddr rest))))
+                                     (loop (cons (? (= nc 110) 10
+                                                    (= nc 116) 9
+                                                    (= nc 114) 13
+                                                    (= nc 48)  0
+                                                    nc) acc) (cdr rest)))))
                    (loop (cons c acc) rest))))
         (loop 0 cl))
 

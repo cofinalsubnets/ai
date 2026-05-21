@@ -1049,7 +1049,18 @@ static struct g *g_read1(struct g*f, struct g_in *i) {
       if ((c = f->b) == EOF) return encode(f, g_status_more);
       if (c == 'n') c = '\n';
       else if (c == 't') c = '\t';
-      else if (c == 'r') c = '\r'; }
+      else if (c == 'r') c = '\r';
+      else if (c == '0') c = '\0';
+      else if (c == 'x') {                          // \xHH: two hex digits
+       if (!g_ok(f = i->getc(f, i))) return f;
+       int h1 = f->b;
+       if (h1 == EOF) return encode(f, g_status_more);
+       if (!g_ok(f = i->getc(f, i))) return f;
+       int h2 = f->b;
+       if (h2 == EOF) return encode(f, g_status_more);
+       int v1 = h1 <= '9' ? h1 - '0' : (h1 | 0x20) - 'a' + 10;
+       int v2 = h2 <= '9' ? h2 - '0' : (h2 | 0x20) - 'a' + 10;
+       c = ((v1 & 0xf) << 4) | (v2 & 0xf); } }
      else if (c == EOF) return encode(f, g_status_more);  // unterminated
      else if (c == '"') return len(b) = n, f; }           // closing quote
    return f; } }
@@ -1210,6 +1221,12 @@ static struct g *gfputx(struct g *f, struct g_out *o, intptr_t x) {
        else if (c == '\n') f = o->putc(f, '\\', o), c = 'n';
        else if (c == '\t') f = o->putc(f, '\\', o), c = 't';
        else if (c == '\r') f = o->putc(f, '\\', o), c = 'r';
+       else if (c == '\0') f = o->putc(f, '\\', o), c = '0';
+       else if ((unsigned char) c < 32) {           // other ctl bytes -> \xHH
+        f = o->putc(f, '\\', o);
+        f = o->putc(f, 'x', o);
+        f = o->putc(f, g_digits[(c >> 4) & 0xf], o);
+        c = g_digits[c & 0xf]; }
       f = o->putc(f, '"', o); }
      return f; }
    case sym_q: {
