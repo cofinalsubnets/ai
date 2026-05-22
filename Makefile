@@ -257,10 +257,10 @@ b/$n-$a.hdd: b/k/$n-$a.elf dl/limine/limine k/limine/limine.conf
 	@mcopy -i $@@@1M dl/limine/BOOTLOONGARCH64.EFI ::/EFI/BOOT
 
 k_qemu_x86_64=-M q35 -serial stdio
-k_qemu_risc=-M virt -device ramfb -device qemu-xhci -device usb-kbd -device usb-mouse
-k_qemu_loongarch64=$(k_qemu_risc) -cpu la464
-k_qemu_aarch64=$(k_qemu_risc) -cpu cortex-a72
-k_qemu_riscv64=$(k_qemu_risc) -cpu rv64
+k_qemu_risc=-device ramfb -device qemu-xhci -device usb-kbd -device usb-mouse
+k_qemu_loongarch64=-M virt -cpu la464 $(k_qemu_risc)
+k_qemu_aarch64=-M virt,gic-version=2 -cpu cortex-a72 -serial stdio $(k_qemu_risc)
+k_qemu_riscv64=-M virt -cpu rv64 $(k_qemu_risc)
 k_qemu=qemu-system-$a -m 256M $(k_qemu_$a)\
 	-drive if=pflash,unit=0,format=raw,file=dl/edk2-ovmf/ovmf-code-$a.fd,readonly=on
 

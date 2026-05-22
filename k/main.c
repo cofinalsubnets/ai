@@ -5,6 +5,9 @@
 #include <limits.h>
 
 uint64_t kticks;
+// Limine higher-half direct map offset: physical address P is reachable
+// at khhdm + P. set in kmain before archinit, so arch code can map MMIO.
+uintptr_t khhdm;
 
 static struct mem {
   struct mem *next;
@@ -292,12 +295,14 @@ static g_vm(color) {
    kcb->cb[i] = cb_cell(cb_ch(kcb->cb[i]), fg, bg, 0); }
  return Ip += 1, Continue(); }
 
-// (fault n) -- deliberately raise CPU exception n to exercise the
+// (fault n) -- deliberately raise a CPU exception to exercise the
 // handler in arch.c. the handler reports and halts, so this does not
-// return. n picks the vector: 0 #DE, 3 #BP, 13 #GP, 14 #PF; anything
-// else (e.g. 6) raises #UD -- the same path __builtin_trap() takes.
+// return. the cases mirror x86_64 vector numbers; on aarch64 the same
+// n picks an analogous fault, and anything else an undefined opcode.
 static g_vm(fault) {
-  switch (g_getnum(Sp[0])) {
+  intptr_t n = g_getnum(Sp[0]);
+#if defined (__x86_64__)
+  switch (n) {
     case 0:   // #DE: integer divide by zero
       asm volatile ("xorl %%edx,%%edx; movl $1,%%eax; xorl %%ecx,%%ecx;"
                     "divl %%ecx" ::: "eax","ecx","edx");
@@ -314,6 +319,18 @@ static g_vm(fault) {
     default:  // #UD: invalid opcode
       asm volatile ("ud2");
       break; }
+#elif defined (__aarch64__)
+  switch (n) {
+    case 3:            // breakpoint
+      asm volatile ("brk #0");
+      break;
+    case 13: case 14:  // data abort: write to an unmapped address
+      *(volatile int*) 0x600000000000ULL = 0;
+      break;
+    default:           // undefined instruction
+      asm volatile ("udf #0");
+      break; }
+#endif
   Ip += 1;                 // unreachable unless the fault did not fire
   return Continue(); }
 
@@ -369,12 +386,13 @@ static struct g_def defs[] = {
   {0}, };
 
 void kmain(void) {
+ khhdm = hhdm_req.response ? hhdm_req.response->offset : 0;
  archinit();
  serial_init();
  // the heap (meminit) is the only hard requirement. the framebuffer
  // console is optional: when fbinit/cbinit fail -- no Limine
  // framebuffer, or the console buffer won't allocate -- kcb stays null
- // and the kernel runs headless on the COM1 serial console alone.
+ // and the kernel runs headless on the serial console alone.
  if (meminit()) {
   if (fbinit() && cbinit()) palette_init();
   // load the prelude, then run the gwen read-eval-print loop. its line
