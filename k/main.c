@@ -1,12 +1,17 @@
+#ifndef K_EFI
 #include "limine/limine.h"
+#endif
+#include "k_boot.h"
 #include "g.h"
 #include "cb.h"
 #include <stdarg.h>
 #include <limits.h>
 
 uint64_t kticks;
-// Limine higher-half direct map offset: physical address P is reachable
-// at khhdm + P. set in kmain before archinit, so arch code can map MMIO.
+// Higher-half direct map offset: physical address P is reachable at
+// khhdm + P. The Limine build copies this out of the HHDM response; the
+// EFI build leaves it 0 (identity-mapped). Set before archinit, so arch
+// code can use it for MMIO.
 uintptr_t khhdm;
 
 static struct mem {
@@ -73,6 +78,7 @@ static g_inline void kwait(void) { asm volatile (
 
 #include "cb.h"
 #include <stdarg.h>
+#ifndef K_EFI
 __attribute__((used, section(".limine_requests_start")))
 static volatile LIMINE_REQUESTS_START_MARKER;
 #define _L __attribute__((used, section(".limine_requests"))) static volatile
@@ -86,6 +92,28 @@ _L struct limine_efi_system_table_request systbl_req = { .id = LIMINE_EFI_SYSTEM
 _L struct limine_executable_cmdline_request cmdline_req = { .id = LIMINE_EXECUTABLE_CMDLINE_REQUEST, .revision = 0 };
 __attribute__((used, section(".limine_requests_end")))
 static volatile LIMINE_REQUESTS_END_MARKER;
+
+// kboot is shared with the EFI backend; defined here for the Limine
+// build and populated by limine_to_kboot() at the top of kmain.
+struct k_boot kboot;
+static void limine_to_kboot(void) {
+  if (hhdm_req.response) kboot.hhdm = hhdm_req.response->offset;
+  if (memmap_req.response) {
+    struct limine_memmap_entry **rr = memmap_req.response->entries;
+    uintptr_t n = memmap_req.response->entry_count;
+    for (uintptr_t i = 0; i < n && kboot.ram_n < K_BOOT_RAM_MAX; i++)
+      if (rr[i]->type == 0)
+        kboot.ram[kboot.ram_n].base = rr[i]->base,
+        kboot.ram[kboot.ram_n].len  = rr[i]->length,
+        kboot.ram_n++; }
+  if (fb_req.response && fb_req.response->framebuffer_count) {
+    struct limine_framebuffer *f = fb_req.response->framebuffers[0];
+    kboot.fb.base     = f->address;
+    kboot.fb.w        = f->width;
+    kboot.fb.h        = f->height;
+    kboot.fb.pitch_px = f->pitch >> 2;
+    kboot.has_fb      = true; } }
+#endif
 
 #define kb_code_lshift 0x2a
 #define kb_code_rshift 0x36
@@ -174,6 +202,10 @@ _Static_assert(LEN(kb2ascii) == LEN(shift_kb2ascii));
 // CSI form (`ESC [ 1 ; 5 H/F`) that the editor reads as buffer top /
 // buffer end. Ctrl+letter becomes the matching control byte (so
 // Ctrl-A/E reach the editor as home/end, Ctrl-D as quit).
+// sysv_abi tag matches what x86_64.S's keyboard_isr passes -- a no-op
+// for the Limine build (SysV default), required for the EFI build
+// (default is MS x64) so arg0 is read out of rdi rather than rcx.
+__attribute__((sysv_abi))
 void kb_int(const uint8_t code) {
   if (code == kb_code_extend) { kkb.f |= kb_flag_extend; return; }
   bool ext = kkb.f & kb_flag_extend, up = code & 128;
@@ -318,26 +350,26 @@ static union u
   bif_color[] = {{g_vm_cur}, {.x = g_putnum(2)}, {color}, {g_vm_ret0}},
   bif_fault[] = {{g_vm_fault}, {g_vm_ret0}};
 
+// Reads the bootloader-populated kboot struct (Limine or UEFI) and
+// links every reported free range into the kernel free list. The
+// chained-into-kmem order matches the previous Limine-walk order:
+// entries are pushed in array order, so kmem ends up pointing at the
+// last entry, with earlier entries linked through ->next.
 static bool meminit(void) {
-  if (!memmap_req.response || !hhdm_req.response) return false;
-  struct mem *m;
-  struct limine_memmap_entry *r, **rr = memmap_req.response->entries;
-  uintptr_t hhdm = hhdm_req.response->offset,
-            n = memmap_req.response->entry_count;
-  while (n--) if ((r = rr[n])->type == 0)
-    m = (struct mem*) (hhdm + r->base),
-    m->len = r->length / sizeof(uintptr_t),
-    m->next = kmem,
-    kmem = m;
+  if (!kboot.ram_n) return false;
+  for (uint32_t i = 0; i < kboot.ram_n; i++) {
+    struct mem *m = (struct mem*) (kboot.hhdm + kboot.ram[i].base);
+    m->len = kboot.ram[i].len / sizeof(uintptr_t);
+    m->next = kmem;
+    kmem = m; }
   return true; }
 
 static bool fbinit(void) {
-  if (!fb_req.response || !fb_req.response->framebuffer_count) return false;
-  struct limine_framebuffer *f = fb_req.response->framebuffers[0];
-  kfb._ = f->address;
-  kfb.width = f->width;
-  kfb.height = f->height;
-  kfb.pitch = f->pitch >> 2;
+  if (!kboot.has_fb) return false;
+  kfb._      = kboot.fb.base;
+  kfb.width  = kboot.fb.w;
+  kfb.height = kboot.fb.h;
+  kfb.pitch  = kboot.fb.pitch_px;
   return true; }
 
 static bool cbinit(void) {
@@ -361,7 +393,12 @@ static struct g_def defs[] = {
   {0}, };
 
 void kmain(void) {
- khhdm = hhdm_req.response ? hhdm_req.response->offset : 0;
+#ifndef K_EFI
+ // Limine path: copy the requested responses into kboot before anything
+ // else reads it. The EFI path has already populated kboot in efi_main.
+ limine_to_kboot();
+#endif
+ khhdm = kboot.hhdm;
  archinit();
  serial_init();
  // the heap (meminit) is the only hard requirement. the framebuffer

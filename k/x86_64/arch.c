@@ -36,6 +36,9 @@ static char const *const exc_name[32] = {
 // fr->vector == 6 and fr->rip at its ud2, so it maps straight back to
 // whichever guard fired. faults are not resumed -- returning from
 // #UD/#GP/#PF would just re-execute the instruction and fault again.
+// sysv_abi: see kb_int in main.c -- arg0 (k_frame*) comes in via rdi
+// from exc_common, which is SysV regardless of the build target.
+__attribute__((sysv_abi))
 void k_exception(struct k_frame *fr) {
   asm volatile ("cli");                // no interrupts while reporting
   static int nested;

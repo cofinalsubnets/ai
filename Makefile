@@ -99,11 +99,36 @@ b/h/$n.1: b/h/$n h/manpage.$x
 	@echo GEN	$@
 	@$m < h/manpage.$x > $@
 
+# Source list: the Limine build picks up arch.c + the nasm bits and
+# omits the efi_*.c files. The EFI build (EFI=1) does the opposite.
+ifdef EFI
+ifneq ($a,x86_64)
+$(error EFI=1 is only wired up for x86_64 in this prototype)
+endif
+CC := clang
+CC_IS_CLANG := 1
+# Same sources as the Limine build, with two swaps: efi_main.c stands
+# in for the Limine boot info, and efi_*.c stays excluded for backends
+# that already exist (currently nothing -- the polled-mode stand-in is
+# gone). arch.c + x86_64.S come along; the SysV-tagged C callees keep
+# the asm-to-C boundary correct under MS x64.
 k_c=$(g_c) $(f_c) $(wildcard k/*.c k/$a/*.c)
-k_h=$(g_h) $(wildcard k/*.h k/$a/*.h)
+k_S=$(wildcard k/$a/*.S)
+k_asm=
+else
+k_c=$(g_c) $(f_c) $(filter-out k/$a/efi_%.c,$(wildcard k/*.c k/$a/*.c))
 k_S=$(wildcard k/$a/*.S)
 k_asm=$(wildcard k/$a/*.asm)
-k_o=$(addprefix b/k/$a/, $(k_c:.c=.o) $(k_S:.S=.o) $(k_asm:.asm=.o))
+endif
+k_h=$(g_h) $(wildcard k/*.h k/$a/*.h)
+# Output objects live under b/k/$a/ for the Limine build and b/k/$a-efi/
+# for the EFI build, so the two coexist (different ABI/format objects).
+ifdef EFI
+k_odir=b/k/$a-efi
+else
+k_odir=b/k/$a
+endif
+k_o=$(addprefix $(k_odir)/, $(k_c:.c=.o) $(k_S:.S=.o) $(k_asm:.asm=.o))
 
 kcflags=$(g_cflags)	-nostdinc -ffreestanding -fno-lto -fno-PIC -ffunction-sections -fdata-sections
 kldflags := -static -nostdlib --gc-sections -T k/$a/$a.lds -z max-page-size=0x1000
@@ -113,16 +138,42 @@ kcppflags := \
 	-isystem k/include/ \
 	$(kcppflags) \
 	-DLIMINE_API_REVISION=3
+ifdef EFI
+kcppflags += -DK_EFI
+endif
 
 b/k/$n-$a.elf: k/$a/$a.lds $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(LD) $(kldflags) $(k_o) -o $@
 
+# EFI link: clang drives lld-link via -fuse-ld=lld. Subsystem flag picks
+# the EFI_APPLICATION subsystem (10); entry is efi_main. lld-link emits a
+# .reloc section automatically so the firmware can relocate the image.
+b/k/$n-$a.efi: $(k_o)
+	@echo LD	$@
+	@mkdir -p "$(dir $@)"
+	@$(CC) $(kcflags) $(kcflags_$a) $(kcc_if_clang) -nostdlib -fuse-ld=lld \
+	  -Wl,-subsystem:efi_application -Wl,-entry:efi_main \
+	  $(k_o) -o $@
+
 ifeq ($(CC_IS_CLANG),1)
+ifdef EFI
+# x86_64-unknown-windows defaults to MS x64 (matches the UEFI ABI) and
+# tells clang to invoke lld-link for the final link.
+kcc_if_clang=-target $a-unknown-windows
+else
 kcc_if_clang=-target $a-unknown-none-elf
 endif
+endif
+ifdef EFI
+# Under UEFI we keep the kernel at whatever base the firmware places us
+# (image is fully relocatable); -mcmodel=kernel and -mabi=sysv don't
+# apply to the windows target, so drop them.
+kcflags_x86_64=-m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone
+else
 kcflags_x86_64=-m64 -march=x86-64 -mabi=sysv -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -mcmodel=kernel
+endif
 kcflags_aarch64=-mcpu=generic -march=armv8-a+nofp+nosimd -mgeneral-regs-only
 kcflags_riscv64=-march=rv64imac -mabi=lp64 -mno-relax
 kcflags_loongarch64=-march=loongarch64 -mabi=lp64s  -mfpu=none -msimd=none
@@ -139,17 +190,17 @@ kcc_aarch64=-target aarch64-unknown-none-elf
 k_nasmflags := -f elf64 -g -F dwarf -Wall -w-reloc-abs-qword -w-reloc-abs-dword -w-reloc-rel-dword
 
 
-b/k/$a/%.o: %.c $(g_h) b/boot.h b/repl.h
+$(k_odir)/%.o: %.c $(g_h) b/boot.h b/repl.h
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
 
-b/k/$a/%.o: %.S $(g_h)
+$(k_odir)/%.o: %.S $(g_h)
 	@echo AS	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
 
-b/k/$a/%.o: %.asm $(g_h)
+$(k_odir)/%.o: %.asm $(g_h)
 	@echo AS	$@
 	@mkdir -p "$(dir $@)"
 	@nasm $< -o $@ $(k_nasmflags)
@@ -255,6 +306,25 @@ b/$n-$a.hdd: b/k/$n-$a.elf dl/limine/limine k/limine/limine.conf
 	@mcopy -i $@@@1M dl/limine/BOOTAA64.EFI ::/EFI/BOOT
 	@mcopy -i $@@@1M dl/limine/BOOTRISCV64.EFI ::/EFI/BOOT
 	@mcopy -i $@@@1M dl/limine/BOOTLOONGARCH64.EFI ::/EFI/BOOT
+
+# --- EFI-only boot media -----------------------------------------------
+# A raw FAT image containing just /EFI/BOOT/BOOTX64.EFI. OVMF reads this
+# directly -- no Limine, no second-stage loader, no config file. Same
+# mformat path as b/$n-$a.hdd, just without the GPT wrapper and without
+# the Limine BOOT*.EFI copies.
+b/$n-$a-efi.img: b/k/$n-$a.efi
+	@echo MK $@
+	@rm -f $@
+	@dd if=/dev/zero bs=1M count=0 seek=64 of=$@ 2>/dev/null
+	@mformat -i $@ -F
+	@mmd -i $@ ::/EFI ::/EFI/BOOT
+	@mcopy -i $@ $< ::/EFI/BOOT/BOOTX64.EFI
+
+run-efi: b/$n-$a-efi.img dl/edk2-ovmf/ovmf-code-$a.fd
+	$(k_qemu) -drive if=ide,format=raw,file=$<
+run-efi-headless: b/$n-$a-efi.img dl/edk2-ovmf/ovmf-code-$a.fd
+	$(k_qemu) -drive if=ide,format=raw,file=$< -display none -no-reboot
+.PHONY: run-efi run-efi-headless
 
 k_qemu_x86_64=-M q35 -serial stdio
 k_qemu_risc=-device ramfb -device qemu-xhci -device usb-kbd -device usb-mouse
