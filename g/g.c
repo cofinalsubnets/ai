@@ -1821,7 +1821,13 @@ __attribute__((weak)) bool g_key(void) { return false; }
 // relinquishing the CPU, and a getc-suspended task spins waiting for input.
 __attribute__((weak)) void g_wait(uintptr_t ticks) { (void) ticks; }
 
-g_inline struct g *g_pop(struct g*f, uintptr_t n) { return g_core_of(f)->sp += n, f; }
+// `extern` keeps C99 from treating this as an inline-definition-only
+// (which would emit no external symbol -- clang's COFF backend on the
+// EFI build takes that literally, and main.c calling g_pop via the
+// inlined g_evals_ in g.h would fail to link). With `extern inline` the
+// body still inlines at call sites in this TU, but an external symbol
+// is also emitted, so callers in other TUs link cleanly.
+extern g_inline struct g *g_pop(struct g*f, uintptr_t n) { return g_core_of(f)->sp += n, f; }
 
 static g_inline struct g *symof(char const *n, struct g *f) {
   return intern(g_strof(f, n)); }
