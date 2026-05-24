@@ -102,8 +102,8 @@ b/h/$n.1: b/h/$n h/manpage.$x
 # Source list: the Limine build picks up arch.c + the nasm bits and
 # omits the efi_*.c files. The EFI build (EFI=1) does the opposite.
 ifdef EFI
-ifeq ($(filter $a,x86_64 aarch64),)
-$(error EFI=1 is only wired up for x86_64 and aarch64)
+ifeq ($(filter $a,x86_64 aarch64 riscv64),)
+$(error EFI=1 is only wired up for x86_64, aarch64, and riscv64)
 endif
 CC := clang
 CC_IS_CLANG := 1
@@ -148,15 +148,34 @@ b/k/$n-$a.elf: k/$a/$a.lds $(k_o)
 	@mkdir -p "$(dir $@)"
 	@$(LD) $(kldflags) $(k_o) -o $@
 
-# EFI link: clang drives lld-link via -fuse-ld=lld. Subsystem flag picks
-# the EFI_APPLICATION subsystem (10); entry is efi_main. lld-link emits a
-# .reloc section automatically so the firmware can relocate the image.
+# EFI link.
+# x86_64 and aarch64: clang drives lld-link via -fuse-ld=lld against the
+# *-unknown-windows triple. Subsystem flag picks EFI_APPLICATION (10);
+# entry is efi_main. lld-link synthesises the .reloc table itself so the
+# firmware can relocate the image at load time.
+# riscv64: LLVM has no COFF backend for RISC-V, so we cannot take that
+# path. Instead we link a plain static ELF with --emit-relocs (preserving
+# the relocation records ld would otherwise drop) and wrap the result in
+# a PE32+ container via tools/elf2efi.py. The tool walks .rela.* for the
+# R_RISCV_64 entries and stamps out an IMAGE_REL_BASED_DIR64 .reloc
+# section that does the same job lld-link does for the other two arches.
+ifeq ($a,riscv64)
+b/k/$n-$a.efi: $(k_o) k/$a/$a.efi.lds tools/elf2efi.py
+	@echo LD	$(@:.efi=.efi.elf)
+	@mkdir -p "$(dir $@)"
+	@$(LD) -m elf64lriscv --no-relax -static -nostdlib --gc-sections \
+	  --emit-relocs -T k/$a/$a.efi.lds -e efi_main \
+	  $(k_o) -o $(@:.efi=.efi.elf)
+	@echo EFI	$@
+	@python3 tools/elf2efi.py $(@:.efi=.efi.elf) $@
+else
 b/k/$n-$a.efi: $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(CC) $(kcflags) $(kcflags_$a) $(kcc_if_clang) -nostdlib -fuse-ld=lld \
 	  -Wl,-subsystem:efi_application -Wl,-entry:efi_main \
 	  $(k_o) -o $@
+endif
 
 ifeq ($(CC_IS_CLANG),1)
 ifdef EFI
@@ -164,8 +183,14 @@ ifdef EFI
 # x86_64) and tells clang to invoke lld-link for the final link. For
 # aarch64 the same triple yields PE32+/AArch64 with MS-AAPCS64, which
 # is ABI-compatible with UEFI's AAPCS64 for the scalar-argument calls
-# the firmware makes into us and we make back.
+# the firmware makes into us and we make back. riscv64 has no COFF
+# backend in LLVM, so we keep the ELF target and wrap the link output
+# in a PE32+ container after the fact (see the .efi recipe above).
+ifeq ($a,riscv64)
+kcc_if_clang=-target $a-unknown-none-elf
+else
 kcc_if_clang=-target $a-unknown-windows
+endif
 else
 kcc_if_clang=-target $a-unknown-none-elf
 endif
@@ -179,7 +204,15 @@ else
 kcflags_x86_64=-m64 -march=x86-64 -mabi=sysv -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -mcmodel=kernel
 endif
 kcflags_aarch64=-mcpu=generic -march=armv8-a+nofp+nosimd -mgeneral-regs-only
-kcflags_riscv64=-march=rv64imac -mabi=lp64 -mno-relax
+kcflags_riscv64=-march=rv64imac -mabi=lp64 -mno-relax $(kcflags_riscv64_$(if $(EFI),efi,limine))
+# Limine drops us at VMA 0xffffffff80000000, whose 32-bit truncation
+# sign-extends back to the same address -- medlow's lui+addi sequences
+# encode it correctly. UEFI loads the image at a runtime-chosen base
+# instead, so we need PC-relative addressing (auipc+addi) everywhere;
+# medany gives us that, and the PE base relocations only have to fix
+# up the 64-bit absolute symbol references in static initializers.
+kcflags_riscv64_limine=
+kcflags_riscv64_efi=-mcmodel=medany
 kcflags_loongarch64=-march=loongarch64 -mabi=lp64s  -mfpu=none -msimd=none
 
 kldflags_x86_64=-m elf_x86_64
@@ -319,6 +352,8 @@ b/$n-$a.hdd: b/k/$n-$a.elf dl/limine/limine k/limine/limine.conf
 # BOOT*.EFI copies.
 k_efi_short_x86_64=BOOTX64
 k_efi_short_aarch64=BOOTAA64
+k_efi_short_riscv64=BOOTRISCV64
+k_efi_short_loongarch64=BOOTLOONGARCH64
 b/$n-$a-efi.img: b/k/$n-$a.efi
 	@echo MK $@
 	@rm -f $@
@@ -332,6 +367,7 @@ b/$n-$a-efi.img: b/k/$n-$a.efi
 # the image as virtio-blk over the existing virtio-mmio bus instead.
 k_efi_drive_x86_64=-drive if=ide,format=raw,file=$<
 k_efi_drive_aarch64=-drive if=none,format=raw,file=$<,id=hd0 -device virtio-blk-device,drive=hd0
+k_efi_drive_riscv64=-drive if=none,format=raw,file=$<,id=hd0 -device virtio-blk-device,drive=hd0
 run-efi: b/$n-$a-efi.img dl/edk2-ovmf/ovmf-code-$a.fd
 	$(k_qemu) $(k_efi_drive_$a)
 run-efi-headless: b/$n-$a-efi.img dl/edk2-ovmf/ovmf-code-$a.fd
