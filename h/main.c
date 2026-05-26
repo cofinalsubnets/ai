@@ -34,13 +34,10 @@ static void raw_mode(void) {
   tcsetattr(STDIN_FILENO, TCSANOW, &raw); }
   // c_oflag is left alone, so '\n' on output still becomes CR-LF.
 
-// Deep wait. ms=0 means infinite (caller should pair with wake_on_input=true).
-// EINTR is retried internally so the caller can rely on g_wait returning only
-// when its deadline has elapsed or (if wake_on_input) input is ready.
-void g_wait(uintptr_t ms, bool wake_on_input) {
-  struct pollfd p = { .fd = STDIN_FILENO, .events = POLLIN };
-  struct pollfd *fds = wake_on_input ? &p : NULL;
-  nfds_t nfds = wake_on_input ? 1 : 0;
+// Shared EINTR-retry skeleton for poll-based wait. ms=0 means infinite.
+// Returns only when poll succeeds (data ready / deadline elapsed) or fails
+// for a non-EINTR reason.
+static void poll_wait(struct pollfd *fds, nfds_t nfds, uintptr_t ms) {
   uintptr_t deadline = ms == 0 ? 0 : g_clock() + ms;
   for (;;) {
     int t = ms == 0 ? -1 :
@@ -50,6 +47,13 @@ void g_wait(uintptr_t ms, bool wake_on_input) {
     uintptr_t now = g_clock();
     if (now >= deadline) return;
     ms = deadline - now; } }
+
+void g_sleep(uintptr_t ms) { poll_wait(NULL, 0, ms); }
+
+static void raw_wait(struct g *f, struct g_in *i, uintptr_t ms) {
+  (void) f; (void) i;
+  struct pollfd p = { .fd = STDIN_FILENO, .events = POLLIN };
+  poll_wait(&p, 1, ms); }
 
 // --- host input ------------------------------------------------------
 // raw_stdin is the byte source at f->in: non-interactively the parser
@@ -67,7 +71,7 @@ static bool raw_key(struct g *f, struct g_in*) {
   (void) f;
   struct pollfd p = { .fd = STDIN_FILENO, .events = POLLIN };
   return poll(&p, 1, 0) > 0; }
-static struct g_in raw_stdin = { raw_getc, raw_ungetc, raw_eof, raw_key };
+static struct g_in raw_stdin = { raw_getc, raw_ungetc, raw_eof, raw_key, raw_wait };
 struct g_in *g_stdin = &raw_stdin;
 
 static char const

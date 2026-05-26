@@ -103,6 +103,13 @@ static g_inline struct g_tag { union u *null, *head, end[]; } *ttag(union u *k) 
  return (struct g_tag*) k; }
 static g_inline union u *clip(union u *k) { return ttag(k)->head = k; }
 static g_inline bool gkey(struct g *f) { return f->in->key(f, f->in); }
+// wait_io slot encoding: NULL → literal 1 (non-zero so ttag's NULL-terminator
+// walk skips it); non-NULL pointers are aligned ≥2, so bit 0 is free as a tag.
+static g_inline uintptr_t wait_io_enc(struct g_in *i) { return (uintptr_t) i | 1; }
+static g_inline struct g_in *wait_io_dec(uintptr_t s) {
+  return (struct g_in *) (s & ~(uintptr_t) 1); }
+static g_inline void gwait(struct g *f, struct g_in *i, uintptr_t ticks) {
+  if (i) i->wait(f, i, ticks); else g_sleep(ticks); }
 
 // equality comparisons inline the fast identity check
 static g_noinline bool eqv(struct g*, word, word); // this is for checking equality of non-identical values
@@ -650,9 +657,13 @@ static struct g*_ungetc(struct g*f, int c, struct ti *i) {
  if (c != EOF && i->i) i->i--;
  return f->b = c, f; }
 static bool _key(struct g *f, struct ti *i) { (void) f; (void) i; return true; }
+// unreachable in practice — _key always returns true so the scheduler never
+// parks on this g_in — but the field must be filled.
+static void _wait(struct g *f, struct ti *i, uintptr_t t) {
+ (void) f; (void) i; (void) t; }
 g_noinline struct g *g_evals(struct g*f, char const*s) {
  static char const *t = "((:(e a b)(? b(e(ev'ev(A b))(B b))a)e)0)";
- struct ti i = {{(void*)_getc, (void*)_ungetc, (void*)_eof, (void*)_key}, t, 0};
+ struct ti i = {{(void*)_getc, (void*)_ungetc, (void*)_eof, (void*)_key, (void*)_wait}, t, 0};
  f = push0(pushq(push0(g_eval(g_reads(f, (void*) &i, false)))));
  i.t = s, i.i = 0;
  return g_eval(gxr(gxl(gxr(gxl(g_reads(f, (void*) &i, false)))))); }
@@ -1159,7 +1170,7 @@ static g_vm(g_vm_str) {
 // switching to one) — so this Continue() loop terminates with gkey true.
 static g_vm(g_vm_getc) {
  if (!gkey(f)) {
-  f->next_wait_io = 1;
+  f->next_wait_io = f->in;
   return Ap(g_vm_yield_sw, f); }
  Pack(f);
  if (!g_ok(f = ggetc(f))) return f;
@@ -1732,7 +1743,7 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
  M[2].x = putnum(0);   // main pid
  M[3].x = putnum(0);   // wake_at: non-zero sentinel for "always runnable"
                        // (so ttag's NULL-terminator walk doesn't stop here)
- M[4].x = putnum(0);   // wait_io: non-zero sentinel for "not waiting on I/O"
+ M[4].x = (g_word) wait_io_enc(NULL);  // wait_io: NULL encoded as 1
  ((struct g_tag*) (M + 5))->null = NULL;
  ((struct g_tag*) (M + 5))->head = M;
  f->tasks = M;
@@ -1745,13 +1756,10 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
 void *g_libc_malloc(struct g*f, size_t n) { return malloc(n); }
 void g_libc_free(struct g*f, void *x) { free(x); }
 
-// Default deep-wait: no-op. Frontends override with a real wait that also
-// returns early on input readiness (poll(STDIN, POLLIN, ms) on POSIX, hlt/wfi
-// with timer+IRQ wakeup on bare metal). Without an override, the scheduler
-// still works — it just busy-yields through the deadline instead of
-// relinquishing the CPU, and a getc-suspended task spins waiting for input.
-__attribute__((weak)) void g_wait(uintptr_t ticks, bool wake_on_input) {
-  (void) ticks; (void) wake_on_input; }
+// Default time-wait: no-op. Frontends override with a real sleep that
+// honors the deadline (poll(NULL, 0, ms) on POSIX, hlt-with-timer on bare
+// metal). Input wait lives on g_in->wait, dispatched via gwait().
+__attribute__((weak)) void g_sleep(uintptr_t ticks) { (void) ticks; }
 
 // `extern` keeps C99 from treating this as an inline-definition-only
 // (which would emit no external symbol -- clang's COFF backend on the
@@ -1843,12 +1851,14 @@ static g_vm(g_vm_callk) {
 
 // fast path for monotask
 static g_noinline g_vm(g_vm_yield_sw_mono) {
- uintptr_t my_wake = f->next_wake_at, my_wait_io = f->next_wait_io;
- f->next_wake_at = f->next_wait_io = 0;
+ uintptr_t my_wake = f->next_wake_at;
+ struct g_in *my_wait_io = f->next_wait_io;
+ f->next_wake_at = 0;
+ f->next_wait_io = NULL;
  if (my_wake)
-  for (uintptr_t now; my_wake > (now = g_clock()); g_wait(my_wake - now, !!my_wait_io));
+  for (uintptr_t now; my_wake > (now = g_clock()); gwait(f, my_wait_io, my_wake - now));
  else if (my_wait_io)
-  while (!gkey(f)) g_wait(0, true);
+  while (!gkey(f)) my_wait_io->wait(f, my_wait_io, 0);
  f->yield_ctr = 0;
  return Continue(); }
 
@@ -1863,19 +1873,20 @@ static g_inline union u *find_runnable(union u *head, uintptr_t now) {
 // across the ring (seeded with caller's my_wake / my_wait_io) and waits. Returns
 // the runnable peer to switch to, or NULL if caller's wait was satisfied
 // (input arrived for caller, or deadline reached, or nothing to wait for).
-// Relies on g_wait returning only when its deadline elapsed or input is ready.
-static g_noinline union u *yield_sw_wait(struct g *f, uintptr_t my_wake, uintptr_t my_wait_io) {
+// Relies on the backend wait returning only when its deadline elapsed or input
+// is ready. Single-source world: the first non-NULL wait_io wins.
+static g_noinline union u *yield_sw_wait(struct g *f, uintptr_t my_wake, struct g_in *my_wait_io) {
   uintptr_t min_wake = my_wake;
-  bool io_any = my_wait_io != 0;
+  struct g_in *io_any = my_wait_io;
   for (union u *n = f->tasks->m; n != f->tasks; n = n->m)
     if (n[1].m->ap != g_vm_task_exit) {
       uintptr_t wa = (uintptr_t) getnum(n[3].x);
       if (wa && (!min_wake || wa < min_wake)) min_wake = wa;
-      if (getnum(n[4].x)) io_any = true; }
+      if (!io_any) io_any = wait_io_dec((uintptr_t) n[4].x); }
   if (!min_wake && !io_any) return NULL;
   uintptr_t now = g_clock();
-  if (!min_wake) g_wait(0, true);
-  else if (min_wake > now) g_wait(min_wake - now, io_any);
+  if (!min_wake) io_any->wait(f, io_any, 0);
+  else if (min_wake > now) gwait(f, io_any, min_wake - now);
   now = g_clock();
   if (my_wait_io && gkey(f)) return NULL;
   return find_runnable(f->tasks, now); }
@@ -1889,13 +1900,14 @@ static g_noinline union u *yield_sw_wait(struct g *f, uintptr_t my_wake, uintptr
 // NULL-terminator walk doesn't stop here.
 static g_vm(g_vm_yield_sw) {
   if (f->tasks->m == f->tasks) return Ap(g_vm_yield_sw_mono, f);
-  uintptr_t my_wake = f->next_wake_at, my_wait_io = f->next_wait_io;
+  uintptr_t my_wake = f->next_wake_at;
+  struct g_in *my_wait_io = f->next_wait_io;
   union u *next = find_runnable(f->tasks, g_clock());
   if (!next) {
     next = yield_sw_wait(f, my_wake, my_wait_io);
     if (!next) {
       f->next_wake_at = 0;
-      f->next_wait_io = 0;
+      f->next_wait_io = NULL;
       if (f->yield_ctr >= YIELD_INTERVAL) f->yield_ctr = 0;
       return Continue(); } }
   word my_height = topof(f) - Sp;
@@ -1911,7 +1923,7 @@ static g_vm(g_vm_yield_sw) {
     Unpack(f);
     return Ap(g_vm_yield_sw, f); }
   f->next_wake_at = 0;
-  f->next_wait_io = 0;
+  f->next_wait_io = NULL;
   union u *prev = next;
   while (prev->m != f->tasks) prev = prev->m;
   uintptr_t snap = 5 + my_height + Width(struct g_tag);
@@ -1921,7 +1933,7 @@ static g_vm(g_vm_yield_sw) {
   N[1].m = Ip;
   N[2].x = f->tasks[2].x;
   N[3].x = putnum((intptr_t) my_wake);
-  N[4].x = putnum((intptr_t) my_wait_io);
+  N[4].x = (g_word) wait_io_enc(my_wait_io);
   for (uintptr_t i = 0; i < (uintptr_t) my_height; i++) N[5 + i].x = Sp[i];
   struct g_tag *t = (struct g_tag*) (N + 5 + my_height);
   t->null = NULL, t->head = N;
@@ -1962,7 +1974,7 @@ static g_vm(g_vm_spawn) {
   N[2].x = putnum(pid);
   N[3].x = putnum(0);        // wake_at: non-zero sentinel for "always runnable"
                              // (so ttag's NULL-terminator walk doesn't stop here)
-  N[4].x = putnum(0);        // wait_io: non-zero sentinel for "not waiting on I/O"
+  N[4].x = (g_word) wait_io_enc(NULL);  // wait_io: NULL encoded as 1
   N[5].x = x;
   N[6].x = fn;
   ((struct g_tag*) (N + 7))->null = NULL;

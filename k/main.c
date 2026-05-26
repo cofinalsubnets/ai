@@ -150,19 +150,27 @@ static bool kb_ready(void) { return kkb.qh != kkb.qt; }
 static bool k_key(struct g *f, struct g_in*) { (void) f; return kb_ready(); }
 static struct g *k_ungetc(struct g*f, int c, struct g_in*) { return f; }
 static struct g *k_eof(struct g*f, struct g_in*) { return g_core_of(f)->b = 0, f; }
-struct g_in _g_stdin = { .getc = k_getc, .ungetc = k_ungetc, .eof = k_eof, .key = k_key, },
+// Deep wait on the keyboard queue. ticks=0 means infinite.
+// Future: program a one-shot timer at the deadline instead of waking every tick.
+static void k_wait(struct g *f, struct g_in *i, uintptr_t ticks) {
+  (void) f; (void) i;
+  uintptr_t deadline = kticks + ticks;
+  for (;;) {
+    if (ticks && kticks >= deadline) break;
+    if (kb_ready()) break;
+    kwait(); } }
+struct g_in _g_stdin = { .getc = k_getc, .ungetc = k_ungetc, .eof = k_eof, .key = k_key, .wait = k_wait, },
             *g_stdin = &_g_stdin;
 struct g_out _g_stdout = { .putc = _putc, .flush = _flush, },
              *g_stdout = &_g_stdout;
 uintptr_t g_clock(void) { return kticks; }
 
-// Deep wait. ticks=0 means infinite (caller should pair with wake_on_input).
-// Future: program a one-shot timer at the deadline instead of waking every tick.
-void g_wait(uintptr_t ticks, bool wake_on_input) {
+// Pure time-wait. ticks=0 means infinite (caller is expected to pair with an
+// input wait via g_in->wait, so this should only be hit when no I/O is intended).
+void g_sleep(uintptr_t ticks) {
   uintptr_t deadline = kticks + ticks;
   for (;;) {
     if (ticks && kticks >= deadline) break;
-    if (wake_on_input && kb_ready()) break;
     kwait(); } }
 
 #define show_cursor 1

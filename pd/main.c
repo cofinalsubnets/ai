@@ -312,7 +312,9 @@ static struct g*_getc(struct g*f, struct g_in*) { return g_core_of(f)->b = cb_ge
 static struct g* _ungetc(struct g*f, int c, struct g_in*) { return g_core_of(f)->b = cb_ungetc(kcb, c), f; }
 static struct g* _eof(struct g*f, struct g_in*) { return g_core_of(f)->b = cb_eof(kcb), f; }
 static bool _key(struct g *f, struct g_in*) { (void) f; return true; }
-struct g_in _g_stdin = { .getc = _getc, .ungetc = _ungetc, .eof = _eof, .key = _key, },
+// unreachable — _key always returns true so the scheduler never parks here.
+static void _wait(struct g *f, struct g_in*, uintptr_t t) { (void) f; (void) t; }
+struct g_in _g_stdin = { .getc = _getc, .ungetc = _ungetc, .eof = _eof, .key = _key, .wait = _wait, },
             *g_stdin = &_g_stdin;
 struct g_out _g_stdout = { .putc = _putc, .flush = _flush, },
              *g_stdout = &_g_stdout;

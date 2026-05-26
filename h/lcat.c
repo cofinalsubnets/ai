@@ -25,7 +25,9 @@ static struct g*lcat_getc(struct g*f, struct g_in*) {
 static struct g* lcat_ungetc(struct g*f, int c, struct g_in*) { return g_core_of(f)->b = ungetc(c, stdin), f; }
 static struct g* lcat_eof(struct g*f, struct g_in*) { return g_core_of(f)->b = feof(stdin), f; }
 static bool lcat_key(struct g *f, struct g_in*) { (void) f; return true; }
-struct g_in _g_stdin = { .getc = lcat_getc, .ungetc = lcat_ungetc, .eof = lcat_eof, .key = lcat_key, },
+// unreachable — lcat_key always returns true so the scheduler never parks here.
+static void lcat_wait(struct g *f, struct g_in*, uintptr_t t) { (void) f; (void) t; }
+struct g_in _g_stdin = { .getc = lcat_getc, .ungetc = lcat_ungetc, .eof = lcat_eof, .key = lcat_key, .wait = lcat_wait, },
             *g_stdin = &_g_stdin;
 struct g_out _g_stdout = { .putc = lcat_putc, .flush = lcat_flush, },
              *g_stdout = &_g_stdout;;
