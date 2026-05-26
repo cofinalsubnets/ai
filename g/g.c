@@ -1161,7 +1161,7 @@ static g_vm(g_vm_str) {
 // just yield again. When all peers are sleeping, yield_sw's g_wait coalesces
 // the deadline with input readiness, so input still wakes us promptly.
 static g_vm(g_vm_getc) {
- if (!g_key() && f->tasks)
+ if (!g_key())
   for (union u *n = f->tasks->m; n != f->tasks; n = n->m)
    if (n[1].m->ap != g_vm_task_exit)
     return Ap(g_vm_yield_sw, f);
@@ -1399,7 +1399,7 @@ static g_vm(g_vm_arg) {
 // resumes cleanly at the callee start.
 #define YIELD_INTERVAL 64
 #define YieldCheck() \
-  if (f->tasks && f->tasks->m != f->tasks && --f->yield_ctr == 0) \
+  if (f->tasks->m != f->tasks && --f->yield_ctr == 0) \
     return Ap(g_vm_yield_sw, f)
 
 // apply function to one argument
@@ -1572,7 +1572,7 @@ static g_noinline struct g *gcg(struct g*g, struct g *p1, uintptr_t len1, struct
  g->sp = ptr(g) + len1 - h;
  g->hp = g->cp = g->end;
  g->ip = cell(gcp(g, word(g->ip), p0, t0));
- g->tasks = cell(gcp(g, word(g->tasks), p0, t0)); // NULL passes through (out-of-heap)
+ g->tasks = cell(gcp(g, word(g->tasks), p0, t0));
  g->symbols = 0;
  for (word i = 0; i < g->end - &g->v0; i++) (&g->v0)[i] = gcp(g, (&g->v0)[i], p0, t0);               // core live variables
  for (word n = 0; n < h; n++) g->sp[n] = gcp(g, sp0[n], p0, t0);                     // stack
@@ -1719,6 +1719,20 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
  f->len = len0, f->pool = (void*) f, f->malloc = ma, f->free = fr;
  f->hp = f->end, f->sp = (word*) f + len0, f->ip = yield, f->t0 = g_clock();
  f->in = g_stdin, f->out = g_stdout;
+ // Bootstrap the task ring with a single placeholder M for the main thread
+ // (pid=0). M's saved_ip is a non-null sentinel so evac_thd's NULL-terminated
+ // walk doesn't stop early; the cell is overwritten on the first yield from
+ // main. Until a peer is spawned the ring is a self-loop, so scheduler hot
+ // paths early-out via the `tasks->m == tasks` check.
+ union u *M = bump(f, 6);
+ M[0].m = M;
+ M[1].x = putnum(0);   // sentinel; replaced on first yield
+ M[2].x = putnum(0);   // main pid
+ M[3].x = putnum(0);   // wake_at: non-zero sentinel for "always runnable"
+                       // (so ttag's NULL-terminator walk doesn't stop here)
+ ((struct g_tag*) (M + 4))->null = NULL;
+ ((struct g_tag*) (M + 4))->head = M;
+ f->tasks = M;
  if (!g_ok(f = mktbl(mktbl(f)))) return f;
  word m = pop1(f), d = pop1(f);
  f->macro = tbl(m), f->dict = tbl(d);
@@ -1854,9 +1868,9 @@ static g_vm(g_vm_yield_sw) {
   // silently disabling preemption for the running task until something else
   // resets it. Re-arm here so non-switching returns stay bounded too.
   f->yield_ctr = YIELD_INTERVAL;
-  // single-task fast path (no ring or self-loop): just deep-sleep if we have
+  // single-task fast path (ring is a self-loop): just deep-sleep if we have
   // a deadline, otherwise stay running. Either way the caller's Ip resumes.
-  if (!f->tasks || f->tasks->m == f->tasks) {
+  if (f->tasks->m == f->tasks) {
     if (my_wake && my_wake > now) g_wait(my_wake - now);
     return Continue(); }
   // walk forward, skipping dormant AND sleeping tasks
@@ -1933,13 +1947,12 @@ static g_vm(g_vm_task_exit) { return Ap(g_vm_yield_sw, f); }
 // return address = &spawn_body[1] = g_vm_task_exit, which marks the task dormant.
 static union u spawn_body[] = { {g_vm_ap}, {.ap = g_vm_task_exit} };
 
-// (spawn fn x) : create a new task that will apply fn to x, splice it into the ring.
-// First spawn bootstraps the ring by also creating a placeholder node for the
-// currently-running (main) task (pid=0, reserved). Returns the new task's pid.
+// (spawn fn x) : create a new task that will apply fn to x, splice it into the
+// ring just after f->tasks. The ring is bootstrapped at g_ini time with a
+// placeholder M for main, so spawn never has to create it. Returns the new pid.
 static g_vm(g_vm_spawn) {
   word fn = Sp[0], x = Sp[1];
-  uintptr_t need = f->tasks ? 8 : 14;
-  Have(need);
+  Have(8);
   // New task node N: [next, saved_ip=spawn_body, pid, wake_at=0, stack[0..1]=x,fn, NULL, HEAD]
   union u *N = (union u*) Hp;
   Hp += 8;
@@ -1952,27 +1965,8 @@ static g_vm(g_vm_spawn) {
   N[5].x = fn;
   ((struct g_tag*) (N + 6))->null = NULL;
   ((struct g_tag*) (N + 6))->head = N;
-  if (!f->tasks) {
-    // Bootstrap: also allocate placeholder M for the main task (height 0, pid=0).
-    // M's saved_ip is a non-null sentinel so evac_thd's NULL-terminated walk
-    // doesn't stop early; the cell is overwritten on the first yield from main.
-    // M is only ever the current task and is replaced on first yield, so the
-    // sentinel is never dereferenced as a function pointer.
-    union u *M = (union u*) Hp;
-    Hp += 6;
-    M[0].m = N;
-    M[1].x = putnum(0);   // sentinel; replaced on first yield
-    M[2].x = putnum(0);   // main pid
-    M[3].x = putnum(0);   // wake_at: non-zero sentinel for "always runnable"
-    ((struct g_tag*) (M + 4))->null = NULL;
-    ((struct g_tag*) (M + 4))->head = M;
-    N[0].m = M;
-    f->tasks = M;
-  } else {
-    // Splice N in just after f->tasks.
-    N[0].m = f->tasks->m;
-    f->tasks->m = N;
-  }
+  N[0].m = f->tasks->m;
+  f->tasks->m = N;
   f->yield_ctr = YIELD_INTERVAL;
   Sp[1] = putnum(pid);
   Sp += 1;
@@ -1987,7 +1981,7 @@ static g_vm(g_vm_spawn) {
 //   still running       -> yield without advancing Ip (re-enters wait on resume)
 static g_vm(g_vm_wait) {
   word pid_arg = Sp[0];
-  if (!f->tasks || !nump(pid_arg)) {
+  if (!nump(pid_arg)) {
     Sp[0] = putnum(0);
     Ip += 1;
     return Continue(); }
@@ -2014,7 +2008,7 @@ static g_vm(g_vm_wait) {
 // false iff there's a runnable task with that pid in the ring.
 static g_vm(g_vm_donep) {
   word pid_arg = Sp[0], result = putnum(-1);
-  if (f->tasks && nump(pid_arg)) {
+  if (nump(pid_arg)) {
     intptr_t target = getnum(pid_arg);
     for (union u *node = f->tasks->m; node != f->tasks; node = node->m)
       if (getnum(node[2].x) == target) {
@@ -2033,7 +2027,7 @@ static g_vm(g_vm_donep) {
 // ring; GC will collect it. No cross-task abort dance — pure ring surgery.
 static g_vm(g_vm_kill) {
   word pid_arg = Sp[0], result = putnum(0);
-  if (f->tasks && nump(pid_arg)) {
+  if (nump(pid_arg)) {
     intptr_t target = getnum(pid_arg);
     union u *prev = f->tasks;
     for (union u *node = prev->m; node != f->tasks; prev = node, node = node->m)

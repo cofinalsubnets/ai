@@ -55,7 +55,7 @@ struct g {
   g_word x, typ;
   union u *m; } *ip;
  g_word *hp, *sp;
- union u *tasks;       // task ring head (running task's node); NULL = no ring
+ union u *tasks;       // task ring head (running task's node); always non-NULL after g_ini
  uintptr_t yield_ctr;  // ticks before next cooperative yield; reset on swap/spawn
  uintptr_t next_pid;   // monotonic pid counter; pre-incremented, so first spawn returns 1
  uintptr_t next_wake_at; // raw deadline for next yield_sw snapshot's wake_at slot; 0 = always runnable
