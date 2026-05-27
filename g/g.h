@@ -75,7 +75,7 @@ struct g {
  uintptr_t len;
  struct g *pool;
  struct g_r { g_word *x; struct g_r *n; } *root;
- struct g_finalizer *finalizers;  // GC-managed list of (p, fn, next), 3 words each on the gwen heap
+ struct g_fz *fz;  // GC-managed list of (p, fn, next), 3 words each on the gwen heap
  union { uintptr_t t0; g_word *cp; };
  g_malloc_t *malloc;
  g_free_t *free;
@@ -113,10 +113,10 @@ struct g_out {
          *(*flush)(struct g*);
  g_word fd; };            // sink fd; putnum(-1) = data sink (subtype carries the buffer)
 
-struct g_finalizer {
+struct g_fz {
  union u *p;
  void (*fn)(void *);
- struct g_finalizer *next; };
+ struct g_fz *next; };
 
 struct g *g_finalize(struct g*, union u *p, void (*fn)(void *));
 

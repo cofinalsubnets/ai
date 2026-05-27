@@ -1743,14 +1743,14 @@ static g_inline void evac_data(struct g *g, word const *const p0, word const*con
    case tbl_q: return evac_tbl(g, p0, t0); } }
 
 static g_inline void run_finalizers(struct g*g) {
- struct g_finalizer *new_fz = NULL;
- for (struct g_finalizer *fz = g->finalizers; fz; fz = fz->next) {
+ struct g_fz *new_fz = NULL;
+ for (struct g_fz *fz = g->fz; fz; fz = fz->next) {
   word fwd = fz->p->x;
   if (homp(fwd) && ptr(g) <= ptr(fwd) && ptr(fwd) < ptr(g) + g->len) {
-   struct g_finalizer *nn = bump(g, Width(struct g_finalizer));
+   struct g_fz *nn = bump(g, Width(struct g_fz));
    nn->p = cell(fwd), nn->fn = fz->fn, nn->next = new_fz, new_fz = nn;
   } else fz->fn(fz->p); }
- g->finalizers = new_fz; }
+ g->fz = new_fz; }
 
 static g_noinline struct g *gcg(struct g*g, struct g *p1, uintptr_t len1, struct g *f) {
  memcpy(g, f, sizeof(struct g));
@@ -1806,10 +1806,10 @@ static g_noinline struct g *g_please(struct g *f, uintptr_t req0) {
    g); }
 
 struct g *g_finalize(struct g *f, union u *p, void (*fn)(void *)) {
- if (g_ok(f = have(g_push(f, 1, p), Width(struct g_finalizer)))) {
+ if (g_ok(f = have(g_push(f, 1, p), Width(struct g_fz)))) {
   p = cell(pop1(f));
-  struct g_finalizer *n = bump(f, Width(struct g_finalizer));
-  n->p = p, n->fn = fn, n->next = f->finalizers, f->finalizers = n; }
+  struct g_fz *n = bump(f, Width(struct g_fz));
+  n->p = p, n->fn = fn, n->next = f->fz, f->fz = n; }
  return f; }
 
 static g_inline word copy_two(struct g*f, struct g_pair *src, word const *const p0, word const *const t0) {
@@ -1874,7 +1874,9 @@ static g_noinline intptr_t gcp(struct g *f, word x, word const *p0, word const *
 
 enum g_status g_fin(struct g *f) {
  enum g_status s = g_code_of(f);
- if ((f = g_core_of(f))) f->free(f, f->pool);
+ if ((f = g_core_of(f))) {
+   for (struct g_fz *fz = f->fz; fz; fz->fn(fz->p), fz = fz->next); // run finalizers
+   f->free(f, f->pool); }
  return s; }
 
 #define S1(i) {{i}, {g_vm_ret0}}
