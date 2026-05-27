@@ -25,8 +25,7 @@ static struct g *_putc(struct g *f, int c) {
   (void) r;
   return f; }
 static struct g *_flush(struct g *f) { return f; }
-static struct g_out _g_stdout = { g_vm_port_out, _putc, _flush, g_putnum(STDOUT_FILENO) };
-struct g_out *g_stdout = &_g_stdout;
+struct g_out g_stdout = { g_vm_port_out, _putc, _flush, g_putnum(STDOUT_FILENO) };
 
 // --- raw terminal mode -----------------------------------------------
 static struct termios saved_termios;
@@ -95,9 +94,8 @@ static struct g *fd_eof(struct g *f) {
   struct g *fc = g_core_of(f);
   struct g_in *i = (struct g_in*) fc->sp[0];
   return fc->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
-static struct g_in raw_stdin = { g_vm_port_in, fd_getc, fd_ungetc, fd_eof,
+struct g_in g_stdin = { g_vm_port_in, fd_getc, fd_ungetc, fd_eof,
                                   g_putnum(STDIN_FILENO), g_putnum(EOF), g_putnum(false) };
-struct g_in *g_stdin = &raw_stdin;
 
 static union u const
  bif_exit[] = {{g_vm_exit}, {g_vm_ret0}};

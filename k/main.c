@@ -161,10 +161,9 @@ static struct g *k_ungetc(struct g*f, int c) {
 static struct g *k_eof(struct g*f) {
   struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
-struct g_in _g_stdin = { .ap = g_vm_port_in,
-                         .getc = k_getc, .ungetc = k_ungetc, .eof = k_eof,
-                         .fd = g_putnum(0), .ungetc_buf = g_putnum(EOF), .eof_seen = g_putnum(false), },
-            *g_stdin = &_g_stdin;
+struct g_in g_stdin = { .ap = g_vm_port_in,
+                        .getc = k_getc, .ungetc = k_ungetc, .eof = k_eof,
+                        .fd = g_putnum(0), .ungetc_buf = g_putnum(EOF), .eof_seen = g_putnum(false), };
 
 // Registry of known kernel sources. Indexed by fd; entries with NULL `ready`
 // are unregistered. Add new drivers by populating a new slot here.
@@ -187,9 +186,8 @@ void g_wait_fds(int const *fds, int n, uintptr_t ticks) {
     if (ticks && kticks >= deadline) return;
     for (int i = 0; i < n; i++) if (g_ready(fds[i])) return;
     kwait(); } }
-struct g_out _g_stdout = { .ap = g_vm_port_out,
-                           .putc = _putc, .flush = _flush, .fd = g_putnum(1), },
-             *g_stdout = &_g_stdout;
+struct g_out g_stdout = { .ap = g_vm_port_out,
+                           .putc = _putc, .flush = _flush, .fd = g_putnum(1), };
 uintptr_t g_clock(void) { return kticks; }
 
 // Pure time-wait. ticks=0 means infinite (caller is expected to pair with an

@@ -37,13 +37,11 @@ static struct g* lcat_ungetc(struct g*f, int c) {
 static struct g* lcat_eof(struct g*f) {
   struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
-struct g_in _g_stdin = { .ap = g_vm_port_in,
-                         .getc = lcat_getc, .ungetc = lcat_ungetc, .eof = lcat_eof,
-                         .fd = g_putnum(STDIN_FILENO), .ungetc_buf = g_putnum(EOF), .eof_seen = g_putnum(false), },
-            *g_stdin = &_g_stdin;
-struct g_out _g_stdout = { .ap = g_vm_port_out,
-                           .putc = lcat_putc, .flush = lcat_flush, .fd = g_putnum(STDOUT_FILENO), },
-             *g_stdout = &_g_stdout;;
+struct g_in g_stdin = { .ap = g_vm_port_in,
+                        .getc = lcat_getc, .ungetc = lcat_ungetc, .eof = lcat_eof,
+                        .fd = g_putnum(STDIN_FILENO), .ungetc_buf = g_putnum(EOF), .eof_seen = g_putnum(false), };
+struct g_out g_stdout = { .ap = g_vm_port_out,
+                           .putc = lcat_putc, .flush = lcat_flush, .fd = g_putnum(STDOUT_FILENO), };
 
 int main(int argc, char const **argv) {
  putc('"', stdout);

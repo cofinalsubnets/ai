@@ -325,10 +325,8 @@ static struct g* _ungetc(struct g*f, int c) {
 static struct g* _eof(struct g*f) {
   struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
-struct g_in _g_stdin = { .ap = g_vm_port_in,
-                         .getc = _getc, .ungetc = _ungetc, .eof = _eof,
-                         .fd = g_putnum(-1), .ungetc_buf = g_putnum(EOF), .eof_seen = g_putnum(false), },
-            *g_stdin = &_g_stdin;
-struct g_out _g_stdout = { .ap = g_vm_port_out,
-                           .putc = _putc, .flush = _flush, .fd = g_putnum(1), },
-             *g_stdout = &_g_stdout;
+struct g_in g_stdin = { .ap = g_vm_port_in,
+                        .getc = _getc, .ungetc = _ungetc, .eof = _eof,
+                        .fd = g_putnum(-1), .ungetc_buf = g_putnum(EOF), .eof_seen = g_putnum(false), };
+struct g_out g_stdout = { .ap = g_vm_port_out,
+                          .putc = _putc, .flush = _flush, .fd = g_putnum(1), };

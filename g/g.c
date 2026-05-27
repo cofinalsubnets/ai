@@ -1076,12 +1076,9 @@ static struct g *port_ungetc(struct g *f, int c, struct g_in *i) {
   f = ((struct g_in*) f->sp[0])->ungetc(f, c);
   if (g_ok(f)) f->sp++;
   return f; }
-static struct g *port_eof(struct g *f, struct g_in *i) {
-  if (!g_ok(f = g_push(f, 1, (word) i))) return f;
-  f = ((struct g_in*) f->sp[0])->eof(f);
-  if (g_ok(f)) f->sp++;
-  return f; }
 
+static struct g*gsgetc(struct g*f) { return g_ok(f) ? g_in0(f)->getc(f) : f; }
+static struct g*gseof(struct g*f) { return g_ok(f) ? g_in0(f)->eof(f) : f; }
 ////
 /// " the parser "
 //
@@ -1089,15 +1086,18 @@ static struct g *port_eof(struct g *f, struct g_in *i) {
 // get the next significant character from the stream. MM-protect the C
 // `i` parameter across the multiple port_* calls — each push triggers a
 // have() check that may GC and move heap ports.
-static struct g* g_r_getc(struct g*f, struct g_in *i) {
- MM(f, (g_word*) &i);
- while (g_ok(f = port_getc(f, i))) switch (f->b) {
-  default: goto out;
+
+static struct g* g_s_getc(struct g*f) {
+ while (g_ok(f = gsgetc(f))) switch (f->b) {
+  default: return f;
   case '#': case ';':
-   while (g_ok(f = port_eof(f, i)) && !f->b && g_ok(f = port_getc(f, i)) && f->b != '\n' && f->b != '\r');
+   while (g_ok(f = gseof(f)) && !f->b && g_ok(f = gsgetc(f)) && f->b != '\n' && f->b != '\r');
   case 0: case ' ': case '\t': case '\n': case '\r': case '\f':
    continue; }
-out: UM(f); return f; }
+ return f; }
+
+static struct g* g_r_getc(struct g*f, struct g_in *i) {
+ return g_pop(g_s_getc(g_push(f, 1, i)), 1); }
 
 static struct g *g_read1(struct g*f, struct g_in *i) {
  MM(f, (g_word*) &i);
@@ -1197,7 +1197,7 @@ struct g *g_read(struct g *f, struct g_in *i) {
 
 
 static g_vm(g_vm_read) {
- switch (Pack(f), g_code_of(f = g_read1(f, f->in))) {
+ switch (Pack(f), g_code_of(f = g_read1(f, &g_stdin))) {
   default: return f;
   case g_status_more:   // not enough input yet -- treat as nothing read
   case g_status_eof:
@@ -1229,8 +1229,8 @@ static g_vm(g_vm_str) {
 
 static struct g *ggetc(struct g*f), *gflush(struct g*f);
 static g_vm(g_vm_getc) {
- if (!g_ready(getnum(f->in->fd))) {
-  f->next_wait_fd = getnum(f->in->fd);
+ if (!g_ready(getnum(g_stdin.fd))) {
+  f->next_wait_fd = getnum(g_stdin.fd);
   return Ap(g_vm_yield_sw, f); }
  Pack(f);
  if (!g_ok(f = ggetc(f))) return f;
@@ -1239,7 +1239,6 @@ static g_vm(g_vm_getc) {
  Ip += 1;
  return Continue(); }
 
-static struct g*gsgetc(struct g*f) { return g_ok(f) ? g_in0(f)->getc(f) : f; }
 
 // (fgetc port) — like (getc _) but on an explicit port. Cooperative wait
 // uses the port's own fd.
@@ -1379,10 +1378,10 @@ static struct g *gfputx(struct g *f, struct g_out *o, intptr_t x) {
  return g_ok(f = g_push(f, 2, x, o)) ? g_pop(gsputx(f, pop1(f)), 1) : f; }
 
 struct g *gputx(struct g*f, word x) {
- return gfputx(f, g_core_of(f)->out, x); }
+ return gfputx(f, &g_stdout, x); }
 
 struct g *gputn(struct g*f, intptr_t n, uint8_t b) {
-  return g_putn(f, f->out, n, b); }
+  return g_putn(f, &g_stdout, n, b); }
 
 static g_vm(g_vm_putc) {
  Pack(f);
@@ -1422,7 +1421,7 @@ static g_vm(g_vm_puts) {
 static g_vm(g_vm_putn) {
  Pack(f);
  uintptr_t n = getnum(Sp[0]), b = getnum(Sp[1]);
- if (!g_ok(f = g_putn(f, f->out, n, b))) return f;
+ if (!g_ok(f = g_putn(f, &g_stdout, n, b))) return f;
  Unpack(f);
  Sp[1] = Sp[0];
  Sp += 1;
@@ -1431,7 +1430,7 @@ static g_vm(g_vm_putn) {
 
 static g_vm(g_vm_dot) {
  Pack(f);
- if (!g_ok(f = gfputx(f, f->out, f->sp[0]))) return f;
+ if (!g_ok(f = gfputx(f, &g_stdout, f->sp[0]))) return f;
  Unpack(f);
  Ip += 1;
  return Continue(); }
@@ -1925,15 +1924,14 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
  memset(f, 0, sizeof(struct g));
  f->len = len0, f->pool = (void*) f, f->malloc = ma, f->free = fr;
  f->hp = f->end, f->sp = (word*) f + len0, f->ip = yield, f->t0 = g_clock();
- f->in = g_stdin, f->out = g_stdout;
  if (!g_ok(f = mktbl(mktbl(f)))) return f;
  word m = pop1(f), d = pop1(f);
  f->macro = tbl(m), f->dict = tbl(d);
  struct g_def def0[] = {
   {"globals", d, },
   {"macros", m, },
-  {"in", (intptr_t) g_stdin},
-  {"out", (intptr_t) g_stdout},
+  {"in", (intptr_t) &g_stdin},
+  {"out", (intptr_t) &g_stdout},
   {0}, };
  if (g_ok(f = have(g_defs(g_defs(f, def0), def1), 7))) {
   union u *M = bump(f, 7);
@@ -1983,9 +1981,9 @@ static word g_tget(struct g *f, word zero, word k, struct g_tab *t) {
  while (e && !eql(f, k, e->key)) e = e->next;
  return e ? e->val : zero; }
 
-static struct g *ggetc(struct g*f)  { return port_getc(f, f->in); }
-struct g *gputc(struct g*f, int c)  { return g_pop(gsputc(g_push(f, 1, f->out), c), 1); }
-static struct g *gflush(struct g*f) { return g_pop(gsflush(g_push(f, 1, f->out)), 1); }
+static struct g *ggetc(struct g*f)  { return port_getc(f, &g_stdin); }
+struct g *gputc(struct g*f, int c)  { return g_pop(gsputc(g_push(f, 1, &g_stdout), c), 1); }
+static struct g *gflush(struct g*f) { return g_pop(gsflush(g_push(f, 1, &g_stdout)), 1); }
 
 
 #define topof(f) ((word*)f+f->len)
@@ -2183,6 +2181,6 @@ static g_vm(g_vm_sleep) {
  return Ap(g_vm_yield_sw, f); }
 
 static g_vm(g_vm_key) {
- Sp[0] = (getnum(f->in->ungetc_buf) != EOF || g_ready(getnum(f->in->fd))) ? putnum(-1) : nil;
+ Sp[0] = (getnum(g_stdin.ungetc_buf) != EOF || g_ready(getnum(g_stdin.fd))) ? putnum(-1) : nil;
  Ip += 1;
  return Continue(); }
