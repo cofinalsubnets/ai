@@ -1543,7 +1543,7 @@ static g_vm(g_vm_arg) {
     return Ap(g_vm_yield_sw, f)
 
 // apply function to one argument
-static g_vm(g_vm_ap) {
+static g_noinline g_vm(g_vm_ap) {
  union u *k;
  if (oddp(Sp[1])) Ip++, Sp++;
  else k = cell(Sp[1]), Sp[1] = word(Ip + 1), Ip = k;
@@ -1672,31 +1672,47 @@ struct g *g_push(struct g *f, uintptr_t m, ...) {
  va_end(xs);
  return f; }
 
-static g_inline void evac_data(struct g *g, word const *const p0, word const*const t0) {
-  switch (typ(g->cp)) {
-   default: __builtin_trap();
-   case vec_q:
-     g->cp += b2w(g_vec_bytes(vec(g->cp))); return;
-   case sym_q:
-     g->cp += Width(struct g_atom) - (sym(g->cp)->nom ? 0 : 2); return;
-   case two_q: {
-     struct g_pair *w = (struct g_pair*) g->cp;
-     g->cp += Width(struct g_pair);
-     w->a = gcp(g, w->a, p0, t0);
-     w->b = gcp(g, w->b, p0, t0);
-     return; }
-   case tbl_q: {
-     struct g_tab *t = (struct g_tab*) g->cp;
-     g->cp += Width(struct g_tab) + t->cap + t->len * Width(struct g_kvs);
-     for (intptr_t i = 0, lim = t->cap; i < lim; i++)
-      for (struct g_kvs*e = t->tab[i]; e;
-       e->key = gcp(g, e->key, p0, t0),
-       e->val = gcp(g, e->val, p0, t0),
-       e = e->next);
-     return; } } }
+static g_inline void evac_two(struct g*f, word const*const p0, word const*const t0) {
+ struct g_pair *w = (struct g_pair*) f->cp;
+ f->cp += Width(struct g_pair);
+ w->a = gcp(f, w->a, p0, t0);
+ w->b = gcp(f, w->b, p0, t0); }
+
+static g_inline void evac_vec(struct g*f, word const*const p0, word const*const t0) {
+ f->cp += b2w(g_vec_bytes(vec(f->cp))); }
+
+static g_inline void evac_sym(struct g*f, word const*const p0, word const*const t0) {
+ f->cp += Width(struct g_atom) - (sym(f->cp)->nom ? 0 : 2); }
+
+static g_inline void evac_tbl(struct g*f, word const*const p0, word const*const t0) {
+ struct g_tab *t = (struct g_tab*) f->cp;
+ f->cp += Width(struct g_tab) + t->cap + t->len * Width(struct g_kvs);
+ for (intptr_t i = 0, lim = t->cap; i < lim; i++)
+  for (struct g_kvs*e = t->tab[i]; e;
+   e->key = gcp(f, e->key, p0, t0),
+   e->val = gcp(f, e->val, p0, t0),
+   e = e->next); }
 
 static g_inline void evac_thd(struct g *g, word const *const p0, word const*const t0) {
   for (g->cp += 2; g->cp[-2]; g->cp[-2] = gcp(g, g->cp[-2], p0, t0), g->cp++); }
+
+static g_inline void evac_data(struct g *g, word const *const p0, word const*const t0) {
+  switch (typ(g->cp)) {
+   default: __builtin_trap();
+   case vec_q: return evac_vec(g, p0, t0);
+   case sym_q: return evac_sym(g, p0, t0);
+   case two_q: return evac_two(g, p0, t0);
+   case tbl_q: return evac_tbl(g, p0, t0); } }
+
+static g_inline void run_finalizers(struct g*g) {
+ struct g_finalizer *new_fz = NULL;
+ for (struct g_finalizer *fz = g->finalizers; fz; fz = fz->next) {
+  word fwd = fz->p->x;
+  if (homp(fwd) && ptr(g) <= ptr(fwd) && ptr(fwd) < ptr(g) + g->len) {
+   struct g_finalizer *nn = bump(g, Width(struct g_finalizer));
+   nn->p = cell(fwd), nn->fn = fz->fn, nn->next = new_fz, new_fz = nn;
+  } else fz->fn(fz->p); }
+ g->finalizers = new_fz; }
 
 static g_noinline struct g *gcg(struct g*g, struct g *p1, uintptr_t len1, struct g *f) {
  memcpy(g, f, sizeof(struct g));
@@ -1716,14 +1732,7 @@ static g_noinline struct g *gcg(struct g*g, struct g *p1, uintptr_t len1, struct
  for (word n = 0; n < h; n++) g->sp[n] = gcp(g, sp0[n], p0, t0);                     // stack
  for (struct g_r *s = g->root; s; s = s->n) *s->x = gcp(g, *s->x, p0, t0); // C live variables
  while (g->cp < g->hp) (datp(g->cp) ? evac_data : evac_thd)(g, p0, t0);              // cheney algorithm
- struct g_finalizer *new_fz = NULL;
- for (struct g_finalizer *fz = g->finalizers; fz; fz = fz->next) {
-  word fwd = fz->p->x;
-  if (homp(fwd) && ptr(g) <= ptr(fwd) && ptr(fwd) < ptr(g) + g->len) {
-   struct g_finalizer *nn = bump(g, Width(struct g_finalizer));
-   nn->p = cell(fwd), nn->fn = fz->fn, nn->next = new_fz, new_fz = nn;
-  } else fz->fn(fz->p); }
- g->finalizers = new_fz;
+ run_finalizers(g);
  return g; }
 
 
@@ -1758,42 +1767,52 @@ static g_noinline struct g *g_please(struct g *f, uintptr_t req0) {
    g->t0 = g_clock(),
    g); }
 
-void g_finalize(struct g *f, union u *p, void (*fn)(void *)) {
- struct g_finalizer *n = bump(f, Width(struct g_finalizer));
- n->p = p, n->fn = fn, n->next = f->finalizers, f->finalizers = n; }
+struct g *g_finalize(struct g *f, union u *p, void (*fn)(void *)) {
+ if (g_ok(f = have(g_push(f, 1, p), Width(struct g_finalizer)))) {
+  p = cell(pop1(f));
+  struct g_finalizer *n = bump(f, Width(struct g_finalizer));
+  n->p = p, n->fn = fn, n->next = f->finalizers, f->finalizers = n; }
+ return f; }
 
+static g_inline word copy_two(struct g*f, struct g_pair *src, word const *const p0, word const *const t0) {
+ struct g_pair *dst = bump(f, Width(struct g_pair));
+ ini_two(dst, src->a, src->b);
+ src->ap = (g_vm_t*) dst;
+ return word(dst); }
+
+static g_inline word copy_vec(struct g*f, struct g_vec *src, word const *const p0, word const*const t0) {
+ uintptr_t bytes = g_vec_bytes(src);
+ struct g_vec *dst = bump(f, b2w(bytes));
+ src->ap = memcpy(dst, src, bytes);
+ return word(dst); }
+
+static g_inline word copy_sym(struct g*f, struct g_atom *src, word const *const p0, word const*const t0) {
+ struct g_atom *dst;
+ if (src->nom) dst = intern_checked(f, (struct g_vec*) gcp(f, word(src->nom), p0, t0));
+ else dst = bump(f, Width(struct g_atom) - 2),
+      ini_anon(dst, src->code);
+ return word(src->ap = (g_vm_t*) dst); }
+
+static g_inline word copy_tbl(struct g*f, struct g_tab *src, word const*const p0, word const*const t0) {
+ uintptr_t len = src->len, cap = src->cap;
+ struct g_tab *dst = bump(f, Width(struct g_tab) + cap + Width(struct g_kvs) * len);
+ struct g_kvs **tab = (struct g_kvs**) (dst + 1),
+              *dd = (struct g_kvs*) (tab + cap);
+ ini_tab(dst, len, cap, tab);
+ src->ap = (g_vm_t*) dst;
+ for (struct g_kvs *d, *s, *last; cap--; tab[cap] = last)
+  for (s = src->tab[cap], last = NULL; s;
+   d = dd++, d->key = s->key, d->val = s->val, d->next = last,
+   last = d, s = s->next);
+ return word(dst); }
 
 static g_inline word copy_data(struct g *f, union u *src, word const *const p0, word const *const t0) {
  switch (typ(src)) {
   default: __builtin_trap();
-  case two_q: {
-   struct g_pair *dst = bump(f, Width(struct g_pair));
-   ini_two(dst, A(src), B(src));
-   src->ap = (g_vm_t*) dst;
-   return word(dst); }
-  case vec_q: {
-   uintptr_t bytes = g_vec_bytes(vec(src));
-   struct g_vec *dst = bump(f, b2w(bytes));
-   src->ap = memcpy(dst, src, bytes);
-   return word(dst); }
-  case sym_q: {
-   struct g_atom *dst;
-   if (sym(src)->nom) dst = intern_checked(f, (struct g_vec*) gcp(f, word(sym(src)->nom), p0, t0));
-   else dst = bump(f, Width(struct g_atom) - 2),
-        ini_anon(dst, sym(src)->code);
-   return word(src->ap = (g_vm_t*) dst); }
-  case tbl_q: {
-   uintptr_t len = tbl(src)->len, cap = tbl(src)->cap;
-   struct g_tab *dst = bump(f, Width(struct g_tab) + cap + Width(struct g_kvs) * len);
-   struct g_kvs **tab = (struct g_kvs**) (dst + 1),
-                *dd = (struct g_kvs*) (tab + cap);
-   ini_tab(dst, len, cap, tab);
-   src->ap = (g_vm_t*) dst;
-   for (struct g_kvs *d, *s, *last; cap--; tab[cap] = last)
-    for (s = tbl(src)->tab[cap], last = NULL; s;
-     d = dd++, d->key = s->key, d->val = s->val, d->next = last,
-     last = d, s = s->next);
-   return word(dst); } } }
+  case two_q: return copy_two(f, two(src), p0, t0);
+  case vec_q: return copy_vec(f, vec(src), p0, t0);
+  case sym_q: return copy_sym(f, sym(src), p0, t0);
+  case tbl_q: return copy_tbl(f, tbl(src), p0, t0); } }
 
 static g_inline word copy_thread(struct g *f, union u *src, word const *const p0, word const *const t0) {
  // it's a thread, find the end to find the head
@@ -1887,12 +1906,10 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
   M[0].m = M;
   M[1].x = nil;   // sentinel; replaced on first yield
   M[2].x = nil;   // main pid
-  M[3].x = nil;   // wake_at: non-zero sentinel for "always runnable"
-                        // (so ttag's NULL-terminator walk doesn't stop here)
+  M[3].x = nil;   // wake_at: nil means "always runnable"
   M[4].x = putnum(-1);  // wait_fd: -1 = not waiting on I/O (slot value -1, non-zero)
-  ((struct g_tag*) (M + 5))->null = NULL;
-  ((struct g_tag*) (M + 5))->head = M;
-  f->tasks = M; }
+  M[5].m = NULL;
+  M[6].m = f->tasks = M; }
  return f; }
 
 void *g_libc_malloc(struct g*f, size_t n) { return malloc(n); }
@@ -1916,9 +1933,7 @@ __attribute__((weak)) void g_wait_fds(int const *fds, int n, uintptr_t ticks) {
 // body still inlines at call sites in this TU, but an external symbol
 // is also emitted, so callers in other TUs link cleanly.
 extern g_inline struct g *g_pop(struct g*f, uintptr_t n) { return g_core_of(f)->sp += n, f; }
-
-static g_inline struct g *symof(char const *n, struct g *f) {
-  return intern(g_strof(f, n)); }
+static g_inline struct g *symof(char const *n, struct g *f) { return intern(g_strof(f, n)); }
 
 struct g *g_defs(struct g*f, struct g_def const*defs) {
  if (!g_ok(f)) return f;
@@ -1960,9 +1975,9 @@ static struct g *port_flush(struct g *f, struct g_out *o) {
   if (g_ok(f)) f->sp++;
   return f; }
 
-static struct g *ggetc(struct g*f)         { return port_getc(f, f->in); }
-struct g *gputc(struct g*f, int c)   { return port_putc(f, c, f->out); }
-static struct g *gflush(struct g*f)        { return port_flush(f, f->out); }
+static struct g *ggetc(struct g*f)  { return port_getc(f, f->in); }
+struct g *gputc(struct g*f, int c)  { return port_putc(f, c, f->out); }
+static struct g *gflush(struct g*f) { return port_flush(f, f->out); }
 
 
 #define topof(f) ((word*)f+f->len)
@@ -1976,7 +1991,6 @@ static g_vm(g_vm_kcall) {
  *(Sp = memmove(topof(f) - height, stack, height * sizeof(word))) = x;
  Ip = Ip[1].m;
  return Continue(); }
-
 
 // callk : i = Sp[0], k = Ip + 1 -> Ip = i, Sp[0] = k
 static g_vm(g_vm_callk) {
@@ -2004,9 +2018,8 @@ static g_noinline g_vm(g_vm_yield_sw_mono) {
  f->next_wake_at = 0;
  f->next_wait_fd = -1;
  f->yield_ctr = 0;
- if (my_wake)
-  for (uintptr_t now; my_wake > (now = g_clock());
-       my_wait_fd >= 0 ? g_wait_fds(&my_wait_fd, 1, my_wake - now) : g_sleep(my_wake - now));
+ if (my_wake) for (uintptr_t now; my_wake > (now = g_clock());)
+  my_wait_fd >= 0 ? g_wait_fds(&my_wait_fd, 1, my_wake - now) : g_sleep(my_wake - now);
  else if (my_wait_fd >= 0)
   while (!g_ready(my_wait_fd)) g_wait_fds(&my_wait_fd, 1, 0);
  return Continue(); }
@@ -2036,7 +2049,7 @@ static g_noinline union u *yield_sw_wait(struct g *f, uintptr_t my_wake, int my_
  if (my_wait_fd >= 0 && g_ready(my_wait_fd)) return NULL;
  return find_runnable(f->tasks, now); }
 
-static g_vm(g_vm_yield_sw) {
+static g_noinline g_vm(g_vm_yield_sw) {
   if (f->tasks->m == f->tasks) return Ap(g_vm_yield_sw_mono, f);
   union u *next = find_runnable(f->tasks, g_clock());
   uintptr_t my_wake = f->next_wake_at;
@@ -2097,7 +2110,6 @@ static g_vm(g_vm_spawn) {
  N[7].m = NULL;
  N[8].m = f->tasks->m = N;
 // f->yield_ctr = 0;
-// Sp[1] = putnum(pid);
  Sp += 1;
  Ip += 1;
  return Continue(); }
@@ -2132,27 +2144,27 @@ static g_vm(g_vm_donep) {
  return Continue(); }
 
 static g_vm(g_vm_kill) {
-  word pid_arg = Sp[0], result = nil;
-  intptr_t target = getnum(pid_arg);
-  union u *prev = f->tasks;
-  for (union u *node = prev->m; node != f->tasks; prev = node, node = node->m)
-    if (getnum(node[2].x) == target) {
-      prev->m = node->m;
-      result = putnum(-1);
-      break; }
-  Sp[0] = result;
-  Ip += 1;
-  return Continue(); }
+ word pid_arg = Sp[0], result = nil;
+ intptr_t target = getnum(pid_arg);
+ union u *prev = f->tasks;
+ for (union u *node = prev->m; node != f->tasks; prev = node, node = node->m)
+  if (getnum(node[2].x) == target) {
+   prev->m = node->m;
+   result = putnum(-1);
+   break; }
+ Sp[0] = result;
+ Ip += 1;
+ return Continue(); }
 
 static g_vm(g_vm_sleep) {
-  word n = Sp[0];
-  Sp[0] = nil;
-  Ip += 1;
-  if (!nump(n) || getnum(n) <= 0) return Continue();
-  f->next_wake_at = (uintptr_t) g_clock() + getnum(n);
-  return Ap(g_vm_yield_sw, f); }
+ word n = Sp[0];
+ Sp[0] = nil;
+ Ip += 1;
+ if (!nump(n) || getnum(n) <= 0) return Continue();
+ f->next_wake_at = (uintptr_t) g_clock() + getnum(n);
+ return Ap(g_vm_yield_sw, f); }
 
 static g_vm(g_vm_key) {
-  Sp[0] = (getnum(f->in->ungetc_buf) != EOF || g_ready(getnum(f->in->fd))) ? putnum(-1) : nil;
-  Ip += 1;
-  return Continue(); }
+ Sp[0] = (getnum(f->in->ungetc_buf) != EOF || g_ready(getnum(f->in->fd))) ? putnum(-1) : nil;
+ Ip += 1;
+ return Continue(); }

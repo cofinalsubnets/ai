@@ -139,7 +139,7 @@ struct g_finalizer {
 // unreachable. Caller must reserve heap space up front: Have(<object words>
 // + 3) before bump-allocating the guarded object, then call g_finalize. The
 // finalizer must not allocate or call back into the runtime.
-void g_finalize(struct g*, union u *p, void (*fn)(void *));
+struct g *g_finalize(struct g*, union u *p, void (*fn)(void *));
 
 
 enum g_status {
