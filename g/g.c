@@ -2036,11 +2036,15 @@ static g_noinline g_vm(g_vm_yield_sw_mono) {
   while (!g_ready(my_wait_fd)) g_wait_fd(my_wait_fd, 1, 0);
  return Continue(); }
 
-// First non-dormant peer in the ring whose wake_at <= now, or NULL.
+// First non-dormant peer in the ring whose wake_at <= now and whose
+// wait_fd is either unset or actually ready. Without the wait_fd check
+// a task parked on stdin would be scheduled immediately, busy-looping
+// through yield_sw and filling the heap with stale task nodes.
 static g_inline union u *find_runnable(union u *head, uintptr_t now) {
  for (union u *n = head->m; n != head; n = n->m)
-  if (n[1].m->ap != g_vm_task_exit && (uintptr_t) getnum(n[3].x) <= now)
-   return n;
+  if (n[1].m->ap != g_vm_task_exit && (uintptr_t) getnum(n[3].x) <= now) {
+   int wf = (int) getnum(n[4].x);
+   if (wf < 0 || g_ready(wf)) return n; }
  return NULL; }
 
 static g_noinline union u *yield_sw_wait(struct g *f, uintptr_t my_wake, int my_wait_fd) {
@@ -2079,8 +2083,10 @@ static g_noinline g_vm(g_vm_yield_sw) {
            need = my_height + restore_h + 7;
  if (Sp < Hp + need) {
   Pack(f);
-  if (!g_ok(f = g_please(f, need))) return f;
-  Unpack(f); }
+  if (!g_ok(f = g_please(g_push(f, 1, next), need))) return f;
+  next = cell(pop1(f));
+  Unpack(f);
+  next_stack = next + 5; }   // recompute: next was forwarded by gc
  f->next_wake_at = 0;
  f->next_wait_fd = -1;
  union u *prev = next;
