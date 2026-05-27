@@ -79,7 +79,7 @@ static struct g
  *port_putc(struct g*, int, struct g_out*),
  *port_flush(struct g*, struct g_out*);
 static g_vm(g_vm_gc, uintptr_t);
-static g_vm_t
+static g_vm_t g_vm_kcall,
  g_vm_data,  g_vm_putn,   g_vm_nomsym, g_vm_info, g_vm_dot,    g_vm_clock,
  g_vm_nilp,  g_vm_symnom, g_vm_read,   g_vm_putc, g_vm_gensym, g_vm_twop,
  g_vm_len, g_vm_get,
@@ -804,11 +804,6 @@ static struct g *mktbl(struct g*f) {
 static g_inline void *off_pool(struct g *f) {
  return f == f->pool ? (word*) f->pool + f->len : (word*) f->pool; }
 
-// iterative structural hash of a pair. the worklist holds deferred
-// a-sides while we walk the b-spine in O(1). pairs are immutable and
-// eagerly built, so the graph is acyclic and the worklist is bounded by
-// the pair count < a semispace. overflow can only mean a mutation bug
-// introduced a cycle -- trap rather than run off the end of the space.
 static g_noinline uintptr_t hash_two(struct g *f, word x) {
  word *base = off_pool(f), *top = base + f->len, *w = base;
  for (uintptr_t h = mix;; x = *--w) {
@@ -963,12 +958,6 @@ struct to {
  struct g_vec *buf;
  g_word i; };
 
-// Buffer grows by doubling; getnum(o->i) is the written byte count,
-// len(o->buf) the current capacity. The port (o) lives at f->sp[0]; vec0
-// pushes the new buf above it, so after the allocation o has shifted to
-// f->sp[1] and may have moved (heap ports), but reading it back through
-// f->sp[1] is safe — gcp forwarded the slot. Re-reading o->buf after vec0
-// gives the forwarded buf (evac_thd walked the port and updated the slot).
 static struct g *to_putc(struct g *f, int c) {
  struct to *o = (struct to*) f->sp[0];
  uintptr_t i = getnum(o->i);
@@ -1104,11 +1093,6 @@ static struct g* g_r_getc(struct g*f, struct g_in *i) {
    continue; }
 out: UM(f); return f; }
 
-
-// MM-protect both the C `i` parameter and the in-progress buffer pointer
-// `b` across the embedded port_* calls — each push triggers have(), which
-// may GC and forward both. Convert all returns to `goto out` so the UM
-// dance always runs.
 static struct g *g_read1(struct g*f, struct g_in *i) {
  MM(f, (g_word*) &i);
  if (!g_ok(f = g_r_getc(f, i))) goto out;
@@ -1222,11 +1206,6 @@ static g_vm(g_vm_read) {
    Ip += 1;
    return Continue(); } }
 
-// (str charlist): flatten a list of character codes into a gwen string.
-// the parser uses this to materialize the underlying bytes of symbol
-// names and string literals so they can be interned via sym (or used
-// as-is). vec0 may collect, so the input list is kept on the stack
-// across the allocation.
 static g_vm(g_vm_str) {
  uintptr_t n = 0;
  for (word l = Sp[0]; twop(l); l = B(l)) n++;
@@ -1243,9 +1222,6 @@ static g_vm(g_vm_str) {
  Ip += 1;
  return Continue(); }
 
-// Cooperative getc: if no byte is ready, set wait_io and yield. yield_sw
-// returns only after input is ready (or, with a peer in the ring, after
-// switching to one) — so this Continue() loop terminates with gkey true.
 static g_vm(g_vm_getc) {
  if (!g_ready(getnum(f->in->fd))) {
   f->next_wait_fd = getnum(f->in->fd);
@@ -1434,7 +1410,7 @@ static g_vm(g_vm_putn) {
 
 static g_vm(g_vm_dot) {
  Pack(f);
- if (!g_ok(f = gfputx(f, f->out, Sp[0]))) return f;
+ if (!g_ok(f = gfputx(f, f->out, f->sp[0]))) return f;
  Unpack(f);
  Ip += 1;
  return Continue(); }
@@ -1548,27 +1524,21 @@ static g_vm(g_vm_quote) {
  return Continue(); }
 
 static g_vm(g_vm_data) {
- intptr_t x = word(Ip);
- Sp += 1;
- Ip = cell(Sp[0]);
- Sp[0] = x;
+ word x = word(Ip);
+ Ip = cell(*++Sp);
+ *Sp = x;
  return Continue(); }
 
-// Port discriminators. Behaviourally identical to g_vm_data (calling a port
-// returns the port itself), but distinct function symbols so the GC's datp
-// check routes ports through `evac_thd` rather than `evac_data`, and so bifs
-// can test "is this a port?" with `cell(x)->ap == g_vm_port_in/out`.
 g_vm(g_vm_port_in) {
- intptr_t x = word(Ip);
- Sp += 1;
- Ip = cell(Sp[0]);
- Sp[0] = x;
+ word x = word(Ip);
+ Ip = cell(*++Sp);
+ *Sp = x;
  return Continue(); }
+
 g_vm(g_vm_port_out) {
- intptr_t x = word(Ip);
- Sp += 1;
- Ip = cell(Sp[0]);
- Sp[0] = x;
+ word x = word(Ip);
+ Ip = cell(*++Sp);
+ *Sp = x;
  return Continue(); }
 
 
@@ -1580,17 +1550,6 @@ static g_vm(g_vm_arg) {
  Ip += 2;
  return Continue(); }
 
-// call and return
-// cooperative yield check at apply boundaries: if there's another task in the ring
-// AND the yield counter has reached the interval, snapshot current Ip and switch.
-// Ip has been updated by the surrounding op to point at the callee, so the
-// snapshot's saved_ip resumes cleanly at the callee start.
-// The counter counts UP from 0 toward YIELD_INTERVAL — level-triggered, not edge-
-// triggered. If yield_sw returns without clearing the counter, the next ap simply
-// re-fires yield_sw on the same level, rather than underflowing into a silently
-// preemption-disabled state. yield_sw clears on actual switch; on non-switching
-// exits it only clears if the counter is at the trigger level, so voluntary
-// yielders (sleep, getc, ...) preserve whatever quantum they had left.
 #define YIELD_INTERVAL 64
 #define YieldCheck() \
   if (f->tasks->m != f->tasks && ++f->yield_ctr >= YIELD_INTERVAL) \
@@ -1772,11 +1731,6 @@ static g_noinline struct g *gcg(struct g*g, struct g *p1, uintptr_t len1, struct
  for (word n = 0; n < h; n++) g->sp[n] = gcp(g, sp0[n], p0, t0);                     // stack
  for (struct g_r *s = g->root; s; s = s->n) *s->x = gcp(g, *s->x, p0, t0); // C live variables
  while (g->cp < g->hp) (datp(g->cp) ? evac_data : evac_thd)(g, p0, t0);              // cheney algorithm
- // Finalizer pass. g->finalizers (copied from f by memcpy above) still points
- // into from-space, which is valid until pool flip. For each entry: read the
- // first word of the guarded object — if it's an aligned to-space pointer,
- // that's the forwarding pointer (survivor) and we bump a fresh 3-word node;
- // otherwise the object is dead, so call fn(p) and drop.
  struct g_finalizer *new_fz = NULL;
  for (struct g_finalizer *fz = g->finalizers; fz; fz = fz->next) {
   word fwd = fz->p->x;
@@ -1884,7 +1838,6 @@ enum g_status g_fin(struct g *f) {
 #define S1(i) {{i}, {g_vm_ret0}}
 #define S2(i) {{g_vm_cur},{.x=putnum(2)},{i}, {g_vm_ret0}}
 #define S3(i) {{g_vm_cur},{.x=putnum(3)},{i}, {g_vm_ret0}}
-#define S4(i) {{i},{g_vm_ret},{.x=putnum(0)}}
 #define bifs(_) \
  _(bif_clock, "clock", S1(g_vm_clock)) _(bif_addr, "vminfo", S1(g_vm_info))\
  _(bif_add, "+", S2(g_vm_add)) _(bif_sub, "-", S2(g_vm_sub)) _(bif_mul, "*", S2(g_vm_mul))\
@@ -1908,7 +1861,7 @@ enum g_status g_fin(struct g *f) {
  _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))\
  _(bif_callk, "call_cc", S1(g_vm_callk)) _(bif_yield, "yield", S1(g_vm_yield_bif)) \
  _(bif_spawn, "spawn", S2(g_vm_spawn)) _(bif_wait, "wait", S1(g_vm_wait)) \
- _(bif_sleep, "sleep", S4(g_vm_sleep)) _(bif_donep, "done?", S1(g_vm_donep)) \
+ _(bif_sleep, "sleep", S1(g_vm_sleep)) _(bif_donep, "done?", S1(g_vm_donep)) \
  _(bif_kill, "kill", S1(g_vm_kill)) \
  _(bif_key, "key?", S1(g_vm_key)) \
  _(bif_inspect, "inspect", S1(g_vm_inspect)) \
@@ -1935,21 +1888,6 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
  f->len = len0, f->pool = (void*) f, f->malloc = ma, f->free = fr;
  f->hp = f->end, f->sp = (word*) f + len0, f->ip = yield, f->t0 = g_clock();
  f->in = g_stdin, f->out = g_stdout;
- // Bootstrap the task ring with a single placeholder M for the main thread
- // (pid=0). M's saved_ip is a non-null sentinel so evac_thd's NULL-terminated
- // walk doesn't stop early; the cell is overwritten on the first yield from
- // main. Until a peer is spawned the ring is a self-loop, so scheduler hot
- // paths early-out via the `tasks->m == tasks` check.
- union u *M = bump(f, 7);
- M[0].m = M;
- M[1].x = putnum(0);   // sentinel; replaced on first yield
- M[2].x = putnum(0);   // main pid
- M[3].x = putnum(0);   // wake_at: non-zero sentinel for "always runnable"
-                       // (so ttag's NULL-terminator walk doesn't stop here)
- M[4].x = putnum(-1);  // wait_fd: -1 = not waiting on I/O (slot value -1, non-zero)
- ((struct g_tag*) (M + 5))->null = NULL;
- ((struct g_tag*) (M + 5))->head = M;
- f->tasks = M;
  if (!g_ok(f = mktbl(mktbl(f)))) return f;
  word m = pop1(f), d = pop1(f);
  f->macro = tbl(m), f->dict = tbl(d);
@@ -1959,7 +1897,18 @@ g_noinline struct g *g_ini_m(g_malloc_t *ma, g_free_t *fr) {
   {"in", (intptr_t) g_stdin},
   {"out", (intptr_t) g_stdout},
   {0}, };
- return g_defs(g_defs(f, def0), def1); }
+ if (g_ok(f = have(g_defs(g_defs(f, def0), def1), 7))) {
+  union u *M = bump(f, 7);
+  M[0].m = M;
+  M[1].x = nil;   // sentinel; replaced on first yield
+  M[2].x = nil;   // main pid
+  M[3].x = nil;   // wake_at: non-zero sentinel for "always runnable"
+                        // (so ttag's NULL-terminator walk doesn't stop here)
+  M[4].x = putnum(-1);  // wait_fd: -1 = not waiting on I/O (slot value -1, non-zero)
+  ((struct g_tag*) (M + 5))->null = NULL;
+  ((struct g_tag*) (M + 5))->head = M;
+  f->tasks = M; }
+ return f; }
 
 void *g_libc_malloc(struct g*f, size_t n) { return malloc(n); }
 void g_libc_free(struct g*f, void *x) { free(x); }
@@ -2000,15 +1949,6 @@ static word g_tget(struct g *f, word zero, word k, struct g_tab *t) {
  while (e && !eql(f, k, e->key)) e = e->next;
  return e ? e->val : zero; }
 
-// Port method dispatch helpers. The pure calling convention requires the
-// port to live at f->sp[0] for the duration of the call. These helpers
-// push the port pointer via g_push (which is GC-safe — the port survives
-// the allocation triggered by the push), invoke the method via Sp[0]
-// (since the C-parameter copy of the port may have gone stale across the
-// push), then drop the slot on the way out. Caller's Sp depth is
-// unchanged on return. Method bodies must re-fetch from Sp[0] after any
-// allocating sub-call. Callers that hold their own C reference to the
-// port across multiple port_* calls must MM-protect it themselves.
 static struct g *port_getc(struct g *f, struct g_in *i) {
   if (!g_ok(f = g_push(f, 1, (word) i))) return f;
   f = ((struct g_in*) f->sp[0])->getc(f);
@@ -2041,117 +1981,83 @@ struct g *geof(struct g*f)          { return port_eof(f, f->in); }
 struct g *gputc(struct g*f, int c)   { return port_putc(f, c, f->out); }
 struct g *gflush(struct g*f)        { return port_flush(f, f->out); }
 
-static g_vm_t g_vm_kcall, g_vm_resume;
 
 #define topof(f) ((word*)f+f->len)
 
 // kcall : x = Sp[0], k = Ip[1] -> Ip = k, Sp[0] = x
-// NB: Sp[0] is overwritten with the call_cc argument x. The task-yield variant g_vm_resume
-// must NOT do this — yielded tasks have a meaningful value at saved Sp[0].
 static g_vm(g_vm_kcall) {
-  word x = Sp[0];
-  union u *ip = Ip[1].m,
-          *stack = Ip + 2,
-          *end = (union u*) ttag(stack);
-  uintptr_t height = end - stack;
-  Have(height);
-  Sp = memmove(topof(f) - height, stack, height * sizeof(word));
-  Sp[0] = x;
-  Ip = ip;
-  return Continue(); }
+ word x = Sp[0];
+ union u *stack = Ip + 2, *end = (union u*) ttag(stack);
+ uintptr_t height = end - stack;
+ Have(height);
+ *(Sp = memmove(topof(f) - height, stack, height * sizeof(word))) = x;
+ Ip = Ip[1].m;
+ return Continue(); }
 
-// resume : k = Ip[1] -> Ip = k, Sp = restored stack (cf. g_vm_kcall; no Sp[0] clobber)
-// tail-called by g_vm_yield_sw with Ip pointing at a task node; its Have is
-// guaranteed to pass because yield_sw pre-allocates the restored stack space.
-// Task layout: [next, saved_ip, pid, wake_at, wait_io, stack..., tag] — stack at Ip+5.
-static g_vm(g_vm_resume) {
-  union u *ip = Ip[1].m,
-          *stack = Ip + 5,
-          *end = (union u*) ttag(stack);
-  uintptr_t height = end - stack;
-  Have(height);
-  Sp = memmove(topof(f) - height, stack, height * sizeof(word));
-  Ip = ip;
-  return Continue(); }
 
 // callk : i = Sp[0], k = Ip + 1 -> Ip = i, Sp[0] = k
 static g_vm(g_vm_callk) {
-  word f_val = Sp[0];                         // f, the call_cc arg
-  if (oddp(f_val)) return Ip += 1, Continue();
-  word height = topof(f) - Sp;
-  uintptr_t n = 2 + height;                   // g_vm_kcall + (ip + 1) + stack = thread_contents
-  Have(n + Width(struct g_tag) + 1);          // thread_contents + thread_tag + 1 stack = _mem_req
-  union u *k = (union u*) Hp;
-  Hp += n + Width(struct g_tag);              // thread_contents + thread_tag = _heap_alloc
-  k[0].ap = g_vm_kcall;                       // 
-  k[1].m  = Ip + 1;                           // resume at next instruction
-  for (uintptr_t i = 0; i < (uintptr_t) height; i++) k[2 + i].x = Sp[i];
-  struct g_tag *t = (struct g_tag*) (k + n);
-  t->null = NULL;
-  t->head = k;
-  Sp -= 1;
-  Sp[0] = word(k);
-  Sp[1] = f_val;
-  return Ap(g_vm_ap, f); }
+ word f_val = Sp[0];                         // f, the call_cc arg
+ if (oddp(f_val)) return Ip += 1, Continue();
+ word height = topof(f) - Sp;
+ uintptr_t n = 2 + height;                   // g_vm_kcall + (ip + 1) + stack = thread_contents
+ Have(n + Width(struct g_tag) + 1);          // thread_contents + thread_tag + 1 stack = _mem_req
+ union u *k = (union u*) Hp;
+ Hp += n + Width(struct g_tag);              // thread_contents + thread_tag = _heap_alloc
+ k[0].ap = g_vm_kcall;                       // 
+ k[1].m  = Ip + 1;                           // resume at next instruction
+ memcpy(k + 2, Sp, height * sizeof(word));
+ k[n].m = NULL;
+ k[n+1].m = k;
+ Sp -= 1;
+ Sp[0] = word(k);
+ Sp[1] = f_val;
+ return Ap(g_vm_ap, f); }
 
-// fast path for monotask
+// monotask fast path
 static g_noinline g_vm(g_vm_yield_sw_mono) {
  uintptr_t my_wake = f->next_wake_at;
  int my_wait_fd = f->next_wait_fd;
  f->next_wake_at = 0;
  f->next_wait_fd = -1;
+ f->yield_ctr = 0;
  if (my_wake)
   for (uintptr_t now; my_wake > (now = g_clock());
        my_wait_fd >= 0 ? g_wait_fds(&my_wait_fd, 1, my_wake - now) : g_sleep(my_wake - now));
  else if (my_wait_fd >= 0)
   while (!g_ready(my_wait_fd)) g_wait_fds(&my_wait_fd, 1, 0);
- f->yield_ctr = 0;
  return Continue(); }
 
 // First non-dormant peer in the ring whose wake_at <= now, or NULL.
 static g_inline union u *find_runnable(union u *head, uintptr_t now) {
-  for (union u *n = head->m; n != head; n = n->m)
-    if (n[1].m->ap != g_vm_task_exit && (uintptr_t) getnum(n[3].x) <= now)
-      return n;
-  return NULL; }
+ for (union u *n = head->m; n != head; n = n->m)
+  if (n[1].m->ap != g_vm_task_exit && (uintptr_t) getnum(n[3].x) <= now)
+   return n;
+ return NULL; }
 
-// Called when no peer was immediately runnable. Coalesces deadlines / fd
-// intent across the ring (seeded with caller's my_wake / my_wait_fd) and
-// waits. Returns the runnable peer to switch to, or NULL if caller's wait
-// was satisfied (input arrived for caller, deadline reached, or nothing to
-// wait for). Backend wait returns only when its deadline elapsed or any of
-// the supplied fds is ready.
 static g_noinline union u *yield_sw_wait(struct g *f, uintptr_t my_wake, int my_wait_fd) {
-  uintptr_t min_wake = my_wake;
-  int fds[G_WAIT_FDS_MAX];
-  int nfds = 0;
-  if (my_wait_fd >= 0) fds[nfds++] = my_wait_fd;
-  for (union u *n = f->tasks->m; n != f->tasks; n = n->m)
-    if (n[1].m->ap != g_vm_task_exit) {
-      uintptr_t wa = (uintptr_t) getnum(n[3].x);
-      if (wa && (!min_wake || wa < min_wake)) min_wake = wa;
-      int wf = (int) getnum(n[4].x);
-      if (wf >= 0 && nfds < G_WAIT_FDS_MAX) fds[nfds++] = wf; }
-  if (!min_wake && !nfds) return NULL;
-  uintptr_t now = g_clock();
-  if (!min_wake) g_wait_fds(fds, nfds, 0);
-  else if (min_wake > now) g_wait_fds(fds, nfds, min_wake - now);
-  now = g_clock();
-  if (my_wait_fd >= 0 && g_ready(my_wait_fd)) return NULL;
-  return find_runnable(f->tasks, now); }
+ uintptr_t min_wake = my_wake;
+ int fds[G_WAIT_FDS_MAX], nfds = 0;
+ if (my_wait_fd >= 0) fds[nfds++] = my_wait_fd;
+ for (union u *n = f->tasks->m; n != f->tasks; n = n->m)
+  if (n[1].m->ap != g_vm_task_exit) {
+   uintptr_t wa = (uintptr_t) getnum(n[3].x);
+   if (wa && (!min_wake || wa < min_wake)) min_wake = wa;
+   int wf = (int) getnum(n[4].x);
+   if (wf >= 0 && nfds < G_WAIT_FDS_MAX) fds[nfds++] = wf; }
+ if (!min_wake && !nfds) return NULL;
+ uintptr_t now = g_clock();
+ if (!min_wake) g_wait_fds(fds, nfds, 0);
+ else if (min_wake > now) g_wait_fds(fds, nfds, min_wake - now);
+ now = g_clock();
+ if (my_wait_fd >= 0 && g_ready(my_wait_fd)) return NULL;
+ return find_runnable(f->tasks, now); }
 
-// yield_sw : snapshot current task into the ring, advance f->tasks to the next
-// runnable peer, tail-call resume. Caller sets Ip to the resume point and may
-// set f->next_wake_at / f->next_wait_fd before tail-calling — those ride the
-// snapshot's wake_at / wait_fd slots.
-// Layout: [next, saved_ip, pid, wake_at, wait_fd, stack..., tag] — stack at offset 5.
-// Slots tagged via putnum; putnum stays non-zero (putnum(-1)=-1, putnum(0)=1)
-// so ttag's NULL-terminator walk doesn't stop here.
 static g_vm(g_vm_yield_sw) {
   if (f->tasks->m == f->tasks) return Ap(g_vm_yield_sw_mono, f);
+  union u *next = find_runnable(f->tasks, g_clock());
   uintptr_t my_wake = f->next_wake_at;
   int my_wait_fd = f->next_wait_fd;
-  union u *next = find_runnable(f->tasks, g_clock());
   if (!next) {
     next = yield_sw_wait(f, my_wake, my_wait_fd);
     if (!next) {
@@ -2160,155 +2066,101 @@ static g_vm(g_vm_yield_sw) {
       if (f->yield_ctr >= YIELD_INTERVAL) f->yield_ctr = 0;
       return Continue(); } }
   word my_height = topof(f) - Sp;
-  union u *next_stack = next + 5;
-  uintptr_t restore_h = (union u*) ttag(next_stack) - next_stack;
-  // GC-retry leaves next_wake_at / next_wait_fd intact so the re-entry sees
-  // the same caller intent.
-  uintptr_t need = my_height + restore_h + 7;
+  union u *next_stack = next + 5, *end = (union u*) ttag(next_stack);
+  uintptr_t restore_h = end - next_stack,
+            need = my_height + restore_h + 7;
   if (Sp < Hp + need) {
-    Pack(f);
-    f = g_please(f, need);
-    if (!g_ok(f)) return f;
-    Unpack(f);
-    return Ap(g_vm_yield_sw, f); }
+   Pack(f);
+   if (!g_ok(f = g_please(f, need))) return f;
+   Unpack(f); }
   f->next_wake_at = 0;
   f->next_wait_fd = -1;
   union u *prev = next;
   while (prev->m != f->tasks) prev = prev->m;
-  uintptr_t snap = 5 + my_height + Width(struct g_tag);
   union u *N = (union u*) Hp;
-  Hp += snap;
+  Hp += need - restore_h;
   N[0].m = f->tasks->m;
   N[1].m = Ip;
   N[2].x = f->tasks[2].x;
   N[3].x = putnum((intptr_t) my_wake);
   N[4].x = putnum(my_wait_fd);
-  for (uintptr_t i = 0; i < (uintptr_t) my_height; i++) N[5 + i].x = Sp[i];
-  struct g_tag *t = (struct g_tag*) (N + 5 + my_height);
-  t->null = NULL, t->head = N;
-  prev->m = N;
+  memcpy(N + 5, Sp, my_height * sizeof(word));
+  N[5 + my_height].m = NULL;
+  N[6 + my_height].m = prev->m = N;
   f->yield_ctr = 0;
   f->tasks = next;
-  Ip = next;
-  return Ap(g_vm_resume, f); }
+  Sp = memmove(topof(f) - restore_h, next_stack, restore_h * sizeof(word));
+  Ip = next[1].m;
+  return Continue(); }
 
-// (yield) bif body op. Advances Ip past itself so yield_sw saves the trailing
-// g_vm_ret0 as the resume point, then tail-calls yield_sw.
-static g_vm(g_vm_yield_bif) {
-  Ip += 1;
-  return Ap(g_vm_yield_sw, f); }
-
-// task_exit : called when a spawned task's fn returns. Yields without advancing
-// Ip, leaving saved_ip pointing at this instruction inside spawn_body — that's
-// the dormancy marker. If rescheduled, the dormant task re-enters task_exit and
-// yields again; the scheduler also skips dormant tasks. `wait` collects them.
+static g_vm(g_vm_yield_bif) { return Ip++, Ap(g_vm_yield_sw, f); }
 static g_vm(g_vm_task_exit) { return Ap(g_vm_yield_sw, f); }
 
-// Bootstrap thread for spawned tasks. Inline-static; lives outside the heap so GC
-// leaves it alone. The task starts with stack [x, fn]; g_vm_ap applies fn to x with
-// return address = &spawn_body[1] = g_vm_task_exit, which marks the task dormant.
 static union u spawn_body[] = { {g_vm_ap}, {.ap = g_vm_task_exit} };
-
-// (spawn fn x) : create a new task that will apply fn to x, splice it into the
-// ring just after f->tasks. The ring is bootstrapped at g_ini time with a
-// placeholder M for main, so spawn never has to create it. Returns the new pid.
 static g_vm(g_vm_spawn) {
-  word fn = Sp[0], x = Sp[1];
-  Have(9);
-  // New task node N: [next, saved_ip=spawn_body, pid, wake_at=0, wait_io=0, stack[0..1]=x,fn, NULL, HEAD]
-  union u *N = (union u*) Hp;
-  Hp += 9;
-  uintptr_t pid = ++f->next_pid;
-  N[1].m = (union u*) spawn_body;
-  N[2].x = putnum(pid);
-  N[3].x = putnum(0);        // wake_at: non-zero sentinel for "always runnable"
-                             // (so ttag's NULL-terminator walk doesn't stop here)
-  N[4].x = putnum(-1);       // wait_fd: -1 = not waiting on I/O
-  N[5].x = x;
-  N[6].x = fn;
-  ((struct g_tag*) (N + 7))->null = NULL;
-  ((struct g_tag*) (N + 7))->head = N;
-  N[0].m = f->tasks->m;
-  f->tasks->m = N;
-  f->yield_ctr = 0;
-  Sp[1] = putnum(pid);
-  Sp += 1;
-  Ip += 1;
-  return Continue(); }
+ Have(9);
+ // New task node N: [next, saved_ip=spawn_body, pid, wake_at=0, wait_io=0, stack[0..1]=x,fn, NULL, HEAD]
+ union u *N = (union u*) Hp;
+ Hp += 9;
+ word fn = Sp[0], x = Sp[1];
+ uintptr_t pid = ++f->next_pid;
+ N[0].m = f->tasks->m;
+ N[1].m = (union u*) spawn_body;
+ N[2].x = Sp[1] = putnum(pid);
+ N[3].x = nil;         // wake_at: sentinel for "always runnable"
+ N[4].x = putnum(-1);  // wait_fd: -1 = not waiting on I/O
+ N[5].x = x;
+ N[6].x = fn;
+ N[7].m = NULL;
+ N[8].m = f->tasks->m = N;
+// f->yield_ctr = 0;
+// Sp[1] = putnum(pid);
+ Sp += 1;
+ Ip += 1;
+ return Continue(); }
 
-// (wait pid) : look up task by pid in the ring; the calling (current) task is
-// skipped, so waiting on your own pid (or pid 0 from main) yields "not found"
-// rather than deadlocking.
-//   not found           -> return 0
-//   dormant (finished)  -> splice out, return the task's return value
-//   still running       -> yield without advancing Ip (re-enters wait on resume)
 static g_vm(g_vm_wait) {
-  word pid_arg = Sp[0];
-  if (!nump(pid_arg)) {
-    Sp[0] = putnum(0);
-    Ip += 1;
-    return Continue(); }
-  intptr_t target = getnum(pid_arg);
-  for (union u *node = f->tasks->m; node != f->tasks; node = node->m) {
-    if (getnum(node[2].x) != target) continue;
-    if (node[1].m->ap == g_vm_task_exit) {
-      // dormant: dormant task's stack is just [retval] at node[5]
-      word retval = node[5].x;
-      union u *prev = node;
-      while (prev->m != node) prev = prev->m;
-      prev->m = node->m;
-      Sp[0] = retval;
-      Ip += 1;
-      return Continue(); }
-    // still running: yield without advancing Ip (re-enter wait on resume)
-    return Ap(g_vm_yield_sw, f); }
-  Sp[0] = putnum(0);
-  Ip += 1;
-  return Continue(); }
+ word pid_arg = Sp[0], ret = nil;
+ intptr_t target = getnum(pid_arg);
+ for (union u *node = f->tasks->m; node != f->tasks; node = node->m) {
+  if (getnum(node[2].x) != target) continue;
+  if (node[1].m->ap == g_vm_task_exit) {
+   // dormant: dormant task's stack is just [retval] at node[5]
+   ret = node[5].x;
+   union u *prev = node;
+   while (prev->m != node) prev = prev->m;
+   prev->m = node->m;
+   break; }
+   // still running: yield without advancing Ip (re-enter wait on resume)
+  return Ap(g_vm_yield_sw, f); }
+ Sp[0] = ret;
+ Ip += 1;
+ return Continue(); }
 
-// (done? pid) : true iff (wait pid) would return without yielding — that is,
-// pid is unknown, is the caller's own pid, or refers to a dormant task.
-// false iff there's a runnable task with that pid in the ring.
 static g_vm(g_vm_donep) {
-  word pid_arg = Sp[0], result = putnum(-1);
-  if (nump(pid_arg)) {
-    intptr_t target = getnum(pid_arg);
-    for (union u *node = f->tasks->m; node != f->tasks; node = node->m)
-      if (getnum(node[2].x) == target) {
-        if (node[1].m->ap != g_vm_task_exit) result = g_nil;
-        break; } }
-  Sp[0] = result;
-  Ip += 1;
-  return Continue(); }
+ word pid_arg = Sp[0], result = putnum(-1);
+ intptr_t target = getnum(pid_arg);
+ for (union u *node = f->tasks->m; node != f->tasks; node = node->m)
+  if (getnum(node[2].x) == target) {
+   if (node[1].m->ap != g_vm_task_exit) result = g_nil;
+   break; }
+ Sp[0] = result;
+ Ip += 1;
+ return Continue(); }
 
-// (kill pid) : remove a task from the ring unconditionally (running or dormant).
-// Same shape as wait's lookup, but state-agnostic: find prev, splice node out.
-//   unknown / non-num / self  -> 0 (no-op; self-kill impossible by construction
-//                                since current is sentinel and is skipped).
-//   found (running or dormant) -> splice out, return -1.
-// Killing a running task leaves its saved continuation unreachable through the
-// ring; GC will collect it. No cross-task abort dance — pure ring surgery.
 static g_vm(g_vm_kill) {
-  word pid_arg = Sp[0], result = putnum(0);
-  if (nump(pid_arg)) {
-    intptr_t target = getnum(pid_arg);
-    union u *prev = f->tasks;
-    for (union u *node = prev->m; node != f->tasks; prev = node, node = node->m)
-      if (getnum(node[2].x) == target) {
-        prev->m = node->m;
-        result = putnum(-1);
-        break; } }
+  word pid_arg = Sp[0], result = nil;
+  intptr_t target = getnum(pid_arg);
+  union u *prev = f->tasks;
+  for (union u *node = prev->m; node != f->tasks; prev = node, node = node->m)
+    if (getnum(node[2].x) == target) {
+      prev->m = node->m;
+      result = putnum(-1);
+      break; }
   Sp[0] = result;
   Ip += 1;
   return Continue(); }
 
-// (sleep n) : block the current task for at least n g_clock() ticks, returning
-// nil. n <= 0 or non-numeric returns nil immediately without yielding.
-// Otherwise: set Sp[0] = nil (the resume-value), set f->next_wake_at to the
-// absolute deadline (yield_sw installs it as our snapshot's wake_at slot),
-// advance Ip past ourselves so resume lands on the bif body's return cell,
-// and tail-call yield_sw. yield_sw is GC-safe in its snapshot branch, so the
-// advanced Ip survives a Have failure.
 static g_vm(g_vm_sleep) {
   word n = Sp[0];
   Sp[0] = g_nil;
@@ -2317,8 +2169,6 @@ static g_vm(g_vm_sleep) {
   f->next_wake_at = (uintptr_t) g_clock() + getnum(n);
   return Ap(g_vm_yield_sw, f); }
 
-// (key? _) : non-consuming key-ready poll on f->in. -1 if (getc 0) would
-// return immediately, nil otherwise. Arg is dummy to defeat (x)=x.
 static g_vm(g_vm_key) {
   Sp[0] = (getnum(f->in->ungetc_buf) != EOF || g_ready(getnum(f->in->fd))) ? putnum(-1) : g_nil;
   Ip += 1;
