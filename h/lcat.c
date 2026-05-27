@@ -13,14 +13,15 @@ g_noinline uintptr_t g_clock(void) {
  int s = clock_gettime(CLOCK_MONOTONIC, &ts);
  return s ? 0 : ts.tv_sec  * 1e3 + ts.tv_nsec / 1e6; }
 
-static struct g *lcat_putc(struct g*f, int c, struct g_out*) {
+static struct g *lcat_putc(struct g*f, int c) {
   if (c == '\n') { fputs("\\n", stdout); return f; }
   if (c == '\\' || c == '"') putc('\\', stdout);  // C-escape backslash & quote
   putc(c, stdout);
   return f; }
-static struct g* lcat_flush(struct g*f, struct g_out*) { fflush(stdout); return f; }
+static struct g* lcat_flush(struct g*f) { fflush(stdout); return f; }
 
-static struct g*lcat_getc(struct g*f, struct g_in *i) {
+static struct g*lcat_getc(struct g*f) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   if (g_getnum(i->ungetc_buf) != EOF) {
     int c = g_getnum(i->ungetc_buf);
     i->ungetc_buf = g_putnum(EOF);
@@ -28,11 +29,13 @@ static struct g*lcat_getc(struct g*f, struct g_in *i) {
   int c = getc(stdin);
   if (c == EOF) i->eof_seen = g_putnum(true);
   return g_core_of(f)->b = c, f; }
-static struct g* lcat_ungetc(struct g*f, int c, struct g_in *i) {
+static struct g* lcat_ungetc(struct g*f, int c) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   i->ungetc_buf = g_putnum(c);
   i->eof_seen = g_putnum(false);
   return g_core_of(f)->b = c, f; }
-static struct g* lcat_eof(struct g*f, struct g_in *i) {
+static struct g* lcat_eof(struct g*f) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
 struct g_in _g_stdin = { .ap = g_vm_port_in,
                          .getc = lcat_getc, .ungetc = lcat_ungetc, .eof = lcat_eof,

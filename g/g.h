@@ -103,19 +103,26 @@ struct g_def { char const *n; intptr_t x; };
 // All int-shaped fields are stored as tagged numbers (`g_putnum`/`g_getnum`)
 // so that evac_thd's blind gcp never misinterprets a raw int that happens to
 // land in pool range as a heap pointer.
+//
+// Pure calling convention: i/o method pointers take only `struct g*` (plus
+// the byte for putc/ungetc). The receiver port lives at `f->sp[0]` for the
+// duration of the call. Method bodies cast Sp[0] back to their subtype to
+// reach any extension fields (e.g. struct ti / struct to). Method bodies
+// must re-fetch from Sp[0] after any allocating sub-call, since a GC may
+// have moved a heap port.
 struct g_in {
  g_vm_t *ap;
- struct g*(*getc)(struct g*, struct g_in*),
-         *(*ungetc)(struct g*, int, struct g_in*),
-         *(*eof)(struct g*, struct g_in*);
+ struct g*(*getc)(struct g*),
+         *(*ungetc)(struct g*, int),
+         *(*eof)(struct g*);
  g_word fd;               // source fd; putnum(-1) = data source (always-ready, no backend wait)
  g_word ungetc_buf;       // pushed-back byte; putnum(-1) (EOF) = empty
  g_word eof_seen; };      // set by getc on read-returning-0, cleared by ungetc
 
 struct g_out {
  g_vm_t *ap;
- struct g*(*putc)(struct g*, int, struct g_out*),
-         *(*flush)(struct g*, struct g_out*);
+ struct g*(*putc)(struct g*, int),
+         *(*flush)(struct g*);
  g_word fd; };            // sink fd; putnum(-1) = data sink (subtype carries the buffer)
 
 // Data-sink g_out: writes go to a growable gwen-heap string buf. Symmetric to

@@ -72,7 +72,12 @@ static struct g
  *mktbl(struct g*),
  *intern(struct g*),
  *g_reads(struct g*, struct g_in*, bool),
- *g_read1(struct g*, struct g_in*);
+ *g_read1(struct g*, struct g_in*),
+ *port_getc(struct g*, struct g_in*),
+ *port_ungetc(struct g*, int, struct g_in*),
+ *port_eof(struct g*, struct g_in*),
+ *port_putc(struct g*, int, struct g_out*),
+ *port_flush(struct g*, struct g_out*);
 static g_vm(g_vm_gc, uintptr_t);
 static g_vm_t
  g_vm_data,  g_vm_putn,   g_vm_nomsym, g_vm_info, g_vm_dot,    g_vm_clock,
@@ -637,22 +642,25 @@ g_vm(g_vm_eval) { return
                  Continue()); }
 
 struct ti { struct g_in in; char const *t; word i; } ;
-static struct g*_eof(struct g*f, struct ti *i) {
+static struct g*_eof(struct g*f) {
+ struct ti *i = (struct ti*) f->sp[0];
  return f->b = (getnum(i->in.ungetc_buf) == EOF) && getnum(i->in.eof_seen), f; }
-static struct g*_getc(struct g*f, struct ti *i) {
+static struct g*_getc(struct g*f) {
+ struct ti *i = (struct ti*) f->sp[0];
  if (getnum(i->in.ungetc_buf) != EOF) {
   int c = getnum(i->in.ungetc_buf);
   i->in.ungetc_buf = putnum(EOF);
   return f->b = c, f; }
  if (!i->t[i->i]) { i->in.eof_seen = putnum(true); return f->b = EOF, f; }
  return f->b = i->t[i->i++], f; }
-static struct g*_ungetc(struct g*f, int c, struct ti *i) {
+static struct g*_ungetc(struct g*f, int c) {
+ struct ti *i = (struct ti*) f->sp[0];
  i->in.ungetc_buf = putnum(c);
  i->in.eof_seen = putnum(false);
  return f->b = c, f; }
 g_noinline struct g *g_evals(struct g*f, char const*s) {
  static char const *t = "((:(e a b)(? b(e(ev'ev(A b))(B b))a)e)0)";
- struct ti i = {{g_vm_port_in, (void*)_getc, (void*)_ungetc, (void*)_eof,
+ struct ti i = {{g_vm_port_in, _getc, _ungetc, _eof,
                  putnum(-1), putnum(EOF), putnum(false)}, t, 0};
  f = push0(pushq(push0(g_eval(g_reads(f, (void*) &i, false)))));
  i.t = s, i.i = 0, i.in.ungetc_buf = putnum(EOF), i.in.eof_seen = putnum(false);
@@ -947,37 +955,46 @@ struct g *g_strof(struct g *f, char const *cs) {
 // Data-sink g_out methods. Buffer grows by doubling; o->i tracks written bytes,
 // len(o->buf) tracks current capacity. vec0 may GC, so MM the old buf pointer
 // across the allocation so we can memcpy from its (possibly forwarded) bytes.
-static struct g *to_putc(struct g *f, int c, struct to *o) {
+// Port (o) lives at f->sp[0]; vec0 pushes a new slot on top, so after the
+// allocation o has shifted to f->sp[1]. In Phase B o is still a C-stack
+// pointer and the cached C local would survive the GC; the re-fetch is
+// kept anyway so this body is ready for Phase C heap ports.
+static struct g *to_putc(struct g *f, int c) {
+ struct to *o = (struct to*) f->sp[0];
  if (o->i >= len(o->buf)) {
   uintptr_t new_cap = len(o->buf) * 2;
   MM(f, (g_word*) &o->buf);
   f = vec0(f, g_vect_char, 1, new_cap);
   UM(f);
   if (!g_ok(f)) return f;
+  o = (struct to*) f->sp[1];
   struct g_vec *nb = (struct g_vec*) f->sp[0];
   memcpy(txt(nb), txt(o->buf), o->i);
   o->buf = nb;
   f->sp++; }
  txt(o->buf)[o->i++] = c;
  return f; }
-static struct g *to_flush(struct g *f, struct g_out *o) { (void) o; return f; }
+static struct g *to_flush(struct g *f) { return f; }
 
 struct g *g_to_init(struct g *f, struct to *o) {
+ MM(f, (g_word*) &o);
  f = vec0(f, g_vect_char, 1, 32);
- if (!g_ok(f)) return f;
+ if (!g_ok(f)) { UM(f); return f; }
  o->out.ap = g_vm_port_out;
- o->out.putc = (struct g*(*)(struct g*, int, struct g_out*)) to_putc;
+ o->out.putc = to_putc;
  o->out.flush = to_flush;
  o->out.fd = putnum(-1);
  o->buf = (struct g_vec*) f->sp[0];
  o->i = 0;
  f->sp++;
+ UM(f);
  return f; }
 
 struct g *g_to_harvest(struct g *f, struct to *o) {
+ MM(f, (g_word*) &o);
  MM(f, (g_word*) &o->buf);
  f = vec0(f, g_vect_char, 1, o->i);
- UM(f);
+ UM(f); UM(f);
  if (!g_ok(f)) return f;
  memcpy(txt(f->sp[0]), txt(o->buf), o->i);
  return f; }
@@ -1056,89 +1073,104 @@ static struct g *grbufg(struct g *f) {
 /// " the parser "
 //
 //
-// get the next significant character from the stream
+// get the next significant character from the stream. MM-protect the C
+// `i` parameter across the multiple port_* calls — each push triggers a
+// have() check that may GC and move heap ports.
 static struct g* g_r_getc(struct g*f, struct g_in *i) {
- while (g_ok(f = i->getc(f, i))) switch (f->b) {
-  default: return f;
+ MM(f, (g_word*) &i);
+ while (g_ok(f = port_getc(f, i))) switch (f->b) {
+  default: goto out;
   case '#': case ';':
-   while (g_ok(f = i->eof(f, i)) && !f->b && g_ok(f = i->getc(f, i)) && f->b != '\n' && f->b != '\r');
+   while (g_ok(f = port_eof(f, i)) && !f->b && g_ok(f = port_getc(f, i)) && f->b != '\n' && f->b != '\r');
   case 0: case ' ': case '\t': case '\n': case '\r': case '\f':
    continue; }
- return f; }
+out: UM(f); return f; }
 
 
+// MM-protect both the C `i` parameter and the in-progress buffer pointer
+// `b` across the embedded port_* calls — each push triggers have(), which
+// may GC and forward both. Convert all returns to `goto out` so the UM
+// dance always runs.
 static struct g *g_read1(struct g*f, struct g_in *i) {
- if (!g_ok(f = g_r_getc(f, i))) return f;
+ MM(f, (g_word*) &i);
+ if (!g_ok(f = g_r_getc(f, i))) goto out;
  int c = f->b;
  switch (c) {
-  case '(':  return g_reads(f, i, true);
-  case ')': case EOF:  return encode(f, g_status_eof);
+  case '(':  f = g_reads(f, i, true); goto out;
+  case ')': case EOF:  f = encode(f, g_status_eof); goto out;
   case '\'':
    f = g_read1(f, i);
    if (g_code_of(f) == g_status_eof)               // quote with no operand
     f = encode(g_core_of(f), g_status_more);
-   return gxl(pushq(gxr(g_push(f, 1, g_nil))));
+   f = gxl(pushq(gxr(g_push(f, 1, g_nil)))); goto out;
   case '"': {
    size_t n = 0;
+   struct g_vec *b = 0;
+   MM(f, (g_word*) &b);
    f = grbufn(f);
    for (size_t lim = sizeof(word); g_ok(f); f = grbufg(f), lim *= 2)
-    for (struct g_vec *b = (struct g_vec*) f->sp[0]; n < lim; txt(b)[n++] = c) {
-     if (!g_ok(f = i->getc(f, i))) return f;        // threaded; char in f->b
+    for (b = (struct g_vec*) f->sp[0]; n < lim; txt(b)[n++] = c) {
+     if (!g_ok(f = port_getc(f, i))) goto out_str;     // threaded; char in f->b
      c = f->b;
      if (c == '\\') {                               // escape: take next char
-      if (!g_ok(f = i->getc(f, i))) return f;
-      if ((c = f->b) == EOF) return encode(f, g_status_more);
+      if (!g_ok(f = port_getc(f, i))) goto out_str;
+      if ((c = f->b) == EOF) { f = encode(f, g_status_more); goto out_str; }
       if (c == 'n') c = '\n';
       else if (c == 't') c = '\t';
       else if (c == 'r') c = '\r';
       else if (c == '0') c = '\0';
       else if (c == 'x') {                          // \xHH: two hex digits
-       if (!g_ok(f = i->getc(f, i))) return f;
+       if (!g_ok(f = port_getc(f, i))) goto out_str;
        int h1 = f->b;
-       if (h1 == EOF) return encode(f, g_status_more);
-       if (!g_ok(f = i->getc(f, i))) return f;
+       if (h1 == EOF) { f = encode(f, g_status_more); goto out_str; }
+       if (!g_ok(f = port_getc(f, i))) goto out_str;
        int h2 = f->b;
-       if (h2 == EOF) return encode(f, g_status_more);
+       if (h2 == EOF) { f = encode(f, g_status_more); goto out_str; }
        int v1 = h1 <= '9' ? h1 - '0' : (h1 | 0x20) - 'a' + 10;
        int v2 = h2 <= '9' ? h2 - '0' : (h2 | 0x20) - 'a' + 10;
        c = ((v1 & 0xf) << 4) | (v2 & 0xf); } }
-     else if (c == EOF) return encode(f, g_status_more);  // unterminated
-     else if (c == '"') return len(b) = n, f; }           // closing quote
-   return f; } }
+     else if (c == EOF) { f = encode(f, g_status_more); goto out_str; }
+     else if (c == '"') { len(b) = n; goto out_str; } }
+out_str: UM(f); goto out; } }
 
- uintptr_t n = 1, lim = sizeof(intptr_t);
- if (g_ok(f = grbufn(f)))
-  for (txt(f->sp[0])[0] = c; g_ok(f); f = grbufg(f), lim *= 2)
-   for (struct g_vec *b = (struct g_vec*) f->sp[0]; n < lim; txt(b)[n++] = c) {
-    if (!g_ok(f = i->getc(f, i))) return f;
-    switch (c = f->b) {
-     default: continue;
-     case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
-     case '(': case ')': case '"': case '\'': case 0 : case EOF:
-      f = i->ungetc(f, c, i);
-      if (!g_ok(f)) return f;
-      b = (struct g_vec*) f->sp[0]; // ungetc may allocate and relocate
-      len(b) = n;
-      txt(b)[n] = 0; // zero terminate for strtol ; n < lim so this is safe
-      char *e;
-      long j = strtol(txt(b), &e, 0);
-      if (*e == 0) f->sp[0] = putnum(j);
-      else f = intern(f);
-      return f; } }
- return f; }
+ {
+  uintptr_t n = 1, lim = sizeof(intptr_t);
+  struct g_vec *b = 0;
+  MM(f, (g_word*) &b);
+  if (g_ok(f = grbufn(f)))
+   for (txt((struct g_vec*) f->sp[0])[0] = c; g_ok(f); f = grbufg(f), lim *= 2)
+    for (b = (struct g_vec*) f->sp[0]; n < lim; txt(b)[n++] = c) {
+     if (!g_ok(f = port_getc(f, i))) goto out_atom;
+     switch (c = f->b) {
+      default: continue;
+      case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
+      case '(': case ')': case '"': case '\'': case 0 : case EOF:
+       f = port_ungetc(f, c, i);
+       if (!g_ok(f)) goto out_atom;
+       b = (struct g_vec*) f->sp[0];
+       len(b) = n;
+       txt(b)[n] = 0; // zero terminate for strtol ; n < lim so this is safe
+       char *e;
+       long j = strtol(txt(b), &e, 0);
+       if (*e == 0) f->sp[0] = putnum(j);
+       else f = intern(f);
+       goto out_atom; } }
+out_atom: UM(f); }
+out: UM(f); return f; }
 
 static struct g *g_reads(struct g *f, struct g_in* i, bool nested) {
+ MM(f, (g_word*) &i);
  intptr_t n = 0;
  for (int c; g_ok(f = g_r_getc(f, i)); n++) {
   c = f->b;
   if (c == ')') break;                          // list closed
   if (c == EOF) {                               // end of input...
-   if (nested) return encode(f, g_status_more); //  ...inside a list: defer
+   if (nested) { f = encode(f, g_status_more); goto out; }
    break; }                                     //  ...at top level: done
-  f = i->ungetc(f, c, i);
+  f = port_ungetc(f, c, i);
   f = g_read1(f, i); }
  for (f = g_push(f, 1, g_nil); n--; f = gxr(f));
- return f; }
+out: UM(f); return f; }
 
 // Read one datum, transactionally. On g_status_more (or any non-ok
 // result) the VM stack is rolled back to its pre-parse depth, so a
@@ -1212,25 +1244,28 @@ struct g*gputs(struct g*f, char const*s) {
  return f; }
 
 static struct g*g_putn(struct g *f, struct g_out *o, intptr_t n, uint8_t b) {
+ MM(f, (g_word*) &o);
  uintptr_t
-  m = n >= 0 || b != 10 ? (uintptr_t) n : (f = o->putc(f, '-', o), -(uintptr_t) n),
+  m = n >= 0 || b != 10 ? (uintptr_t) n : (f = port_putc(f, '-', o), -(uintptr_t) n),
   q = m / b,
   r = m % b;
  if (q) f = g_putn(f, o, q, b);
- return o->putc(f, g_digits[r], o); }
+ f = port_putc(f, g_digits[r], o);
+ UM(f); return f; }
 
 static struct g*gvfprintf(struct g*f, struct g_out*o, char const *fmt, va_list xs) {
+ MM(f, (g_word*) &o);
  for (int c; (c = *fmt++);) {
-  if (c != '%') f = o->putc(f, c, o);
+  if (c != '%') f = port_putc(f, c, o);
   else pass: switch ((c = *fmt++)) {
-   case 0: return f;
+   case 0: goto out;
    case 'l': goto pass;
    case 'b': f = g_putn(f, o, va_arg(xs, uintptr_t), 2); continue;
    case 'o': f = g_putn(f, o, va_arg(xs, uintptr_t), 8); continue;
    case 'd': f = g_putn(f, o, va_arg(xs, uintptr_t), 10); continue;
    case 'x': f = g_putn(f, o, va_arg(xs, uintptr_t), 16); continue;
-   default: f = o->putc(f, c, o); } }
- return f; }
+   default: f = port_putc(f, c, o); } }
+out: UM(f); return f; }
 
 static struct g*gfprintf(struct g *f, struct g_out *o, char const *fmt, ...) {
  va_list xs;
@@ -1241,47 +1276,63 @@ static struct g*gfprintf(struct g *f, struct g_out *o, char const *fmt, ...) {
 
 
 
+// MM-protect both `o` and `x` across the embedded port_putc / gfprintf /
+// recursive calls — each of those goes through g_push which can GC.
+// Interior reads into data objects (shape array, string body) re-read
+// from `x` each iteration via vec(x)->shape[i] / txt(vec(x))[i]; gcp can
+// forward `x` itself (heap pointer to start of object) but not raw
+// interior data pointers, since data objects have no ttag for
+// copy_thread to find the head.
 static struct g *gfputx(struct g *f, struct g_out *o, intptr_t x) {
  if (nump(x)) return gfprintf(f, o, "%d", getnum(x));
  if (!datp(x)) return gfprintf(f, o, "#%lx", (long) x);
+ MM(f, (g_word*) &o);
+ MM(f, (g_word*) &x);
  switch (typ(x)) {
    default: __builtin_trap();
    case two_q: {
      struct g_vec *n;
-     if (symp(A(x)) && (n = sym(A(x))->nom) && len(n) == 1 && txt(n)[0] == '`' && twop(B(x)))
-       return f = o->putc(f, '\'', o), gfputx(f, o, AB(x));
-     for (f = o->putc(f, '(', o);; f = o->putc(f, ' ', o), x = B(x)) {
+     if (symp(A(x)) && (n = sym(A(x))->nom) && len(n) == 1 && txt(n)[0] == '`' && twop(B(x))) {
+       f = port_putc(f, '\'', o);
+       f = gfputx(f, o, AB(x));
+       goto out; }
+     for (f = port_putc(f, '(', o);; f = port_putc(f, ' ', o), x = B(x)) {
       f = gfputx(f, o, A(x));
-      if (!twop(B(x))) return o->putc(f, ')', o); } }
-   case vec_q: {
-     struct g_vec *v = vec(x);
-     if (!vec_strp(v)) {
-      uintptr_t type = v->type, rank = v->rank, *shape = v->shape;
-      f = gfprintf(f, o, "#vec@%x:%d.%d", v, type, rank);
-      for (uintptr_t i = rank, *j = shape; i-- && g_ok(f = gfprintf(f, o, ".%d", (intptr_t) *j++));); }
+      if (!twop(B(x))) { f = port_putc(f, ')', o); goto out; } } }
+   case vec_q:
+     if (!vec_strp(vec(x))) {
+      uintptr_t type = vec(x)->type, rank = vec(x)->rank;
+      f = gfprintf(f, o, "#vec@%x:%d.%d", vec(x), type, rank);
+      for (uintptr_t i = 0; i < rank && g_ok(f); i++)
+       f = gfprintf(f, o, ".%d", (intptr_t) vec(x)->shape[i]); }
      else {
-      uintptr_t len = len(v);
-      char *text = txt(v);
-      f = o->putc(f, '"', o);
-      for (char c; g_ok(f) && len--; f = o->putc(f, c, o))
-       if ((c = *text++) == '\\' || c == '"') f = o->putc(f, '\\', o);
-       else if (c == '\n') f = o->putc(f, '\\', o), c = 'n';
-       else if (c == '\t') f = o->putc(f, '\\', o), c = 't';
-       else if (c == '\r') f = o->putc(f, '\\', o), c = 'r';
-       else if (c == '\0') f = o->putc(f, '\\', o), c = '0';
+      uintptr_t slen = len(vec(x));
+      f = port_putc(f, '"', o);
+      for (uintptr_t i = 0; g_ok(f) && i < slen; i++) {
+       char c = txt(vec(x))[i];
+       if (c == '\\' || c == '"') f = port_putc(f, '\\', o);
+       else if (c == '\n') f = port_putc(f, '\\', o), c = 'n';
+       else if (c == '\t') f = port_putc(f, '\\', o), c = 't';
+       else if (c == '\r') f = port_putc(f, '\\', o), c = 'r';
+       else if (c == '\0') f = port_putc(f, '\\', o), c = '0';
        else if ((unsigned char) c < 32) {           // other ctl bytes -> \xHH
-        f = o->putc(f, '\\', o);
-        f = o->putc(f, 'x', o);
-        f = o->putc(f, g_digits[(c >> 4) & 0xf], o);
+        f = port_putc(f, '\\', o);
+        f = port_putc(f, 'x', o);
+        f = port_putc(f, g_digits[(c >> 4) & 0xf], o);
         c = g_digits[c & 0xf]; }
-      f = o->putc(f, '"', o); }
-     return f; }
+       f = port_putc(f, c, o); }
+      f = port_putc(f, '"', o); }
+     goto out;
    case sym_q: {
      struct g_vec *s = sym(x)->nom;
-     if (s && vec_strp(s)) for (uintptr_t i = 0; i < len(s); f = o->putc(f, txt(s)[i++], o));
+     if (s && vec_strp(s)) {
+      uintptr_t slen = len(s);
+      for (uintptr_t i = 0; g_ok(f) && i < slen; i++)
+       f = port_putc(f, txt(sym(x)->nom)[i], o); }
      else f = gfprintf(f, o, "#sym@%x", x);
-     return f; }
-   case tbl_q: return gfprintf(f, o, "#tab:%d/%d@%x", tbl(x)->len, tbl(x)->cap, x); } }
+     goto out; }
+   case tbl_q: f = gfprintf(f, o, "#tab:%d/%d@%x", tbl(x)->len, tbl(x)->cap, x); goto out; }
+out: UM(f); UM(f); return f; }
 
 struct g *gputx(struct g*f, word x) {
  return gfputx(f, f->out, x); }
@@ -1853,16 +1904,46 @@ static word g_tget(struct g *f, word zero, word k, struct g_tab *t) {
  while (e && !eql(f, k, e->key)) e = e->next;
  return e ? e->val : zero; }
 
-struct g *ggetc(struct g*f) {
-  return !g_ok(f) ? f : f->in->getc(f, f->in); }
-struct g *gungetc(struct g*f, int c) {
-  return !g_ok(f) ? f : f->in->ungetc(f, c, f->in); }
-struct g *geof(struct g*f) {
-  return !g_ok(f) ? f : f->in->eof(f, f->in); }
-struct g *gputc(struct g*f, int c) {
-  return !g_ok(f) ? f : f->out->putc(f, c, f->out); }
-struct g *gflush(struct g*f) {
-  return !g_ok(f) ? f : f->out->flush(f, f->out); }
+// Port method dispatch helpers. The pure calling convention requires the
+// port to live at f->sp[0] for the duration of the call. These helpers
+// push the port pointer via g_push (which is GC-safe — the port survives
+// the allocation triggered by the push), invoke the method via Sp[0]
+// (since the C-parameter copy of the port may have gone stale across the
+// push), then drop the slot on the way out. Caller's Sp depth is
+// unchanged on return. Method bodies must re-fetch from Sp[0] after any
+// allocating sub-call. Callers that hold their own C reference to the
+// port across multiple port_* calls must MM-protect it themselves.
+static struct g *port_getc(struct g *f, struct g_in *i) {
+  if (!g_ok(f = g_push(f, 1, (word) i))) return f;
+  f = ((struct g_in*) f->sp[0])->getc(f);
+  if (g_ok(f)) f->sp++;
+  return f; }
+static struct g *port_ungetc(struct g *f, int c, struct g_in *i) {
+  if (!g_ok(f = g_push(f, 1, (word) i))) return f;
+  f = ((struct g_in*) f->sp[0])->ungetc(f, c);
+  if (g_ok(f)) f->sp++;
+  return f; }
+static struct g *port_eof(struct g *f, struct g_in *i) {
+  if (!g_ok(f = g_push(f, 1, (word) i))) return f;
+  f = ((struct g_in*) f->sp[0])->eof(f);
+  if (g_ok(f)) f->sp++;
+  return f; }
+static struct g *port_putc(struct g *f, int c, struct g_out *o) {
+  if (!g_ok(f = g_push(f, 1, (word) o))) return f;
+  f = ((struct g_out*) f->sp[0])->putc(f, c);
+  if (g_ok(f)) f->sp++;
+  return f; }
+static struct g *port_flush(struct g *f, struct g_out *o) {
+  if (!g_ok(f = g_push(f, 1, (word) o))) return f;
+  f = ((struct g_out*) f->sp[0])->flush(f);
+  if (g_ok(f)) f->sp++;
+  return f; }
+
+struct g *ggetc(struct g*f)         { return port_getc(f, f->in); }
+struct g *gungetc(struct g*f, int c) { return port_ungetc(f, c, f->in); }
+struct g *geof(struct g*f)          { return port_eof(f, f->in); }
+struct g *gputc(struct g*f, int c)   { return port_putc(f, c, f->out); }
+struct g *gflush(struct g*f)        { return port_flush(f, f->out); }
 
 static g_vm_t g_vm_kcall, g_vm_resume;
 

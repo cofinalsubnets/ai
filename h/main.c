@@ -15,12 +15,12 @@ g_noinline uintptr_t g_clock(void) {
 // --- host output -----------------------------------------------------
 // write(2) directly to STDOUT_FILENO — no FILE* / libc stream buffering.
 // _flush is a no-op since every byte hits the fd immediately.
-static struct g *_putc(struct g *f, int c, struct g_out*) {
+static struct g *_putc(struct g *f, int c) {
   uint8_t b = c;
   ssize_t r = write(STDOUT_FILENO, &b, 1);
   (void) r;
   return f; }
-static struct g *_flush(struct g *f, struct g_out*) { return f; }
+static struct g *_flush(struct g *f) { return f; }
 static struct g_out _g_stdout = { g_vm_port_out, _putc, _flush, g_putnum(STDOUT_FILENO) };
 struct g_out *g_stdout = &_g_stdout;
 
@@ -76,8 +76,9 @@ void g_wait_fds(int const *fds, int n, uintptr_t ms) {
 // read(2) directly from i->fd — no FILE* / libc stream buffering. ungetc
 // is one byte stashed in i->ungetc_buf; EOF is tracked in i->eof_seen,
 // set when read returns 0 and cleared by ungetc.
-static struct g *raw_getc(struct g *f, struct g_in *i) {
+static struct g *raw_getc(struct g *f) {
   struct g *fc = g_core_of(f);
+  struct g_in *i = (struct g_in*) fc->sp[0];
   if (g_getnum(i->ungetc_buf) != EOF) {
     fc->b = g_getnum(i->ungetc_buf);
     i->ungetc_buf = g_putnum(EOF);
@@ -87,12 +88,16 @@ static struct g *raw_getc(struct g *f, struct g_in *i) {
   if (n <= 0) { i->eof_seen = g_putnum(true); fc->b = EOF; }
   else fc->b = b;
   return f; }
-static struct g *raw_ungetc(struct g *f, int c, struct g_in *i) {
+static struct g *raw_ungetc(struct g *f, int c) {
+  struct g *fc = g_core_of(f);
+  struct g_in *i = (struct g_in*) fc->sp[0];
   i->ungetc_buf = g_putnum(c);
   i->eof_seen = g_putnum(false);
-  return g_core_of(f)->b = c, f; }
-static struct g *raw_eof(struct g *f, struct g_in *i) {
-  return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
+  return fc->b = c, f; }
+static struct g *raw_eof(struct g *f) {
+  struct g *fc = g_core_of(f);
+  struct g_in *i = (struct g_in*) fc->sp[0];
+  return fc->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
 static struct g_in raw_stdin = { g_vm_port_in, raw_getc, raw_ungetc, raw_eof,
                                   g_putnum(STDIN_FILENO), g_putnum(EOF), g_putnum(false) };
 struct g_in *g_stdin = &raw_stdin;

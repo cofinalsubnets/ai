@@ -306,9 +306,10 @@ static g_vm(cur_put) {
   Ip += 1;
   return Continue(); }
 
-static struct g *_putc(struct g*f, int c, struct g_out*) { return cb_putc(kcb, c), f; }
-static struct g* _flush(struct g*f, struct g_out*) { return f; }
-static struct g*_getc(struct g*f, struct g_in *i) {
+static struct g *_putc(struct g*f, int c) { return cb_putc(kcb, c), f; }
+static struct g* _flush(struct g*f) { return f; }
+static struct g*_getc(struct g*f) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   if (g_getnum(i->ungetc_buf) != EOF) {
     int c = g_getnum(i->ungetc_buf);
     i->ungetc_buf = g_putnum(EOF);
@@ -316,11 +317,13 @@ static struct g*_getc(struct g*f, struct g_in *i) {
   int c = cb_getc(kcb);
   if (c == EOF) i->eof_seen = g_putnum(true);
   return g_core_of(f)->b = c, f; }
-static struct g* _ungetc(struct g*f, int c, struct g_in *i) {
+static struct g* _ungetc(struct g*f, int c) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   i->ungetc_buf = g_putnum(c);
   i->eof_seen = g_putnum(false);
   return g_core_of(f)->b = c, f; }
-static struct g* _eof(struct g*f, struct g_in *i) {
+static struct g* _eof(struct g*f) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
 struct g_in _g_stdin = { .ap = g_vm_port_in,
                          .getc = _getc, .ungetc = _ungetc, .eof = _eof,

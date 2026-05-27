@@ -134,16 +134,17 @@ static void limine_to_kboot(void) {
 
 // console output goes to the framebuffer when one is present, and is
 // always mirrored to the COM1 serial console.
-static struct g *_putc(struct g*f, int c, struct g_out*) {
+static struct g *_putc(struct g*f, int c) {
   if (kcb) cb_putc(kcb, c);
   return serial_putc(c), f; }
-static struct g *_flush(struct g*f, struct g_out*) { return fbdraw(), f; }
+static struct g *_flush(struct g*f) { return fbdraw(), f; }
 // the keystroke source the line editor reads: block until a byte is
 // queued, pumping the framebuffer meanwhile so the cursor keeps
 // blinking. it never allocates, so f stays valid across the call.
 // Consumes ungetc_buf first if a byte was pushed back. No EOF on bare
 // metal — the kb queue is endless — so eof_seen stays false.
-static struct g *k_getc(struct g*f, struct g_in *i) {
+static struct g *k_getc(struct g*f) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   if (g_getnum(i->ungetc_buf) != EOF) {
     int c = g_getnum(i->ungetc_buf);
     i->ungetc_buf = g_putnum(EOF);
@@ -153,10 +154,12 @@ static struct g *k_getc(struct g*f, struct g_in *i) {
   return g_core_of(f)->b = b, f; }
 // Non-consuming check on the kb queue. No EOF state on bare metal.
 static bool kb_ready(void) { return kkb.qh != kkb.qt; }
-static struct g *k_ungetc(struct g*f, int c, struct g_in *i) {
+static struct g *k_ungetc(struct g*f, int c) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   i->ungetc_buf = g_putnum(c);
   return g_core_of(f)->b = c, f; }
-static struct g *k_eof(struct g*f, struct g_in *i) {
+static struct g *k_eof(struct g*f) {
+  struct g_in *i = (struct g_in*) g_core_of(f)->sp[0];
   return g_core_of(f)->b = (g_getnum(i->ungetc_buf) == EOF) && g_getnum(i->eof_seen), f; }
 struct g_in _g_stdin = { .ap = g_vm_port_in,
                          .getc = k_getc, .ungetc = k_ungetc, .eof = k_eof,
