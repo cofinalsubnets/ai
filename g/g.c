@@ -63,7 +63,11 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 struct g_pair { g_vm_t *ap; uintptr_t typ; intptr_t a, b; };
 enum q { two_q, vec_q, sym_q, tbl_q, text_q, };
 typedef g_word num, word;
-enum g_vec_type { g_vect_u8, };
+enum g_vec_type {
+ g_vt_u8, g_vt_u16, g_vt_u32, g_vt_u64,
+ g_vt_i8, g_vt_i16, g_vt_i32, g_vt_i64,
+ g_vt_f32, g_vt_f64,
+};
 static struct g
  *g_please(struct g*, uintptr_t),
  *have(struct g*, uintptr_t),
@@ -116,6 +120,9 @@ size_t strlen(char const*);
 #define vec(_) ((struct g_vec*)(_))
 #define str(_) ((struct g_str*)(_))
 #define tbl(_) ((struct g_tab*)(_))
+// payload of a g_vec, type-erased. For rank 0 this is just past the
+// header; for rank N it's past the N shape words.
+#define vec_data(_) ((void*)(vec(_)->shape + vec(_)->rank))
 #define nump oddp
 #define homp evenp
 #define two(_) ((struct g_pair*)(_))
@@ -927,7 +934,11 @@ static g_vm(g_vm_scat) {
   *++Sp = word(z); }
  return Ip++, Continue(); }
 
-static size_t const vt_size[] = { [g_vect_u8]  = 1, };
+static size_t const vt_size[] = {
+ [g_vt_u8]  = 1, [g_vt_u16] = 2, [g_vt_u32] = 4, [g_vt_u64] = 8,
+ [g_vt_i8]  = 1, [g_vt_i16] = 2, [g_vt_i32] = 4, [g_vt_i64] = 8,
+ [g_vt_f32] = 4, [g_vt_f64] = 8,
+};
 
 static uintptr_t g_vec_bytes(struct g_vec *v) {
  uintptr_t len = vt_size[v->type],
