@@ -144,12 +144,15 @@
                    (loop (cons c acc) rest))))
         (loop 0 cl))
 
-   ; read an atom: a token, then decide number-or-symbol.
+   ; read an atom: a token, then decide integer / float / symbol.
+   ; matches the C reader's strtol -> strtod -> intern cascade.
    (rdatom cl)
      (: tr (readtok cl)
         tok (car tr)
         r (numof tok)
-        val (? (&& (twop r) (nilp (cdr r))) (car r) (sym (str tok)))
+        s (str tok)
+        val (? (&& (twop r) (nilp (cdr r))) (car r)
+               (: f (flo s) (? (nilp f) (sym s) f)))
         (cons val (cdr tr)))
 
    ; drain a charlist into a list of all the datums it holds.

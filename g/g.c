@@ -82,7 +82,7 @@ static g_vm_t g_vm_kcall,
  g_vm_data,  g_vm_putn, g_vm_info, g_vm_dot,    g_vm_clock,
  g_vm_nilp,  g_vm_symnom, g_vm_read,   g_vm_putc, g_vm_gensym, g_vm_twop,
  g_vm_len, g_vm_get,
- g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,
+ g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,  g_vm_flo,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_bnot, g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
  g_vm_getc,  g_vm_str,    g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_gt,  g_vm_ge,
@@ -905,6 +905,43 @@ struct g *gxr(struct g *f) {
  return f; }
 
 static op11(g_vm_strp, strp(Sp[0]) ? putnum(-1) : nil)
+
+// Strict parse of a gwen-string's bytes as a decimal float. g_noinline +
+// by-value struct return so the &e and &buf escapes stay inside this
+// frame and never reach g_vm_flo, which needs to TCO out via Continue().
+struct g_strtod_r { double d; bool ok; };
+static g_noinline struct g_strtod_r parse_flo_strict(char const *bytes, size_t len) {
+ struct g_strtod_r r = { 0, false };
+ char buf[64];
+ if (len == 0 || len >= sizeof buf) return r;
+ memcpy(buf, bytes, len);
+ buf[len] = 0;
+ char *e;
+ r.d = g_strtod(buf, &e);
+ r.ok = e != buf && *e == 0;
+ return r; }
+
+// (flo s) — parse a gwen string as a decimal float. Returns a rank-0
+// f64 box if the entire string parses, else nil. Used by the gwen-side
+// reader in repl.g to match the C reader's strtol → strtod → intern
+// cascade on float-shaped tokens.
+static g_vm(g_vm_flo) {
+ word x = Sp[0];
+ if (!strp(x)) { Sp[0] = nil; Ip += 1; return Continue(); }
+ struct g_strtod_r p = parse_flo_strict(str(x)->bytes, str(x)->len);
+ if (!p.ok) { Sp[0] = nil; Ip += 1; return Continue(); }
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));
+ Have(req);
+ struct g_vec *r = (struct g_vec*) Hp;
+ Hp += req;
+ r->ap = g_vm_data;
+ r->typ = vec_q;
+ r->type = g_vt_f64;
+ r->rank = 0;
+ *(double*) r->shape = p.d;
+ Sp[0] = word(r);
+ Ip += 1;
+ return Continue(); }
 
 static g_vm(g_vm_ssub) {
  if (!strp(Sp[0])) Sp[2] = nil;
@@ -2110,6 +2147,7 @@ enum g_status g_fin(struct g *f) {
  _(bif_seek, "seek", S2(g_vm_seek)) _(bif_len, "len", S1(g_vm_len)) _(bif_get, "get", S3(g_vm_get))\
  _(bif_put, "put", S3(g_vm_put)) _(bif_tnew, "new", S1(g_vm_tnew)) _(bif_tabkeys, "tkeys", S1(g_vm_tkeys))\
  _(bif_tabdel, "tdel", S3(g_vm_tdel)) _(bif_twop, "twop", S1(g_vm_twop)) _(bif_strp, "strp", S1(g_vm_strp))\
+ _(bif_flo, "flo", S1(g_vm_flo))\
  _(bif_symp, "symp", S1(g_vm_symp)) _(bif_tblp, "tblp", S1(g_vm_tblp)) _(bif_nump, "nump", S1(g_vm_nump))\
  _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))\
  _(bif_callk, "call_cc", S1(g_vm_callk)) _(bif_yield, "yield", S1(g_vm_yield_bif)) \
