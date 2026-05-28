@@ -226,6 +226,17 @@ uart_isr:
 // 100-Hz tick, remap the PIC to 0x20/0x28, unmask, and STI.
 .balign 8
 archinit:
+  // Enable x87/SSE so g.c can use double-precision floats. CR0: clear
+  // EM (no FPU emulation), set MP (cooperate with FPU). CR4: set OSFXSR
+  // (FXSAVE/FXRSTOR available) and OSXMMEXCPT (#XF on SIMD exceptions).
+  mov rax, cr0
+  and rax, ~(1 << 2)                  // CR0.EM = 0
+  or  rax, (1 << 1)                   // CR0.MP = 1
+  mov cr0, rax
+  mov rax, cr4
+  or  rax, (1 << 9) | (1 << 10)       // CR4.OSFXSR | CR4.OSXMMEXCPT
+  mov cr4, rax
+
   lea rdi, [rip + idt]
   lea rcx, [rip + isrs]
   lea rdx, [rip + isr_types]

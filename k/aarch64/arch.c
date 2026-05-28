@@ -236,6 +236,11 @@ void archinit(void) {
   // the value is unchanged across the switch, so C carries on.
   asm volatile ("mov x9, sp; msr spsel, #1; mov sp, x9"
                 ::: "x9", "memory");
+  // Enable FP/SIMD (CPACR_EL1.FPEN = 0b11) so g.c can use doubles.
+  // Limine leaves FPEN cleared on EL1, which would trap on the first
+  // FP register access.
+  asm volatile ("mrs x9, cpacr_el1; orr x9, x9, #(3 << 20); msr cpacr_el1, x9; isb"
+                ::: "x9", "memory");
   asm volatile ("msr vbar_el1, %0; isb" :: "r"((uintptr_t) vectors));
   // Under Limine the HHDM covers RAM only, so mmio_map() walks TTBR1 to
   // add 2 MiB block descriptors at HHDM+phys for the GIC and UART pages.

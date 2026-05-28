@@ -31,6 +31,7 @@ extern uint8_t trap_vec[];
 #define CSR_TCFG       0x41            // timer config (En/Periodic/InitVal)
 #define CSR_TICLR      0x44            // timer interrupt clear
 #define CSR_DMW0       0x180           // direct memory window 0
+#define CSR_EUEN       0x2             // FPU/LSX/LASX enable (FPE = bit 0)
 
 #define CSR_RD(csr) ({ uint64_t _v; asm volatile ("csrrd %0, %1" : "=r"(_v) : "i"(csr)); _v; })
 #define CSR_WR(csr, v) do { uint64_t _t = (v); \
@@ -194,6 +195,9 @@ void k_trap_c(uint64_t estat, uint64_t era, uint64_t badv) {
 // in place, a stack -- so archinit only has to install our DMW0 for
 // MMIO, the trap vector, the timer, and unmask interrupts.
 void archinit(void) {
+  // EUEN.FPE = 1: enable basic FPU so g.c can use doubles. Limine
+  // leaves FPE = 0 and the first FP instruction would raise #FPD.
+  CSR_WR(CSR_EUEN, 1);
   // DMW0 first: until our own SUC window is up, MMIO is unreachable
   // (Limine leaves DMW state undefined under protocol revision 3, and
   // the HHDM only covers RAM).

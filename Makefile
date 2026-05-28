@@ -200,12 +200,12 @@ ifdef EFI
 # Under UEFI we keep the kernel at whatever base the firmware places us
 # (image is fully relocatable); -mcmodel=kernel and -mabi=sysv don't
 # apply to the windows target, so drop them.
-kcflags_x86_64=-m64 -march=x86-64 -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone
+kcflags_x86_64=-m64 -march=x86-64 -mno-red-zone
 else
-kcflags_x86_64=-m64 -march=x86-64 -mabi=sysv -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone -mcmodel=kernel
+kcflags_x86_64=-m64 -march=x86-64 -mabi=sysv -mno-red-zone -mcmodel=kernel
 endif
-kcflags_aarch64=-mcpu=generic -march=armv8-a+nofp+nosimd -mgeneral-regs-only
-kcflags_riscv64=-march=rv64imac -mabi=lp64 -mno-relax $(kcflags_riscv64_$(if $(EFI),efi,limine))
+kcflags_aarch64=-mcpu=generic -march=armv8-a
+kcflags_riscv64=-march=rv64imafdc -mabi=lp64d -mno-relax $(kcflags_riscv64_$(if $(EFI),efi,limine))
 # Limine drops us at VMA 0xffffffff80000000, whose 32-bit truncation
 # sign-extends back to the same address -- medlow's lui+addi sequences
 # encode it correctly. UEFI loads the image at a runtime-chosen base
@@ -214,7 +214,7 @@ kcflags_riscv64=-march=rv64imac -mabi=lp64 -mno-relax $(kcflags_riscv64_$(if $(E
 # up the 64-bit absolute symbol references in static initializers.
 kcflags_riscv64_limine=
 kcflags_riscv64_efi=-mcmodel=medany
-kcflags_loongarch64=-march=loongarch64 -mabi=lp64s  -mfpu=none -msimd=none \
+kcflags_loongarch64=-march=loongarch64 -mabi=lp64d \
   $(kcflags_loongarch64_$(if $(EFI),efi,limine))
 kcflags_loongarch64_limine=
 # LoongArch clang defaults to routing cross-TU extern data accesses through

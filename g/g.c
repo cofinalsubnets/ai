@@ -98,6 +98,9 @@ static g_vm_t g_vm_kcall,
 static uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 static struct g_str *ini_str(struct g_str*, uintptr_t);
 static struct g *str0(struct g*, uintptr_t);
+static struct g *flo_alloc(struct g*, double);
+static double g_strtod(char const*, char**);
+static int g_dtoa(double, char*, int);
 static word g_tget(struct g*, word, word, struct g_tab*);
 static struct g_atom *intern_checked(struct g*, struct g_str*);
 static g_inline struct g_tag { union u *null, *head, end[]; } *ttag(union u *k) {
@@ -132,6 +135,9 @@ static g_inline bool tblp(word _) { return homp(_) && typ(_) == tbl_q; }
 static g_inline bool symp(word _) { return homp(_) && typ(_) == sym_q; }
 static g_inline bool vecp(word _) { return homp(_) && typ(_) == vec_q; }
 static g_inline bool strp(word _) { return homp(_) && typ(_) == text_q; }
+static g_inline bool flop(word _) {
+  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == g_vt_f64; }
+static g_inline bool numericp(word _) { return nump(_) || vecp(_); }
 // public predicate for frontends that need to check string args
 bool g_strp(g_word x) { return strp(x); }
 static g_inline struct g *encode(struct g*f, enum g_status s) { return
@@ -862,7 +868,10 @@ static uintptr_t hash(struct g *f, intptr_t x) {
    case two_q: return hash_two(f, x);
    case sym_q: return sym(x)->code;
    case tbl_q: return mix;
-   case vec_q: return mix;       // FIXME hash by shape + contents once arrays land
+   case vec_q: {
+    uintptr_t len = g_vec_bytes(vec(x)), h = mix;
+    for (uint8_t const *bs = (void*) x; len--; h ^= *bs++, h *= mix);
+    return h; }
    case text_q: {
     uintptr_t n = len(x), h = mix;
     char const *bs = txt(x);
@@ -957,6 +966,99 @@ static struct g *str0(struct g *f, uintptr_t len) {
   memset(s->bytes, 0, len);
   *--f->sp = word(s); }
  return f; }
+
+// Allocate a rank-0 g_vt_f64 g_vec wrapping v, push on Sp.
+static struct g *flo_alloc(struct g *f, double v) {
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));
+ f = have(f, req + 1);
+ if (g_ok(f)) {
+  struct g_vec *r = bump(f, req);
+  r->ap = g_vm_data;
+  r->typ = vec_q;
+  r->type = g_vt_f64;
+  r->rank = 0;
+  *(double*) vec_data(r) = v;
+  *--f->sp = word(r); }
+ return f; }
+
+// Decimal float parser: [-+]? digits ('.' digits)? ([eE] [-+]? digits)?.
+// Adequate for round-trip of literals the printer emits; not IEEE
+// round-to-nearest correct. Returns 0 with *end == s when nothing was
+// consumed.
+static double g_strtod(char const *s, char **end) {
+ char const *p = s;
+ int sign = 1;
+ if (*p == '-') sign = -1, p++;
+ else if (*p == '+') p++;
+ bool any = false;
+ double v = 0;
+ while ('0' <= *p && *p <= '9') v = v * 10 + (*p++ - '0'), any = true;
+ if (*p == '.') {
+  p++;
+  double scale = 0.1;
+  while ('0' <= *p && *p <= '9') v += (*p++ - '0') * scale, scale *= 0.1, any = true; }
+ if (!any) { if (end) *end = (char*) s; return 0; }
+ if (*p == 'e' || *p == 'E') {
+  char const *q = p++;
+  int esign = 1;
+  if (*p == '-') esign = -1, p++;
+  else if (*p == '+') p++;
+  if (!('0' <= *p && *p <= '9')) p = q;                  // not a real exponent
+  else {
+   int e = 0;
+   while ('0' <= *p && *p <= '9') e = e * 10 + (*p++ - '0');
+   double scale = 1;
+   while (e--) scale *= 10;
+   v = esign > 0 ? v * scale : v / scale; } }
+ if (end) *end = (char*) p;
+ return sign * v; }
+
+// Decimal float printer. Writes up to cap bytes into buf; returns the
+// byte count written. Strategy: sign, integer part via integer math,
+// then up to 15 fractional digits with trailing zeros trimmed; for very
+// large or very small magnitudes, normalize to [1,10) and append eE.
+static int g_dtoa(double v, char *buf, int cap) {
+ char *p = buf, *end = buf + cap;
+ if (v != v) { if (end - p >= 3) memcpy(p, "nan", 3), p += 3; return p - buf; }
+ if (v < 0) { if (p < end) *p++ = '-'; v = -v; }
+ if (v > 1e308) { if (end - p >= 3) memcpy(p, "inf", 3), p += 3; return p - buf; }
+ int exp = 0;
+ bool sci = false;
+ if (v != 0 && (v >= 1e16 || v < 1e-4)) {
+  sci = true;
+  while (v >= 10) v /= 10, exp++;
+  while (v < 1)  v *= 10, exp--; }
+ // integer part, lsb-first then reversed
+ uint64_t ip = (uint64_t) v;
+ double frac = v - (double) ip;
+ char ib[24]; int ib_n = 0;
+ if (ip == 0) ib[ib_n++] = '0';
+ while (ip) ib[ib_n++] = '0' + ip % 10, ip /= 10;
+ while (ib_n > 0) { ib_n--; if (p < end) *p++ = ib[ib_n]; }
+ // fractional digits; in non-scientific mode always emit at least ".0"
+ // so the result is visually distinguishable from a fixnum.
+ bool emit_frac = frac > 0 || !sci;
+ if (emit_frac) {
+  char fb[16]; int fb_n = 0;
+  for (int i = 0; i < 15 && frac > 0; i++) {
+   frac *= 10;
+   int d = (int) frac;
+   if (d > 9) d = 9;
+   fb[fb_n++] = '0' + d;
+   frac -= d; }
+  while (fb_n > 0 && fb[fb_n - 1] == '0') fb_n--;
+  if (!sci && fb_n == 0) fb[fb_n++] = '0';      // force "X.0" for ints
+  if (fb_n > 0) {
+   if (p < end) *p++ = '.';
+   for (int i = 0; i < fb_n; i++) if (p < end) *p++ = fb[i]; } }
+ if (sci) {
+  if (p < end) *p++ = 'e';
+  if (exp < 0) { if (p < end) *p++ = '-'; exp = -exp; }
+  char eb[8]; int eb_n = 0;
+  if (exp == 0) eb[eb_n++] = '0';
+  while (exp) eb[eb_n++] = '0' + exp % 10, exp /= 10;
+  while (eb_n > 0) { eb_n--; if (p < end) *p++ = eb[eb_n]; } }
+ return p - buf; }
 
 struct g *g_strof(struct g *f, char const *cs) {
  uintptr_t len = strlen(cs);
@@ -1211,7 +1313,13 @@ out_str: UM(f); goto out; } }
        char *e;
        long j = strtol(txt(b), &e, 0);
        if (*e == 0) f->sp[0] = putnum(j);
-       else f = intern(f);
+       else {
+        char *fe;
+        double d = g_strtod(txt(b), &fe);
+        if (fe != txt(b) && *fe == 0) {
+         f = flo_alloc(f, d);                  // pushes box; collapse scratch slot
+         if (g_ok(f)) f->sp[1] = f->sp[0], f->sp++;
+        } else f = intern(f); }
        goto out_atom; } }
 out_atom: UM(f); }
 out: return f; }
@@ -1391,6 +1499,11 @@ out: return UM(f), f; }
 
 static g_inline struct g*gzput_vec(struct g*f, word x) {
  MM(f, &x);
+ if (vec(x)->rank == 0 && vec(x)->type == g_vt_f64) {
+  char buf[32];
+  int n = g_dtoa(*(double*) vec_data(x), buf, (int) sizeof buf);
+  for (int i = 0; g_ok(f) && i < n; i++) f = gzputc(f, buf[i]);
+  return UM(f), f; }
  uintptr_t type = vec(x)->type, rank = vec(x)->rank;
  f = gzprintf(f, "#vec@%x:%d.%d", vec(x), type, rank);
  for (uintptr_t i = 0; i < rank && g_ok(f); i++)

@@ -159,6 +159,9 @@ void k_trap_c(uint64_t cause, uint64_t epc, uint64_t tval) {
 // place, a stack -- so archinit only has to install our trap vector,
 // arm the first timer, and unmask interrupts.
 void archinit(void) {
+  // sstatus.FS = 0b01 (Initial): enable F/D extension registers.
+  // SBI leaves FS = 0b00 (Off), which traps on any FP instruction.
+  asm volatile ("csrs sstatus, %0" :: "r"((uintptr_t) (1u << 13)) : "memory");
   // stvec: low 2 bits select mode; 0 = direct (single entry point).
   // trap_vec is 4-byte aligned (.balign 4 in riscv64.S), satisfying
   // the mode-0 alignment requirement.
