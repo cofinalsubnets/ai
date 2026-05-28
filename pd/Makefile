@@ -1,6 +1,6 @@
 # Playdate build. Run from project root via `make pd`, or directly via
-# `cd pd && make`. Outputs land in $(R)/b/pd/. Requires PLAYDATE_SDK_PATH
-# in the environment.
+# `cd pd && make`. Outputs land in b/ under this cwd. Requires
+# PLAYDATE_SDK_PATH in the environment.
 R := ..
 include $(R)/common.mk
 
@@ -11,7 +11,7 @@ pd_as = $(pd_gcc) -x assembler-with-cpp
 pd_opt = -O2 -falign-functions=16 -fomit-frame-pointer
 pd_lds = $(patsubst ~%,$(HOME)%,$(pd_sdk)/C_API/buildsupport/link_map.ld)
 pd_fpu = -mfloat-abi=hard -mfpu=fpv5-sp-d16 -D__FPU_USED=1
-pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R)/g $(R)/b $(R)/f)
+pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R)/g $(R)/h/b $(R)/f)
 pd_defs = -DTARGET_PLAYDATE=1 -DTARGET_EXTENSION=1 -Dg_tco=0
 
 # Sources split by group so the obj-path patsubst works cleanly:
@@ -22,9 +22,9 @@ pd_shared_c = $(g_c) $(f_c)
 pd_sdk_c = $(pd_sdk)/C_API/buildsupport/setup.c
 pd_src = $(pd_local_c) $(pd_shared_c) $(pd_sdk_c)
 
-pd_local_o = $(pd_local_c:%.c=$(R)/b/pd/%.o)
-pd_shared_o = $(pd_shared_c:$(R)/%.c=$(R)/b/pd/%.o)
-pd_sdk_o = $(R)/b/pd/setup.o
+pd_local_o = $(pd_local_c:%.c=b/%.o)
+pd_shared_o = $(pd_shared_c:$(R)/%.c=b/%.o)
+pd_sdk_o = b/setup.o
 pd_o = $(pd_local_o) $(pd_shared_o) $(pd_sdk_o)
 
 pd_mcflags = -mthumb -mcpu=cortex-m7 $(pd_fpu)
@@ -32,67 +32,70 @@ pd_cpflags = \
   $(pd_mcflags) $(pd_opt) $(pd_defs) \
   -gdwarf-2 -Wall -Wno-unused -Wstrict-prototypes -Wno-unknown-pragmas \
   -fverbose-asm -Wdouble-promotion -mword-relocations -fno-common \
-  -ffunction-sections -fdata-sections -Wa,-ahlms=$(R)/b/pd/$(notdir $(<:.c=.lst))
+  -ffunction-sections -fdata-sections -Wa,-ahlms=b/$(notdir $(<:.c=.lst))
 pd_ldflags = \
   -nostartfiles $(pd_mcflags) -T$(pd_lds) \
-  -Wl,-Map=$(R)/b/pd/pdex.map,--cref,--gc-sections,--no-warn-mismatch,--emit-relocs
+  -Wl,-Map=b/pdex.map,--cref,--gc-sections,--no-warn-mismatch,--emit-relocs
 pd_asflags = $(pd_mcflags) $(pd_opt) -g3 -gdwarf-2 -Wa,-amhls=$(<:.s=.lst) \
   -D__HEAP_SIZE=8388208 \
   -D__STACK_SIZE=4194304
 
-.PHONY: default sim
-default: $(R)/b/pd/$n.pdx
+.PHONY: default sim clean
+default: b/$n.pdx
 
-sim: $(R)/b/pd/$n.pdx
+sim: b/$n.pdx
 	@$(pd_sdk)/bin/PlaydateSimulator $^
 
+clean:
+	rm -rf b
+
 # boot.h is owned by the host build.
-$(R)/b/boot.h:
+$(R)/h/b/boot.h:
 	@$(MAKE) -C $(R)/h boot.h
 
-$(R)/b/pd/$n.pdx: $(R)/b/pd/Source/pdex.elf $(R)/b/pd/Source/pdex.so
+b/$n.pdx: b/Source/pdex.elf b/Source/pdex.so
 	@echo PDC	$@
-	@$(pd_sdk)/bin/pdc -sdkpath $(pd_sdk) $(R)/b/pd/Source $@
+	@$(pd_sdk)/bin/pdc -sdkpath $(pd_sdk) b/Source $@
 
-$(R)/b/pd/Source/pdex.%: $(R)/b/pd/pdex.%
+b/Source/pdex.%: b/pdex.%
 	@echo CP	$@
 	@mkdir -p $(dir $@)
 	@cp $< $@
 
 # Shared C sources from g/ and f/.
-$(R)/b/pd/%.o: $(R)/%.c | $(R)/b/boot.h
+b/%.o: $(R)/%.c | $(R)/h/b/boot.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/b -I$(R)/f $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/h/b -I$(R)/f $(pd_incdir) $< -o $@
 
 # Local pd/*.c sources.
-$(R)/b/pd/%.o: %.c | $(R)/b/boot.h
+b/%.o: %.c | $(R)/h/b/boot.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/b -I$(R)/f $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/h/b -I$(R)/f $(pd_incdir) $< -o $@
 
 # Local pd/*.s assembly (rule preserved from original; no .s files exist
 # today but keep the pattern in case one shows up).
-$(R)/b/pd/%.o: %.s
+b/%.o: %.s
 	@echo AS	$@
 	@mkdir -p $(dir $@)
 	@$(pd_as) -c $(pd_asflags) $< -o $@
 
 # SDK setup.c is reached via an absolute path; an explicit rule keeps
 # its output filename predictable.
-$(R)/b/pd/setup.o: $(pd_sdk)/C_API/buildsupport/setup.c | $(R)/b/boot.h
+b/setup.o: $(pd_sdk)/C_API/buildsupport/setup.c | $(R)/h/b/boot.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/b -I$(R)/f $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/h/b -I$(R)/f $(pd_incdir) $< -o $@
 
-$(R)/b/pd/pdex.elf: $(pd_o) $(pd_lds)
+b/pdex.elf: $(pd_o) $(pd_lds)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(pd_cc) $(pd_o) $(pd_ldflags) -o $@
 
-$(R)/b/pd/pdex.so: $(pd_src)
+b/pdex.so: $(pd_src)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@gcc -g -shared -fPIC -lm -Dg_tco=0 -DTARGET_SIMULATOR=1 -DTARGET_EXTENSION=1 $(pd_incdir) -o $(R)/b/pd/pdex.so $(pd_src)
+	@gcc -g -shared -fPIC -lm -Dg_tco=0 -DTARGET_SIMULATOR=1 -DTARGET_EXTENSION=1 $(pd_incdir) -o b/pdex.so $(pd_src)
 
-.PRECIOUS: $(R)/b/pd/%elf
+.PRECIOUS: b/%elf

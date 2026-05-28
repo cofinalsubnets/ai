@@ -6,7 +6,7 @@ R ?= .
 
 n = gl
 x = g
-m = $(R)/b/h/$n
+m = $(R)/h/b/$n
 a ?= $(shell uname -m)
 
 t = $(sort $(wildcard $(R)/t/*.$x))

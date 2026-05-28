@@ -1,7 +1,8 @@
 # Project root. This file defines the cross-cutting phony tasks (h, k,
 # pd, test, clean, install, ...) and delegates the actual build logic
-# to per-subfolder Makefiles (h/, k/, pd/). Shared variables live in
-# common.mk.
+# to per-subfolder Makefiles (h/, k/, pd/). Each subfolder owns its
+# own b/ build directory (and k/ owns dl/ for limine + edk2-ovmf).
+# Shared variables live in common.mk.
 R := .
 include common.mk
 
@@ -17,24 +18,28 @@ k:
 pd:
 	@$(MAKE) -C pd
 clean:
-	rm -rf b `git check-ignore esp/* wasm/* pico/*`
-distclean: clean
-	rm -rf dl
+	@$(MAKE) -C h clean
+	@$(MAKE) -C k clean
+	@$(MAKE) -C pd clean
+distclean:
+	@$(MAKE) -C h clean
+	@$(MAKE) -C k distclean
+	@$(MAKE) -C pd clean
 
 # Host artefacts produced by `make -C h`. Declaring them as targets that
 # depend on the phony `h` means any other rule that consumes them (the
 # install rules, valg, perf, etc.) triggers a single recursive `make -C
 # h` rather than failing with "no rule to make target".
-b/h/$n b/h/$n.1 b/h/lib$n.a b/h/lib$n.so: h
+h/b/$n h/b/$n.1 h/b/lib$n.a h/b/lib$n.so: h
 
 .PHONY: valg perf repl cloc cat
 valg: h
 	cat $t | valgrind --error-exitcode=1 $m
-b/perf.data: h
+h/b/perf.data: h
 	cat $t | perf record -o $@ $m
-perf: b/perf.data
+perf: h/b/perf.data
 	perf report -i $<
-b/flamegraph.svg: b/perf.data
+h/b/flamegraph.svg: h/b/perf.data
 	flamegraph -o $@ --perfdata $<
 repl: h
 	@$m
@@ -66,7 +71,6 @@ d = $(DESTDIR)/$(PREFIX)
 v = $(DESTDIR)/$(VIMPREFIX)
 installs = \
   $d/bin/$n \
-  $d/bin/$nsh \
   $d/g/man/man1/$n.1 \
   $d/lib/$n/boot.$x \
   $d/lib/$n/repl.$x \
@@ -87,31 +91,23 @@ $d/include/$x.h: g/$x.h
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/$n/boot.$x: g/boot.g
+$d/lib/$n/%.$x: g/%.$x
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/$n/%.$x: h/%.$x
+$d/lib/lib$n.a: h/b/lib$n.a
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/lib$n.a: b/h/lib$n.a
-	@echo CP	$(abspath $@)
-	@install -D -m 644 $< $@
-
-$d/lib/lib$n.so: b/h/lib$n.so
+$d/lib/lib$n.so: h/b/lib$n.so
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
 
-$d/bin/$n: b/h/$n
+$d/bin/$n: h/b/$n
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
 
-$d/bin/$nsh: h/$nsh
-	@echo CP	$(abspath $@)
-	@install -D -m 755 $< $@
-
-$d/g/man/man1/$n.1: b/h/$n.1
+$d/g/man/man1/$n.1: h/b/$n.1
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
