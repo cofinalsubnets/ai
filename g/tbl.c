@@ -1,0 +1,174 @@
+#include "i.h"
+g_vm(g_vm_tnew) {
+ Have(Width(struct g_tab) + 1);
+ struct g_tab *t = (struct g_tab*) Hp;
+ struct g_kvs **tab = (struct g_kvs**) (t + 1);
+ return
+  Hp += Width(struct g_tab) + 1,
+  tab[0] = 0,
+  Sp[0] = word(ini_tab(t, 0, 1, tab)),
+  Ip++,
+  Continue(); }
+
+op11(g_vm_tblp, tblp(Sp[0]) ? putnum(-1) : nil)
+
+// relies on table capacity being a power of 2
+static g_inline uintptr_t index_of_key(struct g *f, struct g_tab *t, intptr_t k) {
+ return (t->cap - 1) & hash(f, k); }
+
+word g_tget(struct g *f, word zero, word k, struct g_tab *t) {
+ uintptr_t i = index_of_key(f, t, k);
+ struct g_kvs *e = t->tab[i];
+ while (e && !eql(f, k, e->key)) e = e->next;
+ return e ? e->val : zero; }
+
+
+g_noinline struct g *g_tput(struct g *f) {
+ if (!g_ok(f)) return f;
+ struct g_tab *t = (struct g_tab*) f->sp[2];
+ word v = f->sp[1], k = f->sp[0];
+ uintptr_t i = index_of_key(f, t, k);
+ struct g_kvs *e = t->tab[i];
+ while (e && !eql(f, k, e->key)) e = e->next;
+
+ if (e) return e->val = v, f->sp += 2, f;
+
+ if (!g_ok(f = have(f, Width(struct g_kvs) + 1))) return f;
+ e = bump(f, Width(struct g_kvs));
+ t = (struct g_tab*) f->sp[2];
+ k = f->sp[0], v = f->sp[1];
+ e->key = k, e->val = v, e->next = t->tab[i];
+ t->tab[i] = e;
+ intptr_t cap0 = t->cap, load = ++t->len / cap0;
+
+ if (load < 2) return f->sp += 2, f;
+
+ // grow the table
+ intptr_t cap1 = 2 * cap0;
+ struct g_kvs **tab0, **tab1;
+
+ if (!g_ok(f = have(f, cap1 + 1))) return f;
+ tab1 = bump(f, cap1);
+ t = (struct g_tab*) f->sp[2];
+ tab0 = t->tab;
+ memset(tab1, 0, cap1 * sizeof(intptr_t));
+ for (t->cap = cap1, t->tab = tab1; cap0--;)
+  for (struct g_kvs *e, *es = tab0[cap0]; es;
+   e = es,
+   es = es->next,
+   i = (cap1-1) & hash(f, e->key),
+   e->next = tab1[i],
+   tab1[i] = e);
+
+ return f->sp += 2, f; }
+
+static struct g_kvs *gtabdelr(struct g *f, struct g_tab *t, intptr_t k, intptr_t *v, struct g_kvs *e) {
+ if (e) {
+  if (eql(f, e->key, k)) return
+   t->len--,
+   *v = e->val,
+   e->next;
+  e->next = gtabdelr(f, t, k, v, e->next); }
+ return e; }
+
+static g_noinline intptr_t gtabdel(struct g *f, struct g_tab *t, intptr_t k, intptr_t v) {
+ uintptr_t idx = index_of_key(f, t, k);
+ t->tab[idx] = gtabdelr(f, t, k, &v, t->tab[idx]);
+ if (t->cap > 1 && t->len / t->cap < 1) {
+  intptr_t cap = t->cap;
+  struct g_kvs *coll = 0, *x, *y; // collect all entries in one list
+  for (intptr_t i = 0; i < cap; i++)
+   for (x = t->tab[i], t->tab[i] = 0; x;)
+    y = x, x = x->next, y->next = coll, coll = y;
+  t->cap = cap >>= 1;
+  for (intptr_t i; coll;)
+   i = (cap - 1) & hash(f, coll->key),
+   x = coll->next,
+   coll->next = t->tab[i],
+   t->tab[i] = coll,
+   coll = x; }
+ return v; }
+
+g_vm(g_vm_get) {
+ word z = Sp[0], k = Sp[1], x = Sp[2], n;
+ if (homp(x) && datp(x)) switch (typ(x)) {
+  case tbl_q: z = g_tget(f, z, k, tbl(x)); break;
+  case text_q:
+   if (nump(k) && (n = getnum(k)) >= 0 && n < (word) len(x))
+    z = putnum(txt(x)[n]);
+   break;
+  case two_q:
+   if (nump(k) && (n = getnum(k)) >= 0) {
+    while (n-- && twop(x = B(x)));
+    if (twop(x)) z = A(x); } }
+ return Sp[2] = z, Sp += 2, Ip += 1, Continue(); }
+
+g_vm(g_vm_put) {
+ if (!tblp(Sp[2])) Sp += 2;
+ else {
+  Pack(f);
+  if (!g_ok(f = g_tput(f))) return f;
+  Unpack(f); }
+ return Ip += 1, Continue(); }
+
+g_vm(g_vm_tdel) {
+ if (tblp(Sp[1])) Sp[2] = gtabdel(f, (struct g_tab*) Sp[1], Sp[2], Sp[0]);
+ return Sp += 2, Ip += 1, Continue(); }
+
+g_vm(g_vm_tkeys) {
+ intptr_t list = nil;
+ if (tblp(Sp[0])) {
+  struct g_tab *t = (struct g_tab*) Sp[0];
+  intptr_t len = t->len;
+  Have(len * Width(struct g_pair));
+  struct g_pair *pairs = (struct g_pair*) Hp;
+  Hp += len * Width(struct g_pair);
+  for (uintptr_t i = t->cap; i;)
+   for (struct g_kvs *e = t->tab[--i]; e; e = e->next)
+    ini_two(pairs, e->key, list),
+    list = (intptr_t) pairs, pairs++; }
+ Sp[0] = list;
+ Ip += 1;
+ return Continue(); }
+
+struct g *mktbl(struct g*f) {
+ if (g_ok(f = have(f, Width(struct g_tab) + 2))) {
+  struct g_tab *t = bump(f, Width(struct g_tab) + 1);
+  *--f->sp = word(t);
+  struct g_kvs **tab = (struct g_kvs**) (t + 1);
+  tab[0] = 0, ini_tab(t, 0, 1, tab); }
+ return f; }
+
+
+static g_noinline uintptr_t hash_two(struct g *f, word x) {
+ word *base = off_pool(f), *top = base + f->len, *w = base;
+ for (uintptr_t h = mix;; x = *--w) {
+  while (twop(x)) {
+   if (w == top) __builtin_trap();       // worklist overflow: a cycle
+   h = (h ^ mix) * mix;                  // mark a pair node
+   *w++ = A(x), x = B(x); }
+  h = (h ^ hash(f, x)) * mix;          // x is a leaf: hash won't recur
+  if (w == base) return h; } }
+
+// general hashing method...
+uintptr_t hash(struct g *f, intptr_t x) {
+ if (nump(x)) return rot(x*mix);
+ if (!datp(x)) {
+   // it's a function, hash by length
+   uintptr_t r = mix, *y = (uintptr_t *) x;
+   while (*y++) r ^= r * mix;
+   return r; }
+ switch (typ(x)) {
+   default: __builtin_trap();
+   case two_q: return hash_two(f, x);
+   case sym_q: return sym(x)->code;
+   case tbl_q: return mix;
+   case vec_q: {
+    uintptr_t len = g_vec_bytes(vec(x)), h = mix;
+    for (uint8_t const *bs = (void*) x; len--; h ^= *bs++, h *= mix);
+    return h; }
+   case text_q: {
+    uintptr_t n = len(x), h = mix;
+    char const *bs = txt(x);
+    while (n--) h ^= (uint8_t) *bs++, h *= mix;
+    return h; } } }

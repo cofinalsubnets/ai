@@ -78,7 +78,7 @@ b/h/$n: h/main.c b/h/lib$n.a b/boot.h b/repl.h
 	@mkdir -p $(dir $@)
 	@$(cc) -o $@ h/main.c b/h/lib$n.a -lm
 
-b/h/lcat: h/lcat.c b/h/$x/$x.o
+b/h/lcat: h/lcat.c $(h_o)
 	@echo CC $@
 	@$(cc) -o $@ $^
 
