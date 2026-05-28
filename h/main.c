@@ -92,6 +92,12 @@ struct g_io g_stdin = { g_vm_port_io, g_putnum(STDIN_FILENO), g_putnum(EOF), g_p
 
 struct g_port_vt const g_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, _putc, _flush };
 
+// Override the weak g.c default with the real POSIX close. Called by the
+// finalizer that g_io_alloc registers, so it runs when a heap port becomes
+// unreachable. Static stdin/stdout don't go through this path -- they live
+// outside the gwen heap and the GC never visits them.
+void g_fd_close(int fd) { close(fd); }
+
 static union u const
  bif_exit[] = {{g_vm_exit}, {g_vm_ret0}};
 

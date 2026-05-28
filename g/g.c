@@ -1043,6 +1043,35 @@ static struct g *to_harvest(struct g *f, struct to *o) {
  memcpy(txt(f->sp[0]), txt(o->buf), getnum(o->i));
  return f; }
 
+// Finalizer for heap stream ports: extract the fd and ask the frontend to
+// close it. Runs inside GC (run_finalizers); fz->p still points at the
+// from-space port so its fields are readable.
+static void io_close(void *p) {
+ struct g_io *io = p;
+ g_fd_close(getnum(io->fd)); }
+
+// Heap-allocate a stream port for the given OS fd. Pushes the port pointer
+// on Sp[0] and registers io_close as its finalizer. The fd >= 0 path of
+// the dispatcher routes through g_fd_port_vt, so the host's read/write
+// methods see this port like any other.
+struct g *g_io_alloc(struct g *f, int fd) {
+ uintptr_t n = Width(struct g_io);
+ if (!g_ok(f = have(f, n + Width(struct g_tag) + 1))) return f;
+ union u *k = bump(f, n + Width(struct g_tag));
+ struct g_io *io = (struct g_io*) k;
+ io->ap = g_vm_port_io;
+ io->fd = putnum(fd);
+ io->ungetc_buf = putnum(EOF);
+ io->eof_seen = putnum(false);
+ struct g_tag *t = (struct g_tag*) (k + n);
+ t->null = NULL;
+ t->head = k;
+ *--f->sp = (word) io;            // stack slot reserved by the +1 in have()
+ // g_finalize MM-protects its `p` argument internally across its own
+ // allocation, and the stack slot we just pushed will be forwarded by GC
+ // if a collection happens, so Sp[0] holds the live port on return.
+ return g_finalize(f, (union u*) f->sp[0], io_close); }
+
 
 static g_vm(g_vm_gensym) {
  Have(Width(struct g_atom));
@@ -2001,6 +2030,10 @@ __attribute__((weak)) void g_sleep(uintptr_t ticks) {
 __attribute__((weak)) bool g_ready(int fd) { (void) fd; return true; }
 __attribute__((weak)) void g_wait_fds(int const *fds, int n, uintptr_t ticks) {
   (void) fds; (void) n; g_sleep(ticks); }
+
+// Default fd close is a no-op. The host overrides with close(2); kernel
+// and pd don't have real OS fds to release, so the no-op is correct.
+__attribute__((weak)) void g_fd_close(int fd) { (void) fd; }
 
 extern g_inline struct g *g_pop(struct g*f, uintptr_t n) { return g_core_of(f)->sp += n, f; }
 static g_inline struct g *symof(char const *n, struct g *f) { return intern(g_strof(f, n)); }

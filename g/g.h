@@ -145,6 +145,19 @@ g_vm_t g_vm_ret0, g_vm_cur, g_vm_port_io;
 // shared synth table inside g.c instead.
 extern struct g_port_vt const g_fd_port_vt;
 
+// Frontend hook to close an OS file descriptor backing a heap port. Weak
+// default in g.c is a no-op so kernel/pd/lcat link without having to care;
+// the host overrides with close(2). Called by the finalizer that g_io_alloc
+// installs, so it runs when a heap port becomes unreachable.
+void g_fd_close(int fd);
+
+// Heap-allocate a port for the given OS fd. Bumps Width(struct g_io) +
+// ttag, fills ap/fd/ungetc_buf/eof_seen, pushes the port pointer on Sp[0],
+// and registers a finalizer that calls g_fd_close(fd) when the port is
+// collected. fd is stored as a plain integer at the C layer and tagged on
+// the way in.
+struct g *g_io_alloc(struct g *f, int fd);
+
 uintptr_t g_clock(void); // used by garbage collector
 void g_sleep(uintptr_t ticks); // per-frontend deep wait for at most `ticks`
 // g_clock() units (ticks=0 means infinite). No input wakeup; the scheduler
