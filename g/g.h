@@ -49,6 +49,19 @@
 
 // ok thanks
 typedef intptr_t g_word;
+
+// gwen's runtime float width. 64-bit hosts get double; 32-bit ports
+// (Playdate, pico, esp32, wasm32) get float so they can use their
+// hardware single-precision FPU instead of soft-emulated doubles.
+// G_VT_FLO is the matching enum g_vec_type entry the boxed-flo
+// allocator stamps in.
+#if UINTPTR_MAX > 0xffffffffu
+typedef double g_flo_t;
+#define G_VT_FLO g_vt_f64
+#else
+typedef float g_flo_t;
+#define G_VT_FLO g_vt_f32
+#endif
 union u;
 typedef g_vm(g_vm_t);
 typedef void *g_malloc_t(struct g*, size_t);
@@ -189,11 +202,11 @@ bool g_ready(int fd);
 
 // Math hooks. Weak defaults in g.c trap (loud-fail on kernel until
 // internal impls land). Host and pd override with libm. Same per-
-// frontend pattern as g_clock / g_sleep.
-double g_sin(double), g_cos(double), g_tan(double),
-       g_atan(double), g_atan2(double, double),
-       g_sqrt(double), g_exp(double), g_log(double),
-       g_pow(double, double);
+// frontend pattern as g_clock / g_sleep. Width follows g_flo_t.
+g_flo_t g_sin(g_flo_t), g_cos(g_flo_t), g_tan(g_flo_t),
+        g_atan(g_flo_t), g_atan2(g_flo_t, g_flo_t),
+        g_sqrt(g_flo_t), g_exp(g_flo_t), g_log(g_flo_t),
+        g_pow(g_flo_t, g_flo_t);
 
 struct g
  *gputc(struct g*, int),

@@ -100,9 +100,9 @@ static g_vm_t g_vm_kcall,
 static uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 static struct g_str *ini_str(struct g_str*, uintptr_t);
 static struct g *str0(struct g*, uintptr_t);
-static struct g *flo_alloc(struct g*, double);
+static struct g *flo_alloc(struct g*, g_flo_t);
 static double g_strtod(char const*, char**);
-static int g_dtoa(double, char*, int);
+static int g_dtoa(double, char*, int, int max_frac);
 static word g_tget(struct g*, word, word, struct g_tab*);
 static struct g_atom *intern_checked(struct g*, struct g_str*);
 static g_inline struct g_tag { union u *null, *head, end[]; } *ttag(union u *k) {
@@ -138,7 +138,7 @@ static g_inline bool symp(word _) { return homp(_) && typ(_) == sym_q; }
 static g_inline bool vecp(word _) { return homp(_) && typ(_) == vec_q; }
 static g_inline bool strp(word _) { return homp(_) && typ(_) == text_q; }
 static g_inline bool flop(word _) {
-  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == g_vt_f64; }
+  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == G_VT_FLO; }
 static g_inline bool numericp(word _) { return nump(_) || vecp(_); }
 // public predicate for frontends that need to check string args
 bool g_strp(g_word x) { return strp(x); }
@@ -933,15 +933,15 @@ static g_vm(g_vm_flo) {
  if (!strp(x)) { Sp[0] = nil; Ip += 1; return Continue(); }
  struct g_strtod_r p = parse_flo_strict(str(x)->bytes, str(x)->len);
  if (!p.ok) { Sp[0] = nil; Ip += 1; return Continue(); }
- uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  Have(req);
  struct g_vec *r = (struct g_vec*) Hp;
  Hp += req;
  r->ap = g_vm_data;
  r->typ = vec_q;
- r->type = g_vt_f64;
+ r->type = G_VT_FLO;
  r->rank = 0;
- *(double*) r->shape = p.d;
+ *(g_flo_t*) r->shape = (g_flo_t) p.d;
  Sp[0] = word(r);
  Ip += 1;
  return Continue(); }
@@ -1007,17 +1007,17 @@ static struct g *str0(struct g *f, uintptr_t len) {
   *--f->sp = word(s); }
  return f; }
 
-// Allocate a rank-0 g_vt_f64 g_vec wrapping v, push on Sp.
-static struct g *flo_alloc(struct g *f, double v) {
- uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));
+// Allocate a rank-0 G_VT_FLO g_vec wrapping v, push on Sp.
+static struct g *flo_alloc(struct g *f, g_flo_t v) {
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  f = have(f, req + 1);
  if (g_ok(f)) {
   struct g_vec *r = bump(f, req);
   r->ap = g_vm_data;
   r->typ = vec_q;
-  r->type = g_vt_f64;
+  r->type = G_VT_FLO;
   r->rank = 0;
-  *(double*) vec_data(r) = v;
+  *(g_flo_t*) vec_data(r) = v;
   *--f->sp = word(r); }
  return f; }
 
@@ -1057,7 +1057,7 @@ static double g_strtod(char const *s, char **end) {
 // byte count written. Strategy: sign, integer part via integer math,
 // then up to 15 fractional digits with trailing zeros trimmed; for very
 // large or very small magnitudes, normalize to [1,10) and append eE.
-static int g_dtoa(double v, char *buf, int cap) {
+static int g_dtoa(double v, char *buf, int cap, int max_frac) {
  char *p = buf, *end = buf + cap;
  if (v != v) { if (end - p >= 3) memcpy(p, "nan", 3), p += 3; return p - buf; }
  if (v < 0) { if (p < end) *p++ = '-'; v = -v; }
@@ -1080,7 +1080,8 @@ static int g_dtoa(double v, char *buf, int cap) {
  bool emit_frac = frac > 0 || !sci;
  if (emit_frac) {
   char fb[16]; int fb_n = 0;
-  for (int i = 0; i < 15 && frac > 0; i++) {
+  if (max_frac > 15) max_frac = 15;
+  for (int i = 0; i < max_frac && frac > 0; i++) {
    frac *= 10;
    int d = (int) frac;
    if (d > 9) d = 9;
@@ -1539,9 +1540,11 @@ out: return UM(f), f; }
 
 static g_inline struct g*gzput_vec(struct g*f, word x) {
  MM(f, &x);
- if (vec(x)->rank == 0 && vec(x)->type == g_vt_f64) {
+ if (vec(x)->rank == 0 && vec(x)->type == G_VT_FLO) {
   char buf[32];
-  int n = g_dtoa(*(double*) vec_data(x), buf, (int) sizeof buf);
+  // 7 sig digits is enough for round-trip on f32; 15 for f64.
+  int max_frac = sizeof(g_flo_t) == 4 ? 7 : 15;
+  int n = g_dtoa((double) *(g_flo_t*) vec_data(x), buf, (int) sizeof buf, max_frac);
   for (int i = 0; g_ok(f) && i < n; i++) f = gzputc(f, buf[i]);
   return UM(f), f; }
  uintptr_t type = vec(x)->type, rank = vec(x)->rank;
@@ -1721,16 +1724,16 @@ opf(g_vm_bsl, <<)
 // Truncation toward zero. Magnitudes above 2^63 are already
 // integer-valued in double precision, so we leave them alone instead of
 // risking an int64 overflow on the round-trip. NaN passes through.
-static g_inline double g_trunc(double x) {
+static g_inline g_flo_t g_trunc(g_flo_t x) {
  if (x != x) return x;
- double m = x < 0 ? -x : x;
- if (m > 9.22e18) return x;
- return (double)(int64_t) x; }
+ g_flo_t m = x < 0 ? -x : x;
+ if (m > (g_flo_t) 9.22e18) return x;
+ return (g_flo_t)(int64_t) x; }
 
 // Float remainder via truncated quotient. Matches libm's fmod() for
 // the cases we care about. When b == 0, x/b is ±inf or NaN, ±inf*0 is
 // NaN, so the result is NaN — same as libm.
-static g_inline double g_fmod(double a, double b) {
+static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
  return a - g_trunc(a / b) * b; }
 
 // Generic arithmetic dispatcher. Both fixnums + no overflow → fixnum
@@ -1740,7 +1743,7 @@ static g_inline double g_fmod(double a, double b) {
 // g_noinline + by-value struct return keeps the &t overflow-out-param
 // off the g_vm caller's frame, preserving TCO.
 enum arith_op { AOP_ADD, AOP_SUB, AOP_MUL, AOP_QUOT, AOP_REM };
-struct arith_r { word v; double d; bool isflo; bool isnil; };
+struct arith_r { word v; g_flo_t d; bool isflo; bool isnil; };
 
 static g_noinline struct arith_r do_arith(word a, word b, enum arith_op op) {
  struct arith_r r = { 0, 0, false, false };
@@ -1768,9 +1771,9 @@ static g_noinline struct arith_r do_arith(word a, word b, enum arith_op op) {
  // Float path: require both operands numeric.
  if (!(nump(a) || flop(a)) || !(nump(b) || flop(b))) {
   r.isnil = true; return r; }
- double ad = nump(a) ? (double) getnum(a) : *(double*) vec_data(a);
- double bd = nump(b) ? (double) getnum(b) : *(double*) vec_data(b);
- double rd = 0;
+ g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : *(g_flo_t*) vec_data(a);
+ g_flo_t bd = nump(b) ? (g_flo_t) getnum(b) : *(g_flo_t*) vec_data(b);
+ g_flo_t rd = 0;
  switch (op) {
   case AOP_ADD: rd = ad + bd; break;
   case AOP_SUB: rd = ad - bd; break;
@@ -1785,15 +1788,15 @@ static g_noinline struct arith_r do_arith(word a, word b, enum arith_op op) {
  struct arith_r r = do_arith(Sp[0], Sp[1], op_tag);                        \
  if (r.isnil)  { Sp[1] = nil;  Sp += 1; Ip++; return Continue(); }         \
  if (!r.isflo) { Sp[1] = r.v;  Sp += 1; Ip++; return Continue(); }         \
- uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));               \
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));              \
  Have(req);                                                                \
  struct g_vec *v = (struct g_vec*) Hp;                                     \
  Hp += req;                                                                \
  v->ap = g_vm_data;                                                        \
  v->typ = vec_q;                                                           \
- v->type = g_vt_f64;                                                       \
+ v->type = G_VT_FLO;                                                       \
  v->rank = 0;                                                              \
- *(double*) v->shape = r.d;                                                \
+ *(g_flo_t*) v->shape = r.d;                                               \
  Sp[1] = word(v);                                                          \
  Sp += 1; Ip++; return Continue(); }
 
@@ -1811,8 +1814,8 @@ ARITH_OP(g_vm_rem,  AOP_REM)
  word x;                                                                   \
  if (nump(a) && nump(b)) x = (a c_op b) ? putnum(-1) : nil;                \
  else if ((nump(a) || flop(a)) && (nump(b) || flop(b))) {                  \
-  double ad = nump(a) ? (double) getnum(a) : *(double*) vec_data(a);       \
-  double bd = nump(b) ? (double) getnum(b) : *(double*) vec_data(b);       \
+  g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : *(g_flo_t*) vec_data(a);    \
+  g_flo_t bd = nump(b) ? (g_flo_t) getnum(b) : *(g_flo_t*) vec_data(b);    \
   x = (ad c_op bd) ? putnum(-1) : nil;                                     \
  } else x = nil;                                                           \
  Sp[1] = x; Sp += 1; Ip++; return Continue(); }
@@ -1831,8 +1834,8 @@ static g_vm(g_vm_eq) {
  bool eq;
  if (nump(a) && nump(b)) eq = a == b;
  else if ((nump(a) || flop(a)) && (nump(b) || flop(b))) {
-  double ad = nump(a) ? (double) getnum(a) : *(double*) vec_data(a);
-  double bd = nump(b) ? (double) getnum(b) : *(double*) vec_data(b);
+  g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : *(g_flo_t*) vec_data(a);
+  g_flo_t bd = nump(b) ? (g_flo_t) getnum(b) : *(g_flo_t*) vec_data(b);
   eq = ad == bd;
  } else eq = eql(f, a, b);
  Sp[1] = eq ? putnum(-1) : nil;
@@ -1849,17 +1852,17 @@ op11(g_vm_nilp, nilp(Sp[0]) ? putnum(-1) : nil)
 #define MATH1_OP(nom, fn) g_vm(nom) {                                      \
  word a = Sp[0];                                                           \
  if (!nump(a) && !flop(a)) { Sp[0] = nil; Ip++; return Continue(); }       \
- double ad = nump(a) ? (double) getnum(a) : *(double*) vec_data(a);        \
- double rd = fn(ad);                                                       \
- uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));               \
+ g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : *(g_flo_t*) vec_data(a);     \
+ g_flo_t rd = fn(ad);                                                      \
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));              \
  Have(req);                                                                \
  struct g_vec *v = (struct g_vec*) Hp;                                     \
  Hp += req;                                                                \
  v->ap = g_vm_data;                                                        \
  v->typ = vec_q;                                                           \
- v->type = g_vt_f64;                                                       \
+ v->type = G_VT_FLO;                                                       \
  v->rank = 0;                                                              \
- *(double*) v->shape = rd;                                                 \
+ *(g_flo_t*) v->shape = rd;                                                \
  Sp[0] = word(v);                                                          \
  Ip++; return Continue(); }
 
@@ -1867,18 +1870,18 @@ op11(g_vm_nilp, nilp(Sp[0]) ? putnum(-1) : nil)
  word a = Sp[0], b = Sp[1];                                                \
  if ((!nump(a) && !flop(a)) || (!nump(b) && !flop(b)))                     \
   { Sp[1] = nil; Sp += 1; Ip++; return Continue(); }                       \
- double ad = nump(a) ? (double) getnum(a) : *(double*) vec_data(a);        \
- double bd = nump(b) ? (double) getnum(b) : *(double*) vec_data(b);        \
- double rd = fn(ad, bd);                                                   \
- uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(double));               \
+ g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : *(g_flo_t*) vec_data(a);     \
+ g_flo_t bd = nump(b) ? (g_flo_t) getnum(b) : *(g_flo_t*) vec_data(b);     \
+ g_flo_t rd = fn(ad, bd);                                                  \
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));              \
  Have(req);                                                                \
  struct g_vec *v = (struct g_vec*) Hp;                                     \
  Hp += req;                                                                \
  v->ap = g_vm_data;                                                        \
  v->typ = vec_q;                                                           \
- v->type = g_vt_f64;                                                       \
+ v->type = G_VT_FLO;                                                       \
  v->rank = 0;                                                              \
- *(double*) v->shape = rd;                                                 \
+ *(g_flo_t*) v->shape = rd;                                                \
  Sp[1] = word(v);                                                          \
  Sp += 1; Ip++; return Continue(); }
 
@@ -2385,9 +2388,9 @@ __attribute__((weak)) void g_fd_close(int fd) { (void) fd; }
 // Math hooks. Weak defaults trap so calls on a frontend without an
 // override fail loudly (kernel/pico/esp until internal impls land).
 // Host and pd override via libm.
-#define WEAK_TRAP1(nom) __attribute__((weak)) double nom(double x) \
+#define WEAK_TRAP1(nom) __attribute__((weak)) g_flo_t nom(g_flo_t x) \
   { (void) x; __builtin_trap(); }
-#define WEAK_TRAP2(nom) __attribute__((weak)) double nom(double x, double y) \
+#define WEAK_TRAP2(nom) __attribute__((weak)) g_flo_t nom(g_flo_t x, g_flo_t y) \
   { (void) x; (void) y; __builtin_trap(); }
 WEAK_TRAP1(g_sin)  WEAK_TRAP1(g_cos)  WEAK_TRAP1(g_tan)
 WEAK_TRAP1(g_atan) WEAK_TRAP1(g_sqrt) WEAK_TRAP1(g_exp)
