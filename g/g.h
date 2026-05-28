@@ -53,6 +53,22 @@ union u;
 typedef g_vm(g_vm_t);
 typedef void *g_malloc_t(struct g*, size_t);
 typedef void g_free_t(struct g*, void*);
+
+// Byte string. Interned, immutable. Bytes are not nul-terminated; length
+// is the byte count.
+struct g_str {
+ g_vm_t *ap;
+ uintptr_t typ;       // text_q
+ uintptr_t len;       // byte count
+ char bytes[]; };
+
+// Typed N-dim array. Rank 0 = scalar (no shape words); payload at
+// (void*)(shape + rank). Immutable.
+struct g_vec {
+ g_vm_t *ap;
+ uintptr_t typ;       // vec_q
+ uintptr_t type, rank, shape[]; };
+
 struct g {
  union u {
   g_vm_t *ap;
@@ -68,9 +84,7 @@ struct g {
   g_vm_t *ap;
   g_word typ;
   uintptr_t code;
-  struct g_vec {
-   g_vm_t *ap;
-   uintptr_t typ, type, rank, shape[]; } *nom;
+  struct g_str *nom;
   struct g_atom *l, *r; } *symbols;
  uintptr_t len;
  struct g *pool;
@@ -179,10 +193,9 @@ struct g
  *gputn(struct g*, intptr_t, uint8_t),
  *gputs(struct g*, char const*);
 
-// Public predicate: is x a gwen string? True iff x is a heap g_vec with
-// char element type and rank 1. Frontends use this to type-check bif args.
-// String bytes live at `((char*)(((struct g_vec*)x)->shape + 1))` and the
-// byte length is `((struct g_vec*)x)->shape[0]`.
+// Public predicate: is x a gwen string? True iff x is a heap struct g_str.
+// Frontends use this to type-check bif args. Bytes live at
+// `((struct g_str*)x)->bytes` and the byte length is `((struct g_str*)x)->len`.
 bool g_strp(g_word);
 
 struct g

@@ -109,15 +109,15 @@ void g_fd_close(int fd) { close(fd); }
 // Errors (path too long, unknown mode, open(2) failure) all return nil.
 static g_vm(g_vm_open) {
   if (!g_strp(Sp[0]) || !g_strp(Sp[1])) goto fail;
-  struct g_vec *pv = (struct g_vec*) Sp[0];
-  struct g_vec *mv = (struct g_vec*) Sp[1];
-  uintptr_t plen = pv->shape[0];
+  struct g_str *pv = (struct g_str*) Sp[0];
+  struct g_str *mv = (struct g_str*) Sp[1];
+  uintptr_t plen = pv->len;
   char path[4096];
-  if (plen >= sizeof path || mv->shape[0] == 0) goto fail;
-  memcpy(path, (char*)(pv->shape + 1), plen);
+  if (plen >= sizeof path || mv->len == 0) goto fail;
+  memcpy(path, pv->bytes, plen);
   path[plen] = 0;
   int flags;
-  switch (((char*)(mv->shape + 1))[0]) {
+  switch (mv->bytes[0]) {
     case 'r': flags = O_RDONLY; break;
     case 'w': flags = O_WRONLY | O_CREAT | O_TRUNC; break;
     case 'a': flags = O_WRONLY | O_CREAT | O_APPEND; break;
