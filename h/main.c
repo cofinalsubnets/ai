@@ -131,7 +131,7 @@ static g_vm(g_vm_open) {
   if (fd < 0) goto fail;
   Pack(f);
   struct g *r = g_io_alloc(f, fd);
-  if (!g_ok(r)) { close(fd); return r; }
+  if (!g_ok(r)) { close(fd); goto fail; }
   f = r;
   Unpack(f);
   // stack: [port, path, mode, ...] -> [port, ...]
