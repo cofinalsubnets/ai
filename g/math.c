@@ -63,12 +63,8 @@ static g_noinline g_vm(g_vm_arith, enum arith_op op_tag) {
  if (!r.isflo) return *++Sp = r.v, Ip++, Continue();
  uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  Have(req);
- struct g_vec *v = (struct g_vec*) Hp;
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
  Hp += req;
- v->ap = g_vm_data;
- v->typ = vec_q;
- v->type = G_VT_FLO;
- v->rank = 0;
  flo_put(v->shape, r.d);
  Sp[1] = word(v);
  return Sp++, Ip++, Continue(); }

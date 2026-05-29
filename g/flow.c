@@ -48,10 +48,7 @@ g_vm(g_vm_tapn) {
 // return
 g_vm(g_vm_ret) {
  word n = getnum(Ip[1].x) + 1;
- Ip = cell(Sp[n]);
- Sp[n] = Sp[0];
- Sp += n;
- return Continue(); }
+ return Ip = cell(Sp[n]), Sp[n] = Sp[0], Sp += n, Continue(); }
 
 g_vm(g_vm_ret0) { return
  Ip = cell(Sp[1]),
@@ -195,10 +192,7 @@ g_vm(g_vm_spawn) {
  N[6].x = fn;
  N[7].m = NULL;
  N[8].m = f->tasks->m = N;
-// f->yield_ctr = 0;
- Sp += 1;
- Ip += 1;
- return Continue(); }
+ return Sp++, Ip++, Continue(); }
 
 g_vm(g_vm_wait) {
  word pid_arg = Sp[0], ret = nil;
@@ -214,9 +208,7 @@ g_vm(g_vm_wait) {
    break; }
    // still running: yield without advancing Ip (re-enter wait on resume)
   return Ap(g_vm_yield_sw, f); }
- Sp[0] = ret;
- Ip += 1;
- return Continue(); }
+ return *Sp = ret, Ip++, Continue(); }
 
 g_vm(g_vm_donep) {
  word pid_arg = Sp[0], result = putnum(-1);
@@ -295,10 +287,6 @@ g_vm(g_vm_data) {
  *Sp = x;
  return Continue(); }
 
-// Single unified port discriminator. Behaviorally identical to g_vm_data
-// (capture self, pop one, return self) but a distinct symbol so the GC's
-// `datp` check routes ports through evac_thd (thread walker) rather than
-// evac_data.
 g_vm(g_vm_port_io) {
  word x = word(Ip);
  Ip = cell(*++Sp);
@@ -314,29 +302,19 @@ g_vm(g_vm_arg) {
  return Continue(); }
 
 g_vm(g_vm_trim) { return
- clip(cell(Sp[0])),
- Ip += 1,
- Continue(); }
+ clip(cell(Sp[0])), Ip++, Continue(); }
 
 g_vm(g_vm_seek) { return
  Sp[1] = word(cell(Sp[1]) + getnum(Sp[0])),
- Sp += 1,
- Ip += 1,
- Continue(); }
+ Sp++, Ip++, Continue(); }
 
 g_vm(g_vm_peek2) { return
  Sp[1] = (cell(Sp[1]) + getnum(Sp[0]))->x,
- Sp += 1,
- Ip += 1,
- Continue(); }
+ Sp++, Ip++, Continue(); }
 
 g_vm(g_vm_poke2) {
  union u *c = cell(Sp[2]) + getnum(Sp[0]);
- c->x = Sp[1];
- Sp[2] = (word) c;
- Sp += 2;
- Ip += 1;
- return Continue(); }
+ return c->x = Sp[1], *(Sp += 2) = word(c), Ip++, Continue(); }
 
 g_vm(g_vm_thda) {
  size_t n = getnum(Sp[0]);
@@ -344,10 +322,8 @@ g_vm(g_vm_thda) {
  union u *k = (union u*) Hp;
  Hp += n + Width(struct g_tag);
  k[n].m = NULL, k[n+1].m = k;
- memset(k, -1, n * sizeof(word));
- Sp[0] = word(k);
- Ip += 1;
- return Continue(); }
+ Sp[0] = word(memset(k, -1, n * sizeof(word)));
+ return Ip++, Continue(); }
 
 g_vm(g_vm_len) {
   word x = Sp[0], l = 0;

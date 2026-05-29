@@ -18,7 +18,7 @@ pd_defs = -DTARGET_PLAYDATE=1 -DTARGET_EXTENSION=1 -Dg_tco=0
 # local pd/*.c stay rooted in cwd, shared g/*.c + f/*.c + libc/*.c carry
 # the $(R)/ prefix, and the SDK helper has an absolute path we map by hand.
 pd_local_c = $(wildcard *.c)
-pd_shared_c = $(g_c) $(f_c) $R/libc/strtod.c
+pd_shared_c = $(g_c) $(f_c) $R/libc/str.c
 pd_sdk_c = $(pd_sdk)/C_API/buildsupport/setup.c
 pd_src = $(pd_local_c) $(pd_shared_c) $(pd_sdk_c)
 
