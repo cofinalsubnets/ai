@@ -106,12 +106,8 @@ static g_noinline g_vm(g_vm_math1, g_flo_t (*fn)(g_flo_t)) {
  g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : flo_get(a), rd = fn(ad);
  uintptr_t req = Width(struct g_vec) + Width(g_flo_t);
  Have(req);
- struct g_vec *v = (struct g_vec*) Hp;
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
  Hp += req;
- v->ap = g_vm_data;
- v->typ = vec_q;
- v->type = G_VT_FLO;
- v->rank = 0;
  flo_put(v->shape, rd);
  return Sp[0] = word(v), Ip++, Continue(); }
 
@@ -124,12 +120,8 @@ static g_noinline g_vm(g_vm_math2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
          rd = fn(ad, bd);
  uintptr_t req = Width(struct g_vec) + Width(g_flo_t);
  Have(req);
- struct g_vec *v = (struct g_vec*) Hp;
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
  Hp += req;
- v->ap = g_vm_data;
- v->typ = vec_q;
- v->type = G_VT_FLO;
- v->rank = 0;
  flo_put(v->shape, rd);
  return *++Sp = word(v), Ip++, Continue(); }
 

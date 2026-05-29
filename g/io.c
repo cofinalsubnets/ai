@@ -2,7 +2,7 @@
 
 static struct g *ggetc(struct g*f)  { return g_core_of(f)->io = &g_stdin, port_vt(g_stdin.fd)->getc(f); }
 static struct g *gflush(struct g*f) { return g_core_of(f)->io = &g_stdout, port_vt(g_stdout.fd)->flush(f); }
-static int g_dtoa(double, char*, int, int max_frac);
+static int g_dtoa(g_flo_t, char*, int, int max_frac);
 static struct g *gfputx(struct g *f, struct g_io *o, intptr_t x);
 
 static struct g *noop_getc(struct g *f) {

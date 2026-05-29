@@ -1,5 +1,4 @@
 #include "i.h"
-static double g_strtod(char const*, char**);
 static struct g *flo_alloc(struct g*, g_flo_t);
 
 ////
@@ -102,7 +101,7 @@ out_str: UM(f); goto out; } }
        if (*e == 0) f->sp[0] = putnum(j);
        else {
         char *fe;
-        double d = g_strtod(txt(b), &fe);
+        double d = strtod(txt(b), &fe);
         if (fe != txt(b) && *fe == 0) {
          f = flo_alloc(f, d);                  // pushes box; collapse scratch slot
          if (g_ok(f)) f->sp[1] = f->sp[0], f->sp++;
@@ -171,7 +170,7 @@ static g_noinline struct g_strtod_r parse_flo_strict(char const *bytes, size_t l
  memcpy(buf, bytes, len);
  buf[len] = 0;
  char *e;
- r.d = g_strtod(buf, &e);
+ r.d = strtod(buf, &e);
  r.ok = e != buf && *e == 0;
  return r; }
 
@@ -186,59 +185,19 @@ g_vm(g_vm_flo) {
  if (!p.ok) { Sp[0] = nil; Ip += 1; return Continue(); }
  uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  Have(req);
- struct g_vec *r = (struct g_vec*) Hp;
+ struct g_vec *r = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
  Hp += req;
- r->ap = g_vm_data;
- r->typ = vec_q;
- r->type = G_VT_FLO;
- r->rank = 0;
  flo_put(r->shape, (g_flo_t) p.d);
  Sp[0] = word(r);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
-// Decimal float parser: [-+]? digits ('.' digits)? ([eE] [-+]? digits)?.
-// Adequate for round-trip of literals the printer emits; not IEEE
-// round-to-nearest correct. Returns 0 with *end == s when nothing was
-// consumed.
-static double g_strtod(char const *s, char **end) {
- char const *p = s;
- int sign = 1;
- if (*p == '-') sign = -1, p++;
- else if (*p == '+') p++;
- bool any = false;
- double v = 0;
- while ('0' <= *p && *p <= '9') v = v * 10 + (*p++ - '0'), any = true;
- if (*p == '.') {
-  p++;
-  double scale = 0.1;
-  while ('0' <= *p && *p <= '9') v += (*p++ - '0') * scale, scale *= 0.1, any = true; }
- if (!any) { if (end) *end = (char*) s; return 0; }
- if (*p == 'e' || *p == 'E') {
-  char const *q = p++;
-  int esign = 1;
-  if (*p == '-') esign = -1, p++;
-  else if (*p == '+') p++;
-  if (!('0' <= *p && *p <= '9')) p = q;                  // not a real exponent
-  else {
-   int e = 0;
-   while ('0' <= *p && *p <= '9') e = e * 10 + (*p++ - '0');
-   double scale = 1;
-   while (e--) scale *= 10;
-   v = esign > 0 ? v * scale : v / scale; } }
- if (end) *end = (char*) p;
- return sign * v; }
 
 // Allocate a rank-0 G_VT_FLO g_vec wrapping v, push on Sp.
 static struct g *flo_alloc(struct g *f, g_flo_t v) {
  uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  f = have(f, req + 1);
  if (g_ok(f)) {
-  struct g_vec *r = bump(f, req);
-  r->ap = g_vm_data;
-  r->typ = vec_q;
-  r->type = G_VT_FLO;
-  r->rank = 0;
-  flo_put(vec_data(r), v);
+  struct g_vec *r = ini_scalar(bump(f, req), G_VT_FLO);
+  flo_put(r->shape, v);
   *--f->sp = word(r); }
  return f; }

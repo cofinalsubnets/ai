@@ -107,9 +107,6 @@ uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 #define vec(_) ((struct g_vec*)(_))
 #define str(_) ((struct g_str*)(_))
 #define tbl(_) ((struct g_tab*)(_))
-// payload of a g_vec, type-erased. For rank 0 this is just past the
-// header; for rank N it's past the N shape words.
-#define vec_data(_) ((void*)(vec(_)->shape + vec(_)->rank))
 #define nump oddp
 #define homp evenp
 #define two(_) ((struct g_pair*)(_))
@@ -131,36 +128,50 @@ void *malloc(size_t), free(void*),
  *memset(void*, int, size_t);
 long strtol(char const*restrict, char**restrict, int);
 size_t strlen(char const*);
+double strtod(char const *restrict, char **restrict);
 
 // Boxed scalar float access. The payload lands in `shape[]` (which is
 // typed uintptr_t), so a direct `*(g_flo_t*)` cast trips strict-aliasing.
 // memcpy of a fixed small size compiles to a single load/store.
 static g_inline g_flo_t flo_get(word x) {
- g_flo_t r; memcpy(&r, vec_data(x), sizeof r); return r; }
+ g_flo_t r; memcpy(&r, vec(x)->shape, sizeof r); return r; }
 static g_inline void flo_put(void *p, g_flo_t v) {
  memcpy(p, &v, sizeof v); }
 
 // equality comparisons inline the fast identity check
 g_noinline bool eqv(struct g*, word, word); // this is for checking equality of non-identical values
 static g_inline bool eql(struct g *f, word a, word b) { return a == b || eqv(f, a, b); }
+
 static g_inline struct g_tag { union u *null, *head, end[]; } *ttag(union u *k) {
  while (k->x) k++;
  return (struct g_tag*) k; }
+
 static g_inline union u *clip(union u *k) { return ttag(k)->head = k; }
+
 static g_inline struct g *encode(struct g*f, enum g_status s) { return
   (struct g*) ((uintptr_t) f | s); }
+
 static g_inline void *bump(struct g *f, uintptr_t n) {
   if (avail(f) < n) __builtin_trap();
   void *x = f->hp; f->hp += n; return x; }
+
 static g_inline struct g_atom *ini_anon(struct g_atom *y, uintptr_t code) {
  return y->ap = g_vm_data, y->typ = sym_q, y->nom = 0, y->code = code, y; }
+
 static g_inline struct g_atom *ini_sym(struct g_atom *y, struct g_str *nom, uintptr_t code) {
  return y->ap = g_vm_data, y->typ = sym_q, y->nom = nom, y->code = code, y->l = y->r = 0, y; }
+
 struct g_str *ini_str(struct g_str *s, uintptr_t len);
+
+static g_inline struct g_vec *ini_scalar(struct g_vec *v, enum g_vec_type t) {
+ return v->ap = g_vm_data, v->typ = vec_q, v->type = t, v->rank = 0, v; }
+
 static g_inline struct g_tab *ini_tab(struct g_tab *t, size_t len, size_t cap, struct g_kvs**tab) {
  return t->ap = g_vm_data, t->typ = tbl_q, t->len = len, t->cap = cap, t->tab = tab, t; }
+
 static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b) {
  return w->ap = g_vm_data, w->typ = two_q, w->a = a, w->b = b, w; }
+
 static g_inline uintptr_t rot(uintptr_t x) {
   int const s = sizeof(uintptr_t) * 4; // shift bits = word bits / 2 = sizeof(word) * 4
   return (x << s) | (x >> s); }

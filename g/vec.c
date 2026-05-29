@@ -12,4 +12,3 @@ uintptr_t g_vec_bytes(struct g_vec *v) {
            *shape = v->shape;
  while (rank--) len *= *shape++;
  return sizeof(struct g_vec) + v->rank * sizeof(word) + len; }
-
