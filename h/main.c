@@ -121,13 +121,11 @@ void g_fd_close(int fd) { close(fd); }
 //   w = write-only, truncate-or-create
 //   a = write-only, append-or-create
 // Errors (path too long, unknown mode, open(2) failure) all return nil.
-static g_vm(g_vm_open) {
-  if (!g_strp(Sp[0]) || !g_strp(Sp[1])) goto fail;
-  struct g_str *pv = (struct g_str*) Sp[0];
-  struct g_str *mv = (struct g_str*) Sp[1];
+
+static g_noinline int call_open(struct g_str *pv, struct g_str *mv) {
   uintptr_t plen = pv->len;
   char path[4096];
-  if (plen >= sizeof path || mv->len == 0) goto fail;
+  if (plen >= sizeof path || mv->len == 0) return -1;
   memcpy(path, pv->bytes, plen);
   path[plen] = 0;
   int flags;
@@ -135,8 +133,14 @@ static g_vm(g_vm_open) {
     case 'r': flags = O_RDONLY; break;
     case 'w': flags = O_WRONLY | O_CREAT | O_TRUNC; break;
     case 'a': flags = O_WRONLY | O_CREAT | O_APPEND; break;
-    default: goto fail; }
-  int fd = open(path, flags, 0644);
+    default: return -1; }
+  return open(path, flags, 0644); }
+
+static g_vm(g_vm_open) {
+  if (!g_strp(Sp[0]) || !g_strp(Sp[1])) goto fail;
+  struct g_str *pv = (struct g_str*) Sp[0];
+  struct g_str *mv = (struct g_str*) Sp[1];
+  int fd = call_open(pv, mv);
   if (fd < 0) goto fail;
   Pack(f);
   struct g *r = g_io_alloc(f, fd);
