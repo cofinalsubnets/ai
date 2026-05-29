@@ -496,12 +496,9 @@ void kmain(void) {
   // load the prelude, then run the gwen read-eval-print loop. its line
   // editor (in repl.g) drives the console; PS/2 keyboard and serial
   // input both arrive as ANSI escape sequences the gwen edev decodes.
-  struct g *f = g_defs(g_ini(), defs);
-  f = g_evals_(f,
+  g_fin(g_evals_(g_defs(g_ini(), defs),
 #include "boot.h"
-  );
-  f = g_evals_(f,
 #include "repl.h"
-  );
-  g_evals_(f, "(repl 0 0)"); }
+ "(repl 0 0)"
+  )); }
  k_reset(); }

@@ -1,7 +1,6 @@
 #include "i.h"
 
 static struct g*gzputn(struct g *f, intptr_t n, uint8_t b);
-static struct g *gflush(struct g*f) { return g_core_of(f)->io = &g_stdout, port_vt(g_stdout.fd)->flush(f); }
 static int g_dtoa(g_flo_t, char*, int, int max_frac);
 static struct g *gfputx(struct g *f, struct g_io *o, intptr_t x);
 
@@ -71,13 +70,6 @@ struct g_port_vt const synth[] = {
     fields, so ti_ungetc/ti_eof work unchanged here. */
  { ci_getc,   ti_ungetc,   ti_eof,   noop_putc, noop_flush }, };
 
-g_vm(g_vm_putc) {
- f->io = &g_stdout;
- Pack(f);
- if (!g_ok(f = zputc(f, getnum(*Sp)))) return gtrap(f);
- Unpack(f);
- return Ip++, Continue(); }
-
 // (fputc port byte) — write byte to port; return byte.
 g_vm(g_vm_fputc) {
  if (iop(Sp[0])) {
@@ -110,14 +102,6 @@ g_vm(g_vm_fputs) {
   if (!g_ok(f)) return gtrap(f);
   Unpack(f); }
  return Sp++, Ip++, Continue(); }
-
-g_vm(g_vm_puts) {
- if (strp(Sp[0])) {
-  Pack(f);
-  for (uintptr_t i = 0; i < len(f->sp[0]);) f = gputc(f, txt(f->sp[0])[i++]);
-  if (!g_ok(f = gflush(f))) return gtrap(f);
-  Unpack(f); }
- return Ip++, Continue(); }
 
 g_vm(g_vm_fputn) {
  if (iop(Sp[0])) {

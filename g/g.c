@@ -51,7 +51,6 @@ struct g *g_defs(struct g*f, struct g_def const*defs) {
  _(bif_kill, "kill", S1(g_vm_kill)) \
  _(bif_key, "key?", S1(g_vm_key)) \
  _(bif_inspect, "inspect", S1(g_vm_inspect)) \
- _(bif_putc, "putc", S1(g_vm_putc)) _(bif_puts, "puts", S1(g_vm_puts))\
  _(bif_fputn, "fputn", S3(g_vm_fputn))\
  _(bif_fgetc, "fgetc", S1(g_vm_fgetc)) _(bif_fungetc, "fungetc", S2(g_vm_fungetc)) _(bif_feof, "feof", S1(g_vm_feof))\
  _(bif_fputc, "fputc", S2(g_vm_fputc)) _(bif_fputs, "fputs", S2(g_vm_fputs))  _(bif_fflush, "fflush", S1(g_vm_fflush))
