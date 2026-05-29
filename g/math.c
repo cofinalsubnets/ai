@@ -1,7 +1,6 @@
 #include "i.h"
 
-opf(g_vm_bsr, >>)
-opf(g_vm_bsl, <<)
+opf(g_vm_bsl, <<) opf(g_vm_bsr, >>)
 
 // Truncation toward zero. Magnitudes above 2^63 are already
 // integer-valued in double precision, so we leave them alone instead of
@@ -90,10 +89,7 @@ a2(avm2)
   x = (ad c_op bd) ? putnum(-1) : nil; }                      \
  return *++Sp = x, Ip++, Continue(); }
 
-CMP_OP(g_vm_lt, <)
-CMP_OP(g_vm_le, <=)
-CMP_OP(g_vm_gt, >)
-CMP_OP(g_vm_ge, >=)
+CMP_OP(g_vm_lt, <) CMP_OP(g_vm_le, <=) CMP_OP(g_vm_gt, >) CMP_OP(g_vm_ge, >=)
 
 op(g_vm_bnot, 1, ~Sp[0] | 1)
 op(g_vm_band, 2, (Sp[0] & Sp[1]) | 1)

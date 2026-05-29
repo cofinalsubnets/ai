@@ -4,28 +4,7 @@ static struct g *ggetc(struct g*f)  { return g_core_of(f)->io = &g_stdin, port_v
 static struct g *gflush(struct g*f) { return g_core_of(f)->io = &g_stdout, port_vt(g_stdout.fd)->flush(f); }
 static int g_dtoa(double, char*, int, int max_frac);
 static struct g *gfputx(struct g *f, struct g_io *o, intptr_t x);
-// --- port dispatch -------------------------------------------------------
-// fd >= 0 routes through g_fd_port_vt (frontend-provided). fd <= -1 indexes
-// the synthetic table. Per-port method pointers no longer live on the port
-// instance; the vtable is selected by fd value.
-static struct g
- *noop_getc(struct g*),
- *noop_ungetc(struct g*, int),
- *noop_eof(struct g*),
- *noop_putc(struct g*, int),
- *noop_flush(struct g*),
- *ti_getc(struct g*),
- *ti_ungetc(struct g*, int),
- *ti_eof(struct g*),
- *ci_getc(struct g*),
- *to_putc(struct g*, int),
- *to_flush(struct g*);
 
-// No-op methods occupy unused vtable slots so dispatch needs no NULL guards.
-// Misuse policy (matches existing bif behavior): reading from a write-only
-// port returns EOF and latches eof_seen; writing to a read-only port
-// silently discards the byte. ungetc on a write-only port ignores the
-// pushed byte (subsequent reads still return EOF via noop_getc).
 static struct g *noop_getc(struct g *f) {
  g_core_of(f)->io->eof_seen = putnum(true);
  return f->b = EOF, f; }
@@ -52,7 +31,6 @@ static struct g *ti_ungetc(struct g*f, int c) {
  i->io.ungetc_buf = putnum(c);
  i->io.eof_seen = putnum(false);
  return f->b = c, f; }
-
 
 static struct g *ci_getc(struct g *f) {
  struct ci *i = (struct ci*) f->io;
@@ -91,15 +69,13 @@ struct g_port_vt const synth[] = {
  { noop_getc, noop_ungetc, noop_eof, noop_putc, noop_flush },
  /* fd = -4, ci: read-only charlist source -- ungetc/eof read only the g_io
     fields, so ti_ungetc/ti_eof work unchanged here. */
- { ci_getc,   ti_ungetc,   ti_eof,   noop_putc, noop_flush },
-};
+ { ci_getc,   ti_ungetc,   ti_eof,   noop_putc, noop_flush }, };
 
 g_vm(g_vm_putc) {
  Pack(f);
  if (!g_ok(f = gputc(f, getnum(*Sp)))) return f;
  Unpack(f);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // (fputc port byte) — write byte to port; return byte.
 g_vm(g_vm_fputc) {
@@ -109,9 +85,7 @@ g_vm(g_vm_fputc) {
   f->io = o;
   if (!g_ok(f = zputc(f, getnum(f->sp[1])))) return f;
   Unpack(f); }
- Sp += 1;
- Ip += 1;
- return Continue(); }
+ return Sp++, Ip++, Continue(); }
 
 // (fflush port) — flush; return the port.
 g_vm(g_vm_fflush) {
@@ -121,8 +95,7 @@ g_vm(g_vm_fflush) {
   f->io = o;
   if (!g_ok(f = zflush(f))) return f;
   Unpack(f); }
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // (fputs port s) — write every byte of string s through port; return the
 // port. No-op when args are misused (non-port or non-string). Re-reads
@@ -136,9 +109,7 @@ g_vm(g_vm_fputs) {
    f = zputc(f, txt(f->sp[1])[i++]);
   if (!g_ok(f)) return f;
   Unpack(f); }
- Sp += 1;
- Ip += 1;
- return Continue(); }
+ return Sp++, Ip++, Continue(); }
 
 g_vm(g_vm_puts) {
  if (strp(Sp[0])) {
@@ -146,8 +117,7 @@ g_vm(g_vm_puts) {
   for (uintptr_t i = 0; i < len(f->sp[0]);) f = gputc(f, txt(f->sp[0])[i++]);
   if (!g_ok(f = gflush(f))) return f;
   Unpack(f); }
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 g_vm(g_vm_putn) {
  Pack(f);
@@ -155,22 +125,18 @@ g_vm(g_vm_putn) {
  if (!g_ok(f = g_putn(f, &g_stdout, n, b))) return f;
  Unpack(f);
  Sp[1] = Sp[0];
- Sp += 1;
- Ip += 1;
- return Continue(); }
+ return Sp++, Ip++, Continue(); }
 
 g_vm(g_vm_dot) {
  Pack(f);
  if (!g_ok(f = gfputx(f, &g_stdout, f->sp[0]))) return f;
  Unpack(f);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // Heap-allocate a fresh data-sink port. Bumps Width(struct to) + ttag, fills
 // fields, and pushes the port pointer on Sp.
 static struct g *to_alloc(struct g *f) {
- f = str0(f, 32);                          // initial buf on Sp[0]
- if (!g_ok(f)) return f;
+ if (!g_ok(f = str0(f, 32))) return f;
  uintptr_t n = Width(struct to);
  if (!g_ok(f = have(f, n + Width(struct g_tag)))) return f;
  union u *k = bump(f, n + Width(struct g_tag));
@@ -179,12 +145,11 @@ static struct g *to_alloc(struct g *f) {
  o->io.fd = putnum(-2);
  o->io.ungetc_buf = putnum(EOF);
  o->io.eof_seen = putnum(false);
- o->buf = (struct g_str*) f->sp[0];        // adopt the buf
- o->i = putnum(0);
- struct g_tag *t = (struct g_tag*) (k + n);
- t->null = NULL;
- t->head = k;
- f->sp[0] = (word) o;                      // replace buf slot with port
+ o->buf = (struct g_str*) f->sp[0];
+ o->i = nil;
+ k[n].m = NULL;
+ k[n+1].m = k;
+ f->sp[0] = (word) o;
  return f; }
 
 // Harvest the bytes written so far into a fresh exact-sized g_vec on top of
@@ -198,6 +163,9 @@ static struct g *to_harvest(struct g *f, struct to *o) {
  return f; }
 
 static struct g*gzputc(struct g*f, int c) { return g_ok(f) ? port_vt(f->io->fd)->putc(f, c) : f; }
+static struct g*gzputs(struct g*f, char const *s) {
+ while (*s) f = gzputc(f, *s++);
+ return f; }
 
 static struct g*gzputn(struct g *f, intptr_t n, uint8_t b) {
  uintptr_t
@@ -253,7 +221,7 @@ static g_inline struct g*gzput_vec(struct g*f, word x) {
   char buf[32];
   // 7 sig digits is enough for round-trip on f32; 15 for f64.
   int max_frac = sizeof(g_flo_t) == 4 ? 7 : 15;
-  int n = g_dtoa((double) flo_get(x), buf, (int) sizeof buf, max_frac);
+  int n = g_dtoa((g_flo_t) flo_get(x), buf, (int) sizeof buf, max_frac);
   for (int i = 0; g_ok(f) && i < n; i++) f = gzputc(f, buf[i]);
   return UM(f), f; }
  uintptr_t type = vec(x)->type, rank = vec(x)->rank;
@@ -274,9 +242,7 @@ static g_inline struct g*gzput_str(struct g*f, word x) {
   else if (c == '\r') f = gzputc(f, '\\'), c = 'r';
   else if (c == '\0') f = gzputc(f, '\\'), c = '0';
   else if ((unsigned char) c < 32) {           // other ctl bytes -> \xHH
-   f = gzputc(f, '\\');
-   f = gzputc(f, 'x');
-   f = gzputc(f, g_digits[(c >> 4) & 0xf]);
+   f = gzputc(gzputs(f, "\\x"), g_digits[(c >> 4) & 0xf]);
    c = g_digits[c & 0xf]; }
   f = gzputc(f, c); }
  f = gzputc(f, '"');
@@ -333,14 +299,13 @@ g_vm(g_vm_inspect) {
  f->sp[2] = f->sp[0];
  f->sp += 2;
  Unpack(f);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // Decimal float printer. Writes up to cap bytes into buf; returns the
 // byte count written. Strategy: sign, integer part via integer math,
 // then up to 15 fractional digits with trailing zeros trimmed; for very
 // large or very small magnitudes, normalize to [1,10) and append eE.
-static int g_dtoa(double v, char *buf, int cap, int max_frac) {
+static int g_dtoa(g_flo_t v, char *buf, int cap, int max_frac) {
  char *p = buf, *end = buf + cap;
  if (v != v) { if (end - p >= 3) memcpy(p, "nan", 3), p += 3; return p - buf; }
  if (v < 0) { if (p < end) *p++ = '-'; v = -v; }
@@ -352,8 +317,8 @@ static int g_dtoa(double v, char *buf, int cap, int max_frac) {
   while (v >= 10) v /= 10, exp++;
   while (v < 1)  v *= 10, exp--; }
  // integer part, lsb-first then reversed
- uint64_t ip = (uint64_t) v;
- double frac = v - (double) ip;
+ word ip = (word) v;
+ g_flo_t frac = v - (g_flo_t) ip;
  char ib[24]; int ib_n = 0;
  if (ip == 0) ib[ib_n++] = '0';
  while (ip) ib[ib_n++] = '0' + ip % 10, ip /= 10;
@@ -392,23 +357,13 @@ g_vm(g_vm_getc) {
  if (!g_ok(f = ggetc(f))) return f;
  Unpack(f);
  Sp[0] = putnum(f->b);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
-
-// (fread port e) — read one datum from `port`. On success returns the
-// datum. On clean EOF returns `e` (the caller-supplied sentinel). On
-// g_status_more (EOF reached inside an unfinished form) returns the port
-// itself — distinct from `e`, so callers like the REPL editor can tell
-// "this charlist parses to nothing" apart from "this charlist is mid-form,
-// keep editing." `(: read (fread in))` in boot.g recovers the old single-
-// arg `read` for stdin. Misuse (non-port at Sp[0]) leaves `e` in place.
 g_vm(g_vm_fread) {
- if (!iop(Sp[0])) { Sp += 1; Ip += 1; return Continue(); }
+ if (!iop(Sp[0])) return Sp++, Ip++, Continue();
  struct g_io *i = (struct g_io*) Sp[0];
  Pack(f);
- f = g_read(f, i);
- if (g_ok(f)) {
+ if (g_ok(f = g_read(f, i))) {
   // Sp[0]=datum, Sp[1]=port, Sp[2]=e. Want top=datum, consume 2.
   f->sp[2] = f->sp[0];
   f->sp += 2;
@@ -424,8 +379,7 @@ g_vm(g_vm_fread) {
    break;
   default: return f; }                           // propagate other errors
  Unpack(f);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // Heap-allocate a ci port. Expects the charlist on Sp[0]; on return Sp[0]
 // holds the port (the charlist is preserved inside port->head). Same shape
@@ -440,9 +394,8 @@ static struct g *ci_alloc(struct g *f) {
  i->io.ungetc_buf = putnum(EOF);
  i->io.eof_seen = putnum(false);
  i->head = f->sp[0];
- struct g_tag *t = (struct g_tag*) (k + n);
- t->null = NULL;
- t->head = k;
+ k[n].m = NULL;
+ k[n+1].m = k;
  f->sp[0] = (word) i;
  return f; }
 // (strin cl) — make a read-only synth port (fd=-4, ci) whose getc walks
@@ -452,8 +405,7 @@ g_vm(g_vm_strin) {
  Pack(f);
  if (!g_ok(f = ci_alloc(f))) return f;
  Unpack(f);
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 struct g *gputc(struct g*f, int c)  { return g_core_of(f)->io = &g_stdout, port_vt(g_stdout.fd)->putc(f, c); }
 // Default fd-keyed waits. Frontends override; defaults are conservative
@@ -470,6 +422,7 @@ __attribute__((weak)) void g_fd_close(int fd) { (void) fd; }
 struct g*gputs(struct g*f, char const*s) {
  while (*s) f = gputc(f, *s++);
  return f; }
+
 // (feof port) — -1 if at end of stream, nil otherwise.
 g_vm(g_vm_feof) {
  if (iop(Sp[0])) {
@@ -479,8 +432,7 @@ g_vm(g_vm_feof) {
   if (!g_ok(f = zeof(f))) return f;
   Unpack(f);
   Sp[0] = f->b ? putnum(-1) : nil; }
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 
 // (fgetc port) — like (getc _) but on an explicit port. Cooperative wait
@@ -496,8 +448,7 @@ g_vm(g_vm_fgetc) {
    if (!g_ok(f = zgetc(f))) return f;
    Unpack(f);
    Sp[0] = putnum(f->b); }
- Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // (fungetc port byte) — push back one byte, return the byte.
 g_vm(g_vm_fungetc) {
@@ -507,9 +458,7 @@ g_vm(g_vm_fungetc) {
   f->io = i;
   if (!g_ok(f = zungetc(f, getnum(f->sp[1])))) return f;
   Unpack(f); }
- Sp += 1;
- Ip += 1;
- return Continue(); }
+ return Sp++, Ip++, Continue(); }
 
 // Finalizer for heap stream ports: extract the fd and ask the frontend to
 // close it. Runs inside GC (run_finalizers); fz->p still points at the
@@ -534,9 +483,8 @@ struct g *g_io_alloc(struct g *f, int fd) {
  io->fd = putnum(fd);
  io->ungetc_buf = putnum(EOF);
  io->eof_seen = putnum(false);
- struct g_tag *t = (struct g_tag*) (k + n);
- t->null = NULL;
- t->head = k;
+ k[n].m = NULL;
+ k[n+1].m = k;
  *--f->sp = (word) io;            // stack slot reserved by the +1 in have()
  // g_finalize MM-protects its `p` argument internally across its own
  // allocation, and the stack slot we just pushed will be forwarded by GC
