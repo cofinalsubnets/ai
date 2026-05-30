@@ -19,7 +19,7 @@ static struct g* g_z_getc(struct g*f) {
  return f; }
 
 static struct g *grbufn(struct g *f) {
- if (g_ok(f = have(f, str_type_width + 2))) {
+ if (g_ok(f = g_have(f, str_type_width + 2))) {
   union u *k = bump(f, str_type_width + 1);
   *--f->sp = word(k);
   struct g_str *o = (struct g_str*) k;
@@ -27,88 +27,85 @@ static struct g *grbufn(struct g *f) {
  return f; }
 
 static struct g *grbufg(struct g *f) {
- if (!g_ok(f)) return f;
- size_t len = len(f->sp[0]),
-        req = str_type_width + 2 * b2w(len);
- if (g_ok(f = have(f, req))) {
-  struct g_str *o = bump(f, req);
-  ini_str(o, 2 * len);
-  memcpy(txt(o), txt(f->sp[0]), len);
-  f->sp[0] = (word) o; }
+ if (g_ok(f)) {
+  size_t len = len(f->sp[0]),
+         req = str_type_width + 2 * b2w(len);
+  if (g_ok(f = g_have(f, req))) {
+   struct g_str *o = bump(f, req);
+   ini_str(o, 2 * len);
+   memcpy(txt(o), txt(f->sp[0]), len);
+   f->sp[0] = (word) o; } }
  return f; }
 
 static struct g *gzreads(struct g *f, bool nested);
-static struct g *gzread1(struct g*f) {
- if (!g_ok(f = g_z_getc(f))) goto out;
- int c = f->b;
- switch (c) {
-  case '(':  f = gzreads(f, true); goto out;
-  case ')': case EOF:  f = encode(f, g_status_eof); goto out;
-  case '\'':
-   f = gzread1(f);
-   if (g_code_of(f) == g_status_eof)               // quote with no operand
-    f = encode(g_core_of(f), g_status_more);
-   f = gxl(pushq(gxr(push0(f)))); goto out;
-  case '"': {
-   size_t n = 0;
-   struct g_str *b = 0;
-   MM(f, (g_word*) &b);
-   f = grbufn(f);
-   for (size_t lim = sizeof(word); g_ok(f); f = grbufg(f), lim *= 2)
-    for (b = (struct g_str*) f->sp[0]; n < lim; txt(b)[n++] = c) {
-     if (!g_ok(f = zgetc(f))) goto out_str;     // threaded; char in f->b
-     c = f->b;
-     if (c == '\\') {                               // escape: take next char
-      if (!g_ok(f = zgetc(f))) goto out_str;
-      if ((c = f->b) == EOF) { f = encode(f, g_status_more); goto out_str; }
-      if (c == 'n') c = '\n';
-      else if (c == 't') c = '\t';
-      else if (c == 'r') c = '\r';
-      else if (c == '0') c = '\0';
-      else if (c == 'x') {                          // \xHH: two hex digits
-       if (!g_ok(f = zgetc(f))) goto out_str;
-       int h1 = f->b;
-       if (h1 == EOF) { f = encode(f, g_status_more); goto out_str; }
-       if (!g_ok(f = zgetc(f))) goto out_str;
-       int h2 = f->b;
-       if (h2 == EOF) { f = encode(f, g_status_more); goto out_str; }
-       int v1 = h1 <= '9' ? h1 - '0' : (h1 | 0x20) - 'a' + 10;
-       int v2 = h2 <= '9' ? h2 - '0' : (h2 | 0x20) - 'a' + 10;
-       c = ((v1 & 0xf) << 4) | (v2 & 0xf); } }
-     else if (c == EOF) { f = encode(f, g_status_more); goto out_str; }
-     else if (c == '"') { len(b) = n; goto out_str; } }
-out_str: UM(f); goto out; } }
 
- {
-  uintptr_t n = 1, lim = sizeof(intptr_t);
-  struct g_str *b = 0;
-  MM(f, (g_word*) &b);
-  if (g_ok(f = grbufn(f)))
-   for (txt((struct g_str*) f->sp[0])[0] = c; g_ok(f); f = grbufg(f), lim *= 2)
-    for (b = (struct g_str*) f->sp[0]; n < lim; txt(b)[n++] = c) {
-     if (!g_ok(f = zgetc(f))) goto out_atom;
-     switch (c = f->b) {
-      default: continue;
-      case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
-      case '(': case ')': case '"': case '\'': case 0 : case EOF:
-       f = zungetc(f, c);
-       if (!g_ok(f)) goto out_atom;
-       b = (struct g_str*) f->sp[0];
-       len(b) = n;
-       txt(b)[n] = 0; // zero terminate for strtol ; n < lim so this is safe
-       char *e;
-       long j = strtol(txt(b), &e, 0);
-       if (*e == 0) f->sp[0] = putnum(j);
-       else {
-        char *fe;
-        double d = strtod(txt(b), &fe);
-        if (fe != txt(b) && *fe == 0) {
-         f = flo_alloc(f, d);                  // pushes box; collapse scratch slot
-         if (g_ok(f)) f->sp[1] = f->sp[0], f->sp++;
-        } else f = intern(f); }
-       goto out_atom; } }
-out_atom: UM(f); }
-out: return f; }
+static g_inline struct g *gzread1str(struct g*f) {
+ int c;
+ size_t n = 0, lim = sizeof(word);
+ struct g_str *b = 0;
+ MM(f, (g_word*) &b);
+ for (f = grbufn(f); g_ok(f); f = grbufg(f), lim *= 2)
+  for (b = (struct g_str*) f->sp[0]; n < lim; txt(b)[n++] = c) {
+   if (!g_ok(f = zgetc(f))) goto out;     // threaded; char in f->b
+   else if ((c = f->b) == '"') { len(b) = n; goto out; }
+   else if (c == EOF) { f = encode(f, g_status_more); goto out; }
+   else if (c == '\\') {                               // escape: take next char
+    if (!g_ok(f = zgetc(f))) goto out;
+    else if ((c = f->b) == EOF) { f = encode(f, g_status_more); goto out; }
+    else if (c == 'n') c = '\n';
+    else if (c == 't') c = '\t';
+    else if (c == 'r') c = '\r';
+    else if (c == '0') c = '\0';
+    else if (c == 'x') {                          // \xHH: two hex digits
+     if (!g_ok(f = zgetc(f))) goto out;
+     int h1 = f->b;
+     if (h1 == EOF) { f = encode(f, g_status_more); goto out; }
+     if (!g_ok(f = zgetc(f))) goto out;
+     int h2 = f->b;
+     if (h2 == EOF) { f = encode(f, g_status_more); goto out; }
+     int v1 = h1 <= '9' ? h1 - '0' : (h1 | 0x20) - 'a' + 10;
+     int v2 = h2 <= '9' ? h2 - '0' : (h2 | 0x20) - 'a' + 10;
+     c = ((v1 & 0xf) << 4) | (v2 & 0xf); } } }
+out: return UM(f), f; }
+
+static g_inline struct g *gzread1sym(struct g*f, int c) {
+ uintptr_t n = 1, lim = sizeof(intptr_t);
+ struct g_str *b = 0;
+ MM(f, (g_word*) &b);
+ if (g_ok(f = grbufn(f)))
+  for (txt((struct g_str*) f->sp[0])[0] = c; g_ok(f); f = grbufg(f), lim *= 2)
+   for (b = (struct g_str*) f->sp[0]; n < lim; txt(b)[n++] = c) {
+    if (!g_ok(f = zgetc(f))) goto out;
+    switch (c = f->b) {
+     default: continue;
+     case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
+     case '(': case ')': case '"': case '\'': case 0 : case EOF:
+      if (!g_ok(f = zungetc(f, c))) goto out;
+      b = (struct g_str*) f->sp[0];
+      len(b) = n;
+      txt(b)[n] = 0; // zero terminate for strtol ; n < lim so this is safe
+      char *e;
+      long j = strtol(txt(b), &e, 0);
+      if (*e == 0) f->sp[0] = putnum(j);
+      else {
+       double d = strtod(txt(b), &e);
+       if (e == txt(b) || *e != 0) f = intern(f);
+       else if (g_ok(f = flo_alloc(f, d))) f->sp[1] = f->sp[0], f->sp++; }
+      goto out; } }
+out: return UM(f), f; }
+
+static struct g *gzread1(struct g*f) {
+ if (!g_ok(f = g_z_getc(f))) return f;
+ switch (f->b) {
+  case '(':  return gzreads(f, true);
+  case ')': case EOF: return encode(f, g_status_eof);
+  case '\'': return
+   g_code_of(f = gzread1(f)) == g_status_eof ? // quote with no operand
+    encode(g_core_of(f), g_status_more) :
+    gxl(pushq(gxr(push0(f))));
+  case '"': return gzread1str(f);
+  default: return gzread1sym(f, f->b); } }
+
 g_vm(g_vm_str) {
  uintptr_t n = llen(Sp[0]);
  // FIXME use Have instead of Pack/Unpack
@@ -123,41 +120,30 @@ g_vm(g_vm_str) {
  Unpack(f);
  Ip += 1;
  return Continue(); }
+
 struct g *g_read1(struct g*f, struct g_io *i) {
  return g_core_of(f)->io = i, gzread1(f); }
 
 static struct g *gzreads(struct g *f, bool nested) {
  intptr_t n = 0;
  for (int c; g_ok(f = g_z_getc(f)); n++) {
-  c = f->b;
-  if (c == ')') break;                          // list closed
+  if ((c = f->b) == ')') break;                          // list closed
   if (c == EOF) {                               // end of input...
    if (nested) return encode(f, g_status_more); 
    break; }                                     //  ...at top level: done
-  f = zungetc(f, c);
-  f = gzread1(f); }
+  f = gzread1(zungetc(f, c)); }
  for (f = push0(f); n--; f = gxr(f));
  return f; }
 
-struct g *g_reads(struct g *f, struct g_io* i, bool nested) {
- return g_core_of(f)->io = i, gzreads(f, nested); }
+struct g *g_reads(struct g *f, struct g_io* i) {
+ return g_core_of(f)->io = i, gzreads(f, false); }
 
-// Read one datum, transactionally. On g_status_more (or any non-ok
-// result) the VM stack is rolled back to its pre-parse depth, so a
-// deferred parse leaves no residue and the identical input can be
-// re-read once more of it arrives. The depth is kept as a word count,
-// not a pointer, because a collection during the parse relocates the
-// stack. The input source (g_in) is untouched -- the caller manages it.
-struct g *g_read(struct g *f, struct g_io *i) {
- if (!g_ok(f)) return f;
+static struct g *g_read(struct g *f, struct g_io *i) {
  uintptr_t depth = ((word*) f + f->len) - f->sp;
- f = g_read1(f, i);
- if (!g_ok(f)) {
-  struct g *c = g_core_of(f);
+ if (!g_ok(f = g_read1(f, i))) {
+  struct g *c = g_core_of(f); // reset stack on parse fail
   c->sp = (word*) c + c->len - depth; }
  return f; }
-
-
 
 // Strict parse of a gwen-string's bytes as a decimal float. g_noinline +
 // by-value struct return so the &e and &buf escapes stay inside this
@@ -165,13 +151,12 @@ struct g *g_read(struct g *f, struct g_io *i) {
 struct g_strtod_r { double d; bool ok; };
 static g_noinline struct g_strtod_r parse_flo_strict(char const *bytes, size_t len) {
  struct g_strtod_r r = { 0, false };
- char buf[64];
- if (len == 0 || len >= sizeof buf) return r;
- memcpy(buf, bytes, len);
- buf[len] = 0;
- char *e;
- r.d = strtod(buf, &e);
- r.ok = e != buf && *e == 0;
+ char buf[64], *e;
+ if (len != 0 && len < sizeof buf)
+  memcpy(buf, bytes, len),
+  buf[len] = 0,
+  r.d = strtod(buf, &e),
+  r.ok = e != buf && *e == 0;
  return r; }
 
 // (flo s) — parse a gwen string as a decimal float. Returns a rank-0
@@ -180,9 +165,9 @@ static g_noinline struct g_strtod_r parse_flo_strict(char const *bytes, size_t l
 // cascade on float-shaped tokens.
 g_vm(g_vm_flo) {
  word x = Sp[0];
- if (!strp(x)) { Sp[0] = nil; Ip += 1; return Continue(); }
+ if (!strp(x)) return Sp[0] = nil, Ip += 1, Continue();
  struct g_strtod_r p = parse_flo_strict(str(x)->bytes, str(x)->len);
- if (!p.ok) { Sp[0] = nil; Ip += 1; return Continue(); }
+ if (!p.ok) return Sp[0] = nil, Ip += 1, Continue();
  uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  Have(req);
  struct g_vec *r = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
@@ -191,13 +176,29 @@ g_vm(g_vm_flo) {
  Sp[0] = word(r);
  return Ip++, Continue(); }
 
-
 // Allocate a rank-0 G_VT_FLO g_vec wrapping v, push on Sp.
 static struct g *flo_alloc(struct g *f, g_flo_t v) {
  uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
- f = have(f, req + 1);
- if (g_ok(f)) {
+ if (g_ok(f = g_have(f, req + 1))) {
   struct g_vec *r = ini_scalar(bump(f, req), G_VT_FLO);
   flo_put(r->shape, v);
   *--f->sp = word(r); }
  return f; }
+
+g_vm(g_vm_fread) {
+ if (!iop(Sp[0])) return Sp++, Ip++, Continue();
+ struct g_io *i = (struct g_io*) Sp[0];
+ Pack(f);
+ if (g_ok(f = g_read(f, i))) f->sp[2] = f->sp[0], f->sp += 2;
+ else switch (g_code_of(f)) {
+  case g_status_eof:
+   f = g_core_of(f);
+   f->sp++;
+   break;
+  case g_status_more:
+   f = g_core_of(f);
+   f->sp[1] = f->sp[0];
+   f->sp++;
+   break;
+  default: return gtrap(f); }
+ return Unpack(f), Ip++, Continue(); }

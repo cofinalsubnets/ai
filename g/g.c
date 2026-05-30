@@ -63,6 +63,18 @@ static union u yield_c[] = { {_g_vm_yield_c} };
 static struct g_def const def1[] = { bifs(biff) insts(i_entry) {0}};
 static struct g *g_trap_default(struct g *f) { return f; }
 
+static g_inline struct g *mktbls(struct g*f) {
+ uintptr_t const req = 2 * (Width(struct g_tab) + 1);
+ if (g_ok(f = g_have(f, req))) {
+  struct g_tab *t1 = bump(f, req),
+               *t2 = t1 + 1;
+  struct g_kvs **b1 = (struct g_kvs**) (t2 + 1),
+               **b2 = b1 + 1;
+  b1[0] = b2[0] = 0;
+  f->dict = ini_tab(t1, 0, 1, b1);
+  f->macro = ini_tab(t2, 0, 1, b2); }
+ return f; }
+
 struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) {
  uintptr_t const len0 = 1 << 10;
  struct g *f = ma(NULL, 2 * len0 * sizeof(word));
@@ -71,16 +83,14 @@ struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) 
  f->len = len0, f->pool = (void*) f, f->malloc = ma, f->free = fr;
  f->hp = f->end, f->sp = (word*) f + len0, f->ip = yield_c, f->t0 = g_clock();
  f->trap = g_trap_default;
- if (!g_ok(f = mktbl(mktbl(f)))) return f;
- word m = pop1(f), d = pop1(f);
- f->macro = tbl(m), f->dict = tbl(d);
+ f = mktbls(f);
  struct g_def def0[] = {
-  {"globals", d, },
-  {"macros", m, },
-  {"in", (intptr_t) &g_stdin},
-  {"out", (intptr_t) &g_stdout},
+  {"globals", (word) f->dict, },
+  {"macros", (word) f->macro, },
+  {"in", (word) &g_stdin},
+  {"out", (word) &g_stdout},
   {0}, };
- if (g_ok(f = have(g_defs(g_defs(f, def0), def1), 7))) {
+ if (g_ok(f = g_have(g_defs(g_defs(f, def0), def1), 7))) {
   union u *M = bump(f, 7);
   M[0].m = M;
   M[1].x = nil;   // sentinel; replaced on first yield

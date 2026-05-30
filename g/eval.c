@@ -33,7 +33,7 @@ static g_inline struct g *c0_i(struct g *f, struct env **c, g_vm_t *i) {
 static struct g *enscope(struct g *f, struct env *par, word args, word imps) {
  uintptr_t const n = Width(struct env) + Width(struct g_tag);
  f = g_push(f, 3, args, imps, par);
- if (g_ok(f = have(f, n))) {
+ if (g_ok(f = g_have(f, n))) {
   struct env *c = bump(f, n);
   c->stack = c->branches = c->exits = c->lams = c->len = nil;
   c->args = f->sp[0], c->imps = f->sp[1], c->par = (struct env*) f->sp[2];
@@ -76,7 +76,7 @@ static g_noinline struct g *c0(struct g *f, g_vm_t *y) {
 #define Kp (f->ip)
 static Cata(c1) {
  uintptr_t l = getnum((*c)->len);
- f = have(f, l + Width(struct g_tag));
+ f = g_have(f, l + Width(struct g_tag));
  if (g_ok(f)) {
   union u *k = bump(f, l + Width(struct g_tag));
   k[l].m = NULL, k[l+1].m = memset(k, -1, l * sizeof(word));
@@ -152,7 +152,7 @@ static g_vm(_g_vm_yieldk) { return
  encode(f, g_status_yield); }
 
 
-struct g *g_eval(struct g *f) {
+static struct g *g_eval(struct g *f) {
  f = c0(f, _g_vm_yieldk);
 #if g_tco
  if (g_ok(f)) f = f->ip->ap(f, f->ip, f->hp, f->sp);
@@ -339,17 +339,14 @@ static word ldels(struct g *f, word lam, word l);
 
 static g_inline Ana(ana_2, word a, word b) {
  if ((x = g_tget(f, 0, a, g_core_of(f)->macro)))
-  return f = g_push(f, 4, b, nil, nil, x),
-         f = g_eval(gxr(gxl(gxl(pushq(gxl(f)))))),
+  return f = g_eval(gxr(gxl(gxl(pushq(gxl(g_push(f, 4, b, nil, nil, x))))))),
          analyze(f, c, g_ok(f) ? pop1(f) : 0);
  return avec(f, b, f = analyze(f, c, a)),
         ana_ap(f, c, b); }
 
-static g_inline Ana(ana_q) {
-    return c0_ix(f, c, g_vm_quote, x); }
-static g_inline Ana(ana_l) {
-   return f = c0_lambda(f, c, nil, x),
-          analyze(f, c, g_ok(f) ? pop1(f) : 0); }
+static g_inline Ana(ana_q) { return c0_ix(f, c, g_vm_quote, x); }
+static g_inline Ana(ana_l) { return f = c0_lambda(f, c, nil, x),
+                                    analyze(f, c, g_ok(f) ? pop1(f) : 0); }
 static Ana(c0_cond_r);
 static g_inline Ana(ana_c) {
  return !twop(B(x)) ? analyze(f, c, A(x)) :
@@ -468,18 +465,12 @@ g_vm(g_vm_freev) { return
  Ip[1].x = g_tget(f, nil, Ip[1].x, f->dict),
  Continue(); }
 
-g_vm(g_vm_eval) { return
- Ip++,
- Pack(f),
- f = c0(f, g_vm_jump),
- !g_ok(f) ? gtrap(f) : (Unpack(f), Continue()); }
+g_vm(g_vm_eval) { return Ip++, Pack(f),
+ !g_ok(f = c0(f, g_vm_jump)) ? gtrap(f) : (Unpack(f), Continue()); }
 
-g_noinline struct g *g_evals(struct g*f, char const*s) {
+g_noinline struct g *g_evals_(struct g*f, char const*s) {
  static char const *t = "((:(e a b)(? b(e(ev'ev(A b))(B b))a)e)0)";
  struct ti i = {{g_vm_port_io, putnum(-1), putnum(EOF), putnum(false)}, t, 0};
- f = push0(pushq(push0(g_eval(g_reads(f, (void*) &i, false)))));
+ f = push0(pushq(push0(g_eval(g_reads(f, (void*) &i)))));
  i.t = s, i.i = 0, i.io.ungetc_buf = putnum(EOF), i.io.eof_seen = putnum(false);
- return g_eval(gxr(gxl(gxr(gxl(g_reads(f, (void*) &i, false)))))); }
-struct g *g_evals_(struct g*f, char const *s) { return g_pop(g_evals(f, s), 1); }
-
-
+ return g_pop(g_eval(gxr(gxl(gxr(gxl(g_reads(f, (void*) &i)))))), 1); }

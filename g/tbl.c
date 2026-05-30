@@ -33,7 +33,7 @@ g_noinline struct g *g_tput(struct g *f) {
 
  if (e) return e->val = v, f->sp += 2, f;
 
- if (!g_ok(f = have(f, Width(struct g_kvs) + 1))) return f;
+ if (!g_ok(f = g_have(f, Width(struct g_kvs) + 1))) return f;
  e = bump(f, Width(struct g_kvs));
  t = (struct g_tab*) f->sp[2];
  k = f->sp[0], v = f->sp[1];
@@ -47,7 +47,7 @@ g_noinline struct g *g_tput(struct g *f) {
  intptr_t cap1 = 2 * cap0;
  struct g_kvs **tab0, **tab1;
 
- if (!g_ok(f = have(f, cap1 + 1))) return f;
+ if (!g_ok(f = g_have(f, cap1 + 1))) return f;
  tab1 = bump(f, cap1);
  t = (struct g_tab*) f->sp[2];
  tab0 = t->tab;
@@ -130,15 +130,6 @@ g_vm(g_vm_tkeys) {
  Sp[0] = list;
  Ip += 1;
  return Continue(); }
-
-struct g *mktbl(struct g*f) {
- if (g_ok(f = have(f, Width(struct g_tab) + 2))) {
-  struct g_tab *t = bump(f, Width(struct g_tab) + 1);
-  *--f->sp = word(t);
-  struct g_kvs **tab = (struct g_kvs**) (t + 1);
-  tab[0] = 0, ini_tab(t, 0, 1, tab); }
- return f; }
-
 
 static g_noinline uintptr_t hash_two(struct g *f, word x) {
  word *base = off_pool(f), *top = base + f->len, *w = base;

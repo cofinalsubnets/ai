@@ -25,7 +25,7 @@ g_vm(g_vm_symnom) {
   Continue(); }
 
 struct g *intern(struct g*f) {
- if (g_ok(f = have(f, Width(struct g_atom))))
+ if (g_ok(f = g_have(f, Width(struct g_atom))))
   f->sp[0] = (word) intern_checked(f, (struct g_str*) f->sp[0]);
  return f; }
 

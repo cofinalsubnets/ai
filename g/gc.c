@@ -7,9 +7,6 @@ g_vm(g_vm_gc, uintptr_t n) {
 
 static word gcp(struct g*, word, word const *, word const *);
 
-g_inline struct g *have(struct g *f, uintptr_t n) {
- return !g_ok(f) || avail(f) >= n ? f : g_please(f, n); }
-
 static g_inline void evac_two(struct g*f, word const*const p0, word const*const t0) {
  struct g_pair *w = (struct g_pair*) f->cp;
  f->cp += Width(struct g_pair);

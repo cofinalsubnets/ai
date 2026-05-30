@@ -1,5 +1,9 @@
 #include "i.h"
 
+#define opf(nom, op) g_vm(nom) {\
+ word a = getnum(Sp[0]), b = getnum(Sp[1]);\
+ *++Sp = putnum(a op b);\
+ return Ip++, Continue(); }
 opf(g_vm_bsl, <<) opf(g_vm_bsr, >>)
 
 // Truncation toward zero. Magnitudes above 2^63 are already

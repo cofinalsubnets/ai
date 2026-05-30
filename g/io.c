@@ -124,7 +124,7 @@ g_vm(g_vm_dot) {
 static struct g *to_alloc(struct g *f) {
  if (!g_ok(f = str0(f, 32))) return f;
  uintptr_t n = Width(struct to);
- if (!g_ok(f = have(f, n + Width(struct g_tag)))) return f;
+ if (!g_ok(f = g_have(f, n + Width(struct g_tag)))) return f;
  union u *k = bump(f, n + Width(struct g_tag));
  struct to *o = (struct to*) k;
  o->io.ap = g_vm_port_io;
@@ -160,10 +160,6 @@ static struct g*gzputn(struct g *f, intptr_t n, uint8_t b) {
   r = m % b;
  if (q) f = gzputn(f, q, b);
  return gzputc(f, g_digits[r]); }
-
-struct g *g_putn(struct g *f, struct g_io *o, intptr_t n, uint8_t b) {
- g_core_of(f)->io = o;
- return gzputn(f, n, b); }
 
 static struct g*gvzprintf(struct g*f, char const *fmt, va_list xs) {
  for (int c; (c = *fmt++);) {
@@ -259,16 +255,15 @@ static struct g *gzputx(struct g *f, intptr_t x) {
    case tbl_q: return gzput_tbl(f, x);
    case text_q: return gzput_str(f, x); } }
 
-static struct g *gfputx(struct g *f, struct g_io *o, intptr_t x) {
+static g_inline struct g *gfputx(struct g *f, struct g_io *o, intptr_t x) {
  return g_core_of(f)->io = o, gzputx(f, x); }
 
 struct g *gputx(struct g*f, word x) {
  return gfputx(f, &g_stdout, x); }
 
-struct g *gputn(struct g*f, intptr_t n, uint8_t b) {
-  return g_putn(f, &g_stdout, n, b); }
-
-
+struct g *gputn(struct g*f, intptr_t n, uint8_t b) { return
+ g_core_of(f)->io = &g_stdout,
+ gzputn(f, n, b); }
 
 // (inspect x) -> string. Alloc a heap data-sink, gfputx x into it, harvest.
 // Stack walk:
@@ -351,34 +346,12 @@ static int g_dtoa(g_flo_t v, char *buf, int cap, int max_frac) {
   while (eb_n > 0) { eb_n--; if (p < end) *p++ = eb[eb_n]; } }
  return p - buf; }
 
-g_vm(g_vm_fread) {
- if (!iop(Sp[0])) return Sp++, Ip++, Continue();
- struct g_io *i = (struct g_io*) Sp[0];
- Pack(f);
- if (g_ok(f = g_read(f, i))) {
-  // Sp[0]=datum, Sp[1]=port, Sp[2]=e. Want top=datum, consume 2.
-  f->sp[2] = f->sp[0];
-  f->sp += 2;
- } else switch (g_code_of(f)) {
-  case g_status_eof:
-   f = g_core_of(f);
-   f->sp += 1;                                   // pop port; top = e
-   break;
-  case g_status_more:
-   f = g_core_of(f);
-   f->sp[1] = f->sp[0];                          // e := port; pop one
-   f->sp += 1;
-   break;
-  default: return gtrap(f); }                           // propagate other errors
- Unpack(f);
- return Ip++, Continue(); }
-
 // Heap-allocate a ci port. Expects the charlist on Sp[0]; on return Sp[0]
 // holds the port (the charlist is preserved inside port->head). Same shape
 // as to_alloc / g_io_alloc.
 static struct g *ci_alloc(struct g *f) {
  uintptr_t n = Width(struct ci);
- if (!g_ok(f = have(f, n + Width(struct g_tag)))) return f;
+ if (!g_ok(f = g_have(f, n + Width(struct g_tag)))) return f;
  union u *k = bump(f, n + Width(struct g_tag));
  struct ci *i = (struct ci*) k;
  i->io.ap = g_vm_port_io;
@@ -470,7 +443,7 @@ static void io_close(void *p) {
 // methods see this port like any other.
 struct g *g_io_alloc(struct g *f, int fd) {
  uintptr_t const n = Width(struct g_io);
- if (g_ok(f = have(f, n + Width(struct g_tag) + Width(struct g_fz) + 1))) {
+ if (g_ok(f = g_have(f, n + Width(struct g_tag) + Width(struct g_fz) + 1))) {
   union u *k = bump(f, n + Width(struct g_tag));
   struct g_io *io = (struct g_io*) k;
   io->ap = g_vm_port_io;

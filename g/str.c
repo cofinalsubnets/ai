@@ -3,8 +3,7 @@
 // Allocate a fresh struct g_str of `len` bytes, zero-filled, push on Sp.
 struct g *str0(struct g *f, uintptr_t len) {
  uintptr_t req = str_type_width + b2w(len);
- f = have(f, req + 1);
- if (g_ok(f)) {
+ if (g_ok(f = g_have(f, req + 1))) {
   struct g_str *s = bump(f, req);
   ini_str(s, len);
   memset(s->bytes, 0, len);
@@ -56,7 +55,5 @@ g_vm(g_vm_scat) {
   *++Sp = word(z); }
  return Ip++, Continue(); }
 
-g_inline struct g_str *ini_str(struct g_str *s, uintptr_t len) {
- return s->ap = g_vm_data, s->typ = text_q, s->len = len, s; }
 // public predicate for frontends that need to check string args
 bool g_strp(g_word x) { return strp(x); }

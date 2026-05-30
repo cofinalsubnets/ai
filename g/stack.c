@@ -21,14 +21,14 @@ extern g_inline struct g *g_pop(struct g*f, uintptr_t n) { return g_core_of(f)->
 
 
 struct g *gxl(struct g *f) {
- if (g_ok(f = have(f, Width(struct g_pair)))) {
+ if (g_ok(f = g_have(f, Width(struct g_pair)))) {
   struct g_pair *p = bump(f, Width(struct g_pair));
   ini_two(p, f->sp[0], f->sp[1]);
   *++f->sp = (word) p; }
  return f; }
 
 struct g *gxr(struct g *f) {
- if (g_ok(f = have(f, Width(struct g_pair)))) {
+ if (g_ok(f = g_have(f, Width(struct g_pair)))) {
   struct g_pair *p = bump(f, Width(struct g_pair));
   ini_two(p, f->sp[1], f->sp[0]);
   *++f->sp = (word) p; }

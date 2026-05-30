@@ -127,7 +127,6 @@ struct g_port_vt {
 enum g_status { g_status_ok = 0, g_status_oom = 1, g_status_eof = 2, g_status_more = 3 };
 enum g_status g_fin(struct g*);
 
-static g_inline intptr_t g_pop1(struct g*f) { return *f->sp++; }
 static g_inline size_t b2w(size_t b) {
  size_t q = b / sizeof(g_word), r = b % sizeof(g_word);
  return q + (r ? 1 : 0); }
