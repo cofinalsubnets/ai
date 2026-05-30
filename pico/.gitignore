@@ -13,3 +13,4 @@
 *.elf
 *.hex
 *.uf2
+/build/
