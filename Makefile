@@ -6,25 +6,26 @@
 R := .
 include common.mk
 
-.PHONY: test all h k pd clean distclean
+.PHONY: test all h k pd clean distclean wasm
 test: h
 	@echo TEST
 	@cat $t | $m
-all: h k pd
+all: h k pd wasm
 h:
 	@$(MAKE) -C h
 k:
 	@$(MAKE) -C k
 pd:
 	@$(MAKE) -C pd
+wasm:
+	@$(MAKE) -C wasm
 clean:
 	@$(MAKE) -C h clean
 	@$(MAKE) -C k clean
 	@$(MAKE) -C pd clean
-distclean:
-	@$(MAKE) -C h clean
+	@$(MAKE) -C wasm clean
+distclean: clean
 	@$(MAKE) -C k distclean
-	@$(MAKE) -C pd clean
 
 # Host artefacts produced by `make -C h`. Declaring them as targets that
 # depend on the phony `h` means any other rule that consumes them (the
