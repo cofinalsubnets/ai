@@ -75,7 +75,23 @@ static g_inline struct g *mktbls(struct g*f) {
   f->macro = ini_tab(t2, 0, 1, b2); }
  return f; }
 
+// Verify the data self-quote sentinels tile gwen_data_vt evenly and in enum q
+// order. g_typ() recovers a data object's kind from ap's slot index, so a fold
+// (g_noicf defeated), a mis-ordered link, or interior padding would silently
+// corrupt every type tag. Check it once at init through g_typ itself -- so the
+// ARM Thumb low bit on ap is absorbed the same way it is at runtime -- and trap
+// loudly on any mismatch rather than mis-typing objects later.
+static void check_data_vt(void) {
+ g_vm_t *const sentinel[G_DATA_VT_N] =
+  { g_vm_two, g_vm_vec, g_vm_sym, g_vm_tbl, g_vm_text };
+ uintptr_t span = (uintptr_t) __stop_gwen_data_vt - (uintptr_t) __start_gwen_data_vt;
+ if (span / G_DATA_VT_N == 0) __builtin_trap();          // folded -> unit 0
+ for (enum q k = 0; k < G_DATA_VT_N; k++) {
+  union u probe = { .ap = sentinel[k] };
+  if (g_typ(&probe) != k) __builtin_trap(); } }
+
 struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) {
+ check_data_vt();
  uintptr_t const len0 = 1 << 10;
  struct g *f = ma(NULL, 2 * len0 * sizeof(word));
  if (f == NULL) return encode(f, g_status_oom);

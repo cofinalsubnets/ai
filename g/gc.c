@@ -176,5 +176,5 @@ static g_noinline intptr_t gcp(struct g *f, word x, word const *p0, word const *
  x = src->x; // get its contents
  // if it contains a pointer to the new space then return the pointer
  return homp(x) && ptr(f) <= ptr(x) && ptr(x) < ptr(f) + f->len ? x :
-        x == (word) g_vm_data ? copy_data(f, src, p0, t0) :
+        in_data_vt((void*) x) ? copy_data(f, src, p0, t0) :
                                 copy_thread(f, src, p0, t0); }

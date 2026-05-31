@@ -176,7 +176,7 @@
      (atomp b) (ana c a)
      (:- (l1 0 0 a (car b) (cdr b))
       q (sco c (get 0 'arg c) (get 0 'imp c))
-      (set_cdr p x) (: _ (poke 3 x p) x) ; :[ weh
+      (set_cdr p x) (: _ (poke 2 x p) x) ; :[ weh
       (lambp x) (? (twop x) (= '\ (car x)))
       ;; l1 pass nom def and value expressions to l2
       ; l1 collects bindings and passes them with the body expression to l2

@@ -56,7 +56,7 @@
 #define Pack(f) ((void)0)
 #define Unpack(f) ((void)0)
 #endif
-#define g_vm(...) g_noinline _g_vm(__VA_ARGS__)
+#define g_vm(...) g_noinline g_noicf _g_vm(__VA_ARGS__)
 
 // ok thanks
 typedef intptr_t g_word;
@@ -68,13 +68,12 @@ typedef _g_vm(g_vm_t);
 // (void*)(shape + rank). Immutable.
 struct g_vec {
  g_vm_t *ap;
- uintptr_t typ;       // vec_q
  uintptr_t type, rank, shape[]; };
 
 struct g {
  union u {
   g_vm_t *ap;
-  g_word x, typ;
+  g_word x;
   union u *m; } *ip;
  g_word *hp, *sp;
  union u *tasks;       // task ring head (running task's node); always non-NULL after g_ini
@@ -84,11 +83,9 @@ struct g {
  intptr_t next_wait_fd; // fd the task suspended on, -1 = not waiting on I/O. Installed into next yield_sw snapshot's wait_fd slot.
  struct g_atom {
   g_vm_t *ap;
-  g_word typ;
   uintptr_t code;
   struct g_str {
    g_vm_t *ap;
-   uintptr_t typ;       // text_q
    uintptr_t len;       // byte count
    char bytes[]; } *nom;
   struct g_atom *l, *r; } *symbols;
@@ -110,7 +107,6 @@ struct g {
   struct {
    struct g_tab {
     g_vm_t *ap;
-    intptr_t typ;
     uintptr_t len, cap;
     struct g_kvs {
      intptr_t key, val;

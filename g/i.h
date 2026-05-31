@@ -59,7 +59,7 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 #define ptr(_) ((word*)(_))
 #define num(_) ((word)(_))
 #define word(_) num(_)
-#define datp(_) (cell(_)->ap==g_vm_data)
+#define datp(_) in_data_vt(cell(_)->ap)
 #define avec(f, y, ...) (MM(f,&(y)),(__VA_ARGS__),UM(f))
 #define MM(f,r) ((g_core_of(f)->root=&((struct g_r){(word*)(r),g_core_of(f)->root})))
 #define UM(f) (g_core_of(f)->root=g_core_of(f)->root->n)
@@ -73,7 +73,7 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 
 #define oddp(_) ((uintptr_t)(_)&1)
 #define evenp(_) !oddp(_)
-#define typ(_) cell(_)[1].typ
+#define typ(_) g_typ(cell(_))
 #define cell(_) ((union u*)(_))
 
 #define Have1() if (Sp == Hp) return Ap(g_vm_gc, f, 1)
@@ -94,20 +94,20 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 #define getnum g_getnum
 #define putnum g_putnum
 
-struct g_pair { g_vm_t *ap; uintptr_t typ; intptr_t a, b; };
+struct g_pair { g_vm_t *ap; intptr_t a, b; };
 enum q { two_q, vec_q, sym_q, tbl_q, text_q, };
-// The data self-quote sentinels (flow.c) sit contiguously in the
-// .gwen_data_vt section, laid out in enum q order by g/gwen_data_vt.ld, which
-// also provides these bounds. in_data_vt tests whether an ap lands in that
-// range (a range-based datp for a future per-kind scheme), and g_typ reads
-// the kind straight out of the pointer's slot index: every sentinel shares
-// one body and size (nm confirms), so they tile the section evenly and the
-// slot is (ap - start) / unit, unit = span / count. The slot->kind mapping
-// relies on that enum-ordered layout -- a frontend with its own full linker
-// script must reproduce the .gwen_data_vt block before g_typ works there.
-// Both are unused for now; they're scaffolding for step 2.
+// A heap data object carries no type word: its kind IS its ap. The five
+// self-quote sentinels (flow.c) sit contiguously in the .gwen_data_vt section,
+// one per enum q kind, laid out in enum order by g/gwen_data_vt.ld (which also
+// provides these bounds). datp() tests whether an ap lands in that range;
+// g_typ() reads the kind straight out of the pointer's slot index: every
+// sentinel shares one body and size, so they tile the section evenly and the
+// slot is (ap - start) / unit, unit = span / count (the ARM Thumb low bit on
+// ap washes out in the divide). The slot->kind mapping relies on that
+// enum-ordered layout -- a frontend with its own full linker script must
+// reproduce the .gwen_data_vt block, and g_ini checks the tiling at startup.
 extern char __start_gwen_data_vt[], __stop_gwen_data_vt[];
-#define G_DATA_VT_N 2   // number of DATA_SENTINEL()s in flow.c; keep in sync
+#define G_DATA_VT_N 5   // one DATA_SENTINEL() per enum q kind in flow.c; keep in sync
 static g_inline bool in_data_vt(void *a) {
  return (uintptr_t) a >= (uintptr_t) __start_gwen_data_vt
      && (uintptr_t) a <  (uintptr_t) __stop_gwen_data_vt; }
@@ -141,7 +141,8 @@ struct g
 struct g_atom *intern_checked(struct g*, struct g_str*);
 g_vm(g_vm_gc, uintptr_t);
 g_vm_t g_vm_kcall,
- g_vm_data,  g_vm_putn, g_vm_info, g_vm_dot,    g_vm_clock,
+ g_vm_two, g_vm_vec, g_vm_sym, g_vm_tbl, g_vm_text, // data self-quote sentinels, enum q order
+ g_vm_putn, g_vm_info, g_vm_dot,    g_vm_clock,
  g_vm_nilp,  g_vm_symnom,              g_vm_putc, g_vm_gensym, g_vm_twop,
  g_vm_len, g_vm_get,
  g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,  g_vm_flo,  g_vm_flop,
@@ -232,22 +233,22 @@ static g_inline void *bump(struct g *f, uintptr_t n) {
   void *x = f->hp; f->hp += n; return x; }
 
 static g_inline struct g_atom *ini_anon(struct g_atom *y, uintptr_t code) {
- return y->ap = g_vm_data, y->typ = sym_q, y->nom = 0, y->code = code, y; }
+ return y->ap = g_vm_sym, y->nom = 0, y->code = code, y; }
 
 static g_inline struct g_atom *ini_sym(struct g_atom *y, struct g_str *nom, uintptr_t code) {
- return y->ap = g_vm_data, y->typ = sym_q, y->nom = nom, y->code = code, y->l = y->r = 0, y; }
+ return y->ap = g_vm_sym, y->nom = nom, y->code = code, y->l = y->r = 0, y; }
 
 static g_inline struct g_str *ini_str(struct g_str *s, uintptr_t len) {
- return s->ap = g_vm_data, s->typ = text_q, s->len = len, s; }
+ return s->ap = g_vm_text, s->len = len, s; }
 
 static g_inline struct g_vec *ini_scalar(struct g_vec *v, enum g_vec_type t) {
- return v->ap = g_vm_data, v->typ = vec_q, v->type = t, v->rank = 0, v; }
+ return v->ap = g_vm_vec, v->type = t, v->rank = 0, v; }
 
 static g_inline struct g_tab *ini_tab(struct g_tab *t, size_t len, size_t cap, struct g_kvs**tab) {
- return t->ap = g_vm_data, t->typ = tbl_q, t->len = len, t->cap = cap, t->tab = tab, t; }
+ return t->ap = g_vm_tbl, t->len = len, t->cap = cap, t->tab = tab, t; }
 
 static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b) {
- return w->ap = g_vm_data, w->typ = two_q, w->a = a, w->b = b, w; }
+ return w->ap = g_vm_two, w->a = a, w->b = b, w; }
 
 static g_inline uintptr_t rot(uintptr_t x) {
   int const s = sizeof(uintptr_t) * 4; // shift bits = word bits / 2 = sizeof(word) * 4

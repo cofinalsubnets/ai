@@ -92,6 +92,7 @@ static g_noinline intptr_t gtabdel(struct g *f, struct g_tab *t, intptr_t k, int
 g_vm(g_vm_get) {
  word z = Sp[0], k = Sp[1], x = Sp[2], n;
  if (homp(x) && datp(x)) switch (typ(x)) {
+  default: break;                               // vec_q, sym_q are not indexable
   case tbl_q: z = g_tget(f, z, k, tbl(x)); break;
   case text_q:
    if (nump(k) && (n = getnum(k)) >= 0 && n < (word) len(x))
@@ -145,9 +146,15 @@ static g_noinline uintptr_t hash_two(struct g *f, word x) {
 uintptr_t hash(struct g *f, intptr_t x) {
  if (nump(x)) return rot(x*mix);
  if (!datp(x)) {
-   // it's a function, hash by length
-   uintptr_t r = mix, *y = (uintptr_t *) x;
-   while (*y++) r ^= r * mix;
+   // it's a thread; hash by length. Threads live in the pool and end in a
+   // G_THD_TAG word, so walk to that terminator rather than to a 0 word: the
+   // length is GC-stable, and we never read past the object into un-written
+   // pool space (the 0-walk did, depending on heap layout). Bounded by the
+   // pool so a stray non-pool thread value can't run away.
+   uintptr_t r = mix;
+   word const *lo = ptr(f), *hi = ptr(f) + f->len;
+   for (word const *y = (word const*) x; y >= lo && y < hi && !tagp(*y, lo, hi); y++)
+     r ^= r * mix;
    return r; }
  switch (typ(x)) {
    default: __builtin_trap();

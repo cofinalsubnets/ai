@@ -278,25 +278,35 @@ g_vm(g_vm_quote) {
  return Continue(); }
 
 // Self-quote sentinel: the ap (word 0) of a heap data object. Invoking it
-// pushes the object itself and returns to the caller. DATA_SENTINEL emits
-// each one into its own input subsection gwen_data_vt.NN (NN = the enum q
-// slot) so a future per-kind scheme can treat the sentinels as a contiguous,
-// enum-ordered address range. g/gwen_data_vt.ld SORTs the subsections into
-// one .gwen_data_vt block and provides the __start_/__stop_ bounds; a
-// frontend with its own full linker script must inline an equivalent block
-// (and KEEP it). Because a sentinel's *address* is meant to carry the type
-// tag, g_noicf keeps the byte-identical bodies from being folded to one
-// address. Today only these two exist: g_vm_data for every structural data
-// kind (kind stored in the typ word) and g_vm_port_io for ports.
+// pushes the object itself and returns to the caller. There is one sentinel
+// per data kind, and a data object carries NO type word -- its kind IS its ap.
+// DATA_SENTINEL emits each one into its own input subsection gwen_data_vt.NN
+// (NN = the enum q slot), so the sentinels form a contiguous, enum-ordered
+// address range. g/gwen_data_vt.ld SORTs the subsections into one
+// .gwen_data_vt block and provides the __start_/__stop_ bounds; g_typ() (i.h)
+// recovers the kind from ap's slot index. A frontend with its own full linker
+// script must inline an equivalent block (and KEEP it). Because a sentinel's
+// *address* carries the type tag, g_noicf (on the g_vm macro) keeps the
+// byte-identical bodies from being folded to one address. Ports are not data:
+// g_vm_port_io (below) lives in ordinary .text and is collected as a thread.
 #define DATA_SENTINEL(idx, name) \
- __attribute__((section("gwen_data_vt." #idx), used)) g_noicf g_vm(name) { \
+ __attribute__((section("gwen_data_vt." #idx), used)) g_vm(name) { \
   word x = word(Ip); \
   Ip = cell(*++Sp); \
   *Sp = x; \
   return Continue(); }
 
-DATA_SENTINEL(00, g_vm_data)
-DATA_SENTINEL(01, g_vm_port_io)
+DATA_SENTINEL(00, g_vm_two)   // two_q
+DATA_SENTINEL(01, g_vm_vec)   // vec_q
+DATA_SENTINEL(02, g_vm_sym)   // sym_q
+DATA_SENTINEL(03, g_vm_tbl)   // tbl_q
+DATA_SENTINEL(04, g_vm_text)  // text_q
+
+g_vm(g_vm_port_io) {
+  word x = word(Ip);
+  Ip = cell(*++Sp);
+  *Sp = x;
+  return Continue(); }
 
 // push a value from the stack
 g_vm(g_vm_arg) {
@@ -333,6 +343,7 @@ g_vm(g_vm_thda) {
 g_vm(g_vm_len) {
   word x = Sp[0], l = 0;
   if (!nump(x) && datp(x)) switch (typ(x)) {
+    default: break;                              // vec_q, sym_q have no length
     case tbl_q: l = tbl(x)->len; break;
     case text_q: l = len(x); break;
     case two_q: do l++, x = B(x); while (twop(x)); }
