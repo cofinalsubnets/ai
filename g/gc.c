@@ -159,15 +159,18 @@ static g_inline word copy_data(struct g *f, union u *src, word const *const p0, 
   case tbl_q: return copy_tbl(f, tbl(src), p0, t0);
   case text_q: return copy_str(f, str(src), p0, t0); } }
 
+static g_inline struct g_tag *ttag2(union u *k, word const *const lo, word const *const hi) {
+ while (!tagp(k->x, lo, hi)) k++;
+ return (struct g_tag*) k; }
+
 static g_inline word copy_thread(struct g *f, union u *src, word const *const p0, word const *const t0) {
  // it's a thread, find the end to find the head
- struct g_tag *t = ttag(src, p0, t0);
+ struct g_tag *t = ttag2(src, p0, t0);
  union u *ini = tag_head(t), *d = bump(f, t->end - ini), *dst = d;
  // copy each content word to dest and leave a forwarding pointer behind,
  // stopping at the terminator; then rewrite it as the new tagged head
  for (union u *s = ini; !tagp(s->x, p0, t0); s->x = (word) d, d++, s++) d->x = s->x;
- tag_thd(d, dst);
- return (word) (dst + (src - ini)); }
+ return (word) (tagthd(dst, d - dst) + (src - ini)); }
 
 static g_noinline intptr_t gcp(struct g *f, word x, word const *p0, word const *t0) {
  // if it's a number or it's outside managed memory then return it

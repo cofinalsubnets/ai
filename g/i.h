@@ -225,14 +225,16 @@ static g_inline bool tagp(word x, word const *lo, word const *hi) {
  word const *p = (word const*) (x & ~(word) 3);
  return (x & 3) == G_THD_TAG && p >= lo && p < hi; }
 static g_inline void tag_thd(union u *e, union u *head) { e->x = word(head) | G_THD_TAG; }
-static g_inline struct g_tag { union u *head; union u end[]; }
- *ttag(union u *k, word const *lo, word const *hi) {
+static g_inline union u *tagthd(union u *h, uintptr_t len) { return h[len].x = word(h) | G_THD_TAG, h; }
+#define topof(f) ((word*)f+f->len)
+static g_inline struct g_tag { union u *head; union u end[]; } *ttag(struct g*f, union u *k) {
+ word *lo = ptr(f), *hi = topof(f);
  while (!tagp(k->x, lo, hi)) k++;
  return (struct g_tag*) k; }
 static g_inline union u *tag_head(struct g_tag *t) { return cell(word(t->head) & ~(word) 3); }
 
 static g_inline union u *clip(struct g *f, union u *k) {
- return tag_thd((union u*) ttag(k, ptr(f), ptr(f) + f->len), k), k; }
+ return tagthd(k, cell(ttag(f, k)) - k); }
 
 static g_inline struct g *encode(struct g*f, enum g_status s) { return
   (struct g*) ((uintptr_t) f | s); }

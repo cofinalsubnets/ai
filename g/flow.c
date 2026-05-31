@@ -56,11 +56,10 @@ g_vm(g_vm_ret0) { return
  Continue(); }
 
 
-#define topof(f) ((word*)f+f->len)
 // kcall : x = Sp[0], k = Ip[1] -> Ip = k, Sp[0] = x
 g_vm(g_vm_kcall) {
  word x = Sp[0];
- union u *stack = Ip + 2, *end = (union u*) ttag(stack, ptr(f), ptr(f) + f->len);
+ union u *stack = Ip + 2, *end = (union u*) ttag(f, stack);
  uintptr_t height = end - stack;
  Have(height);
  *(Sp = memmove(topof(f) - height, stack, height * sizeof(word))) = x;
@@ -79,9 +78,8 @@ g_vm(g_vm_callk) {
  k[0].ap = g_vm_kcall;                       // 
  k[1].m  = Ip + 1;                           // resume at next instruction
  memcpy(k + 2, Sp, height * sizeof(word));
- tag_thd(k + n, k);
  Sp -= 1;
- Sp[0] = word(k);
+ Sp[0] = word(tagthd(k, n));
  Sp[1] = f_val;
  return Ap(g_vm_ap, f); }
 
@@ -143,7 +141,8 @@ g_vm(g_vm_yield_sw) {
    if (f->yield_ctr >= YIELD_INTERVAL) f->yield_ctr = 0;
    return Continue(); } }
  word my_height = topof(f) - Sp;
- union u *next_stack = next + 5, *end = (union u*) ttag(next_stack, ptr(f), ptr(f) + f->len);
+ union u *next_stack = next + 5,
+       *end = (union u*) ttag(f, next_stack);
  uintptr_t restore_h = end - next_stack,
            need = my_height + restore_h + 6;
  if (Sp < Hp + need) {
@@ -164,7 +163,7 @@ g_vm(g_vm_yield_sw) {
  N[3].x = putnum((intptr_t) my_wake);
  N[4].x = putnum(my_wait_fd);
  memcpy(N + 5, Sp, my_height * sizeof(word));
- prev->m = N, tag_thd(N + 5 + my_height, N);
+ prev->m = tagthd(N, 5 + my_height);
  f->yield_ctr = 0;
  f->tasks = next;
  Sp = memmove(topof(f) - restore_h, next_stack, restore_h * sizeof(word));
@@ -188,7 +187,7 @@ g_vm(g_vm_spawn) {
  N[4].x = putnum(-1);  // wait_fd: -1 = not waiting on I/O
  N[5].x = x;
  N[6].x = fn;
- f->tasks->m = N, tag_thd(N + 7, N);
+ f->tasks->m = tagthd(N, 7);
  return Sp++, Ip++, Continue(); }
 
 g_vm(g_vm_wait) {
@@ -263,9 +262,8 @@ g_vm(g_vm_cur) {
   j[0].ap = g_vm_unc,
   j[1].x = *Sp++,
   j[2].m = Ip + 2,
-  tag_thd(j + 3, k),
   Ip = cell(*Sp),
-  Sp[0] = word(k),
+  Sp[0] = (word) tagthd(k, j + 3 - k),
   Continue(); }
 
 // load instructions
@@ -336,8 +334,7 @@ g_vm(g_vm_thda) {
  Have(n + Width(struct g_tag));
  union u *k = (union u*) Hp;
  Hp += n + Width(struct g_tag);
- tag_thd(k + n, k);
- Sp[0] = word(memset(k, -1, n * sizeof(word)));
+ Sp[0] = word(memset(tagthd(k, n), -1, n * sizeof(word)));
  return Ip++, Continue(); }
 
 g_vm(g_vm_len) {

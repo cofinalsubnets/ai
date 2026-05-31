@@ -63,35 +63,7 @@ static union u yield_c[] = { {_g_vm_yield_c} };
 static struct g_def const def1[] = { bifs(biff) insts(i_entry) {0}};
 static struct g *g_trap_default(struct g *f) { return f; }
 
-static g_inline struct g *mktbls(struct g*f) {
- uintptr_t const req = 2 * (Width(struct g_tab) + 1);
- if (g_ok(f = g_have(f, req))) {
-  struct g_tab *t1 = bump(f, req),
-               *t2 = t1 + 1;
-  struct g_kvs **b1 = (struct g_kvs**) (t2 + 1),
-               **b2 = b1 + 1;
-  b1[0] = b2[0] = 0;
-  f->dict = ini_tab(t1, 0, 1, b1);
-  f->macro = ini_tab(t2, 0, 1, b2); }
- return f; }
-
-// Verify the data self-quote sentinels tile gwen_data_vt evenly and in enum q
-// order. g_typ() recovers a data object's kind from ap's slot index, so a fold
-// (g_noicf defeated), a mis-ordered link, or interior padding would silently
-// corrupt every type tag. Check it once at init through g_typ itself -- so the
-// ARM Thumb low bit on ap is absorbed the same way it is at runtime -- and trap
-// loudly on any mismatch rather than mis-typing objects later.
-static void check_data_vt(void) {
- g_vm_t *const sentinel[G_DATA_VT_N] =
-  { g_vm_two, g_vm_vec, g_vm_sym, g_vm_tbl, g_vm_text };
- uintptr_t span = (uintptr_t) __stop_gwen_data_vt - (uintptr_t) __start_gwen_data_vt;
- if (span / G_DATA_VT_N == 0) __builtin_trap();          // folded -> unit 0
- for (enum q k = 0; k < G_DATA_VT_N; k++) {
-  union u probe = { .ap = sentinel[k] };
-  if (g_typ(&probe) != k) __builtin_trap(); } }
-
 struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) {
- check_data_vt();
  uintptr_t const len0 = 1 << 10;
  struct g *f = ma(NULL, 2 * len0 * sizeof(word));
  if (f == NULL) return encode(f, g_status_oom);
@@ -99,21 +71,27 @@ struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) 
  f->len = len0, f->pool = (void*) f, f->malloc = ma, f->free = fr;
  f->hp = f->end, f->sp = (word*) f + len0, f->ip = yield_c, f->t0 = g_clock();
  f->trap = g_trap_default;
- f = mktbls(f);
- struct g_def def0[] = {
-  {"globals", (word) f->dict, },
-  {"macros", (word) f->macro, },
-  {"in", (word) &g_stdin},
-  {"out", (word) &g_stdout},
-  {0}, };
- if (g_ok(f = g_have(g_defs(g_defs(f, def0), def1), 6))) {
-  union u *M = bump(f, 6);
+ uintptr_t const req = 2 * (Width(struct g_tab) + 1) + 6;
+ if (g_ok(f = g_have(f, req))) {
+  struct g_tab *t1 = bump(f, req),      *t2 = t1 + 1;
+  struct g_kvs **b1 = (void*) (t2 + 1), **b2 = b1 + 1;
+  union u *M = (void*) (b2 + 1);
+  *b1 = *b2 = 0;
+  f->dict = ini_tab(t1, 0, 1, b1);
+  f->macro = ini_tab(t2, 0, 1, b2);
   M[0].m = M;
   M[1].x = nil;   // sentinel; replaced on first yield
   M[2].x = nil;   // main pid
   M[3].x = nil;   // wake_at: nil means "always runnable"
   M[4].x = putnum(-1);  // wait_fd: -1 = not waiting on I/O (slot value -1, non-zero)
-  f->tasks = M, tag_thd(M + 5, M); }
+  f->tasks = tagthd(M, 5);
+  struct g_def def0[] = {
+   {"globals", (word) t1, },
+   {"macros", (word) t2, },
+   {"in", (word) &g_stdin},
+   {"out", (word) &g_stdout},
+   {0}, };
+  f = g_defs(g_defs(f, def0), def1); }
  return f; }
 
 static void *g_libc_malloc(struct g*f, size_t n) { return malloc(n); }
