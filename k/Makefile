@@ -70,11 +70,11 @@ kcflags = $(g_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
   -ffunction-sections -fdata-sections
 kldflags := -static -nostdlib --gc-sections -T $a/$a.lds -z max-page-size=0x1000
 # -I$(k_odir) is first so this arch's generated data_vt.h (reflected out of
-# its own data.o below) shadows the portable -I$(R)/g/data_vt.h. It is
+# its own data.o below) shadows the portable -I$(R)/core/data_vt.h. It is
 # per-arch because the sentinel body -- and so its stride -- differs by target.
 kcppflags := \
   -I$(k_odir) \
-  -I. -I$(R)/h/b -I$(R)/f -I$(R)/g \
+  -I. -I$(R)/h/b -I$(R)/font -I$(R)/core \
   -Iinclude \
   -isystem include \
   $(kcppflags) \
@@ -161,8 +161,8 @@ distclean: clean
 # the .g sources so editing the prelude re-triggers the regen; without these
 # prereqs the rule only fires when the header is missing, so a stale boot.h
 # silently survives boot.g edits and the kernel boots an old prelude.
-$(R)/h/b/boot.h: $(R)/g/boot.g
-$(R)/h/b/repl.h: $(R)/g/repl.g
+$(R)/h/b/boot.h: $(R)/core/boot.g
+$(R)/h/b/repl.h: $(R)/core/repl.g
 $(R)/h/b/boot.h $(R)/h/b/repl.h:
 	@$(MAKE) -C $(R)/h $(notdir $@)
 
@@ -208,12 +208,12 @@ endif
 # explicit recipe overrides the shared-source pattern rule below; on a clean
 # build data_vt.h does not exist yet, so -I$(k_odir) finds nothing and the
 # compile falls through to the portable g/data_vt.h.
-$(k_odir)/g/data.o: $(R)/g/data.c $(k_h) $(R)/h/b/boot.h $(R)/h/b/repl.h
+$(k_odir)/core/data.o: $(R)/core/data.c $(k_h) $(R)/h/b/boot.h $(R)/h/b/repl.h
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
 
-$(vt_h): $(k_odir)/g/data.o $(gen_vt)
+$(vt_h): $(k_odir)/core/data.o $(gen_vt)
 	@echo GEN	$@
 	@$(gen_vt) $< -o $@
 

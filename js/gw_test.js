@@ -18,7 +18,7 @@ test('expressions', t => {
 test('common tests', t => {
   const [Let, Assert] = [':', 'assert'].map(Symbol.for);
   return Promise.all([ 'functions' ].map(n =>
-    fs.readFile(`../t/${n}.${suff}`).then(r =>
+    fs.readFile(`../test/${n}.${suff}`).then(r =>
       t.test(n, x => gw.eval([Let, Assert, assert, gw.read(n.toString())])))));
 });
 

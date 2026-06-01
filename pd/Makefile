@@ -10,7 +10,7 @@ pd_cc = $(pd_gcc) -g3
 pd_as = $(pd_gcc) -x assembler-with-cpp
 pd_opt = -O2 -falign-functions=16 -fomit-frame-pointer
 pd_fpu = -mfloat-abi=hard -mfpu=fpv5-sp-d16 -D__FPU_USED=1
-pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R)/g $(R)/h/b $(R)/f)
+pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R)/core $(R)/h/b $(R)/font)
 pd_defs = -DTARGET_PLAYDATE=1 -DTARGET_EXTENSION=1 -Dg_tco=0
 
 # Sources split by group so the obj-path patsubst works cleanly:
@@ -79,12 +79,12 @@ b/Source/pdex.%: b/pdex.%
 # The data-sentinel TU bootstraps from the portable header (no -Ib, no $(vt_h)
 # prerequisite -- both would be circular, since b/data_vt.h is reflected out of
 # this object). Its explicit recipe overrides the pattern rules below.
-b/g/data.o: $(R)/g/data.c | $(R)/h/b/boot.h
+b/core/data.o: $(R)/core/data.c | $(R)/h/b/boot.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/h/b -I$(R)/f $(pd_incdir) $< -o $@
 
-b/data_vt.h: b/g/data.o $(gen_vt)
+b/data_vt.h: b/core/data.o $(gen_vt)
 	@echo GEN	$@
 	@$(gen_vt) $< -o $@
 
@@ -123,7 +123,7 @@ b/pdex.elf: $(pd_o) $(pd_lds)
 # needs the data self-quote sentinels pinned too. It's an ordinary host link
 # with no full -T script of its own, so the host INSERT-after-.text fragment
 # (g/gwen_data_vt.ld) augments the default script exactly as it does for h/.
-pd_host_vt_lds = $(R)/g/gwen_data_vt.ld
+pd_host_vt_lds = $(R)/core/gwen_data_vt.ld
 b/pdex.so: $(pd_src) $(pd_host_vt_lds)
 	@echo CC	$@
 	@mkdir -p $(dir $@)

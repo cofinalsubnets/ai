@@ -1,8 +1,8 @@
 EMCC ?= /usr/lib/emscripten/emcc
 
 # g.c was split into per-concern translation units (g/*.c); build them all.
-g_c = $(wildcard ../g/*.c)
-g_h = $(wildcard ../g/*.h)
+g_c = $(wildcard ../core/*.c)
+g_h = $(wildcard ../core/*.h)
 
 # inc/ holds wasm's <data_vt.h> override (no flat code-address space, so it
 # resolves data kinds by sentinel ap rather than .gwen_data_vt slot index).

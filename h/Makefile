@@ -7,9 +7,9 @@ include $(R)/common.mk
 h_o = $(g_c:$(R)/%.c=b/%.o)
 # -Ib is first so b/data_vt.h (generated below) shadows the portable
 # g/data_vt.h; nothing else in b/ collides with a g/ header.
-cc = $(CC) $(g_cflags) -fpic -Ib -I$(R) -I$(R)/g -I.
+cc = $(CC) $(g_cflags) -fpic -Ib -I$(R) -I$(R)/core -I.
 # Pins the gwen_data_vt sentinel order on every final link (see the script).
-vt_ld = $(R)/g/gwen_data_vt.ld
+vt_ld = $(R)/core/gwen_data_vt.ld
 ldflags = -Wl,-T,$(vt_ld)
 # data.o is the data-sentinel TU (g/data.c). gen_data_vt.py reflects its
 # gwen_data_vt.NN section sizes into b/data_vt.h, whose g_typ() shifts instead
@@ -43,12 +43,12 @@ b/lib$n.so: b/lib$n.a $(vt_ld)
 # The data-sentinel TU bootstraps from the portable header (no b/data_vt.h
 # prerequisite -- that would be circular, since b/data_vt.h is reflected out
 # of this object). Its explicit recipe overrides the pattern rules below.
-b/g/data.o: $(R)/g/data.c $(g_h)
+b/core/data.o: $(R)/core/data.c $(g_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(cc) -c $< -o $@
 
-b/data_vt.h: b/g/data.o $(gen_vt)
+b/data_vt.h: b/core/data.o $(gen_vt)
 	@echo GEN	$@
 	@$(gen_vt) $< -o $@
 
@@ -74,15 +74,15 @@ b/lcat: lcat.c $(h_o) $(vt_h) $(vt_ld)
 	@mkdir -p $(dir $@)
 	@$(cc) $(ldflags) -o $@ lcat.c $(h_o) -lm
 
-b/repl.h: b/lcat $(R)/$x/repl.$x
+b/repl.h: b/lcat $(R)/core/repl.$x
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
-	@cat $(R)/$x/repl.$x | b/lcat >$@
+	@cat $(R)/core/repl.$x | b/lcat >$@
 
-b/boot.h: b/lcat $(R)/$x/boot.$x
+b/boot.h: b/lcat $(R)/core/boot.$x
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
-	@cat $(R)/$x/boot.$x | b/lcat >$@
+	@cat $(R)/core/boot.$x | b/lcat >$@
 
 b/$n.1: b/$n manpage.$x
 	@echo GEN	$@

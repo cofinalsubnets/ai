@@ -1,4 +1,4 @@
-#include "../g/g.h"
+#include "../core/g.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>

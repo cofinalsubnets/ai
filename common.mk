@@ -9,11 +9,11 @@ x = g
 m = $R/h/b/$n
 a ?= $(shell uname -m)
 
-t = $(sort $(wildcard $R/t/*.$x))
+t = $(sort $(wildcard $R/test/*.$x))
 
-g_h = $(wildcard $R/g/*.h)
-g_c = $(wildcard $R/g/*.c)
-f_c = $(wildcard $R/f/*.c)
+g_h = $(wildcard $R/core/*.h)
+g_c = $(wildcard $R/core/*.c)
+f_c = $(wildcard $R/font/*.c)
 c_c = $(wildcard $R/libc/*.c)
 
 g_cflags = -std=gnu23 -g -O2 -pipe \
