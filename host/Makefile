@@ -81,17 +81,16 @@ b/$n: main.c b/lib$n.a b/boot.h b/repl.h $(vt_h) $(vt_ld)
 
 # boot.h / repl.h: the prelude re-serialized into a C string literal by
 # tools/lcat.g (the gwen port of the old host/lcat.c), run on the bootstrap gl0.
-# `-l boot.g` loads the prelude first: not because lcat.g needs it, but to keep
-# the heap off near-empty, which trips a GC bug in gl0 (see project memory).
-b/repl.h: $(gl0) $(R)/tools/lcat.$x $(R)/core/repl.$x $(R)/core/boot.$x
+# lcat.g is bif-only, so it needs no prelude loaded.
+b/repl.h: $(gl0) $(R)/tools/lcat.$x $(R)/core/repl.$x
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
-	@$(gl0) -l $(R)/core/boot.$x $(R)/tools/lcat.$x $(R)/core/repl.$x >$@
+	@$(gl0) $(R)/tools/lcat.$x $(R)/core/repl.$x >$@
 
 b/boot.h: $(gl0) $(R)/tools/lcat.$x $(R)/core/boot.$x
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
-	@$(gl0) -l $(R)/core/boot.$x $(R)/tools/lcat.$x $(R)/core/boot.$x >$@
+	@$(gl0) $(R)/tools/lcat.$x $(R)/core/boot.$x >$@
 
 b/$n.1: b/$n manpage.$x
 	@echo GEN	$@

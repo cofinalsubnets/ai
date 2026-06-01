@@ -185,13 +185,17 @@ static Ana(ana_v) {
     if (g_ok(f = c0_ix(f, c, g_vm_lazyb, y)))
       f = ana_ap(f, c, BB(f->sp[2]));
     return f; }
-  // other definition of local let form?
-  if (memq(f, d->stack, x)) return
+  // let binding in the *current* scope -> a direct stack slot.
+  if (d == *c && memq(f, d->stack, x)) return
     c0_ix(f, c, g_vm_arg, putnum(lidx(f, x, d->stack)));
-  // closure or lambda argument?
-  if (memq(f, d->imps, x) || memq(f, d->args, x)) {
+  // a let binding, closure var, or lambda arg -- possibly from an enclosing
+  // scope. If enclosing, import it into this scope's free-variable (imps) list
+  // so the offset c1_var emits is valid in *this* frame, not the defining one;
+  // otherwise a captured let binding aliases whatever sits at the same offset
+  // in the closure's frame (see the boot.g compiler's ava fix, commit 8e3acf0).
+  if (memq(f, d->stack, x) || memq(f, d->imps, x) || memq(f, d->args, x)) {
    incl(*c, 2);
-   if (d != *c) // if we have found the variable in an enclosing scope then import it
+   if (d != *c) // found in an enclosing scope -> import (capture) it
     f = gxl(g_push(f, 2, x, (*c)->imps)),
     x = g_ok(f) ? A((*c)->imps = pop1(f)) : nil;
    return g_push(f, 3, c1_var, x, (*c)->stack); } } }
