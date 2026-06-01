@@ -6,11 +6,15 @@
 R := .
 include common.mk
 
-.PHONY: test all h k pd clean distclean wasm
-test: h
+.PHONY: test all h k pd clean distclean wasm rp2040 test_host test_js
+test: test_host
+test_all: test_host test_js
+test_js:
+	@cd js && npm test
+test_host: h
 	@echo TEST
 	@cat $t | $m
-all: h k pd wasm pico
+all: h k pd wasm rp2040
 h:
 	@$(MAKE) -C h
 k:
@@ -19,17 +23,16 @@ pd:
 	@$(MAKE) -C pd
 wasm:
 	@$(MAKE) -C wasm
-pico: pico/Makefile
-	@$(MAKE) -C pico
-pico/Makefile: pico/CMakeLists.txt
-	@cd pico
-	@cmake .
+rp2040: rp2040/Makefile
+	@$(MAKE) -C rp2040
+rp2040/Makefile: rp2040/CMakeLists.txt
+	@cd rp2040 && cmake .
 clean:
 	@$(MAKE) -C h clean
 	@$(MAKE) -C k clean
 	@$(MAKE) -C pd clean
 	@$(MAKE) -C wasm clean
-	@[ -e pico/Makefile ] && $(MAKE) -C pico clean || true
+	@[ -e rp2040/Makefile ] && $(MAKE) -C rp2040 clean || true
 
 distclean: clean
 	@$(MAKE) -C k distclean
