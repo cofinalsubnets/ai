@@ -176,18 +176,37 @@ static union u const
 
 static char const
 boot[] =
+// GL_BOOTSTRAP builds the prelude-less bootstrap interpreter (b/gl0) used to
+// generate boot.h/repl.h and b/data_vt.h; it gets its prelude at runtime via
+// the cli driver's `-l` flag instead of having it compiled in.
+#ifdef GL_BOOTSTRAP
+  ""
+#else
 #include "boot.h"
 #include "repl.h"
+#endif
 ,
  rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(sym 0)))",
- // Run a script file named by (car argv): open it, then read-eval each form
- // through fread until it hands back the gensym eof sentinel. A leading
- // #!-shebang line is skipped by the reader, which treats # like ; (a
- // comment to end-of-line). nil open -> message to err and exit 1.
- load[] = "(:(g p e)(: r(fread p e)(?(= e r)0(: _(ev'ev r)(g p e))))"
-            "(: p(open(car argv)\"r\")"
-               "(? p(g p(sym 0))"
-                   "(: _(fputs err(scat \"gl: cannot open \"(car argv)))(exit 1)))))"
+ // CLI driver. argv (gl's own name already dropped) is [-l FILE]... SCRIPT
+ // [ARGS...]. load1 opens a file and read-eval-loops its forms (a leading
+ // #!-shebang line is skipped by the reader, which treats # like ;). strip-l
+ // loads each leading `-l FILE` as prelude and returns the tail; we rebind the
+ // global argv to it so SCRIPT sees argv[0] == itself, then load SCRIPT.
+ // bif-only (no prelude funcs): runs on gl0 before any prelude exists.
+ // (the read loop threads the port q as a parameter rather than capturing it:
+ // a closure-captured heap port doesn't survive the GC that fread triggers in
+ // a near-empty heap -- see project_tools_to_gwen memory.)
+ cli[] =
+  "(: (load1 p)"
+  "   (: q (open p \"r\")"
+  "      (? q ((: (g e q) (: r (fread q e) (? (= e r) 0 (: _ (ev 'ev r) (g e q))))) (sym 0) q)"
+  "           (: _ (fputs err (scat \"gl: cannot open \" p)) (exit 1)))))"
+  "(: (strip-l a)"
+  "   (? (& (twop a) (= (car a) \"-l\"))"
+  "      (: _ (load1 (car (cdr a))) (strip-l (cdr (cdr a))))"
+  "      a))"
+  "(: argv (strip-l argv))"
+  "(load1 (car argv))"
   ;
 
 static struct g *report(struct g*f) {
@@ -199,16 +218,15 @@ static struct g *report(struct g*f) {
 // --- main: load the prelude and run the REPL script ------------------
 int main(int argc, char const **argv) {
   struct g *f = g_ini();
-  // First non-program arg, if any, is a script to run; otherwise REPL on a
-  // tty, else read-eval stdin.
-  char const *script = argc > 1 ? argv[1] : NULL;
-  bool replp = !script && isatty(STDIN_FILENO);
+  // With args, run them as a CLI program (the cli driver parses -l and the
+  // script in lisp); otherwise REPL on a tty, else read-eval stdin.
+  bool argp = argc > 1;
+  bool replp = !argp && isatty(STDIN_FILENO);
   if (replp) raw_mode();
-  // Build the `argv` list. In script mode drop gl's own name so the script
-  // sees argv[0] == itself (Unix convention): (car argv) is the script path,
-  // (car (cdr argv)) its first argument.
-  char const **av = script ? argv + 1 : argv;
-  int ac = script ? argc - 1 : argc;
+  // Build the `argv` list. With args, drop gl's own name so the script sees
+  // argv[0] == itself once the cli driver strips any leading -l flags.
+  char const **av = argp ? argv + 1 : argv;
+  int ac = argp ? argc - 1 : argc;
   for (; *av; f = g_strof(f, *av++));
   for (f = g_push(f, 1, g_nil); ac--; f = gxr(f));
   if (g_ok(f)) {
@@ -218,5 +236,5 @@ int main(int argc, char const **argv) {
                         {"argv", g_pop1(f)},
                         {0}};
     f = g_evals_(g_defs(f, d), boot);
-    f = g_evals_(f, script ? load : replp ? "(repl 0 0)" : rel); }
+    f = g_evals_(f, argp ? cli : replp ? "(repl 0 0)" : rel); }
   return g_fin(report(f)); }

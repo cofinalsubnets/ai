@@ -1,6 +1,6 @@
 # Host build. Run from project root via `make h`, or directly via
-# `cd h && make`. Outputs (binary, libs, manpage, lcat, and the
-# lcat-generated boot.h / repl.h) all land in $(R)/h/b/.
+# `cd h && make`. Outputs (binary, libs, manpage, the bootstrap gl0, and the
+# gl0-generated boot.h / repl.h / data_vt.h) all land in $(R)/h/b/.
 R := ..
 include $(R)/common.mk
 
@@ -11,13 +11,17 @@ cc = $(CC) $(g_cflags) -fpic -Ib -I$(R) -I$(R)/core -I.
 # Pins the gwen_data_vt sentinel order on every final link (see the script).
 vt_ld = $(R)/core/gwen_data_vt.ld
 ldflags = -Wl,-T,$(vt_ld)
-# data.o is the data-sentinel TU (g/data.c). gen_data_vt.py reflects its
+# data.o is the data-sentinel TU (g/data.c). tools/gen_data_vt.g reflects its
 # gwen_data_vt.NN section sizes into b/data_vt.h, whose g_typ() shifts instead
 # of doing the portable header's two link-time divides. Every object depends
 # on it (below) except data.o itself, which bootstraps from g/data_vt.h -- it
 # never calls g_typ, so the stride it records doesn't depend on which it sees.
 vt_h = b/data_vt.h
-gen_vt = $(R)/tools/gen_data_vt.py
+# Prelude-less bootstrap interpreter, one-shot compiled against the fallback
+# core/data_vt.h (no -Ib), used to run the gwen build tools (tools/*.g) that
+# generate the headers below -- so it needs none of those headers itself,
+# breaking the circularity. Gets its prelude at runtime via the cli -l flag.
+gl0 = b/gl0
 
 .PHONY: default boot.h repl.h clean
 default: b/$n b/lib$n.so b/$n.1
@@ -48,9 +52,15 @@ b/core/data.o: $(R)/core/data.c $(g_h)
 	@mkdir -p $(dir $@)
 	@$(cc) -c $< -o $@
 
-b/data_vt.h: b/core/data.o $(gen_vt)
+# One-shot bootstrap interpreter (fallback header, no compiled-in prelude).
+$(gl0): main.c $(g_c) $(g_h) $(vt_ld)
+	@echo CC	$@
+	@mkdir -p $(dir $@)
+	@$(CC) $(g_cflags) -DGL_BOOTSTRAP -I$(R) -I$(R)/core -I. $(ldflags) -o $@ main.c $(g_c) -lm
+
+b/data_vt.h: b/core/data.o $(gl0) $(R)/tools/gen_data_vt.$x $(R)/core/boot.$x
 	@echo GEN	$@
-	@$(gen_vt) $< -o $@
+	@$(gl0) -l $(R)/core/boot.$x $(R)/tools/gen_data_vt.$x $< -o $@
 
 # g/*.c (and any other root-level *.c) -> b/<dir>/*.o
 b/%.o: $(R)/%.c $(g_h) $(vt_h)
@@ -69,20 +79,19 @@ b/$n: main.c b/lib$n.a b/boot.h b/repl.h $(vt_h) $(vt_ld)
 	@mkdir -p $(dir $@)
 	@$(cc) $(ldflags) -o $@ main.c b/lib$n.a -lm
 
-b/lcat: lcat.c $(h_o) $(vt_h) $(vt_ld)
-	@echo CC	$@
-	@mkdir -p $(dir $@)
-	@$(cc) $(ldflags) -o $@ lcat.c $(h_o) -lm
-
-b/repl.h: b/lcat $(R)/core/repl.$x
+# boot.h / repl.h: the prelude re-serialized into a C string literal by
+# tools/lcat.g (the gwen port of the old host/lcat.c), run on the bootstrap gl0.
+# `-l boot.g` loads the prelude first: not because lcat.g needs it, but to keep
+# the heap off near-empty, which trips a GC bug in gl0 (see project memory).
+b/repl.h: $(gl0) $(R)/tools/lcat.$x $(R)/core/repl.$x $(R)/core/boot.$x
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
-	@cat $(R)/core/repl.$x | b/lcat >$@
+	@$(gl0) -l $(R)/core/boot.$x $(R)/tools/lcat.$x $(R)/core/repl.$x >$@
 
-b/boot.h: b/lcat $(R)/core/boot.$x
+b/boot.h: $(gl0) $(R)/tools/lcat.$x $(R)/core/boot.$x
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
-	@cat $(R)/core/boot.$x | b/lcat >$@
+	@$(gl0) -l $(R)/core/boot.$x $(R)/tools/lcat.$x $(R)/core/boot.$x >$@
 
 b/$n.1: b/$n manpage.$x
 	@echo GEN	$@
