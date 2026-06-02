@@ -27,12 +27,9 @@ g_noinline bool eqv(struct g *f, word a, word b) {
 // still rejects mixed-type pairs (so table keys 3 and 3.0 stay distinct).
 g_vm(g_vm_eq) {
  word a = Sp[0], b = Sp[1];
- bool eq;
- if (nump(a) && nump(b)) eq = a == b;
- else if ((nump(a) || flop(a)) && (nump(b) || flop(b))) {
-  g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : flo_get(a);
-  g_flo_t bd = nump(b) ? (g_flo_t) getnum(b) : flo_get(b);
-  eq = ad == bd;
- } else eq = eql(f, a, b);
- Sp[1] = eq ? putnum(-1) : nil;
- Sp += 1; Ip++; return Continue(); }
+ Sp[1] = a == b ||
+  (!flop(a) && !flop(b) ? eql(f, a, b) :
+   (flop(a) ? flo_get(a) : (g_flo_t) getnum(a)) == 
+   (flop(b) ? flo_get(b) : (g_flo_t) getnum(b))) ?
+  putnum(-1) : nil;
+ return Sp++, Ip++, Continue(); }

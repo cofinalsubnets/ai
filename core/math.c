@@ -23,49 +23,46 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 
 // Arithmetic is dispatched op-first: each operator is its own g_vm handler
 // (g_vm_add ... g_vm_rem) carrying an inlined both-fixnum fast path, and
-// tail-calls the shared slow handler arith_flo only when an operand isn't a
-// fixnum, an integer op overflows, or a division degenerates. This keeps the
-// common integer case free of the indirect re-dispatch + noinline struct
-// return + runtime op-switch the old generic dispatcher imposed.
-enum arith_op { aop_add, aop_sub, aop_mul, aop_quot, aop_rem };
+// tail-calls its own dedicated slow handler (g_vm_add_flo ...) only when an
+// operand isn't a fixnum, an integer op overflows, or a division degenerates.
+// This keeps the common integer case free of the indirect re-dispatch +
+// noinline struct return + runtime op-switch the old generic dispatcher
+// imposed, and the slow path statically specialized — no op-switch either.
 
-// Slow path: at least one operand is non-fixnum, or the fixnum op overflowed
-// the tagged range / hit a /0 or INT_MIN/-1 degenerate. Non-numeric operand →
-// nil. Otherwise promote both to g_flo_t, compute, and box the f64 inline.
-// g_vm (noinline) + reached only by tail call, so the per-op fast paths stay
-// branch-light and TCO-clean (the &-escaping float box never touches them).
-static g_vm(arith_flo, enum arith_op op) {
- word a = Sp[0], b = Sp[1];
- if (!(nump(a) || flop(a)) || !(nump(b) || flop(b)))
-  return *++Sp = nil, Ip++, Continue();
- g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : flo_get(a),
-         bd = nump(b) ? (g_flo_t) getnum(b) : flo_get(b), rd;
- switch (op) {
-  default: __builtin_trap();
-  case aop_add:  rd = ad + bd; break;
-  case aop_sub:  rd = ad - bd; break;
-  case aop_mul:  rd = ad * bd; break;
-  case aop_quot: rd = ad / bd; break;          // ±inf or NaN on bd == 0
-  case aop_rem:  rd = g_fmod(ad, bd); break; }  // NaN on bd == 0
- uintptr_t req = Width(struct g_vec) + Width(g_flo_t);
- Have(req);
- struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
- Hp += req;
- flo_put(v->shape, rd);
+// Slow path, one handler per operator: at least one operand is non-fixnum, or
+// the fixnum op overflowed the tagged range / hit a /0 or INT_MIN/-1
+// degenerate. Non-numeric operand → nil. Otherwise promote both to g_flo_t,
+// compute `expr`, and box the f64 inline. g_vm (noinline) + reached only by
+// tail call, so the per-op fast paths stay branch-light and TCO-clean (the
+// &-escaping float box never touches them).
+#define AVM_FLO(n, expr) static g_vm(g_vm_##n##_flo) { \
+ word a = Sp[0], b = Sp[1]; \
+ if (!(nump(a) || flop(a)) || !(nump(b) || flop(b))) \
+  return *++Sp = nil, Ip++, Continue(); \
+ g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : flo_get(a), \
+         bd = nump(b) ? (g_flo_t) getnum(b) : flo_get(b), rd = (expr); \
+ uintptr_t req = Width(struct g_vec) + Width(g_flo_t); \
+ Have(req); \
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO); \
+ Hp += req; \
+ flo_put(v->shape, rd); \
  return *++Sp = word(v), Ip++, Continue(); }
+AVM_FLO(add,  ad + bd)
+AVM_FLO(sub,  ad - bd)
+AVM_FLO(mul,  ad * bd)
+AVM_FLO(quot, ad / bd)         // ±inf or NaN on bd == 0
+AVM_FLO(rem,  g_fmod(ad, bd))  // NaN on bd == 0
 
-// Both-fixnum fast path, inlined per operation. add/sub/mul use the compiler
-// overflow builtins; the result must also fit the tagged-fixnum range (one bit
-// lost to the tag). quot/rem guard /0 and the INT_MIN/-1 overflow, then
-// range-check the quotient (-2^62 / -1 == 2^62 overflows the fixnum range).
-// Anything that fails a guard tail-calls arith_flo.
+// arith builtins take an explicit stack address but
+// empirically this is compiled away on both GCC and
+// clang so TCO is preserved.
 #define AVM_OVF(n, builtin) g_vm(g_vm_##n) { \
  word a = Sp[0], b = Sp[1]; \
  if (nump(a) && nump(b)) { intptr_t t; \
   if (!builtin((intptr_t) getnum(a), (intptr_t) getnum(b), &t) && \
       t >= (INTPTR_MIN >> 1) && t <= (INTPTR_MAX >> 1)) \
    return *++Sp = putnum(t), Ip++, Continue(); } \
- return Ap(arith_flo, f, aop_##n); }
+ return Ap(g_vm_##n##_flo, f); }
 AVM_OVF(add, __builtin_add_overflow)
 AVM_OVF(sub, __builtin_sub_overflow)
 AVM_OVF(mul, __builtin_mul_overflow)
@@ -78,21 +75,28 @@ AVM_OVF(mul, __builtin_mul_overflow)
    intptr_t t = av c_op bv; \
    if (t >= (INTPTR_MIN >> 1) && t <= (INTPTR_MAX >> 1)) \
     return *++Sp = putnum(t), Ip++, Continue(); } } \
- return Ap(arith_flo, f, aop_##n); }
+ return Ap(g_vm_##n##_flo, f); }
 AVM_DIV(quot, /)
 AVM_DIV(rem, %)
 
-// Mixed-numeric ordered comparison. Same nump-fast-path, else widen.
-// Non-numeric operands return nil (matches existing degraded behavior
-// on cross-type compares but well-defined).
-#define CMP_OP(nom, c_op) g_vm(nom) {                                      \
- word a = Sp[0], b = Sp[1], x = nil;                                                \
- if (nump(a) && nump(b)) x = (a c_op b) ? putnum(-1) : nil;                \
- else if ((nump(a) || flop(a)) && (nump(b) || flop(b))) {                  \
-  g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : flo_get(a),    \
-          bd = nump(b) ? (g_flo_t) getnum(b) : flo_get(b);    \
-  x = (ad c_op bd) ? putnum(-1) : nil; }                      \
+// Mixed-numeric ordered comparison, split like the arith handlers so the
+// both-fixnum case is a compact, contiguous fast path: load/test/compare/
+// store/jmp in source order, landing in a single cache line. The widen-to-
+// float branch is peeled into a per-op slow handler (nom##_flo) tail-called
+// only when an operand isn't a fixnum. Non-numeric operands return nil
+// (matches existing degraded behavior on cross-type compares but well-defined).
+#define CMP_FLO(nom, c_op) static g_vm(nom##_flo) {                  \
+ word a = Sp[0], b = Sp[1], x = nil;                                 \
+ if ((nump(a) || flop(a)) && (nump(b) || flop(b))) {                 \
+  g_flo_t ad = nump(a) ? (g_flo_t) getnum(a) : flo_get(a),           \
+          bd = nump(b) ? (g_flo_t) getnum(b) : flo_get(b);           \
+  x = (ad c_op bd) ? putnum(-1) : nil; }                             \
  return *++Sp = x, Ip++, Continue(); }
+#define CMP_OP(nom, c_op) CMP_FLO(nom, c_op) g_vm(nom) {             \
+ word a = Sp[0], b = Sp[1];                                          \
+ if (__builtin_expect(nump(a) && nump(b), 1))                        \
+  return *++Sp = (a c_op b) ? putnum(-1) : nil, Ip++, Continue();    \
+ return Ap(nom##_flo, f); }
 
 CMP_OP(g_vm_lt, <) CMP_OP(g_vm_le, <=) CMP_OP(g_vm_gt, >) CMP_OP(g_vm_ge, >=)
 
