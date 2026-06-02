@@ -126,7 +126,7 @@ g_vm(g_vm_gc, uintptr_t);
 g_vm_t g_vm_kcall,
  g_vm_two, g_vm_vec, g_vm_sym, g_vm_tbl, g_vm_text, // data self-quote sentinels, enum q order
  g_vm_putn, g_vm_info, g_vm_dot,    g_vm_clock,
- g_vm_nilp,  g_vm_symnom,              g_vm_putc, g_vm_gensym, g_vm_twop,
+ g_vm_nilp,  g_vm_symnom, g_vm_putc, g_vm_gensym, g_vm_twop,
  g_vm_len, g_vm_get,
  g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_tblp, g_vm_band,   g_vm_bor,  g_vm_flo,  g_vm_flop,
  g_vm_sin, g_vm_cos, g_vm_tan, g_vm_atan, g_vm_atan2,

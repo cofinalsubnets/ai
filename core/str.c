@@ -2,21 +2,15 @@
 #define MIN(p,q) ((p)<(q)?(p):(q))
 #define MAX(p,q) ((p)>(q)?(p):(q))
 
-// Allocate a fresh struct g_str of `len` bytes, zero-filled, push on Sp.
 struct g *str0(struct g *f, uintptr_t len) {
  uintptr_t req = str_type_width + b2w(len);
- if (g_ok(f = g_have(f, req + 1))) {
-  struct g_str *s = bump(f, req);
-  ini_str(s, len);
-  memset(s->bytes, 0, len);
-  *--f->sp = word(s); }
+ if (g_ok(f = g_have(f, req + 1)))
+  *--f->sp = word(ini_str(bump(f, req), len));
  return f; }
-
 
 struct g *g_strof(struct g *f, char const *cs) {
  uintptr_t len = strlen(cs);
- f = str0(f, len);
- if (g_ok(f)) memcpy(txt(f->sp[0]), cs, len);
+ if (g_ok(f = str0(f, len))) memcpy(txt(f->sp[0]), cs, len);
  return f; }
 
 op11(g_vm_strp, strp(Sp[0]) ? putnum(-1) : nil)

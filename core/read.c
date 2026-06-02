@@ -1,5 +1,11 @@
 #include "i.h"
+
+static struct g *grbufg(struct g *f, uintptr_t len);
 static struct g *flo_alloc(struct g*, g_flo_t);
+static struct g *gzreads(struct g *f, bool nested);
+static struct g *gzread1(struct g *f);
+static g_inline struct g *gzread1sym(struct g*f, int c);
+static g_inline struct g *gzread1str(struct g*f);
 
 ////
 /// " the parser "
@@ -18,33 +24,35 @@ static struct g* g_z_getc(struct g*f) {
    continue; }
  return f; }
 
-static struct g *grbufn(struct g *f) {
- if (g_ok(f = g_have(f, str_type_width + 2))) {
-  union u *k = bump(f, str_type_width + 1);
-  *--f->sp = word(k);
-  struct g_str *o = (struct g_str*) k;
-  ini_str(o, sizeof(intptr_t)); }
- return f; }
+static struct g *gzread1(struct g*f) {
+ if (!g_ok(f = g_z_getc(f))) return f;
+ switch (f->b) {
+  case '(':  return gzreads(f, true);
+  case ')': case EOF: return encode(f, g_status_eof);
+  case '\'': return
+   g_code_of(f = gzread1(f)) == g_status_eof ? // quote with no operand
+    encode(g_core_of(f), g_status_more) :
+    gxl(pushq(gxr(push0(f))));
+  case '"': return gzread1str(f);
+  default: return gzread1sym(f, f->b); } }
 
-static struct g *grbufg(struct g *f) {
- if (g_ok(f)) {
-  size_t len = len(f->sp[0]),
-         req = str_type_width + 2 * b2w(len);
-  if (g_ok(f = g_have(f, req))) {
-   struct g_str *o = bump(f, req);
-   ini_str(o, 2 * len);
-   memcpy(txt(o), txt(f->sp[0]), len);
-   f->sp[0] = (word) o; } }
+static struct g *gzreads(struct g *f, bool nested) {
+ intptr_t n = 0;
+ for (int c; g_ok(f = g_z_getc(f)); n++) {
+  if ((c = f->b) == ')') break;                          // list closed
+  if (c == EOF) {                               // end of input...
+   if (nested) return encode(f, g_status_more); 
+   break; }                                     //  ...at top level: done
+  f = gzread1(zungetc(f, c)); }
+ for (f = push0(f); n--; f = gxr(f));
  return f; }
-
-static struct g *gzreads(struct g *f, bool nested);
 
 static g_inline struct g *gzread1str(struct g*f) {
  int c;
  size_t n = 0, lim = sizeof(word);
  struct g_str *b = 0;
  MM(f, (g_word*) &b);
- for (f = grbufn(f); g_ok(f); f = grbufg(f), lim *= 2)
+ for (f = str0(f, sizeof(word)); g_ok(f); f = grbufg(f, lim), lim *= 2)
   for (b = (struct g_str*) f->sp[0]; n < lim; txt(b)[n++] = c) {
    if (!g_ok(f = zgetc(f))) goto out;     // threaded; char in f->b
    else if ((c = f->b) == '"') { len(b) = n; goto out; }
@@ -72,8 +80,8 @@ static g_inline struct g *gzread1sym(struct g*f, int c) {
  uintptr_t n = 1, lim = sizeof(intptr_t);
  struct g_str *b = 0;
  MM(f, (g_word*) &b);
- if (g_ok(f = grbufn(f)))
-  for (txt((struct g_str*) f->sp[0])[0] = c; g_ok(f); f = grbufg(f), lim *= 2)
+ if (g_ok(f = str0(f, sizeof(word))))
+  for (txt((struct g_str*) f->sp[0])[0] = c; g_ok(f); f = grbufg(f, lim), lim *= 2)
    for (b = (struct g_str*) f->sp[0]; n < lim; txt(b)[n++] = c) {
     if (!g_ok(f = zgetc(f))) goto out;
     switch (c = f->b) {
@@ -93,46 +101,13 @@ static g_inline struct g *gzread1sym(struct g*f, int c) {
        else if (g_ok(f = flo_alloc(f, d))) f->sp[1] = f->sp[0], f->sp++; }
       goto out; } }
 out: return UM(f), f; }
-
-static struct g *gzread1(struct g*f) {
- if (!g_ok(f = g_z_getc(f))) return f;
- switch (f->b) {
-  case '(':  return gzreads(f, true);
-  case ')': case EOF: return encode(f, g_status_eof);
-  case '\'': return
-   g_code_of(f = gzread1(f)) == g_status_eof ? // quote with no operand
-    encode(g_core_of(f), g_status_more) :
-    gxl(pushq(gxr(push0(f))));
-  case '"': return gzread1str(f);
-  default: return gzread1sym(f, f->b); } }
-
-g_vm(g_vm_str) {
- uintptr_t n = llen(Sp[0]);
- // FIXME use Have instead of Pack/Unpack
- Pack(f);
- if (!g_ok(f = str0(f, n))) return gtrap(f);
- // sp[0] is the new string; sp[1] is the original charlist.
- char *t = txt(f->sp[0]);
- uintptr_t i = 0;
- for (word l = f->sp[1]; twop(l); l = B(l)) t[i++] = (char) getnum(A(l));
- f->sp[1] = f->sp[0];
- f->sp += 1;
- Unpack(f);
- Ip += 1;
- return Continue(); }
-
-struct g *g_read1(struct g*f, struct g_io *i) {
- return g_core_of(f)->io = i, gzread1(f); }
-
-static struct g *gzreads(struct g *f, bool nested) {
- intptr_t n = 0;
- for (int c; g_ok(f = g_z_getc(f)); n++) {
-  if ((c = f->b) == ')') break;                          // list closed
-  if (c == EOF) {                               // end of input...
-   if (nested) return encode(f, g_status_more); 
-   break; }                                     //  ...at top level: done
-  f = gzread1(zungetc(f, c)); }
- for (f = push0(f); n--; f = gxr(f));
+// Allocate a rank-0 G_VT_FLO g_vec wrapping v, push on Sp.
+static g_inline struct g *flo_alloc(struct g *f, g_flo_t v) {
+ uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
+ if (g_ok(f = g_have(f, req + 1))) {
+  struct g_vec *r = ini_scalar(bump(f, req), G_VT_FLO);
+  flo_put(r->shape, v);
+  *--f->sp = word(r); }
  return f; }
 
 struct g *g_reads(struct g *f, struct g_io* i) {
@@ -159,6 +134,16 @@ static g_noinline struct g_strtod_r parse_flo_strict(char const *bytes, size_t l
   r.ok = e != buf && *e == 0;
  return r; }
 
+struct g *g_read1(struct g*f, struct g_io *i) {
+ return g_core_of(f)->io = i, gzread1(f); }
+
+static struct g *grbufg(struct g *f, uintptr_t len) {
+ if (g_ok(f = str0(f, 2 * len)))
+  memcpy(txt(f->sp[0]), txt(f->sp[1]), len),
+  f->sp[1] = f->sp[0],
+  f->sp++;
+ return f; }
+
 // (flo s) — parse a gwen string as a decimal float. Returns a rank-0
 // f64 box if the entire string parses, else nil. Used by the gwen-side
 // reader in repl.g to match the C reader's strtol → strtod → intern
@@ -176,17 +161,9 @@ g_vm(g_vm_flo) {
  Sp[0] = word(r);
  return Ip++, Continue(); }
 
-// Allocate a rank-0 G_VT_FLO g_vec wrapping v, push on Sp.
-static struct g *flo_alloc(struct g *f, g_flo_t v) {
- uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
- if (g_ok(f = g_have(f, req + 1))) {
-  struct g_vec *r = ini_scalar(bump(f, req), G_VT_FLO);
-  flo_put(r->shape, v);
-  *--f->sp = word(r); }
- return f; }
-
 g_vm(g_vm_fread) {
- if (!iop(Sp[0])) return Sp++, Ip++, Continue();
+ Ip++;
+ if (!iop(Sp[0])) return Sp++, Continue();
  struct g_io *i = (struct g_io*) Sp[0];
  Pack(f);
  if (g_ok(f = g_read(f, i))) f->sp[2] = f->sp[0], f->sp += 2;
@@ -201,4 +178,19 @@ g_vm(g_vm_fread) {
    f->sp++;
    break;
   default: return gtrap(f); }
- return Unpack(f), Ip++, Continue(); }
+ return Unpack(f), Continue(); }
+
+g_vm(g_vm_str) {
+ uintptr_t n = llen(Sp[0]);
+ // FIXME use Have instead of Pack/Unpack
+ Pack(f);
+ if (!g_ok(f = str0(f, n))) return gtrap(f);
+ // sp[0] is the new string; sp[1] is the original charlist.
+ char *t = txt(f->sp[0]);
+ uintptr_t i = 0;
+ for (word l = f->sp[1]; twop(l); l = B(l)) t[i++] = (char) getnum(A(l));
+ f->sp[1] = f->sp[0];
+ f->sp += 1;
+ Unpack(f);
+ Ip += 1;
+ return Continue(); }
