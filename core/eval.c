@@ -175,11 +175,17 @@ static Ana(ana_v) {
  word y;
  if (!g_ok(f)) return f;
  for (struct env *d = *c;; d = d->par) {
-  if (nilp(d)) return (y = g_tget(f, 0, x, f->dict)) ?
-   ana_q(f, c, y) :
-   (f = gxl(g_push(f, 2, x, (*c)->imps)),
-    f = c0_ix(f, c, g_vm_freev, (*c)->imps = g_ok(f) ? pop1(f) : nil),
-    f);
+  if (nilp(d)) {
+   if ((y = g_tget(f, 0, x, f->dict))) return ana_q(f, c, y);
+   // undefined global: resolved by g_vm_freev via the dict at run time.
+   // Only record it as a captured free variable when this scope is nested
+   // (cf. ev.g avb: `(? (get 0 'par c) (push 'imp x))`). At top level there
+   // is no enclosing frame to capture from, so adding x to imps would make a
+   // second reference resolve via memq(imps) to an uninitialized arg slot.
+   if (!nilp((*c)->par))
+    f = gxl(g_push(f, 2, x, (*c)->imps)),
+    (*c)->imps = g_ok(f) ? pop1(f) : nil;
+   return c0_ix(f, c, g_vm_freev, x); }
   // lambda definition of local let form?
   if ((y = assq(f, d->lams, x))) {
     if (g_ok(f = c0_ix(f, c, g_vm_lazyb, y)))
@@ -370,11 +376,18 @@ static g_inline struct g *ana_d(struct g *f, struct env **b, word exp) {
  struct env *q = (struct env*) pop1(f), **c = &q;
  // lots of variables :(
  word nom = nil, def = nil, lam = nil,
-      v = nil, d = nil, e = nil;
+      v = nil, d = nil, e = nil, os = nil;
  MM(f, &nom), MM(f, &def), MM(f, &lam);
- MM(f, &d); MM(f, &e); MM(f, &v); MM(f, &q);
+ MM(f, &d); MM(f, &e); MM(f, &v); MM(f, &q); MM(f, &os);
 
- // collect vars and defs into two lists
+ // collect vars and defs into two lists.
+ // While finding each bound lambda's closure (the c0_lambda below) we expose
+ // the preceding bindings on the enclosing scope's stack, so a let-bound
+ // lambda that refers to a sibling binding captures it as a free variable
+ // instead of falling through to a same-named global (cf. ev.g l2/jj's
+ // `_ (push 'stk (car n))`). The original stack is restored after the loop,
+ // before any code is emitted, so the run-time frame layout is unchanged.
+ os = (*b)->stack;
  while (twop(exp) && twop(B(exp))) {
   for (d = A(exp), e = AB(exp); twop(d); e = pop1(f), d = A(d)) {
    f = gxl(g_push(f, 2, e, nil));
@@ -390,7 +403,10 @@ static g_inline struct g *ana_d(struct g *f, struct env **b, word exp) {
    f = gxl(gxr(c0_lambda(f, c, nil, B(e))));
    if (!g_ok(f)) return forget();
    lam = pop1(f); }
+  f = gxl(g_push(f, 2, d, (*b)->stack)); // expose this binding to later siblings
+  (*b)->stack = g_ok(f) ? pop1(f) : nil;
   exp = BB(exp); }
+ (*b)->stack = os; // restore: emission below rebuilds the real frame
 
  intptr_t ll = llen(nom);
  bool oddp = twop(exp),
