@@ -186,19 +186,10 @@ static char const
   "      (: _ (load1 (car (cdr a))) (strip-l (cdr (cdr a))))"
   "      a))"
   "(: argv (strip-l argv))"
-  // a SCRIPT remains after the -l flags -> run it; otherwise (only -l flags, or
-  // none) read-eval stdin, so `gl -l foo.g` loads foo.g then acts like a pipe.
   "(? (twop argv) (load1 (car argv))"
   "   ((: (g e) (: r (fread in e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (sym 0)))"
   ;
 
-static struct g *report(struct g*f) {
-  switch (g_code_of(f)) {
-    default: break;
-    case g_status_oom: fprintf(stderr, "# oom@len=%ld\n", (long) g_core_of(f)->len); break; }
-  return f; }
-
-// --- main: load the prelude and run the REPL script ------------------
 int main(int argc, char const **argv) {
   struct g *f = g_ini();
   bool argp = argc > 1;
@@ -222,4 +213,7 @@ int main(int argc, char const **argv) {
     );
 #endif
     f = g_evals_(f, argp ? cli : replp ? "(repl 0 0)" : rel); }
-  return g_fin(report(f)); }
+  switch (g_code_of(f)) {
+    default: break;
+    case g_status_oom: fprintf(stderr, "# oom@len=%ld\n", (long) g_core_of(f)->len); break; }
+  return g_fin(f); }
