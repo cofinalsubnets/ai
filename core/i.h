@@ -198,7 +198,7 @@ double strtod(char const *restrict, char **restrict);
 // takes the address of a stack local, which clang -Os treats as an escape
 // and then refuses to sibling-call the trailing Continue() out of any VM
 // handler that inlines this -- silently breaking threaded dispatch (a
-// `call`+`ret` where there must be a `jmp`; see tools/vmret.py). GCC proves
+// `call`+`ret` where there must be a `jmp`; see tools/vmret.g). GCC proves
 // the local dead and TCOs either way; the union keeps the value in a
 // register so clang does too.
 _Static_assert(sizeof(g_flo_t) == sizeof(uintptr_t), "float box assumes g_flo_t is pointer-width");
@@ -213,7 +213,7 @@ static g_inline void flo_put(void *p, g_flo_t v) {
 // it is already an integer, only its signedness differs from the
 // uintptr_t slot. Neither helper takes the address of a stack local, so a
 // VM handler that inlines them keeps its trailing tail call (see the
-// flo_get/flo_put note above and tools/vmret.py).
+// flo_get/flo_put note above and tools/vmret.g).
 static g_inline intptr_t box_get(word x) { return (intptr_t) vec(x)->shape[0]; }
 static g_inline void box_put(void *p, intptr_t v) { *(uintptr_t*) p = (uintptr_t) v; }
 

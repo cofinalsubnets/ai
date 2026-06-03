@@ -59,11 +59,14 @@ k_asm_o = $(k_asm:%.asm=$(k_odir)/%.o)
 k_o = $(k_shared_o) $(k_local_o) $(k_S_o) $(k_asm_o)
 
 # Reflected out of this arch's vt.o so g_typ() shifts instead of doing the
-# portable header's two link-time divides (see tools/gen_data_vt.py). Every C
+# portable header's two link-time divides (see tools/gen_data_vt.g). Every C
 # object depends on it; vt.o itself bootstraps from the portable header (no
 # $(vt_h) prerequisite -- that would be circular -- and it never calls g_typ).
 vt_h = $(k_odir)/vt.h
-gen_vt = $(R)/tools/gen_data_vt.py
+# Run through the host interpreter $m (= $(R)/host/b/gl); built on demand via
+# the host-gl recursion below. py/gen_data_vt.py is the cross-checked reference
+# (make test_tools).
+gen_vt = $(R)/tools/gen_data_vt.$x
 
 # --- flags -----------------------------------------------------------
 kcflags = $(g_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
@@ -184,7 +187,7 @@ b/$n-$a.elf: $a/$a.lds $(k_o)
 # The tool walks .rela.* for the absolute-64 entries (R_RISCV_64 or
 # R_LARCH_64, both encoded as type 2) and stamps out IMAGE_REL_BASED_DIR64
 # records that do the same job lld-link does for the other two arches.
-# tools/elf2efi.py is kept as the cross-checked reference (make test_elf2efi).
+# tools/py/elf2efi.py is kept as the cross-checked reference (make test_tools).
 kefi_elfmach_riscv64     = elf64lriscv
 kefi_elfmach_loongarch64 = elf64loongarch
 ifneq ($(filter $a,riscv64 loongarch64),)
@@ -226,9 +229,9 @@ $(k_odir)/core/vt.o: $(R)/core/vt.c $(k_h) $(R)/host/b/boot.h $(R)/host/b/repl.h
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
 
-$(vt_h): $(k_odir)/core/vt.o $(gen_vt)
+$(vt_h): $(k_odir)/core/vt.o $(gen_vt) | $(m)
 	@echo GEN	$@
-	@$(gen_vt) $< -o $@
+	@$(m) $(gen_vt) $< -o $@
 
 # Compile shared C sources from g/ and f/.
 $(k_odir)/%.o: $(R)/%.c $(k_h) $(vt_h) $(R)/host/b/boot.h $(R)/host/b/repl.h

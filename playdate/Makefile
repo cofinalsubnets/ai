@@ -38,7 +38,9 @@ pd_o = $(pd_local_o) $(pd_shared_o) $(pd_sdk_o)
 # The simulator .so (host x86_64, dev-only) is a single-shot compile with no
 # intermediate vt.o, so it stays on the portable header.
 vt_h = b/vt.h
-gen_vt = $(R)/tools/gen_data_vt.py
+# Run through the host interpreter $m (= $(R)/host/b/gl), built on demand below.
+# py/gen_data_vt.py is the cross-checked reference (make test_tools).
+gen_vt = $(R)/tools/gen_data_vt.$x
 
 pd_mcflags = -mthumb -mcpu=cortex-m7 $(pd_fpu)
 pd_cpflags = \
@@ -66,9 +68,12 @@ sim: b/$n.pdx
 clean:
 	rm -rf b
 
-# boot.h is owned by the host build.
+# boot.h and the host gl (which runs gen_data_vt.g) are owned by the host build;
+# built on demand here so a standalone `make -C playdate` works.
 $(R)/host/b/boot.h:
 	@$(MAKE) -C $(R)/host b/boot.h
+$(m):
+	@$(MAKE) -C $(R)/host
 
 b/$n.pdx: b/Source/pdex.elf b/Source/pdex.so
 	@echo PDC	$@
@@ -87,9 +92,9 @@ b/core/vt.o: $(R)/core/vt.c | $(R)/host/b/boot.h
 	@mkdir -p $(dir $@)
 	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/host/b -I$(R)/f $(pd_incdir) $< -o $@
 
-b/vt.h: b/core/vt.o $(gen_vt)
+b/vt.h: b/core/vt.o $(gen_vt) | $(m)
 	@echo GEN	$@
-	@$(gen_vt) $< -o $@
+	@$(m) $(gen_vt) $< -o $@
 
 # Shared C sources from g/ and f/.
 b/%.o: $(R)/%.c $(vt_h) | $(R)/host/b/boot.h
