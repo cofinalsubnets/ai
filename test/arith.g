@@ -1,8 +1,8 @@
 ; arithmetic, comparison, equality:
 ; - fixnum fast paths unchanged
 ; - mixed nump/flop promotes to float
-; - overflow on fixnum ops promotes to float
-; - /0 returns nil in both type lanes
+; - integer overflow promotes to a boxed wide int (see test/box.g)
+; - /0 promotes to IEEE inf/-inf/NaN
 ; - non-numeric operands return nil
 
 (assert
@@ -27,10 +27,16 @@
  (= 3.0 (* 1.5 2.0))
  (= 3.0 (/ 1.5 0.5))
 
- ; --- overflow promotes to float ---
- ; 1e19 > 2^62 (fixnum tag costs one bit), so the result must be a flo.
- (= 1e19 (* 10000000000 1000000000))
- (~ (nump (* 10000000000 1000000000)))
+ ; --- integer overflow promotes to a boxed wide int (not a float) ---
+ ; 2^61 is the largest power of two that's still a fixnum; doubling it
+ ; overflows the 62-bit tag into a box that holds the exact integer
+ ; (which then demotes back to a fixnum once it fits again).
+ (~ (nump (* 2 2305843009213693952)))   ; 2^62: now a box, not a fixnum
+ (~ (flop (* 2 2305843009213693952)))   ; ...and integer, not float
+ (= 2305843009213693952 (/ (* 2 2305843009213693952) 2))           ; box / 2 demotes
+ (= 2305843009213693952 (- (* 2 2305843009213693952) 2305843009213693952)) ; box - fix demotes
+ (nump (- (* 2 2305843009213693952) 2305843009213693952))          ; ...to a fixnum
+ (= (* 2 2305843009213693952) (* 2 2305843009213693952))           ; equal boxes compare =
 
  ; --- /0 promotes to IEEE inf / -inf / NaN ---
  ; the result is a flo, not a fixnum; not equal to any finite value.

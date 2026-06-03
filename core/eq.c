@@ -21,15 +21,21 @@ g_noinline bool eqv(struct g *f, word a, word b) {
   if (w == base) return true;              // worklist drained: all equal
   b = *--w, a = *--w; } }
 
-// (= a b) — value-equality with numeric promotion across nump/flop.
-// Falls through to eql for non-numeric operands so symbol/pair/string
-// identity is unchanged. Note: this is strictly looser than eqv, which
+// (= a b) — value-equality with numeric promotion across the numeric tower
+// (fixnum / boxed float / boxed wide int). With a float operand we compare as
+// doubles (a box widens via box_get); otherwise eql handles it — two equal
+// wide-int boxes match through eqv's vec arm (g_vec_bytes covers the type +
+// payload), while a box and a fixnum never collide since boxes hold only
+// out-of-fixnum-range values. Falls through to eql for non-numeric operands so
+// symbol/pair/string identity is unchanged. Strictly looser than eqv, which
 // still rejects mixed-type pairs (so table keys 3 and 3.0 stay distinct).
 g_vm(g_vm_eq) {
  word a = Sp[0], b = Sp[1];
- Sp[1] = a == b ||
-  (!flop(a) && !flop(b) ? eql(f, a, b) :
-   (flop(a) ? flo_get(a) : (g_flo_t) getnum(a)) == 
-   (flop(b) ? flo_get(b) : (g_flo_t) getnum(b))) ?
-  putnum(-1) : nil;
+ bool r;
+ if (flop(a) || flop(b))
+  r = (nump(a) || flop(a) || boxp(a)) && (nump(b) || flop(b) || boxp(b)) &&
+      (flop(a) ? flo_get(a) : nump(a) ? (g_flo_t) getnum(a) : (g_flo_t) box_get(a)) ==
+      (flop(b) ? flo_get(b) : nump(b) ? (g_flo_t) getnum(b) : (g_flo_t) box_get(b));
+ else r = eql(f, a, b);
+ Sp[1] = r ? putnum(-1) : nil;
  return Sp++, Ip++, Continue(); }

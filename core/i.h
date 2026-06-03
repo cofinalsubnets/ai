@@ -6,6 +6,7 @@
 #define WBITS 64
 typedef double g_flo_t;
 #define G_VT_FLO g_vt_f64
+#define G_VT_INT g_vt_i64
 #define g_sin   sin
 #define g_cos   cos
 #define g_tan   tan
@@ -19,6 +20,7 @@ typedef double g_flo_t;
 #define WBITS 32
 typedef float g_flo_t;
 #define G_VT_FLO g_vt_f32
+#define G_VT_INT g_vt_i32
 #define g_sin   sinf
 #define g_cos   cosf
 #define g_tan   tanf
@@ -159,6 +161,12 @@ static g_inline bool vecp(word _) { return homp(_) && cell(_)->ap == g_vm_vec; }
 static g_inline bool strp(word _) { return homp(_) && cell(_)->ap == g_vm_text; }
 static g_inline bool flop(word _) {
   return vecp(_) && vec(_)->rank == 0 && vec(_)->type == G_VT_FLO; }
+// Wide-integer box: a rank-0 G_VT_INT scalar vec. Arises only from
+// transparent fixnum overflow (core/math.c); never holds a value that
+// fits the fixnum tag (canonical demotion keeps box and fixnum ranges
+// disjoint), so boxp and nump never both hold for the same number.
+static g_inline bool boxp(word _) {
+  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == G_VT_INT; }
 static g_inline bool numericp(word _) { return nump(_) || vecp(_); }
 
 int memcmp(void const*, void const*, size_t);
@@ -186,6 +194,15 @@ static g_inline g_flo_t flo_get(word x) {
  return ((g_flo_pun){ .u = vec(x)->shape[0] }).d; }
 static g_inline void flo_put(void *p, g_flo_t v) {
  *(uintptr_t*) p = ((g_flo_pun){ .d = v }).u; }
+
+// Boxed wide-int access. The payload is one pointer-width signed integer
+// in shape[0]; unlike the float box it needs no bit reinterpretation --
+// it is already an integer, only its signedness differs from the
+// uintptr_t slot. Neither helper takes the address of a stack local, so a
+// VM handler that inlines them keeps its trailing tail call (see the
+// flo_get/flo_put note above and tools/vmret.py).
+static g_inline intptr_t box_get(word x) { return (intptr_t) vec(x)->shape[0]; }
+static g_inline void box_put(void *p, intptr_t v) { *(uintptr_t*) p = (uintptr_t) v; }
 
 // equality comparisons inline the fast identity check
 g_noinline bool eqv(struct g*, word, word); // this is for checking equality of non-identical values

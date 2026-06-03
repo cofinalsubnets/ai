@@ -129,11 +129,6 @@ g_vm(g_vm_fputx) {
   if (!g_ok(f = gfputx(f, (struct g_io*) Sp[0], Sp[1]))) return gtrap(f);
   Unpack(f); }
  return Sp++, Ip++, Continue(); }
-g_vm(g_vm_dot) {
- Pack(f);
- if (!g_ok(f = gfputx(f, &g_stdout, Sp[0]))) return gtrap(f);
- Unpack(f);
- return Ip++, Continue(); }
 
 
 static struct g*gzputc(struct g*f, int c) {
@@ -188,6 +183,9 @@ static g_inline struct g*gzput_vec(struct g*f, word _) {
     int max_frac = sizeof(g_flo_t) == 4 ? 7 : 15;
     int n = g_dtoa((g_flo_t) flo_get(f->sp[0]), buf, (int) sizeof buf, max_frac);
     for (int i = 0; g_ok(f) && i < n; f = gzputc(f, buf[i++]));
+   } else if (vec(f->sp[0])->rank == 0 && vec(f->sp[0])->type == G_VT_INT) {
+    // wide-int box: print the payload as a decimal integer, same as a fixnum
+    f = gzputn(f, box_get(f->sp[0]), 10);
    } else {
     uintptr_t type = vec(f->sp[0])->type, rank = vec(f->sp[0])->rank;
     f = gzprintf(f, "#vec@%x:%d.%d", vec(f->sp[0]), type, rank);
