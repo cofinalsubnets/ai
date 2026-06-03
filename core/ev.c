@@ -228,7 +228,7 @@ static g_noinline Ana(analyze) {
  // if it is a special form then do that
  if (symp(a) && nom(a)->nom && len(nom(a)->nom) == 1)
   switch (*txt(nom(a)->nom)) {
-   case '`': return ana_q(f, c, A(b));
+   case '.': return ana_q(f, c, A(b));  // quote special form: head symbol `.`
    case '\\': return ana_l(f, c, b);
    case ':': return ana_d(f, c, b);
    case '?': return ana_c(f, c, b); }

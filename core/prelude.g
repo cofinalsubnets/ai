@@ -36,7 +36,7 @@
    putc (fputc out)
    puts (fputs out)
    putn (fputn out)
-   . (fputx out)
+   putx (fputx out)
    (getc _) (fgetc in)
    read (fread in))
 (: (map f l) (? (twop l) (cons (f (car l)) (map f (cdr l))))
@@ -79,3 +79,14 @@
 (:: '>>= (\ l (cons (last l) (init l))))
 (:: ', (\ l (cons ': (foldr  (\ l r (cons '_ (cons l r)))(list (last l)) (init l)))))
 (:: '<=< (\ g (: y (sym 0) (list '\ y (foldr (\ f x (list f x)) y g)))))
+; readability / lisp-compat aliases by head-symbol substitution.
+; do/begin/progn sequence side effects and return the last (identical to the
+; current `,` macro -> `(: _ a _ b ... last)`); let -> the `:` let form;
+; if/cond -> the `?` conditional.
+(: seqx (\ l (cons ': (foldr (\ l r (cons '_ (cons l r))) (list (last l)) (init l)))))
+(:: 'do seqx) (:: 'begin seqx) (:: 'progn seqx)
+(:: 'let (\ a (cons ': a)))
+(:: 'if (\ a (cons '? a)))
+(:: 'cond (\ a (cons '? a)))
+; `(quote x)` -> `(. x)`: the CL/Scheme name for the `.` quote form (`'x` sugar).
+(:: 'quote (\ a (cons '. a)))

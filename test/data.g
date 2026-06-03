@@ -1,7 +1,7 @@
 
-(: s0 (sym .)
-   s1 (sym .)
-   s2 (sym .)
+(: s0 (sym 0)
+   s1 (sym 0)
+   s2 (sym 0)
    (!= a b) (~ (= a b))
  (assert (!= s0 s1)
          (!= s0 s2)
@@ -9,7 +9,7 @@
          (= 'asdf (sym "asdf"))
          (= "asdf" (nom 'asdf))))
 (:
- t (new .)
+ t (new 0)
  (Put k v) (put k v t)
  Del (tdel 0 t)
  (Get k) (get 0 k t)

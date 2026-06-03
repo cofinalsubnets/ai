@@ -272,7 +272,7 @@
    (do_eval v)
      (: pid (spawn ev v)
         (poll _)
-          (? (done? pid) (: r (wait pid) _ (. r) -1)
+          (? (done? pid) (: r (wait pid) _ (putx r) -1)
              (key? 0)    (: c (getc 0)
                             (? (= c 3) (, (puts "^C") (kill pid) -1)
                                (poll 0)))

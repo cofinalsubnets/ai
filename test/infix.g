@@ -42,7 +42,7 @@
    (rewrite_tok tok table) (?
     (atomp tok)            tok
     (nilp (cdr tok))       (car tok)
-    (= (car tok) '`)       tok
+    (= (car tok) '.)       tok
     (= (car tok) 'prefix)  (cdr tok)
     (= (car tok) 'infix)   (infix_rewrite (cdr tok) table)
                            (infix_rewrite tok table))

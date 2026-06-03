@@ -4,7 +4,7 @@
    (symp x) (\ l (l x))
    (not (twop x)) (const x)
    (: x0 (car x) a (cdr x)
-    (? (= x0 '`) (const (car a))
+    (? (= x0 '.) (const (car a))
        (= x0 ',) (foldl (\ a b l (, (a l) (b l))) 0 (map meta_eval a))
        (= x0 '\) (foldr (\ a f l x (f (\ y (? (= y a) x (l y)))))
                         (meta_eval (last a))

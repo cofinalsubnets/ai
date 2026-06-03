@@ -168,7 +168,7 @@ static struct g *gzputx(struct g *f, intptr_t x);
 static g_inline struct g*gzput_two(struct g*f, word _) {
  if (!g_ok(f = g_push(f, 1, _))) return f;
  struct g_str *n;
- if (symp(A(f->sp[0])) && (n = sym(A(f->sp[0]))->nom) && len(n) == 1 && txt(n)[0] == '`' && twop(B(f->sp[0])))
+ if (symp(A(f->sp[0])) && (n = sym(A(f->sp[0]))->nom) && len(n) == 1 && txt(n)[0] == '.' && twop(B(f->sp[0])))
   f = gzputx(gzputc(f, '\''), AB(f->sp[0]));
  else for (f = gzputc(f, '(');; f = gzputc(f, ' '), f->sp[0] = B(f->sp[0])) {
   f = gzputx(f, A(f->sp[0]));

@@ -461,7 +461,7 @@ extern struct g_port_vt const synth[];
 struct ti { struct g_io io; char const *t; word i; } ; // C string input
 static g_inline void *off_pool(struct g *f) {
  return f == f->pool ? (word*) f->pool + f->len : (word*) f->pool; }
-static g_inline struct g *pushq(struct g*f) { return intern(g_strof(f, "`")); }
+static g_inline struct g *pushq(struct g*f) { return intern(g_strof(f, ".")); }
 static g_inline struct g *push0(struct g*f) { return g_push(f, 1, nil); }
 static g_inline size_t llen(word l) {
  size_t n = 0;

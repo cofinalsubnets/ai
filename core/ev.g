@@ -16,7 +16,7 @@
                    (atomp x) (kim x)
                    (: a (car x) b (cdr x) (?
                     (atomp b) (ana c a)
-                    (= a '` ) (kim (car b))
+                    (= a '. ) (kim (car b))
                     (= a '? ) (aco b)
                     (= a '\ ) (ana c (? (atomp (cdr b)) (car b) (ala c 0 b)))
                     (= a ': ) (ale (car b) (cdr b))
