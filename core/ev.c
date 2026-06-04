@@ -183,9 +183,12 @@ static Ana(ana_v) {
    // (cf. ev.g avb: `(? (get 0 'par c) (push 'imp x))`). At top level there
    // is no enclosing frame to capture from, so adding x to imps would make a
    // second reference resolve via memq(imps) to an uninitialized arg slot.
+   // re-read x from the imps cons: the gxl/g_push above can GC and relocate
+   // the symbol, leaving the local x dangling (cf. the same A((*c)->imps)
+   // pattern in the capture path below). c0_ix then emits the live pointer.
    if (!fix0p((*c)->par))
     f = gxl(g_push(f, 2, x, (*c)->imps)),
-    (*c)->imps = g_ok(f) ? pop1(f) : nil;
+    x = g_ok(f) ? A((*c)->imps = pop1(f)) : nil;
    return c0_ix(f, c, g_vm_freev, x); }
   // lambda definition of local let form?
   if ((y = assq(f, d->lams, x))) {
