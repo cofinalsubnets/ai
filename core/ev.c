@@ -248,7 +248,6 @@ static g_noinline Ana(analyze) {
  // if it is a special form then do that
  if (symp(a) && nom(a)->nom && len(nom(a)->nom) == 1)
   switch (*txt(nom(a)->nom)) {
-   case '.': return ana_q(f, c, A(b));  // quote special form: head symbol `.`
    case '\\': return ana_l(f, c, b);
    case ':': return ana_d(f, c, b);
    case '?': return ana_c(f, c, b); }
@@ -376,7 +375,7 @@ static g_inline Ana(ana_2, word a, word b) {
 
 static g_inline Ana(ana_q) { return c0_ix(f, c, g_vm_quote, x); }
 static g_inline Ana(ana_l) {
-  if (!twop(B(x))) return analyze(f, c, A(x));
+  if (!twop(B(x))) return ana_q(f, c, A(x)); // one operand, no params: quote
   return f = c0_lambda(f, c, nil, x),
          analyze(f, c, g_ok(f) ? pop1(f) : 0); }
 static Ana(c0_cond_r);

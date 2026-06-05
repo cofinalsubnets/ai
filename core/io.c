@@ -171,7 +171,9 @@ static struct g *gzputx(struct g *f, intptr_t x);
 static g_inline struct g*gzput_two(struct g*f, word _) {
  if (!g_ok(f = g_push(f, 1, _))) return f;
  struct g_str *n;
- if (symp(A(f->sp[0])) && (n = sym(A(f->sp[0]))->nom) && len(n) == 1 && txt(n)[0] == '.' && twop(B(f->sp[0])))
+ // a one-operand `\` pair (`(\ x)`) is quote -> print as 'x; ≥2 operands is a lambda.
+ if (symp(A(f->sp[0])) && (n = sym(A(f->sp[0]))->nom) && len(n) == 1 && txt(n)[0] == '\\'
+     && twop(B(f->sp[0])) && !twop(BB(f->sp[0])))
   f = gzputx(gzputc(f, '\''), AB(f->sp[0]));
  else for (f = gzputc(f, '(');; f = gzputc(f, ' '), f->sp[0] = B(f->sp[0])) {
   f = gzputx(f, A(f->sp[0]));
@@ -487,12 +489,21 @@ static struct g* g_z_getc(struct g*f) {
    continue; }
  return f; }
 
+static g_inline struct g *gzreadmac(struct g*f, char const *nom);
+
 static struct g *gzread1(struct g*f) {
  if (!g_ok(f = g_z_getc(f))) return f;
  switch (f->b) {
   case '(':  return gzreads(f, true);
   case ')': case EOF: return encode(f, g_status_eof);
   case '\'': return gzquote(f);
+  case '`':  return gzreadmac(f, "qq");                  // quasiquote
+  case ',': {                                            // unquote / unquote-splice
+   int c2;
+   if (!g_ok(f = zgetc(f))) return f;
+   if ((c2 = f->b) == '@') return gzreadmac(f, "uqs");
+   if (c2 == EOF) return encode(g_core_of(f), g_status_more);
+   return gzreadmac(zungetc(f, c2), "uq"); }
   case '"': return gzread1str(f);
   default: return gzread1sym(f, f->b); } }
 
@@ -511,6 +522,13 @@ static g_inline struct g *gzquote(struct g*f) {
  return g_code_of(f = gzread1(f)) == g_status_eof ? // quote with no operand
   encode(g_core_of(f), g_status_more) :
   gxl(pushq(gxr(push0(f)))); }
+
+// reader macro: read one operand and wrap it as (nom operand), e.g. `x -> (qq x).
+// EOF right after the prefix -> incomplete input (status_more), as for '.
+static g_inline struct g *gzreadmac(struct g*f, char const *nom) {
+ return g_code_of(f = gzread1(f)) == g_status_eof ?
+  encode(g_core_of(f), g_status_more) :
+  gxl(intern(g_strof(gxr(push0(f)), nom))); }
 
 static g_inline struct g *gzread1str(struct g*f) {
  int c;
@@ -550,7 +568,7 @@ static g_inline struct g *gzread1sym(struct g*f, int c) {
     switch (c = f->b) {
      default: continue;
      case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
-     case '(': case ')': case '"': case '\'': case 0 : case EOF:
+     case '(': case ')': case '"': case '\'': case '`': case ',': case 0 : case EOF:
       if (!g_ok(f = zungetc(f, c))) return f;
       struct g_str *s = str(f->sp[0]);
       txt(s)[len(s) = n] = 0; // zero terminate for strtol ; n < lim so this is safe

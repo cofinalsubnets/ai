@@ -16,9 +16,8 @@
                    (atomp x) (kim x)
                    (: a (car x) b (cdr x) (?
                     (atomp b) (ana c a)
-                    (= a '. ) (kim (car b))
                     (= a '? ) (aco b)
-                    (= a '\ ) (ana c (? (atomp (cdr b)) (car b) (ala c 0 b)))
+                    (= a '\ ) (? (atomp (cdr b)) (kim (car b)) (ana c (ala c 0 b)))
                     (= a ': ) (ale (car b) (cdr b))
                     (: m (get 0 a macros)
                      (? m (ana c (m b)) (app a b))))))
