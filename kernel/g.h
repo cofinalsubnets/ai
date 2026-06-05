@@ -175,4 +175,24 @@ struct g
  *g_defn(struct g*, struct g_def const*, uintptr_t);
 
 extern struct g_io g_stdin, g_stdout, g_stderr;
+
+// Bootstrap driver (was tools/mkboot.g, now a compile-time C constructor). The
+// lib/ headers are bare C string literals (lcat output), so a frontend builds
+// the egg + double-bake bootstrap by juxtaposing them between these macros:
+//
+//   g_evals_(f, G_EGG_PRE
+//   #include "prelude.h"
+//     " "
+//   #include "ev.h"
+//     G_EGG_POST
+//   #include "repl.h"          // optional: REPL, compiled by the installed ev
+//   );
+//
+// egg = '(<prelude forms> <ev forms>); the driver compiles the gwen compiler
+// with c0, recompiles the whole corpus through itself (exercising wev), and
+// installs that as `ev`. Adjacent string-literal concatenation does all the
+// work at compile time -- no runtime allocation, freestanding-safe.
+#define G_EGG_PRE "(: egg '("
+#define G_EGG_POST ") (go e z a) (? a (go e (e (car a)) (cdr a)) z) t0 (clock 0)" \
+  " e (go (go ev 0 egg) 0 egg) (put 'boot_ms (clock t0) (put 'ev e globals))) "
 #endif

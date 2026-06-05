@@ -335,8 +335,11 @@ int main(int argc, char const **argv) {
                         {"argv", g_pop1(f)}, };
     f = g_defn(f, d, LEN(d));
 #ifndef GL_BOOTSTRAP
-    f = g_evals_(f,
-#include "boot.h"
+    f = g_evals_(f, G_EGG_PRE
+#include "prelude.h"
+    " "
+#include "ev.h"
+    G_EGG_POST
 #include "repl.h"
     );
 #endif

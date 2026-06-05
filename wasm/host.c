@@ -10,8 +10,11 @@
 #include <emscripten.h>
 #include <time.h>
 
-static const char boot_g[] =
-#include "boot.h"
+static const char boot_g[] = G_EGG_PRE
+#include "prelude.h"
+  " "
+#include "ev.h"
+  G_EGG_POST
 ;
 
 static char     out_buf[1 << 14];

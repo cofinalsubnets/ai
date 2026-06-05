@@ -14,7 +14,7 @@ test: test_host
 test_all: test_host test_gl0 test_js test_tools
 test_gl0: host
 	@echo TEST $m0
-	@cat $t | b/host/gl0 -l kernel/prelude.$x -l kernel/repl.$x
+	@cat $t | b/host/gl0 -l lib/prelude.$x -l lib/repl.$x
 test_js:
 	@cd js && npm test
 test_host: host
@@ -25,8 +25,23 @@ test_host: host
 test_tools: host
 	@$(MAKE) -C tools
 all: host kernel playdate wasm rp2040
-host:
+host: lib
 	@$(MAKE) -C host
+
+# Static lisp headers: each lib/*.g is serialized to a C string literal in
+# b/lib/*.h by tools/lcat.g (run on the bootstrap interpreter gl0). Frontends
+# #include these and assemble the bootstrap with G_EGG_PRE/POST (kernel/g.h).
+# Drop a .g into lib/ and it is picked up automatically -- no rule to edit.
+lib_h = $(patsubst lib/%.$x,b/lib/%.h,$(wildcard lib/*.$x))
+.PHONY: lib
+lib: $(lib_h)
+$(lib_h): b/lib/%.h: lib/%.$x b/host/gl0 tools/lcat.$x
+	@mkdir -p b/lib
+	@echo GEN	$@
+	@b/host/gl0 -l lib/prelude.$x tools/lcat.$x $< > $@
+# gl0 (the prelude-less bootstrap interpreter that runs lcat) is a host subbuild.
+b/host/gl0:
+	@$(MAKE) -C host gl0
 kernel:
 	@$(MAKE) -C free
 playdate:
@@ -65,7 +80,7 @@ b/host/flamegraph.svg: b/host/perf.data
 repl: host
 	@$m
 cloc:
-	cloc --by-file --force-lang=Lisp,$x kernel free host js x86_64 aarch64 riscv64 loongarch64 playdate test vim
+	cloc --by-file --force-lang=Lisp,$x lib kernel free host js x86_64 aarch64 riscv64 loongarch64 playdate test vim
 cat: clean all test
 cata: clean all test_all
 # Full clean rebuild, every frontend, all tests, then the test corpus under
@@ -119,7 +134,7 @@ $d/include/$x.h: kernel/$x.h
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/$n/%.$x: kernel/%.$x
+$d/lib/$n/%.$x: lib/%.$x
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 

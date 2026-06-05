@@ -14,7 +14,7 @@ CCACHE ?= $(shell command -v ccache 2>/dev/null)
 pd_gcc = $(CCACHE) arm-none-eabi-gcc
 pd_cc = $(pd_gcc) -g3
 pd_as = $(pd_gcc) -x assembler-with-cpp
-pd_opt = -O2 -falign-functions=16 -fomit-frame-pointer
+pd_opt = -Os -falign-functions=16 -fomit-frame-pointer
 pd_fpu = -mfloat-abi=hard -mfpu=fpv5-sp-d16 -D__FPU_USED=1
 pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R)/kernel $(R)/b/host $(R)/font)
 pd_defs = -DTARGET_PLAYDATE=1 -DTARGET_EXTENSION=1 -Dg_tco=0
@@ -71,10 +71,11 @@ sim: $(o)/$n.pdx
 clean:
 	rm -rf $(o)
 
-# boot.h and the host gl (which runs gen_data_vt.g) are owned by the host build;
-# built on demand here so a standalone `make -C playdate` works.
-$(R)/b/host/boot.h:
-	@$(MAKE) -C $(R)/host boot.h
+# A lib header (and the host gl, which runs gen_data_vt.g) stand in for "the
+# host build ran"; built on demand here so a standalone `make -C playdate` works.
+# (playdate/main.c embeds no prelude -- this is just a build-order sentinel.)
+$(R)/b/lib/prelude.h:
+	@$(MAKE) -C $(R) b/lib/prelude.h
 $(m):
 	@$(MAKE) -C $(R)/host
 
@@ -90,7 +91,7 @@ $(o)/Source/pdex.%: $(o)/pdex.%
 # The data-sentinel TU bootstraps from the portable header (no -I$(o), no $(vt_h)
 # prerequisite -- both would be circular, since $(o)/vt.h is reflected out of
 # this object). Its explicit recipe overrides the pattern rules below.
-$(o)/kernel/vt.o: $(R)/kernel/vt.c | $(R)/b/host/boot.h
+$(o)/kernel/vt.o: $(R)/kernel/vt.c | $(R)/b/lib/prelude.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/b/host -I$(R)/font $(pd_incdir) $< -o $@
@@ -100,13 +101,13 @@ $(o)/vt.h: $(o)/kernel/vt.o $(gen_vt) | $(m)
 	@$(m) $(gen_vt) $< -o $@
 
 # Shared C sources from kernel/ and font/.
-$(o)/%.o: $(R)/%.c $(vt_h) | $(R)/b/host/boot.h
+$(o)/%.o: $(R)/%.c $(vt_h) | $(R)/b/lib/prelude.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/b/host -I$(R)/font $(pd_incdir) $< -o $@
 
 # Local pd/*.c sources.
-$(o)/%.o: %.c $(vt_h) | $(R)/b/host/boot.h
+$(o)/%.o: %.c $(vt_h) | $(R)/b/lib/prelude.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/b/host -I$(R)/font $(pd_incdir) $< -o $@
@@ -120,7 +121,7 @@ $(o)/%.o: %.s
 
 # SDK setup.c is reached via an absolute path; an explicit rule keeps
 # its output filename predictable.
-$(o)/setup.o: $(pd_sdk)/C_API/buildsupport/setup.c $(vt_h) | $(R)/b/host/boot.h
+$(o)/setup.o: $(pd_sdk)/C_API/buildsupport/setup.c $(vt_h) | $(R)/b/lib/prelude.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/b/host -I$(R)/font $(pd_incdir) $< -o $@

@@ -17,7 +17,7 @@ g_c = $(wildcard $R/kernel/*.c)
 f_c = $(wildcard $R/font/*.c)
 c_c = $(wildcard $R/libc/*.c)
 
-g_cflags = -std=gnu23 -g -O2 -pipe \
+g_cflags = -std=gnu23 -g -Os -pipe \
   -Wall -Wextra -Werror -Wstrict-prototypes -Wno-unused-parameter \
   -Wmissing-field-initializers -Wno-implicit-fallthrough\
   -falign-functions -fomit-frame-pointer -fno-stack-check -fno-stack-protector \

@@ -517,8 +517,11 @@ void kmain(void) {
   // load the prelude, then run the gwen read-eval-print loop. its line
   // editor (in repl.g) drives the console; PS/2 keyboard and serial
   // input both arrive as ANSI escape sequences the gwen edev decodes.
-  g_fin(g_evals_(g_defn(g_ini(), defs, LEN(defs)),
-#include "boot.h"
+  g_fin(g_evals_(g_defn(g_ini(), defs, LEN(defs)), G_EGG_PRE
+#include "prelude.h"
+ " "
+#include "ev.h"
+ G_EGG_POST
 #include "repl.h"
  "(repl 0 0)"
   )); }
