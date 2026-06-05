@@ -180,6 +180,7 @@ g_vm(g_vm_cplx_bin, int);
 #include <vt.h>
 uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 word g_tget(struct g*, word, word, struct g_tab*);
+char const *g_bif_name(intptr_t);
 #define vec(_) ((struct g_vec*)(_))
 #define str(_) ((struct g_str*)(_))
 #define tbl(_) ((struct g_tab*)(_))

@@ -113,6 +113,24 @@ So <code>&#96;(a ,b ,@xs c)</code> builds `(cons 'a (cons b (cat xs (cons 'c '()
 Nesting tracks depth (R7RS): an unquote only fires at the outermost quasiquote.
 A stray `,x` outside any quasiquote just evaluates `x` (`uq` is bound to identity).
 
+### printed representation
+
+Most values print as themselves; a few print as the `,`-prefixed constructor
+expression that rebuilds them (`,` reads as `uq`, i.e. identity, so the printed
+form round-trips):
+
+| value              | prints as                          |
+|--------------------|------------------------------------|
+| complex            | `,(cplx re im)`                    |
+| rank-1 i64/f64 array | `,(vec a b …)`                   |
+| other array        | `,(arrl type '(shape) '(elems))`   |
+| table              | `,(tbl k1 v1 …)`                   |
+
+Functions print the same way — a builtin as `,name`, a compiled lambda as its
+source `,(\ x (+ x 1))`, and a partial application / closure as the base applied
+to its captured arguments `,(+ 1)`, `,((\ x (+ x y)) 5)` (the `,` is only on the
+outermost form). An opaque thread (a continuation) prints bare as `#<thread>`.
+
 ## code examples
 
 ### variadic function using a sentinel
