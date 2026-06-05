@@ -101,36 +101,36 @@
            (napof v (cdr x)) (cons apx (cons -1 x))
            (cons apx (cons 0 x))))))
    (wx x 0))
-  (ana c x) (:- (? (symp x)  (ava x)
+  (ana c x) (? (symp x)  (ava c x)
                    (atomp x) (kim x)
                    (: a (car x) b (cdr x) (?
                     (atomp b) (ana c a)
-                    (= a '? ) (aco b)
+                    (= a '? ) (aco c b)
                     (= a '\ ) (? (atomp (cdr b)) (kim (car b)) (ana c (ala c 0 b)))
-                    (= a ': ) (ale (car b) (cdr b))
-                    (= a iop) (iap b)
-                    (= a apx) (apxh b)
+                    (= a ': ) (ale c (car b) (cdr b))
+                    (= a iop) (iap c b)
+                    (= a apx) (apxh c b)
                     (: m (get 0 a macros)
-                     (? m (ana c (m b)) (app a b))))))
-  (push k x) (: _ (put k (cons x (get 0 k c)) c) x)
-  (pop k) (: x (get 0 k c) _ (put k (cdr x) c) (car x))
-  (iap b) (: op (car b) as (cdr b)                         ; (iop op . args) -> inline the vm op
+                     (? m (ana c (m b)) (app c a b))))))
+  (push c k x) (: _ (put k (cons x (get 0 k c)) c) x)
+  (pop c k) (: x (get 0 k c) _ (put k (cdr x) c) (car x))
+  (iap c b) (: op (car b) as (cdr b)                       ; (iop op . args) -> inline the vm op
    (? (atomp (cdr as)) (co (ana c (car as)) (em1 op))      ; unary
-      (: s (get 0 'stk c) k (apr2l as) _ (put 'stk s c) (co k (em1 op))))) ; n-ary, r2l args
+      (: s (get 0 'stk c) k (apr2l c as) _ (put 'stk s c) (co k (em1 op))))) ; n-ary, r2l args
   ; apxh: (apx nary head . args) -> apply. nary -> r2l arg eval + a single n-ary apply;
   ; else l2r 1-ary chain. kap detects tail vs non-tail by peeking the continuation.
-  (apxh b) (: nary (car b) head (cadr b) args (cddr b)
-              f (ana c head) s (get 0 'stk c) _ (push 'stk 0)
-              g (? nary (co (apr2l args) (kap (len args))) (apl2r args))
+  (apxh c b) (: nary (car b) head (cadr b) args (cddr b)
+              f (ana c head) s (get 0 'stk c) _ (push c 'stk 0)
+              g (? nary (co (apr2l c args) (kap (len args))) (apl2r c args))
               _ (put 'stk s c)
             (co f g))
-  (app a b) (: f (ana c a)
-               s (get 0 'stk c) _ (push 'stk 0)
-               g (apl2r b) _ (put 'stk s c)
+  (app c a b) (: f (ana c a)
+               s (get 0 'stk c) _ (push c 'stk 0)
+               g (apl2r c b) _ (put 'stk s c)
              (co f g))
- (apl2r b) (?- id (twop b) (: f (ana c (car b)) g (apl2r (cdr b))
+ (apl2r c b) (?- id (twop b) (: f (ana c (car b)) g (apl2r c (cdr b))
                     (co f (co (kap 1) g))))
- (apr2l b) (?- id (twop b) (: g (apr2l (cdr b)) f (ana c (car b)) _ (push 'stk 0) (co g f)))
+ (apr2l c b) (?- id (twop b) (: g (apr2l c (cdr b)) f (ana c (car b)) _ (push c 'stk 0) (co g f)))
  (kap n k m)
   (: j (k (+ 2 m))
    t (= (peek 0 j) g_vm_ret)                              ; peek the continuation for ret -> tail
@@ -138,7 +138,7 @@
         (? (> n 1) (p2 g_vm_apn n j) (poke -1 g_vm_ap j))))
 
   ;aco is a bit complicated
-  (aco b) (:- (: f (acr b) (\ k n (: k (f (co (push 'end) k) n) _ (pop 'end) k)))
+  (aco c b) (:- (: f (acr b) (\ k n (: k (f (co (push c 'end) k) n) _ (pop c 'end) k)))
    (acx k n) (: ; jump out
     j (k (+ 3 n))
     a (car (get 0 'end c))
@@ -154,9 +154,9 @@
        h (acr (cddr b))
        (? (= kim (pro f)) (? (peek 3 f) g h)
         (\ x (f (\ n
-         (: k (co (push 'alt) (h x))
+         (: k (co (push c 'alt) (h x))
             j (g (acx k) (+ 2 n))
-            (p2 g_vm_cond (pop 'alt) j)))))))))
+            (p2 g_vm_cond (pop c 'alt) j)))))))))
 
   Z (sym 0)
   ; recursive-fn ref: bake `quote code` if the closure is built, else `quote 0`
@@ -164,47 +164,47 @@
   (qsite site k n) (: cell (poke -1 0 (k (+ 2 n)))
                       _ (poke 2 cell site)
                     (poke -1 g_vm_quote cell))
-  (lz lfd scope)(: code (cadr lfd)
+  (lz c lfd scope)(: code (cadr lfd)
                    p (? code (em2 g_vm_quote code)
                         (: site (cons lfd 0)
                            _ (put 'sites (cons site (get 0 'sites scope)) scope)
                          (qsite site)))
-                   _ (push 'stk 0)
-                   q (apl2r (cddr lfd))
-                   _ (pop 'stk)
+                   _ (push c 'stk 0)
+                   q (apl2r c (cddr lfd))
+                   _ (pop c 'stk)
                  (co p q))
   ; variable expression analyzer
   ; boxof: walk scopes for a boxed name -> its cell sym (the 'box map l2x sets).
   (boxof x s) (? s
    (? (|| (memq x (get 0 'arg s)) (memq x (get 0 'stk s))) 0 ; shadowed by a closer binding
     (: p (assq x (get 0 'box s)) (? p (cdr p) (boxof x (get 0 'par s))))))
-  (ava x)
+  (ava c x)
    (: cell (boxof x c)
     (? cell (ana c (list 'car cell)) ; boxed value ref -> (car cell), at analysis
      (: lfd (assq x (get 0 'lam c))
-     (? lfd (lz lfd c)
+     (? lfd (lz c lfd c)
         (: s (get 0 'stk c)
            (stki d) (lidx x (cat (get 0 'imp d) (get 0 'arg d)))
            (q i j m) (: k (j (+ 2 m)) (p2 g_vm_arg (+ i (stki c)) k))
-         (?- (avb (get 0 'par c) x)
+         (?- (avb c (get 0 'par c) x)
           (memq x s) (em2 g_vm_arg (lidx x s))
           (>= (stki c) 0) (q (len (get 0 'stk c)))))))))
 
-  (avb d x)
+  (avb c d x)
    (? (nilp d) ; outside all lexical scopes?
        (: y (get Z x globals) ; check global scope
         (? (!= y Z) (kim y) ; if it's there use that
-         (: _ (? (get 0 'par c) (push 'imp x))
+         (: _ (? (get 0 'par c) (push c 'imp x))
           (em2 g_vm_freev x))))
     (: lfd (assq x (get 0 'lam d))
-     (? lfd (lz lfd d)
+     (? lfd (lz c lfd d)
         (: s (get 0 'stk d)
            (stki d) (lidx x (cat (get 0 'imp d) (get 0 'arg d)))
            (q i j m) (: k (j (+ 2 m)) (p2 g_vm_arg (+ i (stki c)) k))
-         (?- (avb (get 0 'par d) x)
-          (memq x s) (: _ (? (get 0 'par c) (push 'imp x))
+         (?- (avb c (get 0 'par d) x)
+          (memq x s) (: _ (? (get 0 'par c) (push c 'imp x))
                          (q (len (get 0 'stk c))))
-          (>= (stki d) 0) (: _ (? (get 0 'par c) (push 'imp x))
+          (>= (stki d) 0) (: _ (? (get 0 'par c) (push c 'imp x))
                            (q (len (get 0 'stk c)))))))))
   ; lambda analyzer
   (ala c imp exp) (:
@@ -229,7 +229,7 @@
      (cons (cat (cellbinds cs) (map one prs)) cs))))
 
   ; let expression analyzer (the most complicated one)
-  (ale a b) (?
+  (ale c a b) (?
    (atomp b) (ana c a)
    (:- (l1 0 a (car b) (cdr b))
     q (sco c (get 0 'arg c) (get 0 'imp c))
@@ -255,17 +255,17 @@
 
    (l2 prs body even) (:- (cl 0 l l l)
     s (get 0 'stk c)
-    _ (push 'stk 0)
+    _ (push c 'stk 0)
     (jj a ps) (?
      (atomp ps) a
      (nilp (lambp (cdar ps)))
       (:
-      _ (push 'stk (caar ps))
+      _ (push c 'stk (caar ps))
       (jj a (cdr ps)))
      (: k (caar ps)
         v (ala q 0 (cddar ps))
         a (cons (cons k v) a)
-      _ (push 'stk k)
+      _ (push c 'stk k)
       (jj a (cdr ps))))
     l (jj 0 prs)
     _ (put 'stk s c)
@@ -295,12 +295,12 @@
                            (set_cdr qa x)))
         f (ana c d)
         g (?- id (&& even (nilp (get 0 'par c))) (em2 g_vm_defglob n))
-        _ (push 'stk n)
+        _ (push c 'stk n)
         h (ll (cdr nds))
         (\ x (f (g (h x))))))
     _ (put 'lam lams q)
     s (get 0 'stk c)
-    _ (push 'stk 0)
+    _ (push c 'stk 0)
     ; clear stale first-build closures so a ref hit during the rebuild defers to a
     ; backpatch site; the import sets (cddr) are kept.
     _ (each lams (\ e (poke 1 0 (cdr e))))
@@ -313,4 +313,4 @@
     f (ana c (cons '\ (cat (rev (map car prs)) (list body))))
     h (kap (len prs))
     _ (put 'stk s c)
-    (\ x (f (g (h x)))))))))
+    (\ x (f (g (h x))))))))
