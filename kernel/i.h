@@ -135,8 +135,9 @@ struct g
  *str0(struct g*, uintptr_t);
 struct g_atom *intern_checked(struct g*, struct g_str*);
 g_vm(g_vm_gc, uintptr_t);
+extern g_vm_t *g_data_ap[G_DATA_VT_N]; // per-data-kind apply handlers (kernel/vt.c), indexed by enum q
 g_vm_t g_vm_kcall,
- g_vm_two, g_vm_vec, g_vm_sym, g_vm_tbl, g_vm_text, g_vm_big, // data self-quote sentinels, enum q order
+ g_vm_two, g_vm_vec, g_vm_sym, g_vm_tbl, g_vm_text, g_vm_big, // data sentinels (enum q order); apply dispatches through g_data_ap
  g_vm_putn, g_vm_info,    g_vm_clock,
  g_vm_nilp,  g_vm_putc, g_vm_gensym, g_vm_intern, g_vm_twop,
  g_vm_len, g_vm_get, g_vm_fputx, g_vm_buf, g_vm_bufnew, g_vm_bcopy,

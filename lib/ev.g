@@ -5,7 +5,7 @@
   g_vm_cur (peek 0 +)
   g_vm_ret0 (peek 1 car)
   (sco p a i) (put 'par p (put 'imp i (put 'arg a (new 0))))
-  (rootc c) (? (get 0 'par c) (rootc (get 0 'par c)) c)        ; top scope: where wev stashes 'src
+  (rootc c) (? (c 'par) (rootc (c 'par)) c)        ; top scope: where wev stashes 'src
   (p2 i x k) (poke -1 i (poke -1 x k))
   (em1 x k n) (poke -1 x (k (+ 1 n)))
   (em2 i x k n) (poke -1 i (poke -1 x (k (+ 2 n))))
@@ -43,7 +43,7 @@
   ; by one) for ala to stash the lambda's source \-expr at value[-1], where the
   ; printer (gzput_fn) finds it. entry = cell 1, src = cell 0.
   (k0s c n) (poke -1 g_vm_ret (poke (+ 2 n) (ary c) (thd (+ 3 n))))
-  (ary c) (+ (len (get 0 'arg c)) (len (get 0 'imp c)))
+  (ary c) (+ (len (c 'arg)) (len (c 'imp)))
   (pro f) (? (nump f) f (: a (peek 0 f) (?- f
    (= a g_vm_unc) (pro (seek -2 (peek 2 f)))
    (= a g_vm_cur) (?- f (= g_vm_unc (peek 2 f))
@@ -81,10 +81,10 @@
                'ssub 'scat 'string
                're 'im 'conj 'arg 'flo 'cplx
                'sin 'cos 'tan 'atan 'sqrt 'exp 'log 'atan2 'pow)
-   pureset (foldl (\ t s (: v (get 0 s globals) (? v (put v -1 t) t))) (new 0) names)
-   (add t s) (: v (get 0 s globals)
+   pureset (foldl (\ t s (: v (globals s) (? v (put v -1 t) t))) (new 0) names)
+   (add t s) (: v (globals s)
     (? (nump v) t
-     (: o (opof v) p (get 0 v pureset)
+     (: o (opof v) p (pureset v)
       (? (|| o p)
        (: op (? o (car o) 0)
           ar (? o (cdr o) (same g_vm_cur (peek 0 v)) (peek 1 v) 0)   ; bif/multi-arg-fn arity
@@ -106,7 +106,7 @@
      (= h ':) (? (atomp (cddr x)) (cons ': (list (wx (cadr x) bnd)))
                  (cons ': (wxl (cdr x) bnd)))
      (= h '?) (cons '? (wxc (cdr x) bnd))
-     (: m (? (symp h) (get 0 h macros) 0)                     ; macro head? expand, then re-walk
+     (: m (? (symp h) (macros h) 0)                     ; macro head? expand, then re-walk
       (? m (wx (m (cdr x)) bnd)
          (fold (map (\ e (wx e bnd)) x) bnd))))))
    (wxl bs bnd) (wxb bs (cat (ln bs) bnd))        ; a let's names all shadow throughout
@@ -128,7 +128,7 @@
    (fold x bnd) (: h (car x)
     (? (atomp (cdr x)) x                          ; (f) single element -> ana's (atomp b) handles
        (|| (nilp (symp h)) (memq h bnd)) (cons apx (cons 0 x))   ; local/computed head
-       (: v (get 0 h globals) hd (get 0 v wevs)
+       (: v (globals h) hd (wevs v)
         (? hd (hd x)
            (napof v (cdr x)) (cons apx (cons -1 x))
            (cons apx (cons 0 x))))))
@@ -142,22 +142,22 @@
                     (= a ': ) (ale c (car b) (cdr b))
                     (= a iop) (iap c b)
                     (= a apx) (apxh c b)
-                    (: m (get 0 a macros)
+                    (: m (macros a)
                      (? m (ana c (m b)) (app c a b))))))
-  (push c k x) (: _ (put k (cons x (get 0 k c)) c) x)
-  (pop c k) (: x (get 0 k c) _ (put k (cdr x) c) (car x))
+  (push c k x) (: _ (put k (cons x (c k)) c) x)
+  (pop c k) (: x (c k) _ (put k (cdr x) c) (car x))
   (iap c b) (: op (car b) as (cdr b)                       ; (iop op . args) -> inline the vm op
    (? (atomp (cdr as)) (co (ana c (car as)) (em1 op))      ; unary
-      (: s (get 0 'stk c) k (apr2l c as) _ (put 'stk s c) (co k (em1 op))))) ; n-ary, r2l args
+      (: s (c 'stk) k (apr2l c as) _ (put 'stk s c) (co k (em1 op))))) ; n-ary, r2l args
   ; apxh: (apx nary head . args) -> apply. nary -> r2l arg eval + a single n-ary apply;
   ; else l2r 1-ary chain. kap detects tail vs non-tail by peeking the continuation.
   (apxh c b) (: nary (car b) head (cadr b) args (cddr b)
-              f (ana c head) s (get 0 'stk c) _ (push c 'stk 0)
+              f (ana c head) s (c 'stk) _ (push c 'stk 0)
               g (? nary (co (apr2l c args) (kap (len args))) (apl2r c args))
               _ (put 'stk s c)
             (co f g))
   (app c a b) (: f (ana c a)
-               s (get 0 'stk c) _ (push c 'stk 0)
+               s (c 'stk) _ (push c 'stk 0)
                g (apl2r c b) _ (put 'stk s c)
              (co f g))
  (apl2r c b) (?- id (twop b) (: f (ana c (car b)) g (apl2r c (cdr b))
@@ -173,7 +173,7 @@
   (aco c b) (:- (: f (acr b) (\ k n (: k (f (co (push c 'end) k) n) _ (pop c 'end) k)))
    (acx k n) (: ; jump out
     j (k (+ 3 n))
-    a (car (get 0 'end c))
+    a (car (c 'end))
     i (peek 0 a)
     (? (| (= g_vm_ret i) (= g_vm_tap i)) (p2 i (peek 1 a) j)
        (= g_vm_tapn i)                   (p2 i (peek 1 a) (poke -1 (peek 2 a) j))
@@ -199,7 +199,7 @@
   (lz c lfd scope)(: code (cadr lfd)
                    p (? code (em2 g_vm_quote code)
                         (: site (cons lfd 0)
-                           _ (put 'sites (cons site (get 0 'sites scope)) scope)
+                           _ (put 'sites (cons site (scope 'sites)) scope)
                          (qsite site)))
                    _ (push c 'stk 0)
                    q (apl2r c (cddr lfd))
@@ -208,36 +208,36 @@
   ; variable expression analyzer
   ; boxof: walk scopes for a boxed name -> its cell sym (the 'box map l2x sets).
   (boxof x s) (? s
-   (? (|| (memq x (get 0 'arg s)) (memq x (get 0 'stk s))) 0 ; shadowed by a closer binding
-    (: p (assq x (get 0 'box s)) (? p (cdr p) (boxof x (get 0 'par s))))))
+   (? (|| (memq x (s 'arg)) (memq x (s 'stk))) 0 ; shadowed by a closer binding
+    (: p (assq x (s 'box)) (? p (cdr p) (boxof x (s 'par))))))
   (ava c x)
    (: cell (boxof x c)
     (? cell (ana c (list 'car cell)) ; boxed value ref -> (car cell), at analysis
-     (: lfd (assq x (get 0 'lam c))
+     (: lfd (assq x (c 'lam))
      (? lfd (lz c lfd c)
-        (: s (get 0 'stk c)
-           (stki d) (lidx x (cat (get 0 'imp d) (get 0 'arg d)))
+        (: s (c 'stk)
+           (stki d) (lidx x (cat (d 'imp) (d 'arg)))
            (q i j m) (karg (+ i (stki c)) j m)
-         (?- (avb c (get 0 'par c) x)
+         (?- (avb c (c 'par) x)
           (memq x s) (karg (lidx x s))
-          (>= (stki c) 0) (q (len (get 0 'stk c)))))))))
+          (>= (stki c) 0) (q (len (c 'stk)))))))))
 
   (avb c d x)
    (? (nilp d) ; outside all lexical scopes?
        (: y (get Z x globals) ; check global scope
         (? (!= y Z) (kim y) ; if it's there use that
-         (: _ (? (get 0 'par c) (push c 'imp x))
+         (: _ (? (c 'par) (push c 'imp x))
           (em2 g_vm_freev x))))
-    (: lfd (assq x (get 0 'lam d))
+    (: lfd (assq x (d 'lam))
      (? lfd (lz c lfd d)
-        (: s (get 0 'stk d)
-           (stki d) (lidx x (cat (get 0 'imp d) (get 0 'arg d)))
+        (: s (d 'stk)
+           (stki d) (lidx x (cat (d 'imp) (d 'arg)))
            (q i j m) (karg (+ i (stki c)) j m)
-         (?- (avb c (get 0 'par d) x)
-          (memq x s) (: _ (? (get 0 'par c) (push c 'imp x))
-                         (q (len (get 0 'stk c))))
-          (>= (stki d) 0) (: _ (? (get 0 'par c) (push c 'imp x))
-                           (q (len (get 0 'stk c)))))))))
+         (?- (avb c (d 'par) x)
+          (memq x s) (: _ (? (c 'par) (push c 'imp x))
+                         (q (len (c 'stk))))
+          (>= (stki d) 0) (: _ (? (c 'par) (push c 'imp x))
+                           (q (len (c 'stk)))))))))
   ; lambda analyzer
   (ala c imp exp) (:
    d (sco c (init exp) imp)
@@ -249,11 +249,11 @@
    ; fall back to exp if unrecorded. prepend the captured imports as leading params
    ; (frame is [imps args]) so a closure prints as ,((\ y x …) capturedvals) and
    ; round-trips through read+eval.
-   os (assq exp (get 0 'src (rootc c)))
-   s (cons '\ (cat (get 0 'imp d) (? os (cddr os) exp)))
+   os (assq exp ((rootc c) 'src))
+   s (cons '\ (cat (d 'imp) (? os (cddr os) exp)))
    _ (poke -1 s e)                                  ; value[-1] = source \-expr
    _ (trim (seek -1 e))                             ; tag head spans [src .. body]; value stays e
-   (cons e (get 0 'imp d)))
+   (cons e (d 'imp)))
 
   ; bxp: recursive-value boxing for one let's bindings (was prelude `boxprep`),
   ; called by l2x. Prepend a cell per recursively-captured value, rewrite each boxed
@@ -270,7 +270,7 @@
   (ale c a b) (?
    (atomp b) (ana c a)
    (:- (l1 0 a (car b) (cdr b))
-    q (sco c (get 0 'arg c) (get 0 'imp c))
+    q (sco c (c 'arg) (c 'imp))
     (set_cdr p x) (: _ (poke 2 x p) x) ; :[ weh
 
    ; l1 collects bindings into a source-order (name . def) pair-list for l2x.
@@ -285,14 +285,14 @@
    (l2x prs body even)
     (: r (? even 0 (bxp prs))
        pp (? r (car r) prs)
-       old (get 0 'box c)
+       old (c 'box)
        _ (? r (put 'box (cat (cdr r) old) c))
        k (l2 pp body even)
        _ (put 'box old c)
      k)
 
    (l2 prs body even) (:- (cl 0 l l l)
-    s (get 0 'stk c)
+    s (c 'stk)
     _ (push c 'stk 0)
     (jj a ps) (?
      (atomp ps) a
@@ -332,19 +332,19 @@
                              x (ala q (cddr qa) (cdr d))
                            (set_cdr qa x)))
         f (ana c d)
-        g (?- id (&& even (nilp (get 0 'par c))) (em2 g_vm_defglob n))
+        g (?- id (&& even (nilp (c 'par))) (em2 g_vm_defglob n))
         _ (push c 'stk n)
         h (ll (cdr nds))
         (\ x (f (g (h x))))))
     _ (put 'lam lams q)
-    s (get 0 'stk c)
+    s (c 'stk)
     _ (push c 'stk 0)
     ; clear stale first-build closures so a ref hit during the rebuild defers to a
     ; backpatch site; the import sets (cddr) are kept.
     _ (each lams (\ e (poke 1 0 (cdr e))))
     g (ll prs)
     ; closures final -> backpatch each recorded recursive-fn ref with its thread.
-    _ (each (get 0 'sites q) (\ s (poke 0 (cadr (car s)) (cdr s))))
+    _ (each (q 'sites) (\ s (poke 0 (cadr (car s)) (cdr s))))
     _ (put 'sites 0 q)
     _ (put 'stk s c)
     ; body-lambda analyzed AFTER inits (it takes bindings as args; never makes sites)
