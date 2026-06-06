@@ -297,19 +297,22 @@ static g_inline struct g*gzput_str(struct g*f, word _) {
 static g_inline struct g*gzput_sym(struct g*f, word _) {
  if (g_ok(f = g_push(f, 1, _))) {
   word nom = word(sym(f->sp[0])->nom);
-  if (!nom) f = gzprintf(f, ",sym@%z", f->sp[0]);           // anonymous gensym
+  if (!nom) f = gzprintf(f, "@%z", f->sp[0]);           // anonymous gensym
   else if (strp(nom)) {                                     // interned: bare name
    f->sp[0] = nom;
-   for (uintptr_t slen = len(nom), i = 0; g_ok(f) && i < slen; f = gzputc(f, txt(f->sp[0])[i++]));
+   for (uintptr_t l = len(nom), i = 0; g_ok(f) && i < l;)
+     f = gzputc(f, txt(f->sp[0])[i++]);
   } else {                                                  // named but uninterned
    word name = word(sym(nom)->nom), addr = f->sp[0];
-   if (!name || !strp(name)) f = gzprintf(f, ",sym@%z", addr); // named after a nameless sym: fall back
+   if (!name || !strp(name)) f = gzprintf(f, "@%z", addr); // named after a nameless sym: fall back
    else {
     f->sp[0] = name;
-    f = gzputc(f, ',');
-    for (uintptr_t slen = len(name), i = 0; g_ok(f) && i < slen; f = gzputc(f, txt(f->sp[0])[i++]));
+    for (uintptr_t l = len(name), i = 0; g_ok(f) && i < l;)
+        f = gzputc(f, txt(f->sp[0])[i++]);
     if (g_ok(f)) f = gzprintf(f, "@%z", addr); } } }
  return g_pop(f, 1); }
+
+#define fs0(f) (g_core_of(f)->sp[0])
 
 // table -> ,(tbl k1 v1 k2 v2 …); round-trips via uq=identity (tbl is a prelude
 // macro of nested `put`s). Entries are first snapshotted into an assoc list
@@ -329,11 +332,14 @@ static g_inline struct g*gzput_tbl(struct g*f, word x, uintptr_t off) {
    ini_two(kv, e->key, e->val);                       // (k . v)
    ini_two(p, (word) kv, list);                       // cons onto the snapshot
    list = (word) p++; }
- f->sp[0] = list;
- f = gzprintf(f, ",(tbl");
- for (; g_ok(f) && twop(f->sp[0]); f->sp[0] = B(f->sp[0])) {
-  f = gzputc(f, ' '); f = gzputx(f, AA(f->sp[0]), off);  // key (re-read after gzputc)
-  f = gzputc(f, ' '); f = gzputx(f, BA(f->sp[0]), off); } // val (re-read after gzputc)
+ fs0(f) = list;
+ if (g_ok(f = gzprintf(f, "(tbl")) && twop(fs0(f))) do {
+  f = gzputc(f, ' ');
+  f = gzputx(f, AA(g_core_of(f)->sp[0]), off);  // key (re-read after gzputc)
+  f = gzputc(f, ' '); f = gzputx(f, BA(g_core_of(f)->sp[0]), off);
+  g_core_of(f)->sp[0] = B(g_core_of(f)->sp[0]);
+ } while (g_ok(f) && twop(f->sp[0]));
+
  return g_pop(g_ok(f) ? gzputc(f, ')') : f, 1); }
 
 // A bignum prints in base 10 (with sign). g_big_dec renders it to a fresh
@@ -389,7 +395,7 @@ static word fn_src(struct g *c, union u *k, word x) {
 static struct g *gzput_fn(struct g *f, word x, uintptr_t off) {
  union u *k = cell(x);
  bool reprp = fn_partialp(k) || g_bif_name(x) || fn_src(g_core_of(f), k, x);
- return reprp ? gzput_fn_body(gzputc(f, ','), x, off) : gzprintf(f, ",thd@%z", x); }
+ return reprp ? gzput_fn_body(f, x, off) : gzprintf(f, "\\%z", x); }
 
 // Render a function as a bare constructor expression (NO leading ,). Detection
 // order matters: a bare multi-arg lambda and a partial-app both have a g_vm_cur
@@ -411,7 +417,7 @@ static struct g *gzput_fn_body(struct g *f, word x, uintptr_t off) {
  char const *nm = g_bif_name(x);                    // builtin -> name
  if (nm) return gzputcs(f, nm);
  word s = fn_src(c, k, x);                          // compiled lambda -> source \-expr
- return s ? gzputx(f, s, off) : gzprintf(f, ",thd@%z", x); }
+ return s ? gzputx(f, s, off) : gzprintf(f, "\\%z", x); }
 
 static g_noinline struct g *gzputx(struct g *f, intptr_t x, uintptr_t off) {
  if (nump(x)) return gzprintf(f, "%d", getnum(x));

@@ -18,7 +18,7 @@
   ; interned symbols print as their name
   (= "foo" (inspect 'foo))
   ; named-uninterned symbols print as ,<name>@<addr>
-  (= ",x@" (ssub (inspect (gensym "x")) 0 3))
+  (= "x@" (ssub (inspect (gensym "x")) 0 2))
 
   ; quote sugar: a pair (` x) prints as 'x
   (= "'foo"      (inspect ''foo))
