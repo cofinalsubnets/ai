@@ -363,6 +363,7 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 void g_rng_seed(struct g_vec*, uint64_t);   // shape an i64 state vec + seed it (SplitMix64)
 g_vm_t g_vm_rng_seed, g_vm_rng_get, g_vm_rng_set,
        g_vm_rand, g_vm_randf, g_vm_rand_next, g_vm_randf_next;
+g_vm_t g_vm_set_numap;   // installs f->numap (the gwen fixnum-as-function handler), see vm.c
 
 int memcmp(void const*, void const*, size_t);
 void *malloc(size_t), free(void*),

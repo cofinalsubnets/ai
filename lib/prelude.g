@@ -42,6 +42,14 @@
    putx (fputx out)
    (getc _) (fgetc in)
    read (fread in))
+; fixnum-as-function application, installed into the VM via set-numap: applying a
+; fixnum n to x is Church-numeral application -- a numeric x exponentiates (x ** n),
+; a non-numeric (function) x is composed with itself n times (n < 1 -> identity).
+; registered here, after ** and dec exist and before any code can apply a fixnum
+; (boot applies none), so the VM's dispatch needs no fallback.
+(: (church n f) (? (< n 1) (\ x x) (\ x (f ((church (dec n) f) x))))
+   (num-ap n x) (? (nump x) (** x n) (church n x))
+   _ (set-numap num-ap))
 (: (map f l) (? (twop l) (cons (f (car l)) (map f (cdr l))))
    (foldl f z l) (? (twop l) (foldl f (f z (car l)) (cdr l)) z)
    (foldr f z l) (? (twop l) (f (car l) (foldr f z (cdr l))) z))

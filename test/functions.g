@@ -7,14 +7,16 @@
    f37 (f3 -7)
  (assert (= -1 (f37 99)) (= -7 (f37 33))))
 
+; applying a number is Church-numeral application: numeric operand -> exponentiation
+; (operand ** operator), non-numeric operand -> the operator-fold composition.
 (assert
- (= 1 (1 2))
- (= 2 (2 1))
- (= 2 ((\ f n (f n)) 2 3))
- (= 'a ('a 'b 'c 'd))
+ (= 2 (1 2))                                  ; (1 2) = 2 ** 1
+ (= 1 (2 1))                                  ; (2 1) = 1 ** 2
+ (= 9 ((\ f n (f n)) 2 3))                    ; (2 3) = 3 ** 2
+ (= 'a ('a 'b 'c 'd))                         ; symbols still self-quote when applied
  (= 'a ((\ a b c d (a b c d)) 'a 'b 'c 'd))
- (= 3 (foldl id + '(1 2 3 4 5 6)))
- (= 11 (foldl id + '(6 5 4 3 2 1))))
+ (= 8 (3 2))                                  ; (3 2) = 2 ** 3
+ (= 13 ((3 (+ 1)) 10)))                       ; non-numeric operand -> (+ 1) composed 3 times on 10
 ; basic arithmetic
 (: zero? (= 0)
 (assert

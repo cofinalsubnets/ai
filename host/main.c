@@ -302,11 +302,11 @@ static union u const
  bif_getenv[] = {{g_vm_getenv}, {g_vm_ret0}};
 
 static char const
- rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(sym 0)))",
+ rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(gensym 0)))",
  cli[] =
   "(: (load1 p)"
   "   (: q (open p \"r\")"
-  "      (? q ((: (g e q) (: r (fread q e) (? (= e r) 0 (: _ (ev 'ev r) (g e q))))) (sym 0) q)"
+  "      (? q ((: (g e q) (: r (fread q e) (? (= e r) 0 (: _ (ev 'ev r) (g e q))))) (gensym 0) q)"
   "           (: _ (fputs err (scat \"gl: cannot open \" p)) (exit 1)))))"
   "(: (strip-l a)"
   "   (? (& (twop a) (= (car a) \"-l\"))"
@@ -314,7 +314,7 @@ static char const
   "      a))"
   "(: argv (strip-l argv))"
   "(? (twop argv) (load1 (car argv))"
-  "   ((: (g e) (: r (fread in e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (sym 0)))"
+  "   ((: (g e) (: r (fread in e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (gensym 0)))"
   ;
 
 int main(int argc, char const **argv) {

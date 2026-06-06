@@ -5,20 +5,46 @@
   if (f->tasks->m != f->tasks && ++f->yield_ctr >= YIELD_INTERVAL) \
     return Ap(g_vm_yield_sw, f)
 
+// (set-numap fn): install the gwen handler for fixnum-as-function application.
+// Called once from prelude.g; the value stays as the bif's result.
+g_vm(g_vm_set_numap) { f->numap = Sp[0]; return Ip++, Continue(); }
+
+// Fixnum-as-function application. A fixnum operator n applied to x is dispatched
+// to the gwen handler in f->numap as (num-ap n x): numeric x -> x**n, a function
+// x -> x iterated n times (Church numerals). prelude.g installs num-ap before any
+// fixnum apply can run (boot itself applies none), so there is no fallback path.
+//
+// The driver mirrors the pair driver: with the stack laid out [n, num-ap, x, ret]
+// it applies num-ap to n (a partial), swaps so that partial becomes the operator,
+// applies it to x, and ret0s the result to ret. Each of the five apply sites
+// isolates (n, x, ret) and tail-calls numap_run, which writes the frame and jumps
+// here. numap_run does no allocation, so its callers own the Have for the frame.
+static g_vm(numap_swap) {
+ word t = Sp[0]; Sp[0] = Sp[1], Sp[1] = t;
+ return Ap(g_vm_ap, f); }
+static union u numap_drive[] = { {g_vm_ap}, {.ap = numap_swap}, {.ap = g_vm_ret0} };
+static g_vm(numap_run, word *dst, word n, word x, word ret) {
+ dst[0] = n, dst[1] = f->numap, dst[2] = x, dst[3] = ret;
+ return Sp = dst, Ip = numap_drive, Continue(); }
+
 // apply function to one argument
 g_vm(g_vm_ap) {
  union u *k;
- if (oddp(Sp[1])) Ip++, Sp++;
- else k = cell(Sp[1]), Sp[1] = word(Ip + 1), Ip = k;
+ if (oddp(Sp[1])) {                                  // fixnum operator -> num-ap, resume at Ip+1
+  Have(2); word n = Sp[1], x = Sp[0];
+  return Ap(numap_run, f, Sp - 2, n, x, word(Ip + 1)); }
+ k = cell(Sp[1]), Sp[1] = word(Ip + 1), Ip = k;
  YieldCheck();
  return Continue(); }
 
 // tail call
 g_vm(g_vm_tap) {
+ if (oddp(Sp[1])) {                                  // fixnum operator -> num-ap, deliver to caller
+  Have(2); word n = Sp[1], x = Sp[0], fs = getnum(Ip[1].x);
+  return Ap(numap_run, f, &Sp[fs + 2] - 3, n, x, Sp[fs + 2]); }
  intptr_t x = Sp[0], j = Sp[1];
  Sp += getnum(Ip[1].x) + 1;
- if (homp(j)) Ip = cell(j), Sp[0] = x;
- else Sp += 1, Ip = cell(Sp[0]), Sp[0] = j;
+ Ip = cell(j), Sp[0] = x;
  YieldCheck();
  return Continue(); }
 
@@ -298,12 +324,13 @@ g_vm(g_vm_arg) {
 // dispatch + the standalone ap word vs. the unfused pair. The post-pattern
 // resume address is Ip+2 (cf. g_vm_ap's Ip+1, since the op is one word longer).
 g_vm(g_vm_argap) {
+ if (oddp(Sp[0])) {                                  // fixnum operator -> num-ap, resume at Ip+2
+  Have(3); word n = Sp[0], x = Sp[getnum(Ip[1].x)];
+  return Ap(numap_run, f, Sp - 3, n, x, word(Ip + 2)); }
  Have1();
  Sp[-1] = Sp[getnum(Ip[1].x)];
  Sp -= 1;
- union u *k;
- if (oddp(Sp[1])) Ip += 2, Sp++;
- else k = cell(Sp[1]), Sp[1] = word(Ip + 2), Ip = k;
+ union u *k = cell(Sp[1]); Sp[1] = word(Ip + 2), Ip = k;
  YieldCheck();
  return Continue(); }
 
@@ -311,12 +338,13 @@ g_vm(g_vm_argap) {
 // kim when a quote is immediately followed by a non-tail ap (a call with a
 // constant arg, e.g. (k 0)). Resume at Ip+2 (2-word op), cf. g_vm_argap.
 g_vm(g_vm_quoteap) {
+ if (oddp(Sp[0])) {                                  // fixnum operator -> num-ap, resume at Ip+2
+  Have(3); word n = Sp[0], x = Ip[1].x;
+  return Ap(numap_run, f, Sp - 3, n, x, word(Ip + 2)); }
  Have1();
  Sp -= 1;
  Sp[0] = Ip[1].x;
- union u *k;
- if (oddp(Sp[1])) Ip += 2, Sp++;
- else k = cell(Sp[1]), Sp[1] = word(Ip + 2), Ip = k;
+ union u *k = cell(Sp[1]); Sp[1] = word(Ip + 2), Ip = k;
  YieldCheck();
  return Continue(); }
 
@@ -324,13 +352,15 @@ g_vm(g_vm_quoteap) {
 // popping frame size <fs> at Ip[2] (tap's operand, kept in place by the fused
 // emit). The single-arg tail-call shape, e.g. a tail (loop x) or cont (k v).
 g_vm(g_vm_argtap) {
+ if (oddp(Sp[0])) {                                  // fixnum operator -> num-ap, deliver to caller
+  Have(2); word n = Sp[0], x = Sp[getnum(Ip[1].x)], fs = getnum(Ip[2].x);
+  return Ap(numap_run, f, &Sp[fs + 1] - 3, n, x, Sp[fs + 1]); }
  Have1();
  Sp[-1] = Sp[getnum(Ip[1].x)];
  Sp -= 1;
  intptr_t x = Sp[0], j = Sp[1];
  Sp += getnum(Ip[2].x) + 1;
- if (homp(j)) Ip = cell(j), Sp[0] = x;
- else Sp += 1, Ip = cell(Sp[0]), Sp[0] = j;
+ Ip = cell(j), Sp[0] = x;
  YieldCheck();
  return Continue(); }
 

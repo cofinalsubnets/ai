@@ -17,8 +17,26 @@ static g_vm(data_tbl_apply) {
  word v = g_tget(f, nil, Sp[0], tbl(Ip));
  return Ip = cell(*++Sp), *Sp = v, Continue(); }
 
+// ((a . b) f) == (f a b): a pair is its own Church eliminator (cons = \a b f.f a b).
+// We re-enter the apply protocol via a static driver thread: lay the stack as the
+// two curried calls expect, then [ap ; swap+ap ; ret0] runs ((f a) b) and returns
+// the result to the caller. pair_swap reorders [result, b] -> [b, result] so the
+// second ap sees arg=b, fn=(f a). The driver lives in .data, so the return
+// addresses it leaves on the stack fall outside the GC pool and are never forwarded
+// (cf. spawn_body); currying/arity are handled by the reused g_vm_ap/g_vm_cur path.
+static g_vm(pair_swap) {
+ word t = Sp[0]; Sp[0] = Sp[1], Sp[1] = t;
+ return Ap(g_vm_ap, f); }
+static union u pair_drive[] = { {g_vm_ap}, {.ap = pair_swap}, {.ap = g_vm_ret0} };
+static g_vm(data_pair_apply) {
+ Have(2);
+ word a = A(Ip), b = B(Ip), fn = Sp[0];     // re-read after the Have guard; no alloc past here
+ Sp -= 2;                                    // grow the frame to [a, fn, b, ret]
+ Sp[0] = a, Sp[1] = fn, Sp[2] = b;           // Sp[3] = ret (was Sp[1]) stays put
+ return Ip = pair_drive, Continue(); }
+
 g_vm_t *g_data_ap[G_DATA_VT_N] = {
- [two_q]  = data_self_quote, [vec_q]  = data_self_quote, [sym_q] = data_self_quote,
+ [two_q]  = data_pair_apply, [vec_q]  = data_self_quote, [sym_q] = data_self_quote,
  [tbl_q]  = data_tbl_apply,  [text_q] = data_self_quote, [big_q] = data_self_quote, };
 
 #define data_vt(idx, name) \

@@ -80,6 +80,22 @@
  (fz-ok 300 14 (fz-pair2 fz-fix-nz fz-fix-nz)
    (\ v (: g (gcd (car v) (cadr v)) (&& (= 0 (% (car v) g)) (= 0 (% (cadr v) g)))))))
 
+; ---- number-as-function application (Church numerals), deliberately bounded ----
+; applying a fixnum n is Church-numeral application: a numeric operand m gives
+; m ** n, a function operand g gives g composed n times. The OPERATOR is always
+; drawn as a small non-negative fixnum (fz-op, 0..6) so neither the exponent nor
+; the composition depth can run away -- the fuzzer must never turn a random draw
+; into a 2^160-sized exponent. With fz-op bounded, every result here stays tiny
+; (|m ** n| <= 4 ** 6), so these properties cannot loop or blow up the heap.
+(: fz-op (fz-int 0 7))
+(assert
+ ; numeric operand: (n m) == m ** n  (exponent n bounded to <= 6)
+ (fz-ok 300 15 (fz-pair2 fz-op (fz-int -4 5))
+   (\ v (= (** (cadr v) (car v)) ((car v) (cadr v)))))
+ ; function operand: ((n (+ k)) x) == x + n*k  (composition depth n bounded to <= 6)
+ (fz-ok 300 16 (fz-trip fz-op (fz-int -3 4) (fz-int -10 10))
+   (\ v (= (+ (* (car v) (cadr v)) (caddr v)) ((car v) (+ (cadr v)) (caddr v))))))
+
 ; ---- list-combinator identities ----
 (assert
  (fz-ok 300 20 fz-l (\ l (= l (rev (rev l)))))                          ; rev is involutive

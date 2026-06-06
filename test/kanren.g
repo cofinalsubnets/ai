@@ -56,7 +56,7 @@
   (reify st) (flip catmap ks (\ k
    (: it (has_s (X (map A (A st)) (B st)) k)
     (? it (L k (walk_star (A it) st))))))
-  (map reify (slist ((? n (stake n) id) (g empty_dict))))))
+  (map reify ((? n (stake n) slist) (g empty_dict)))))
 
 (:: 'zz (\ x (: s (gensym 0) n (gensym 0) m (gensym 0) y (gensym 0) x (A x)
  (L '\ s n m y (L m (L x s))))))

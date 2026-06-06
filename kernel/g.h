@@ -122,8 +122,10 @@ struct g {
     g_word fd;
     g_word ungetc_buf;            // pushed-back byte; putnum(EOF) = empty
     g_word eof_seen; } *io; };
-  g_word rng; }; }; // global RNG state: a rank-1 i64 vec, len 4 (xoshiro256++). Lives
-                    // in the &v0..end region so gc.c's root loop forwards it for free.
+  // rng: global RNG state (rank-1 i64 vec, len 4, xoshiro256++). numap: gwen handler
+  // for fixnum-as-function application ((n x) -> (num-ap n x)), installed by the
+  // `set-numap` bif from prelude.g. Both live in &v0..end so gc.c's root loop forwards them.
+  g_word rng, numap; }; };
  intptr_t end[]; };
 
 struct g_def { char const *n; intptr_t x; };
