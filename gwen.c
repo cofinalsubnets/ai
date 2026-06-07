@@ -5,10 +5,8 @@
 // ============================================================================
 
 #if UINTPTR_MAX == UINT64_MAX
-#define WBITS 64
+#define Bits 64
 typedef double g_flo_t;
-#define G_VT_FLO g_vt_f64
-#define G_VT_INT g_vt_i64
 #define g_sin   sin
 #define g_cos   cos
 #define g_tan   tan
@@ -19,10 +17,8 @@ typedef double g_flo_t;
 #define g_log   log
 #define g_pow   pow
 #elif UINTPTR_MAX == UINT32_MAX
-#define WBITS 32
+#define Bits 32
 typedef float g_flo_t;
-#define G_VT_FLO g_vt_f32
-#define G_VT_INT g_vt_i32
 #define g_sin   sinf
 #define g_cos   cosf
 #define g_tan   tanf
@@ -42,8 +38,8 @@ g_flo_t g_sin(g_flo_t), g_cos(g_flo_t), g_tan(g_flo_t), g_atan(g_flo_t),
         g_log(g_flo_t), g_pow(g_flo_t, g_flo_t);
 #endif
 
-#define WBYTES (WBITS>>3)
-_Static_assert(WBYTES == sizeof(uintptr_t), "word size sanity check");
+#define Bytes (Bits>>3)
+_Static_assert(Bytes == sizeof(uintptr_t), "word size sanity check");
 
 #include <stdarg.h>
 _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size");
@@ -85,18 +81,18 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 #define getnum g_getnum
 #define putnum g_putnum
 
-// Signedness is a property of operators, not data (see the wide-int box
-// plan), so only signed integer widths + the two float widths exist here.
-enum g_vec_type {
- g_vt_i8, g_vt_i16, g_vt_i32, g_vt_i64,
- g_vt_f32, g_vt_f64,
- // Step 7 -- complex: a rank-0 vec carrying two g_flo_t (re, im). Sits past the
- // real element types; arr/arrl reject ty > f64, so it can never be an array
- // element in v1 -- complex only ever appears as a rank-0 scalar (cplxp), never
- // in the rank>=1 array lanes. The `>= g_vt_f32` float-domain tests therefore
- // never see it except via the explicit cplx branches (g_all_zero, the printer).
- g_vt_cplx, };
-#define G_VT_CPLX g_vt_cplx
+// One word per element: every integer width folds to Z (intptr_t), every float
+// width to R (g_flo_t), and C is the rank-0 complex scalar (two g_flo_t). Ordered
+// Z < R < C so `>= g_R` is the float-domain test and C is the widest *numeric* tier.
+// arr/arrl reject ty == C, so C never appears as a rank>=1 array element -- complex
+// only ever shows up as a rank-0 scalar (cplxp), handled by explicit cplx branches.
+// O (object) is the odd tier out: its slots hold live gwen words (any value --
+// fixnum, bignum, box, complex, string, pair...), so it is the ONE vec type the
+// copying GC must trace element-by-element (evac_vec). It sits outside the numeric
+// order; the typed fast lanes gate on `type <= g_C`, the arith lane on `type == g_O`
+// (g_vm_obin), so O elements always route through the promoting scalar dispatch --
+// that is what makes a bignum array add/multiply exactly instead of wrapping.
+enum g_vec_type { g_Z, g_R, g_C, g_O, };
 // Elementwise binary opcodes for g_vm_vbin (kernel/arr.c). The five arith codes
 // match the arith slow handlers; the five compare codes (>= VOP_LT) produce a
 // 0/1 bool array. VOP_EQ is `=` over arrays (whole-array eq is `(aall (= a b))`).
@@ -146,6 +142,10 @@ g_vm(g_vm_vmap2, g_flo_t (*)(g_flo_t, g_flo_t));
 // Complex arithmetic lane (kernel/cplx.c): the scalar arith slow paths divert
 // here when either operand is complex; vop selects add/sub/mul/quot (rem -> nil).
 g_vm(g_vm_cplx_bin, int);
+// Object-array elementwise lane (g_O): the broadcast engine g_vm_vbin diverts
+// here when an operand is a g_O array, so each element op runs the promoting
+// scalar dispatch (exact bignum results) instead of the typed raw-C lanes.
+g_vm(g_vm_obin, int);
 // data-kind recovery (datp/typ). Included here, after the self-quote sentinels
 // above, because a frontend's override (e.g. wasm/inc/vt.h) resolves kinds
 // by comparing an ap against g_vm_two..g_vm_text directly.
@@ -200,26 +200,26 @@ struct g *g_big_dec(struct g*);             // sp[0] bignum -> decimal string
 struct g *g_big_read_dec(struct g*);        // sp[0] [+-]?digits token -> canonical value
 
 static g_inline bool flop(word _) {
-  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == G_VT_FLO; }
-// Wide-integer box: a rank-0 G_VT_INT scalar vec. Arises only from
+  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == g_R; }
+// Wide-integer box: a rank-0 g_Z scalar vec. Arises only from
 // transparent fixnum overflow (kernel/math.c); never holds a value that
 // fits the fixnum tag (canonical demotion keeps box and fixnum ranges
 // disjoint), so boxp and nump never both hold for the same number.
 static g_inline bool boxp(word _) {
-  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == G_VT_INT; }
-// A complex scalar: a rank-0 G_VT_CPLX vec (two g_flo_t, re then im). Deliberately
+  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == g_Z; }
+// A complex scalar: a rank-0 g_C vec (two g_flo_t, re then im). Deliberately
 // NOT folded into ISNUM -- the real-tower macros (TOFLO/TOINT) would misread its
 // two-word payload, so the arith/eq paths handle complex via explicit cplxp
 // branches placed before the real lanes (decision: complex > float > int/bignum).
 static g_inline bool cplxp(word _) {
-  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == G_VT_CPLX; }
+  return vecp(_) && vec(_)->rank == 0 && vec(_)->type == g_C; }
 // A rank>=1 typed array (vs a rank-0 scalar box, which flop/boxp catch). The
 // elementwise arith/compare lanes divert to g_vm_vbin when either operand arrp.
 static g_inline bool arrp(word _) { return vecp(_) && vec(_)->rank >= 1; }
 
 // Max array rank (bounds the stack index/stride arrays in the broadcast loop).
 #define G_VEC_MAXRANK 8
-extern size_t const g_vt_size[];                 // element byte size by g_vec_type
+extern size_t const g_vt_[];                 // element byte size by g_vec_type
 // Element payload: laid out row-major just past the shape words.
 static g_inline void *vec_data(struct g_vec *v) { return (void*) (v->shape + v->rank); }
 static g_inline struct g_vec *ini_vec(struct g_vec *v, enum g_vec_type t, uintptr_t rank) {
@@ -229,41 +229,23 @@ static g_inline struct g_vec *ini_vec(struct g_vec *v, enum g_vec_type t, uintpt
 // reader is only used on integer-typed arrays in practice.
 static g_inline g_flo_t vec_get_flo(struct g_vec *v, uintptr_t i) {
  void *p = vec_data(v);
- switch (v->type) {
-  case g_vt_i8:  return (g_flo_t) ((int8_t*) p)[i];
-  case g_vt_i16: return (g_flo_t) ((int16_t*) p)[i];
-  case g_vt_i32: return (g_flo_t) ((int32_t*) p)[i];
-  case g_vt_i64: return (g_flo_t) ((int64_t*) p)[i];
-  case g_vt_f32: return (g_flo_t) ((float*) p)[i];
-  default:       return (g_flo_t) ((double*) p)[i]; } }
+ return v->type == g_R ? ((g_flo_t*) p)[i] : (g_flo_t) ((intptr_t*) p)[i]; }
 static g_inline intptr_t vec_get_int(struct g_vec *v, uintptr_t i) {
  void *p = vec_data(v);
- switch (v->type) {
-  case g_vt_i8:  return (intptr_t) ((int8_t*) p)[i];
-  case g_vt_i16: return (intptr_t) ((int16_t*) p)[i];
-  case g_vt_i32: return (intptr_t) ((int32_t*) p)[i];
-  case g_vt_i64: return (intptr_t) ((int64_t*) p)[i];
-  case g_vt_f32: return (intptr_t) ((float*) p)[i];
-  default:       return (intptr_t) ((double*) p)[i]; } }
-// Write element i of v, narrowing to v's element type.
+ return v->type == g_R ? (intptr_t) ((g_flo_t*) p)[i] : ((intptr_t*) p)[i]; }
+// Write element i of v, converting to v's element kind.
 static g_inline void vec_put_int(struct g_vec *v, uintptr_t i, intptr_t x) {
  void *p = vec_data(v);
- switch (v->type) {
-  case g_vt_i8:  ((int8_t*) p)[i]  = (int8_t) x; break;
-  case g_vt_i16: ((int16_t*) p)[i] = (int16_t) x; break;
-  case g_vt_i32: ((int32_t*) p)[i] = (int32_t) x; break;
-  case g_vt_i64: ((int64_t*) p)[i] = (int64_t) x; break;
-  case g_vt_f32: ((float*) p)[i]   = (float) x; break;
-  default:       ((double*) p)[i]  = (double) x; break; } }
+ if (v->type == g_R) ((g_flo_t*) p)[i] = (g_flo_t) x; else ((intptr_t*) p)[i] = x; }
 static g_inline void vec_put_flo(struct g_vec *v, uintptr_t i, g_flo_t x) {
  void *p = vec_data(v);
- switch (v->type) {
-  case g_vt_i8:  ((int8_t*) p)[i]  = (int8_t) (intptr_t) x; break;
-  case g_vt_i16: ((int16_t*) p)[i] = (int16_t) (intptr_t) x; break;
-  case g_vt_i32: ((int32_t*) p)[i] = (int32_t) (intptr_t) x; break;
-  case g_vt_i64: ((int64_t*) p)[i] = (int64_t) (intptr_t) x; break;
-  case g_vt_f32: ((float*) p)[i]   = (float) x; break;
-  default:       ((double*) p)[i]  = (double) x; break; } }
+ if (v->type == g_R) ((g_flo_t*) p)[i] = x; else ((intptr_t*) p)[i] = (intptr_t) x; }
+// Read/write element i of a g_O array as a raw tagged gwen word (the GC traces
+// these; see evac_vec). No conversion -- the slot IS a value.
+static g_inline word vec_get_obj(struct g_vec *v, uintptr_t i) {
+ return ((word*) vec_data(v))[i]; }
+static g_inline void vec_put_obj(struct g_vec *v, uintptr_t i, word x) {
+ ((word*) vec_data(v))[i] = x; }
 
 // Language falsy predicate: nil/0, or an all-zero vec (boxed 0.0, zero box/array;
 // empty vec vacuously). Hot path short-circuits on nilp; only a vec scans g_all_zero.
@@ -295,20 +277,20 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 #define BOX_REQ (Width(struct g_vec) + Width(intptr_t))
 // Heap words for one complex box: the (re, im) payload is two g_flo_t words.
 #define CPLX_REQ (Width(struct g_vec) + 2 * Width(g_flo_t))
-// The tagged fixnum range: putnum spends one bit, so |value| <= 2^(WBITS-2).
+// The tagged fixnum range: putnum spends one bit, so |value| <= 2^(Bits-2).
 #define FIX_MIN (INTPTR_MIN >> 1)
 #define FIX_MAX (INTPTR_MAX >> 1)
 // Emit an integer result R into `_res`: demote to a fixnum when it fits the
-// tag, else box it as a rank-0 G_VT_INT scalar (bumping Hp). The caller must
+// tag, else box it as a rank-0 g_Z scalar (bumping Hp). The caller must
 // already hold Have(BOX_REQ). Takes no &local, so a handler that uses it keeps
 // its trailing tail call.
 #define EMIT_INT(R) do { intptr_t _r = (R); \
  if (_r >= FIX_MIN && _r <= FIX_MAX) _res = putnum(_r); \
- else { struct g_vec *_v = ini_scalar((struct g_vec*) Hp, G_VT_INT); \
+ else { struct g_vec *_v = ini_scalar((struct g_vec*) Hp, g_Z); \
         Hp += BOX_REQ; box_put(_v->shape, _r); _res = word(_v); } } while (0)
-// Emit a double result R into `_res` as a rank-0 G_VT_FLO box. Same Have(BOX_REQ)
+// Emit a double result R into `_res` as a rank-0 g_R box. Same Have(BOX_REQ)
 // precondition and TCO discipline as EMIT_INT.
-#define EMIT_FLO(R) do { struct g_vec *_v = ini_scalar((struct g_vec*) Hp, G_VT_FLO); \
+#define EMIT_FLO(R) do { struct g_vec *_v = ini_scalar((struct g_vec*) Hp, g_R); \
  Hp += BOX_REQ; flo_put(_v->shape, (R)); _res = word(_v); } while (0)
 
 // Step 8 -- RNG (kernel/rng.c). State is a rank-1 i64 vec of length 4 (256 bits,
@@ -320,6 +302,9 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 #define RNG_PAYLOAD_BYTES (RNG_STATE_LEN * 8)
 #define RNG_VEC_BYTES (sizeof(struct g_vec) + sizeof(uintptr_t) + RNG_PAYLOAD_BYTES)
 #define RNG_VEC_REQ (b2w(RNG_VEC_BYTES))
+// State element kind: pick whichever kind is 8 bytes wide so g_vec_bytes (GC) sees
+// the full 256-bit payload -- Z (one word) on 64-bit, C (two words) on 32-bit.
+#define RNG_VT (Bytes == 4 ? g_C : g_Z)
 void g_rng_seed(struct g_vec*, uint64_t);   // shape an i64 state vec + seed it (SplitMix64)
 g_vm_t g_vm_rng_seed, g_vm_rng_get, g_vm_rng_set,
        g_vm_rand, g_vm_randf, g_vm_rand_next, g_vm_randf_next;
@@ -466,7 +451,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  if (!ISNUM(a) || !ISNUM(b)) return *++Sp = nil, Ip++, Continue(); \
  if (flop(a) || flop(b)) { word _res; Have(BOX_REQ); \
   g_flo_t ad = TOFLO(a), bd = TOFLO(b); \
-  struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO); \
+  struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_R); \
   Hp += BOX_REQ; flo_put(v->shape, (fexpr)); _res = word(v); \
   return *++Sp = _res, Ip++, Continue(); } \
  if (!bigp(a) && !bigp(b)) { intptr_t av = TOINT(a), bv = TOINT(b), t; \
@@ -482,7 +467,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  if (!ISNUM(a) || !ISNUM(b)) return *++Sp = nil, Ip++, Continue(); \
  if (flop(a) || flop(b) || b == nil) { word _res; Have(BOX_REQ); \
   g_flo_t ad = TOFLO(a), bd = TOFLO(b); \
-  struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO); \
+  struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_R); \
   Hp += BOX_REQ; flo_put(v->shape, (fexpr)); _res = word(v); \
   return *++Sp = _res, Ip++, Continue(); } \
  if (!bigp(a) && !bigp(b)) { intptr_t av = TOINT(a), bv = TOINT(b); \
@@ -537,13 +522,17 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
 #define LIMB_BITS 32
 #define LIMB_BASE ((uint64_t) 1 << LIMB_BITS)
 
-#define RED_EXTREME(nom, c_op) g_vm(nom) { \
+#define RED_EXTREME(nom, c_op, kind) g_vm(nom) { \
  word x = Sp[0]; \
  if (!vecp(x)) return Ip++, Continue(); \
+ if (vec(x)->type == g_O) { \
+  Pack(f); f = ored(f, kind); \
+  if (!g_ok(f)) return gtrap(f); \
+  return Unpack(f), Continue(); } \
  struct g_vec *v = vec(x); \
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i]; \
  if (!n) return Sp[0] = nil, Ip++, Continue(); \
- bool fdom = v->type >= g_vt_f32; word _res; \
+ bool fdom = v->type >= g_R; word _res; \
  Have(BOX_REQ); v = vec(Sp[0]); \
  if (fdom) { g_flo_t m = vec_get_flo(v, 0); \
   for (uintptr_t i = 1; i < n; i++) {\
@@ -612,7 +601,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_sin, "sin", S1(g_vm_sin)) _(bif_cos, "cos", S1(g_vm_cos)) _(bif_tan, "tan", S1(g_vm_tan)) _(bif_atan, "atan", S1(g_vm_atan))\
  _(bif_sqrt, "sqrt", S1(g_vm_sqrt)) _(bif_exp, "exp", S1(g_vm_exp)) _(bif_log, "log", S1(g_vm_log))\
  _(bif_atan2, "atan2", S2(g_vm_atan2)) _(bif_pow, "pow", S2(g_vm_pow))\
- _(bif_cplx, "cplx", S2(g_vm_cplx)) _(bif_cplxp, "cplxp", S1(g_vm_cplxp))\
+ _(bif_cplx, "C", S2(g_vm_cplx)) _(bif_cplxp, "cplxp", S1(g_vm_cplxp))\
  _(bif_re, "re", S1(g_vm_re)) _(bif_im, "im", S1(g_vm_im)) _(bif_conj, "conj", S1(g_vm_conj))\
  _(bif_abs, "abs", S1(g_vm_abs)) _(bif_arg, "arg", S1(g_vm_carg))\
  _(bif_arr, "arr", S2(g_vm_arr)) _(bif_arrl, "arrl", S3(g_vm_arrl))\
@@ -793,7 +782,13 @@ static g_inline void evac_two(struct g*f, word const*const p0, word const*const 
  w->b = gcp(f, w->b, p0, t0); }
 
 static g_inline void evac_vec(struct g*f, word const*const p0, word const*const t0) {
- f->cp += b2w(g_vec_bytes(vec(f->cp))); }
+ struct g_vec *v = vec(f->cp);
+ f->cp += b2w(g_vec_bytes(v));
+ if (v->type != g_O) return;                 // numeric vecs are GC leaves (flat payload)
+ word *e = (word*) vec_data(v);              // object vec: forward each live element word
+ uintptr_t n = 1;
+ for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
+ while (n--) e[n] = gcp(f, e[n], p0, t0); }
 
 static g_inline void evac_str(struct g*f, word const*const p0, word const*const t0) {
  f->cp += b2w(sizeof(struct g_str) + str(f->cp)->len); }
@@ -2178,13 +2173,15 @@ static g_inline struct g*gzput_two(struct g*f, word _, uintptr_t off) {
 // callers re-fetch vec(f->sp[0]) each call for the same reason.
 static struct g *gzput_vec_elem(struct g *f, uintptr_t i) {
  struct g_vec *v = vec(f->sp[0]);
- if (v->type >= g_vt_f32)
+ if (v->type >= g_R)
   return g_dtoa2(f, vec_get_flo(v, i));
  return gzputn(f, vec_get_int(v, i), 10); }
 
-// element-type code (0..5) -> the prelude symbol bound to it, so the printed
-// `arrl` form round-trips: `(arrl i64 …)` reads `i64` back as the code 3.
-static char const *const g_vt_names[] = { "i8", "i16", "i32", "i64", "f32", "f64" };
+// element-kind code -> a prelude symbol bound to it, so the printed `arrl` form
+// round-trips: Z prints as the `i64` alias, R as `f64`. `c` only labels the
+// 32-bit RNG state vec (never a constructible array -- arrl rejects ty > R).
+static char const *const g_vt_names[] = {
+ [g_Z] = "i64", [g_R] = "f64", [g_C] = "c", [g_O] = "o" };
 
 // Print a rank>=1 array (f->sp[0]) as a `,`-prefixed constructor expression that
 // reads back to the same array (`,` = uq = identity). A rank-1 i64/f64 array uses
@@ -2192,11 +2189,23 @@ static char const *const g_vt_names[] = { "i8", "i16", "i32", "i64", "f32", "f64
 // `,(arrl <type> '(shape) '(vals))`, which pins the exact element type and shape.
 // The array may move on a GC during printing, so shape/elements are re-fetched
 // from f->sp[0] each step (gzput_vec_elem already does this internally).
-static struct g *gzput_arr(struct g *f) {
+static g_noinline struct g *gzputx(struct g *f, intptr_t x, uintptr_t off);
+
+static struct g *gzput_arr(struct g *f, uintptr_t off) {
  struct g_vec *v = vec(f->sp[0]);
  uintptr_t rank = v->rank, type = v->type, nelem = 1;
  for (uintptr_t i = 0; i < rank; i++) nelem *= v->shape[i];
- if (rank == 1 && (type == g_vt_i64 || type == g_vt_f64)) {
+ if (type == g_O) {                             // object array: elements are arbitrary
+  f = gzprintf(f, ",(arrl o '(");               // values -> print each via the general
+  for (uintptr_t i = 0; g_ok(f) && i < rank; i++) {   // printer (re-fetch sp[0] each step:
+   if (i) f = gzputc(f, ' ');                         // gzputx may GC and relocate the array)
+   f = gzputn(f, vec(f->sp[0])->shape[i], 10); }
+  f = gzprintf(f, ") '(");
+  for (uintptr_t i = 0; g_ok(f) && i < nelem; i++) {
+   if (i) f = gzputc(f, ' ');
+   f = gzputx(f, vec_get_obj(vec(f->sp[0]), i), off); }
+  return g_ok(f) ? gzprintf(f, "))") : f; }
+ if (rank == 1 && (type == g_Z || type == g_R)) {
   f = gzprintf(f, ",(vec");
   for (uintptr_t i = 0; g_ok(f) && i < nelem; i++)
    f = gzput_vec_elem(gzputc(f, ' '), i);
@@ -2216,23 +2225,23 @@ static struct g *gzput_arr(struct g *f) {
 static g_inline struct g*gzput_vec_scalar_float(struct g*f) {
  return g_dtoa2(f, (g_flo_t) flo_get(f->sp[0])); }
 
-// complex -> ,(cplx re im); round-trips via uq=identity (cplx is a bif). re/im are
+// complex -> (C re im); round-trips by re-evaluation (C is a bif). re/im are
 // read into C locals up front so a GC during g_dtoa2 can't strand the operand.
 static g_inline struct g*gzput_vec_scalar_complex(struct g*f) {
  g_flo_t re = cplx_re(f->sp[0]), im = cplx_im(f->sp[0]);
- f = gzprintf(f, ",(cplx ");
+ f = gzprintf(f, "(C ");
  f = g_dtoa2(f, re);
  f = gzputc(f, ' ');
  f = g_dtoa2(f, im);
  return gzputc(f, ')'); }
 
-static g_inline struct g*gzput_vec(struct g*f, word _) {
+static g_inline struct g*gzput_vec(struct g*f, word _, uintptr_t off) {
  intptr_t rank = vec(_)->rank, type = vec(_)->type;
  if (!g_ok(f = g_push(f, 1, _))) return f;
- if (rank == 0 && type == G_VT_FLO) f = gzput_vec_scalar_float(f);
- else if (rank == 0 && type == G_VT_INT) f = gzputn(f, box_get(f->sp[0]), 10);
- else if (rank == 0 && type == G_VT_CPLX) f = gzput_vec_scalar_complex(f);
- else if (rank >= 1) f = gzput_arr(f);
+ if (rank == 0 && type == g_R) f = gzput_vec_scalar_float(f);
+ else if (rank == 0 && type == g_Z) f = gzputn(f, box_get(f->sp[0]), 10);
+ else if (rank == 0 && type == g_C) f = gzput_vec_scalar_complex(f);
+ else if (rank >= 1) f = gzput_arr(f, off);
  else f = gzprintf(f, ",vec@%z:%d.%d", vec(f->sp[0]), type, rank);
  return g_pop(f, 1); }
 
@@ -2395,7 +2404,7 @@ static g_noinline struct g *gzputx(struct g *f, intptr_t x, uintptr_t off) {
  switch (typ(x)) {
    default: __builtin_trap();
    case two_q:  f = gzput_two(f, x, off); break;
-   case vec_q:  f = gzput_vec(f, x); break;
+   case vec_q:  f = gzput_vec(f, x, off); break;
    case sym_q:  f = gzput_sym(f, x); break;
    case hash_q:  f = gzput_hash(f, x, off); break;
    case text_q: f = gzput_str(f, x); break;
@@ -2568,7 +2577,7 @@ g_vm(g_vm_flo) {
  if (d != d) return Sp[0] = nil, Ip += 1, Continue();
  uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
  Have(req);
- struct g_vec *r = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
+ struct g_vec *r = ini_scalar((struct g_vec*) Hp, g_R);
  Hp += req;
  flo_put(r->shape, (g_flo_t) d);
  Sp[0] = word(r);
@@ -2803,7 +2812,7 @@ static g_inline struct g *gzread1sym(struct g*f, int c) {
       if (*e == 0) {
        if (j >= FIX_MIN && j <= FIX_MAX) return f->sp[0] = putnum(j), f;
        if (g_ok(f = g_have(f, BOX_REQ))) {
-        struct g_vec *b = ini_scalar(bump(f, BOX_REQ), G_VT_INT);
+        struct g_vec *b = ini_scalar(bump(f, BOX_REQ), g_Z);
         box_put(b->shape, j);
         f->sp[0] = word(b); }
        return f; }
@@ -2811,7 +2820,7 @@ static g_inline struct g *gzread1sym(struct g*f, int c) {
       if (e == txt(s) || *e != 0) return intern(f);
       uintptr_t req = b2w(sizeof(struct g_vec) + sizeof(g_flo_t));
       if (g_ok(f = g_have(f, req))) {
-       struct g_vec *r = ini_scalar(bump(f, req), G_VT_FLO);
+       struct g_vec *r = ini_scalar(bump(f, req), g_R);
        flo_put(r->shape, d);
        f->sp[0] = word(r); }
       return f; } }
@@ -2981,8 +2990,9 @@ g_vm(g_vm_get) {
      intptr_t ix = getnum(ki);
      if (ix < 0 || ix >= (intptr_t) v->shape[a]) { ok = false; break; }
      off = off * v->shape[a] + ix, a++; } }
-   if (ok) { word _res; Have(BOX_REQ); v = vec(Sp[2]);
-    if (v->type >= g_vt_f32) EMIT_FLO(vec_get_flo(v, off));
+   if (ok && v->type == g_O) z = vec_get_obj(v, off);   // object: the slot IS the value
+   else if (ok) { word _res; Have(BOX_REQ); v = vec(Sp[2]);
+    if (v->type >= g_R) EMIT_FLO(vec_get_flo(v, off));
     else EMIT_INT(vec_get_int(v, off));
     z = _res; }
    break; }
@@ -3426,7 +3436,7 @@ static g_vm(g_vm_math1, g_flo_t (*fn)(g_flo_t)) {
  g_flo_t ad = TOFLO(a), rd = fn(ad);
  uintptr_t req = Width(struct g_vec) + Width(g_flo_t);
  Have(req);
- struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_R);
  Hp += req;
  flo_put(v->shape, rd);
  return Sp[0] = word(v), Ip++, Continue(); }
@@ -3439,7 +3449,7 @@ static g_vm(g_vm_math2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
  g_flo_t ad = TOFLO(a), bd = TOFLO(b), rd = fn(ad, bd);
  uintptr_t req = Width(struct g_vec) + Width(g_flo_t);
  Have(req);
- struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_FLO);
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_R);
  Hp += req;
  flo_put(v->shape, rd);
  return *++Sp = word(v), Ip++, Continue(); }
@@ -3456,13 +3466,14 @@ op11(g_vm_flop, flop(Sp[0]) ? putnum(1) : nil)
 // ============================================================================
 // vec
 // ============================================================================
-size_t const g_vt_size[] = {
- [g_vt_i8]  = 1, [g_vt_i16] = 2, [g_vt_i32] = 4, [g_vt_i64] = 8,
- [g_vt_f32] = 4, [g_vt_f64] = 8,
- [g_vt_cplx] = 2 * sizeof(g_flo_t), };   // complex scalar: (re, im)
+size_t const g_vt_[] = {
+ [g_Z] = Bytes,
+ [g_R] = Bytes,
+ [g_C] = 2 * Bytes,      // complex scalar: (re, im)
+ [g_O] = Bytes, };       // object: one tagged gwen word per element
 
 uintptr_t g_vec_bytes(struct g_vec *v) {
- uintptr_t len = g_vt_size[v->type],
+ uintptr_t len = g_vt_[v->type],
            rank = v->rank,
            *shape = v->shape;
  while (rank--) len *= *shape++;
@@ -3517,7 +3528,7 @@ static g_noinline void rng_seed_into(void *payload, uint64_t seed) {
 
 // Map a 64-bit draw to a float in [0,1): keep the high mantissa bits and scale.
 static g_inline g_flo_t u64_to_unit(uint64_t u) {
-#if WBITS >= 64
+#if Bits >= 64
  return (g_flo_t) (u >> 11) * (g_flo_t) 0x1.0p-53;
 #else
  return (g_flo_t) (uint32_t) (u >> 40) * (g_flo_t) 0x1.0p-24f;
@@ -3528,13 +3539,13 @@ static g_inline g_flo_t u64_to_unit(uint64_t u) {
 // seed in g_ini_0. ini_vec + a pointer write only, so an inlining caller keeps
 // its tail call; the &s scratch stays inside rng_seed_into.
 void g_rng_seed(struct g_vec *v, uint64_t seed) {
- ini_vec(v, g_vt_i64, 1);
+ ini_vec(v, RNG_VT, 1);
  v->shape[0] = RNG_STATE_LEN;
  rng_seed_into(vec_data(v), seed); }
 
 // Is x a well-formed state vec (rank-1 i64, length 4)?
 static g_inline bool rng_state_p(word x) {
- return vecp(x) && vec(x)->rank == 1 && vec(x)->type == g_vt_i64
+ return vecp(x) && vec(x)->rank == 1 && vec(x)->type == RNG_VT
         && vec(x)->shape[0] == RNG_STATE_LEN; }
 
 // Build a fresh state vec at Hp, copying the 4 limbs of `src` into it. Caller
@@ -3542,7 +3553,7 @@ static g_inline bool rng_state_p(word x) {
 static g_inline struct g_vec *rng_copy(g_word **hp, struct g_vec *src) {
  struct g_vec *v = (struct g_vec*) *hp;
  *hp += RNG_VEC_REQ;
- ini_vec(v, g_vt_i64, 1);
+ ini_vec(v, RNG_VT, 1);
  v->shape[0] = RNG_STATE_LEN;
  memcpy(vec_data(v), vec_data(src), RNG_PAYLOAD_BYTES);
  return v; }
@@ -3835,7 +3846,7 @@ static int load_int_mag(word x, uint32_t scratch[2], uint32_t const **out, bool 
  uintptr_t u = *neg ? (uintptr_t) 0 - (uintptr_t) v : (uintptr_t) v;
  scratch[0] = (uint32_t) u;
  int k;
-#if WBITS == 64
+#if Bits == 64
  scratch[1] = (uint32_t) (u >> 32);
  k = scratch[1] ? 2 : scratch[0] ? 1 : 0;
 #else
@@ -3861,7 +3872,7 @@ intptr_t g_big_low(word x) {
  intptr_t sl = b->slen;
  bool neg = sl < 0;
  uintptr_t u = b->limb[0];
-#if WBITS == 64
+#if Bits == 64
  int n = (int) (neg ? -sl : sl);   // limb count only consulted for the 2nd limb
  if (n >= 2) u |= ((uintptr_t) b->limb[1] << 16) << 16;
 #endif
@@ -3882,12 +3893,12 @@ int g_big_cmp(word a, word b) {
 word g_big_canon(g_word **hp, uint32_t const *limb, int n, bool neg) {
  while (n > 0 && limb[n-1] == 0) n--;
  if (n == 0) return nil;
- int const wlimbs = WBITS / 32;                 // 2 on 64-bit, 1 on 32-bit ports
+ int const wlimbs = Bits / 32;                 // 2 on 64-bit, 1 on 32-bit ports
  if (n <= wlimbs) {
   uintptr_t u = limb[0];
   if (wlimbs == 2 && n == 2) u |= ((uintptr_t) limb[1] << 16) << 16;
-  uintptr_t const fixmag = (uintptr_t) 1 << (WBITS - 2);   // |FIX_MIN|  = 2^(W-2)
-  uintptr_t const boxmag = (uintptr_t) 1 << (WBITS - 1);   // |INT_MIN|  = 2^(W-1)
+  uintptr_t const fixmag = (uintptr_t) 1 << (Bits - 2);   // |FIX_MIN|  = 2^(W-2)
+  uintptr_t const boxmag = (uintptr_t) 1 << (Bits - 1);   // |INT_MIN|  = 2^(W-1)
   intptr_t val;
   if (!neg) {
    if (u <= fixmag - 1) return putnum((intptr_t) u);       // FIX_MAX = 2^(W-2)-1
@@ -3897,7 +3908,7 @@ word g_big_canon(g_word **hp, uint32_t const *limb, int n, bool neg) {
    if (u <= fixmag) return putnum((intptr_t) ((uintptr_t) 0 - u));   // incl FIX_MIN
    if (u > boxmag) goto big;                                          // < INTPTR_MIN -> bignum
    val = (intptr_t) ((uintptr_t) 0 - u); }                            // incl INTPTR_MIN
-  struct g_vec *bx = ini_scalar((struct g_vec*) *hp, G_VT_INT);
+  struct g_vec *bx = ini_scalar((struct g_vec*) *hp, g_Z);
   *hp += BOX_REQ; box_put(bx->shape, val); return word(bx); }
 big:
  struct g_big *b = ini_big((struct g_big*) *hp, neg ? -n : n);
@@ -4027,7 +4038,7 @@ struct g *g_big_dec(struct g *f) {
 // slow lanes divert into. GC is free: copy_vec / evac_vec already generalize
 // over rank + type via g_vec_bytes (kernel/gc.c). See [[project-todo-math]] 5a.
 // The per-element read/write + size helpers live in i.h (vec_get/put_*,
-// g_vt_size in kernel/vec.c), shared with `get` (kernel/hash.c) and the printer.
+// g_vt_ in kernel/vec.c), shared with `get` (kernel/hash.c) and the printer.
 
 // --- (arr type shape-list): zero-filled array ------------------------------
 // `type` is a fixnum element-type code (i8..f64, named in the prelude); `shape`
@@ -4037,21 +4048,22 @@ g_vm(g_vm_arr) {
  word t = Sp[0], shp = Sp[1];
  if (!nump(t)) return *++Sp = nil, Ip++, Continue();
  intptr_t ty = getnum(t);
- if (ty < 0 || ty > g_vt_f64) return *++Sp = nil, Ip++, Continue();
+ if (ty < 0 || ty > g_O || ty == g_C) return *++Sp = nil, Ip++, Continue();
  uintptr_t rank = 0, nelem = 1;
  for (word l = shp; twop(l); l = B(l)) {
   word d = A(l);
   if (!nump(d) || getnum(d) < 0) return *++Sp = nil, Ip++, Continue();
   rank++, nelem *= (uintptr_t) getnum(d); }
- if (rank > G_VEC_MAXRANK) return *++Sp = nil, Ip++, Continue();
- uintptr_t bytes = sizeof(struct g_vec) + rank * sizeof(word) + nelem * g_vt_size[ty];
+ if (rank > G_VEC_MAXRANK || (ty == g_O && rank == 0)) return *++Sp = nil, Ip++, Continue();
+ uintptr_t bytes = sizeof(struct g_vec) + rank * sizeof(word) + nelem * g_vt_[ty];
  Have(b2w(bytes));
  struct g_vec *v = (struct g_vec*) Hp;
  Hp += b2w(bytes);
  ini_vec(v, ty, rank);
  uintptr_t i = 0;                              // re-walk the (possibly moved) list
  for (word l = Sp[1]; twop(l); l = B(l)) v->shape[i++] = (uintptr_t) getnum(A(l));
- memset(vec_data(v), 0, nelem * g_vt_size[ty]);
+ if (ty == g_O) for (i = 0; i < nelem; i++) vec_put_obj(v, i, nil);   // object zero = nil, NOT raw 0
+ else memset(vec_data(v), 0, nelem * g_vt_[ty]);
  return *++Sp = word(v), Ip++, Continue(); }
 
 // (arrl type shape-list vals-list): like arr, but fills row-major from
@@ -4061,26 +4073,28 @@ g_vm(g_vm_arrl) {
  word t = Sp[0], shp = Sp[1];                  // vals = Sp[2]
  if (!nump(t)) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  intptr_t ty = getnum(t);
- if (ty < 0 || ty > g_vt_f64) return Sp[2] = nil, Sp += 2, Ip++, Continue();
+ if (ty < 0 || ty > g_O || ty == g_C) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  uintptr_t rank = 0, nelem = 1;
  for (word l = shp; twop(l); l = B(l)) {
   word d = A(l);
   if (!nump(d) || getnum(d) < 0) return Sp[2] = nil, Sp += 2, Ip++, Continue();
   rank++, nelem *= (uintptr_t) getnum(d); }
- if (rank > G_VEC_MAXRANK) return Sp[2] = nil, Sp += 2, Ip++, Continue();
- uintptr_t bytes = sizeof(struct g_vec) + rank * sizeof(word) + nelem * g_vt_size[ty];
+ if (rank > G_VEC_MAXRANK || (ty == g_O && rank == 0)) return Sp[2] = nil, Sp += 2, Ip++, Continue();
+ uintptr_t bytes = sizeof(struct g_vec) + rank * sizeof(word) + nelem * g_vt_[ty];
  Have(b2w(bytes));
  struct g_vec *v = (struct g_vec*) Hp;
  Hp += b2w(bytes);
  ini_vec(v, ty, rank);
  uintptr_t i = 0;                              // re-walk the (possibly moved) lists
  for (word l = Sp[1]; twop(l); l = B(l)) v->shape[i++] = (uintptr_t) getnum(A(l));
- memset(vec_data(v), 0, nelem * g_vt_size[ty]);
- i = 0;
+ if (ty == g_O) for (i = 0; i < nelem; i++) vec_put_obj(v, i, nil);
+ else memset(vec_data(v), 0, nelem * g_vt_[ty]);
+ i = 0;                                        // no alloc below, so v/Sp[2] stay put
  for (word l = Sp[2]; twop(l) && i < nelem; l = B(l), i++) {
   word e = A(l);
+  if (ty == g_O) { vec_put_obj(v, i, e); continue; }   // store any value verbatim
   if (!ISNUM(e)) continue;
-  if (ty >= g_vt_f32) vec_put_flo(v, i, TOFLO(e));
+  if (ty >= g_R) vec_put_flo(v, i, TOFLO(e));
   else vec_put_int(v, i, nump(e) ? (intptr_t) getnum(e)
                        : flop(e) ? (intptr_t) flo_get(e) : box_get(e)); }
  return Sp[2] = word(v), Sp += 2, Ip++, Continue(); }
@@ -4119,14 +4133,22 @@ g_vm(g_vm_ashape) {
 bool g_all_zero(struct g_vec *v) {
  // A complex scalar is falsy iff both components are 0 (so (cplx 0 0) and 0.0
  // agree). Read both parts -- the generic float-domain scan below would see only
- // the real part (cplx sorts past f64, so `>= g_vt_f32` treats it as float).
- if (v->type == G_VT_CPLX) return cplx_re(word(v)) == 0 && cplx_im(word(v)) == 0;
+ // the real part (cplx sorts past f64, so `>= g_R` treats it as float).
+ if (v->type == g_C) return cplx_re(word(v)) == 0 && cplx_im(word(v)) == 0;
  uintptr_t n = 1;
  for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
- bool fdom = v->type >= g_vt_f32;
+ if (v->type == g_O) {                          // object array: falsy iff every element is falsy
+  for (uintptr_t i = 0; i < n; i++) if (!g_false(vec_get_obj(v, i))) return false;
+  return true; }
+ bool fdom = v->type >= g_R;
  for (uintptr_t i = 0; i < n; i++)
   if (fdom ? vec_get_flo(v, i) != 0 : vec_get_int(v, i) != 0) return false;
  return true; }
+
+// g_O reductions (sum/prod/max/min) fold through the promoting scalar op, so an
+// object array reduces *exactly*. Defined after the object lane (below); the
+// numeric reductions divert here when their operand is a g_O array.
+static struct g *ored(struct g *f, int kind);   // kind: 0 sum, 1 prod, 2 max, 3 min
 
 // --- reductions: rank>=1 array -> rank-0 scalar; identity on a scalar -------
 // The identity-on-scalar property makes `(aall (< a b))` rank-agnostic: the
@@ -4134,10 +4156,14 @@ bool g_all_zero(struct g_vec *v) {
 g_vm(g_vm_asum) {
  word x = Sp[0];
  if (!vecp(x)) return Ip++, Continue();        // scalar: (asum 5) = 5
+ if (vec(x)->type == g_O) {
+  Pack(f); f = ored(f, 0);
+  if (!g_ok(f)) return gtrap(f);
+  return Unpack(f), Continue(); }
  struct g_vec *v = vec(x);
  uintptr_t n = 1;
  for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
- bool fdom = v->type >= g_vt_f32; word _res;
+ bool fdom = v->type >= g_R; word _res;
  Have(BOX_REQ);
  v = vec(Sp[0]);
  if (fdom) {
@@ -4153,9 +4179,13 @@ g_vm(g_vm_asum) {
 g_vm(g_vm_aprod) {
  word x = Sp[0];
  if (!vecp(x)) return Ip++, Continue();
+ if (vec(x)->type == g_O) {
+  Pack(f); f = ored(f, 1);
+  if (!g_ok(f)) return gtrap(f);
+  return Unpack(f), Continue(); }
  struct g_vec *v = vec(x);
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
- bool fdom = v->type >= g_vt_f32; word _res;
+ bool fdom = v->type >= g_R; word _res;
  Have(BOX_REQ); v = vec(Sp[0]);
  if (fdom) {
   g_flo_t a = 1;
@@ -4167,8 +4197,8 @@ g_vm(g_vm_aprod) {
  return Sp[0] = _res, Ip++, Continue(); }
 
 // max / min over a non-empty array; empty -> nil; scalar -> identity.
-RED_EXTREME(g_vm_amax, >)
-RED_EXTREME(g_vm_amin, <)
+RED_EXTREME(g_vm_amax, >, 2)
+RED_EXTREME(g_vm_amin, <, 3)
 
 // aall/aany: bool reductions. Scalar -> identity (so (aall 1) = 1, the linchpin
 // of the rank-agnostic compare idiom). Over an array: aall = "no zero element",
@@ -4179,7 +4209,11 @@ g_vm(g_vm_aall) {
  if (!vecp(x)) return Ip++, Continue();
  struct g_vec *v = vec(x);
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
- bool fdom = v->type >= g_vt_f32;
+ if (v->type == g_O) {                         // object: a falsy element fails the conjunction
+  for (uintptr_t i = 0; i < n; i++)
+   if (g_false(vec_get_obj(v, i))) return Sp[0] = nil, Ip++, Continue();
+  return Sp[0] = putnum(1), Ip++, Continue(); }
+ bool fdom = v->type >= g_R;
  for (uintptr_t i = 0; i < n; i++)
   if (fdom ? vec_get_flo(v, i) == 0 : vec_get_int(v, i) == 0)
    return Sp[0] = nil, Ip++, Continue();
@@ -4190,7 +4224,11 @@ g_vm(g_vm_aany) {
  if (!vecp(x)) return Ip++, Continue();
  struct g_vec *v = vec(x);
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
- bool fdom = v->type >= g_vt_f32;
+ if (v->type == g_O) {                         // object: a truthy element satisfies the disjunction
+  for (uintptr_t i = 0; i < n; i++)
+   if (!g_false(vec_get_obj(v, i))) return Sp[0] = putnum(1), Ip++, Continue();
+  return Sp[0] = nil, Ip++, Continue(); }
+ bool fdom = v->type >= g_R;
  for (uintptr_t i = 0; i < n; i++)
   if (fdom ? vec_get_flo(v, i) != 0 : vec_get_int(v, i) != 0)
    return Sp[0] = putnum(1), Ip++, Continue();
@@ -4198,7 +4236,7 @@ g_vm(g_vm_aany) {
 
 // --- elementwise unary math over an array (sin/cos/sqrt/... ) --------------
 // Reached from g_vm_math1 when its operand arrp. Result is a float array
-// (G_VT_FLO) with the operand's shape. The fill loop takes no &local, so the
+// (g_R) with the operand's shape. The fill loop takes no &local, so the
 // g_vm wrapper keeps its trailing tail call.
 static g_noinline void vmap1_fill(struct g_vec *r, struct g_vec *a, g_flo_t (*fn)(g_flo_t)) {
  uintptr_t i, n = 1;
@@ -4209,12 +4247,12 @@ g_vm(g_vm_vmap1, g_flo_t (*fn)(g_flo_t)) {
  struct g_vec *a = vec(Sp[0]);
  uintptr_t rank = a->rank, n = 1;
  for (uintptr_t i = 0; i < rank; i++) n *= a->shape[i];
- uintptr_t bytes = sizeof(struct g_vec) + rank * sizeof(word) + n * g_vt_size[G_VT_FLO];
+ uintptr_t bytes = sizeof(struct g_vec) + rank * sizeof(word) + n * g_vt_[g_R];
  Have(b2w(bytes));
  a = vec(Sp[0]);                               // re-read post-Have
  struct g_vec *r = (struct g_vec*) Hp;
  Hp += b2w(bytes);
- ini_vec(r, G_VT_FLO, rank);
+ ini_vec(r, g_R, rank);
  for (uintptr_t i = 0; i < rank; i++) r->shape[i] = a->shape[i];
  vmap1_fill(r, a, fn);
  return Sp[0] = word(r), Ip++, Continue(); }
@@ -4308,15 +4346,17 @@ g_vm(g_vm_vbin, int op) {
  bool aarr = arrp(a), barr = arrp(b);
  if (!(aarr || ISNUM(a)) || !(barr || ISNUM(b)))   // each operand: array or scalar
   return *++Sp = nil, Ip++, Continue();
+ if ((aarr && vec(a)->type == g_O) || (barr && vec(b)->type == g_O))
+  return Ap(g_vm_obin, f, op);                     // object array -> promoting lane
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
  uintptr_t R = ra > rb ? ra : rb;
  // compute-type = max element type; a scalar int contributes the lowest type
  // (i8) so it never widens an int array, a scalar float forces the float lane.
- int ta = aarr ? (int) vec(a)->type : flop(a) ? (int) G_VT_FLO : (int) g_vt_i8;
- int tb = barr ? (int) vec(b)->type : flop(b) ? (int) G_VT_FLO : (int) g_vt_i8;
+ int ta = aarr ? (int) vec(a)->type : flop(a) ? (int) g_R : (int) g_Z;
+ int tb = barr ? (int) vec(b)->type : flop(b) ? (int) g_R : (int) g_Z;
  int ct = ta > tb ? ta : tb;
- bool fdom = ct >= g_vt_f32, cmp = op >= VOP_LT;
- enum g_vec_type rt = cmp ? g_vt_i8 : (enum g_vec_type) ct;   // compare -> 0/1 i8
+ bool fdom = ct >= g_R, cmp = op >= VOP_LT;
+ enum g_vec_type rt = cmp ? g_Z : (enum g_vec_type) ct;   // compare -> 0/1 Z mask
  // broadcast shape + conformance, right-aligned; scalar locals only (no array,
  // so the trailing tail call below survives).
  uintptr_t n = 1;
@@ -4325,7 +4365,7 @@ g_vm(g_vm_vbin, int op) {
   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
   if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
   n *= da > db ? da : db; }
- uintptr_t bytes = sizeof(struct g_vec) + R * sizeof(word) + n * g_vt_size[rt];
+ uintptr_t bytes = sizeof(struct g_vec) + R * sizeof(word) + n * g_vt_[rt];
  Have(b2w(bytes));
  a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);       // re-read post-Have
  struct g_vec *r = (struct g_vec*) Hp; Hp += b2w(bytes);
@@ -4381,11 +4421,11 @@ g_vm(g_vm_vmap2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
   if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
   n *= da > db ? da : db; }
- uintptr_t bytes = sizeof(struct g_vec) + R * sizeof(word) + n * g_vt_size[G_VT_FLO];
+ uintptr_t bytes = sizeof(struct g_vec) + R * sizeof(word) + n * g_vt_[g_R];
  Have(b2w(bytes));
  a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);       // re-read post-Have
  struct g_vec *r = (struct g_vec*) Hp; Hp += b2w(bytes);
- ini_vec(r, G_VT_FLO, R);
+ ini_vec(r, g_R, R);
  for (uintptr_t k = 0; k < R; k++) {
   uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
@@ -4394,12 +4434,178 @@ g_vm(g_vm_vmap2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
  return *++Sp = word(r), Ip++, Continue(); }
 
 // ============================================================================
+// obin -- object-array elementwise lane (g_O)
+// ============================================================================
+// The typed lanes (vbin/vmap) read raw C ints/floats and never allocate, so a
+// fixed-width int array *wraps* on overflow. The object lane instead routes every
+// element through the scalar dispatch (obin_elem), which promotes fixnum->box->
+// bignum and boxes floats -- so a g_O array adds/multiplies *exactly*. Cost: the
+// inner loop allocates, so it runs Pack'd (g_vm_obin -> obin_run) and re-fetches
+// every live pointer (result, operands) after each element, exactly like the
+// other allocate-in-a-loop paths (cf. host_run, g_big_binop).
+
+// One element op: a (op) b for two scalar values, allocating via *fp (may GC --
+// a/b are passed by value and rooted before the first allocation here). Returns
+// the result value, or nil for a non-numeric / complex operand (deferred).
+static word obin_elem(struct g **fp, int op, word a, word b) {
+ if (op >= VOP_LT) {                            // comparison -> 1 / nil, no allocation
+  if (!ISNUM(a) || !ISNUM(b)) return nil;       // cplxp not in ISNUM -> unordered -> nil
+  intptr_t t = (flop(a) || flop(b)) ? vcmp_flo(op, TOFLO(a), TOFLO(b))
+             : (bigp(a) || bigp(b)) ? vcmp_int(op, g_big_cmp(a, b), 0)
+                                    : vcmp_int(op, TOINT(a), TOINT(b));
+  return t ? putnum(1) : nil; }
+ if (!ISNUM(a) || !ISNUM(b)) return nil;
+ struct g *f = *fp;
+ if (flop(a) || flop(b)) {                      // float domain -> g_R box
+  if (!g_ok(f = g_have(f, BOX_REQ))) return *fp = f, nil;
+  *fp = f;
+  struct g_vec *v = ini_scalar((struct g_vec*) f->hp, g_R);
+  f->hp += BOX_REQ; flo_put(v->shape, vop_flo(op, TOFLO(a), TOFLO(b)));
+  return word(v); }
+ if (!bigp(a) && !bigp(b)) {                    // machine-int fast path, overflow-checked
+  intptr_t av = TOINT(a), bv = TOINT(b), t; bool of;
+  switch (op) {
+   case VOP_QUOT: if (bv == 0) return putnum(0);          // array convention: int /0 -> 0
+                  of = (av == INTPTR_MIN && bv == -1); t = of ? 0 : av / bv; break;
+   case VOP_REM:  if (bv == 0) return putnum(0);
+                  of = (av == INTPTR_MIN && bv == -1); t = of ? 0 : av % bv; break;
+   case VOP_SUB:  of = __builtin_sub_overflow(av, bv, &t); break;
+   case VOP_MUL:  of = __builtin_mul_overflow(av, bv, &t); break;
+   default:       of = __builtin_add_overflow(av, bv, &t); break; }   // VOP_ADD
+  if (!of) {                                    // demote-or-box the result
+   if (t >= FIX_MIN && t <= FIX_MAX) return putnum(t);
+   if (!g_ok(f = g_have(f, BOX_REQ))) return *fp = f, nil;
+   *fp = f;
+   struct g_vec *v = ini_scalar((struct g_vec*) f->hp, g_Z);
+   f->hp += BOX_REQ; box_put(v->shape, t); return word(v); } }
+ // bignum lane: g_big_binop computes sp[0] (op) sp[1], leaves it at sp[1],
+ // pops one, and advances ip -- so save/restore ip and pop the net result.
+ if (!g_ok(f = g_push(f, 2, a, b))) return *fp = f, nil;
+ union u *ip0 = f->ip;
+ f = g_big_binop(f, op);
+ if (!g_ok(f)) return *fp = f, nil;
+ f->ip = ip0;
+ word r = f->sp[0]; f->sp++;
+ return *fp = f, r; }
+
+// Widen the numeric array at f->sp[slot] to a g_O copy in place (box each
+// element), so the obin loop reads values uniformly. Allocates per element; the
+// source (rooted at its slot) and the partially-built copy (parked on the stack)
+// are re-fetched after every box.
+static struct g *arr_to_obj(struct g *f, int slot) {
+ struct g_vec *src = vec(f->sp[slot]);
+ uintptr_t R = src->rank, n = 1;
+ for (uintptr_t i = 0; i < R; i++) n *= src->shape[i];
+ uintptr_t bytes = sizeof(struct g_vec) + R * sizeof(word) + n * g_vt_[g_O];
+ if (!g_ok(f = g_have(f, b2w(bytes)))) return f;
+ src = vec(f->sp[slot]);
+ struct g_vec *dst = (struct g_vec*) f->hp; f->hp += b2w(bytes);
+ ini_vec(dst, g_O, R);
+ for (uintptr_t i = 0; i < R; i++) dst->shape[i] = src->shape[i];
+ for (uintptr_t i = 0; i < n; i++) vec_put_obj(dst, i, nil);   // safe pre-fill (GC may see it)
+ if (!g_ok(f = g_push(f, 1, word(dst)))) return f;             // sp[0]=dst, src now at slot+1
+ for (uintptr_t i = 0; i < n; i++) {
+  struct g_vec *s = vec(f->sp[slot + 1]);
+  word v;
+  if (s->type >= g_R) {                                        // float -> g_R box
+   g_flo_t e = vec_get_flo(s, i);
+   if (!g_ok(f = g_have(f, BOX_REQ))) return f;
+   struct g_vec *bx = ini_scalar((struct g_vec*) f->hp, g_R); f->hp += BOX_REQ;
+   flo_put(bx->shape, e); v = word(bx); }
+  else {                                                       // int -> fixnum or g_Z box
+   intptr_t e = vec_get_int(s, i);
+   if (e >= FIX_MIN && e <= FIX_MAX) v = putnum(e);
+   else { if (!g_ok(f = g_have(f, BOX_REQ))) return f;
+    struct g_vec *bx = ini_scalar((struct g_vec*) f->hp, g_Z); f->hp += BOX_REQ;
+    box_put(bx->shape, e); v = word(bx); } }
+  vec_put_obj(vec(f->sp[0]), i, v); }                          // re-fetch dst post-box
+ word d = f->sp[0]; f->sp++; f->sp[slot] = d;                  // install copy, drop the parked root
+ return f; }
+
+// Pack'd body of g_vm_obin (operands at f->sp[0..1], >=1 is a g_O array).
+static struct g *obin_run(struct g *f, int op) {
+ word a = f->sp[0], b = f->sp[1];
+ bool aarr = arrp(a), barr = arrp(b);
+ if (aarr && vec(a)->type != g_O) { if (!g_ok(f = arr_to_obj(f, 0))) return f; }
+ if (barr && vec(b)->type != g_O) { if (!g_ok(f = arr_to_obj(f, 1))) return f; }
+ a = f->sp[0], b = f->sp[1], aarr = arrp(a), barr = arrp(b);
+ uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
+ uintptr_t R = ra > rb ? ra : rb, n = 1, shp[G_VEC_MAXRANK];
+ for (uintptr_t k = 0; k < R; k++) {                           // broadcast shape, right-aligned
+  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
+  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
+  if (da != db && da != 1 && db != 1) {                        // non-conforming -> nil
+   f->sp[1] = nil, f->sp++, f->ip = (union u*) f->ip + 1; return f; }
+  shp[R - 1 - k] = da > db ? da : db; n *= da > db ? da : db; }
+ uintptr_t bytes = sizeof(struct g_vec) + R * sizeof(word) + n * g_vt_[g_O];
+ if (!g_ok(f = g_have(f, b2w(bytes)))) return f;
+ struct g_vec *r = (struct g_vec*) f->hp; f->hp += b2w(bytes);
+ ini_vec(r, g_O, R);
+ for (uintptr_t k = 0; k < R; k++) r->shape[k] = shp[k];
+ for (uintptr_t p = 0; p < n; p++) vec_put_obj(r, p, nil);     // nil-fill before any GC
+ if (!g_ok(f = g_push(f, 1, word(r)))) return f;               // sp: [0]=r [1]=a [2]=b
+ intptr_t ca[G_VEC_MAXRANK], cb[G_VEC_MAXRANK], idx[G_VEC_MAXRANK];
+ for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
+ if (aarr) { intptr_t s = 1; struct g_vec *va = vec(f->sp[1]);
+  for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
+   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank;
+   ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
+ if (barr) { intptr_t s = 1; struct g_vec *vb = vec(f->sp[2]);
+  for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
+   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank;
+   cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ for (uintptr_t p = 0; p < n; p++) {
+  intptr_t oa = 0, ob = 0;
+  for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
+  word ae = aarr ? vec_get_obj(vec(f->sp[1]), oa) : f->sp[1];  // scalar operand re-read each step
+  word be = barr ? vec_get_obj(vec(f->sp[2]), ob) : f->sp[2];
+  word res = obin_elem(&f, op, ae, be);
+  if (!g_ok(f)) return f;
+  vec_put_obj(vec(f->sp[0]), p, res);                          // re-fetch result post-alloc
+  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {
+   if (++idx[j] < (intptr_t) shp[j]) break;
+   idx[j] = 0; } }
+ word result = f->sp[0];                                       // collapse [r,a,b] -> r, advance ip
+ f->sp += 2, f->sp[0] = result, f->ip = (union u*) f->ip + 1;
+ return f; }
+
+g_vm(g_vm_obin, int op) {
+ Pack(f);
+ f = obin_run(f, op);
+ if (!g_ok(f)) return gtrap(f);
+ return Unpack(f), Continue(); }
+
+// g_O reduction body (kind: 0 sum, 1 prod, 2 max, 3 min). f->sp[0] is the array.
+static struct g *ored(struct g *f, int kind) {
+ struct g_vec *v = vec(f->sp[0]);
+ uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
+ if (kind >= 2) {                                              // max/min: pick an element, no alloc
+  if (!n) { f->sp[0] = nil, f->ip = (union u*) f->ip + 1; return f; }
+  word acc = vec_get_obj(vec(f->sp[0]), 0);
+  int cop = kind == 2 ? VOP_GT : VOP_LT;
+  for (uintptr_t i = 1; i < n; i++) {
+   word e = vec_get_obj(vec(f->sp[0]), i);
+   if (obin_elem(&f, cop, e, acc) == putnum(1)) acc = e; }
+  f->sp[0] = acc, f->ip = (union u*) f->ip + 1; return f; }
+ word init = kind == 0 ? putnum(0) : putnum(1);               // sum/prod: fold with allocation
+ int aop = kind == 0 ? VOP_ADD : VOP_MUL;
+ if (!g_ok(f = g_push(f, 1, init))) return f;                 // sp[0]=acc, sp[1]=array
+ for (uintptr_t i = 0; i < n; i++) {
+  word e = vec_get_obj(vec(f->sp[1]), i);
+  word acc = obin_elem(&f, aop, f->sp[0], e);
+  if (!g_ok(f)) return f;
+  f->sp[0] = acc; }
+ word result = f->sp[0]; f->sp++, f->sp[0] = result;          // collapse acc into the array slot
+ f->ip = (union u*) f->ip + 1;
+ return f; }
+
+// ============================================================================
 // cplx
 // ============================================================================
 // Step 7 -- complex arithmetic. A complex number is a rank-0 g_vec of element
-// type G_VT_CPLX holding two g_flo_t (re, im) -- the exact parallel of the float
-// box (G_VT_FLO), so it rides the existing vec allocation and copying GC for
-// free (g_vec_bytes already generalizes over type via g_vt_size). Complex is the
+// type g_C holding two g_flo_t (re, im) -- the exact parallel of the float
+// box (g_R), so it rides the existing vec allocation and copying GC for
+// free (g_vec_bytes already generalizes over type via g_vt_). Complex is the
 // widest numeric tier (complex > float > int/bignum): the scalar arith slow
 // paths (kernel/math.c) divert here via g_vm_cplx_bin when either operand is
 // complex. It is sticky -- never demotes to a real, even when im is 0 -- and
@@ -4440,7 +4646,7 @@ g_vm(g_vm_cplx_bin, int vop) {
   return *++Sp = nil, Ip++, Continue();
  Have(CPLX_REQ);
  a = Sp[0], b = Sp[1];                              // re-read post-Have
- struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_CPLX);
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_C);
  Hp += CPLX_REQ;
  cplx_fill(v, a, b, vop);
  return *++Sp = word(v), Ip++, Continue(); }
@@ -4467,19 +4673,19 @@ g_vm(g_vm_pow) {
    return *++Sp = nil, Ip++, Continue();
   Have(CPLX_REQ);
   a = Sp[0], b = Sp[1];                              // re-read post-Have
-  struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_CPLX);
+  struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_C);
   Hp += CPLX_REQ;
   cplx_pow_fill(v, a, b);
   return *++Sp = word(v), Ip++, Continue(); }
  return Ap(g_vm_math2, f, g_pow); }
 
-// (cplx re im): build a complex from two real numbers. Non-numeric arg -> nil.
+// (C re im): build a complex from two real numbers. Non-numeric arg -> nil.
 g_vm(g_vm_cplx) {
  word a = Sp[0], b = Sp[1];
  if (!ISNUM(a) || !ISNUM(b)) return *++Sp = nil, Ip++, Continue();
  g_flo_t re = TOFLO(a), im = TOFLO(b);             // values extracted before alloc
  Have(CPLX_REQ);
- struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_CPLX);
+ struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_C);
  Hp += CPLX_REQ;
  cplx_put(v, re, im);
  return *++Sp = word(v), Ip++, Continue(); }
@@ -4508,7 +4714,7 @@ g_vm(g_vm_conj) {
  word a = Sp[0];
  if (cplxp(a)) { g_flo_t re = cplx_re(a), im = cplx_im(a);
   Have(CPLX_REQ);
-  struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_CPLX); Hp += CPLX_REQ;
+  struct g_vec *v = ini_scalar((struct g_vec*) Hp, g_C); Hp += CPLX_REQ;
   cplx_put(v, re, -im);
   return Sp[0] = word(v), Ip++, Continue(); }
  if (ISNUM(a)) return Ip++, Continue();

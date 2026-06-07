@@ -303,18 +303,14 @@ static union u const
 
 static char const
  rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(gensym 0)))",
+ // host CLI driver from gwen/cli.g: gl0 takes the sed-wrapped raw text (it can't
+ // lcat its own arg handler); the final gl takes the canonicalized lcat header.
  cli[] =
-  "(: (load1 p)"
-  "   (: q (open p \"r\")"
-  "      (? q ((: (g e q) (: r (fread q e) (? (= e r) 0 (: _ (ev 'ev r) (g e q))))) (gensym 0) q)"
-  "           (: _ (fputs err (scat \"gl: cannot open \" p)) (exit 1)))))"
-  "(: (strip-l a)"
-  "   (? (& (twop a) (= (car a) \"-l\"))"
-  "      (: _ (load1 (car (cdr a))) (strip-l (cdr (cdr a))))"
-  "      a))"
-  "(: argv (strip-l argv))"
-  "(? (twop argv) (load1 (car argv))"
-  "   ((: (g e) (: r (fread in e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (gensym 0)))"
+#ifdef GL_BOOTSTRAP
+#include "cli0.h"
+#else
+#include "cli.h"
+#endif
   ;
 
 int main(int argc, char const **argv) {
@@ -335,11 +331,12 @@ int main(int argc, char const **argv) {
                         {"argv", g_pop1(f)}, };
     f = g_defn(f, d, LEN(d));
 #ifndef GL_BOOTSTRAP
-    f = g_evals_(f, G_EGG_PRE
+    f = g_evals_(f, "("
+#include "egg.h"
+        "'("
 #include "prelude.h"
-    " "
 #include "ev.h"
-    G_EGG_POST
+        "))"
 #include "repl.h"
     );
 #endif

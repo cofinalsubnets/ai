@@ -5,6 +5,9 @@
 # whether every language's checksum for that bench agrees.
 BEGIN { nl = split(langs, L, " ") }
 {
+  # skip anything that isn't a well-formed result line (5 fields, positive reps);
+  # tolerates empty / partial / garbage files from a skipped or broken run.
+  if (NF != 5 || $3 + 0 <= 0) next
   name = $1; lang = $2; reps = $3; ms = $4; chk = $5
   if (!(name in seen)) { order[++n] = name; seen[name] = 1 }
   per[name, lang] = ms / reps
@@ -17,18 +20,22 @@ END {
   nc = 0
   for (j = 1; j <= nl; j++) if (L[j] in langhas) cols[++nc] = L[j]
 
-  w = 12; for (j = 1; j <= nc; j++) w += 14
+  # size every numeric column to the widest header so long labels (e.g.
+  # "luajit-nojit ms/it") don't collide with their neighbour.
+  cw = 14
+  for (j = 1; j <= nc; j++) { hl = length(cols[j]) + 8; if (hl > cw) cw = hl }
+  w = 12; for (j = 1; j <= nc; j++) w += cw
   bar = ""; for (i = 0; i < w + 5; i++) bar = bar "-"
 
   printf "%-12s", "bench"
-  for (j = 1; j <= nc; j++) printf "%14s", cols[j] " ms/it"
+  for (j = 1; j <= nc; j++) printf "%*s", cw, cols[j] " ms/it"
   printf "%5s\n%s\n", "ok", bar
 
   for (i = 1; i <= n; i++) {
     b = order[i]
     printf "%-12s", b
     for (j = 1; j <= nc; j++)
-      printf "%14s", have[b, cols[j]] ? sprintf("%.4f", per[b, cols[j]]) : "-"
+      printf "%*s", cw, have[b, cols[j]] ? sprintf("%.4f", per[b, cols[j]]) : "-"
     base = ""; ok = "yes"
     for (j = 1; j <= nc; j++)
       if (have[b, cols[j]]) {

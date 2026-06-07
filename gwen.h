@@ -189,7 +189,9 @@ extern struct g_io g_stdin, g_stdout, g_stderr;
 // lib/ headers are bare C string literals (lcat output), so a frontend builds
 // the egg + double-bake bootstrap by juxtaposing them between these macros:
 //
-//   g_evals_(f, G_EGG_PRE
+//   g_evals_(f, "("
+//   #include "egg.h"          // (\ egg (: ...)) -- the boot driver, lcat'd
+//     G_EGG_PRE
 //   #include "prelude.h"
 //     " "
 //   #include "ev.h"
@@ -197,13 +199,13 @@ extern struct g_io g_stdin, g_stdout, g_stderr;
 //   #include "repl.h"          // optional: REPL, compiled by the installed ev
 //   );
 //
-// egg = '(<prelude forms> <ev forms>); the driver compiles the gwen compiler
-// with c0, recompiles the whole corpus through itself (exercising wev), and
-// installs that as `ev`. Adjacent string-literal concatenation does all the
-// work at compile time -- no runtime allocation, freestanding-safe.
-#define G_EGG_PRE "(: egg '("
-#define G_EGG_POST ") (go e z a) (? a (go e (e (car a)) (cdr a)) z) t0 (clock 0)" \
-  " e (go (go ev 0 egg) 0 egg) (put 'boot_ms (clock t0) (put 'ev e globals))) "
+// This applies the egg driver (gwen/egg.g) to the quoted corpus, i.e.
+// ((\ egg (: ...)) '(<prelude forms> <ev forms>)): it compiles the gwen
+// compiler with c0, recompiles the whole corpus through itself (exercising
+// wev), and installs that as `ev`. Adjacent string-literal concatenation does
+// all the work at compile time -- no runtime allocation, freestanding-safe.
+#define G_EGG_PRE " '("
+#define G_EGG_POST ")) "
 
 // === internal API shared with vt.c / host / free (merged from former i.h) ===
 #define G_WAIT_FDS_MAX 8

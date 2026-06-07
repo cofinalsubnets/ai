@@ -137,7 +137,9 @@ static uint8_t pool[232 * (1 << 10)];
 int main(void) {
   serial_init();
   struct g *f = g_defn(g_ini_s(pool, sizeof pool), defs, LEN(defs));
-  f = g_evals_(f, G_EGG_PRE
+  f = g_evals_(f, "("
+#include "egg.h"
+    G_EGG_PRE
 #include "prelude.h"
     " "
 #include "ev.h"

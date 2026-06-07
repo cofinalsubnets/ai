@@ -34,10 +34,10 @@
  (aall (= (2 (arrl i64 '(3) '(2 3 4))) (arrl i64 '(3) '(4 9 16))))  ; array operand: elementwise ** broadcast
  (aall (= ((arrl i64 '(3) '(2 3 4)) 5) (arrl f64 '(3) '(25.0 125.0 625.0))))  ; array OPERATOR: 5 ** [2 3 4] elementwise (vmap2 pow)
  (= 13 (((arrl i64 '(2) '(2 3)) (+ 1)) 10))   ; array operator on a fn: compose floor(L2 norm |[2 3]|=sqrt13)=3
- (= 15 (((cplx 3 4) (+ 1)) 10))               ; complex operator on a fn: compose floor(|3+4i|=5)=5
- (cplxp ((cplx 0 1) 5))                       ; complex operator on a number -> complex pow (5^i), no longer fenced
- (< (abs (- 1 (abs ((cplx 0 1) 5)))) 0.0001)  ; |5^i| = 1 exactly (w^z = exp(z Log w))
- (< (abs (im ((cplx 0 1) (cplx 0 1)))) 0.0001)) ; i^i = e^(-pi/2) is real
+ (= 15 (((C 3 4) (+ 1)) 10))               ; complex operator on a fn: compose floor(|3+4i|=5)=5
+ (cplxp ((C 0 1) 5))                       ; complex operator on a number -> complex pow (5^i), no longer fenced
+ (< (abs (- 1 (abs ((C 0 1) 5)))) 0.0001)  ; |5^i| = 1 exactly (w^z = exp(z Log w))
+ (< (abs (im ((C 0 1) (C 0 1)))) 0.0001)) ; i^i = e^(-pi/2) is real
 ; basic arithmetic
 (: zero? (= 0)
 (assert

@@ -10,7 +10,9 @@
 #include <emscripten.h>
 #include <time.h>
 
-static const char boot_g[] = G_EGG_PRE
+static const char boot_g[] = "("
+#include "egg.h"
+  G_EGG_PRE
 #include "prelude.h"
   " "
 #include "ev.h"

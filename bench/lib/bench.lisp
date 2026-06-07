@@ -1,10 +1,18 @@
-;;; sbcl (common lisp) benchmark harness -- mirrors bench/bench.g.
+;;; common lisp benchmark harness -- mirrors bench/bench.g.
 ;;; (bench name work) auto-scales the repetition count (doubling until the run
 ;;; clears +min-ms+), then prints one line matching the other harnesses:
-;;;     <name> sbcl <reps> <ms> <checksum>
-;;; work is a nullary function returning a deterministic checksum.
-(declaim (sb-ext:muffle-conditions style-warning))
+;;;     <name> <lang> <reps> <ms> <checksum>
+;;; work is a nullary function returning a deterministic checksum. the same file
+;;; serves every ANSI CL on the box (sbcl, clisp, ecl); BENCH_LANG sets the
+;;; label so the columns stay distinct, default "sbcl".
+#+sbcl (declaim (sb-ext:muffle-conditions style-warning))
 (defparameter +min-ms+ 200.0)
+(defparameter +lang+
+  (or (or #+sbcl  (sb-ext:posix-getenv "BENCH_LANG")
+          #+clisp (ext:getenv "BENCH_LANG")
+          #+ecl   (ext:getenv "BENCH_LANG")
+          nil)
+      "sbcl"))
 
 (defun bench (name work)
   (loop with reps = 1 do
@@ -13,7 +21,7 @@
            (ms (* 1000.0 (/ (- (get-internal-real-time) t0)
                             internal-time-units-per-second))))
       (when (>= ms +min-ms+)
-        (format t "~a sbcl ~d ~,3f ~a~%" name reps ms chk)
+        (format t "~a ~a ~d ~,3f ~a~%" name +lang+ reps ms chk)
         (finish-output)
         (return))
       (setf reps (* 2 reps)))))

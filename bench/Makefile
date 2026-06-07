@@ -1,95 +1,170 @@
-# Benchmark harness. Times equivalent numeric/list workloads written in gwen,
-# python, ruby, chez scheme, sbcl, node and lua and prints a comparison table.
-# Each language self-times the inner loop (auto-scaling reps past a 200ms floor)
-# so interpreter startup is excluded; see bench.g / lib/bench.* for the shared
-# protocol.
+# Benchmark harness. Times equivalent numeric / list workloads written in many
+# languages and prints a side-by-side comparison. Each language self-times the
+# inner loop (auto-scaling reps past a 200ms floor) so interpreter startup is
+# excluded; see bench.g / lib/bench.* for the shared protocol.
 #
-#   make            run every bench in all available languages -> table
-#   make BENCHES=fib run a subset
-#   make gwen       gwen only   (also: python ruby chez sbcl node lua)
-#   make raw        print the raw "<name> <lang> <reps> <ms> <chk>" lines
-#   make clean      remove bench/out/
+# Results are cached per language under out/bench/<lang>.txt. The user-facing
+# targets DEPEND on those files and just pretty-print them -- a bench is only
+# (re)run when its result file is missing or older than the bench sources (or,
+# for gwen, the gl binary). So `make bench` reformats instantly once the files
+# exist; touch a source or `make clean` to force a re-run.
 #
-# gwen is always run; the other interpreters are auto-skipped if not on PATH,
-# and a bench is skipped for a language that has no implementation file (e.g.
-# bell has no lua version -- lua lacks bignums).
+#   make / make bench   show the default column set (gwen cpython chez sbcl
+#                          node luajit), running only what is stale
+#   make all            show every language present on this machine
+#   make <lang>         show one language (gwen is shown alongside for contrast),
+#                          e.g. make chez / make pypy / make owl
+#   make BENCHES=fib …  restrict the workload set (then clean to refresh files)
+#   make TIMEOUT=60 …   per-bench wall-clock cutoff in seconds (default 30)
+#   make raw            cat the raw "<name> <lang> <reps> <ms> <chk>" lines
+#   make clean          remove out/bench/
+#
+# A language whose interpreter is not on PATH is skipped automatically, as is any
+# bench a language has no implementation file for (e.g. lua/fennel lack bell --
+# no bignums); the cell drops out of the table. Pairs that exceed TIMEOUT are
+# listed in SKIP (below) and dropped up front so the build never pays the timeout
+# wall for them. The per-language run logic lives in run.sh.
 R := ..
 include $(R)/common.mk
 
-GL  := $(R)/out/host/$n
+GL   := $(R)/out/host/$n
 HARN := bench.g
-BDIR := out
-RAW  := $(BDIR)/results.txt
+BDIR := $(R)/out/bench
+TIMEOUT ?= 30
 
-# default suite, in display order; override with `make BENCHES="fib primes"`.
-BENCHES := fib tak sum mapfilter reverse primes bell strcat strscan
+# workloads, in display order; override with `make BENCHES="fib primes"`.
+BENCHES := fib tak sum mapfilter primes bell strcat strscan hash sort tree float closure
 
-# column order in the report; columns with no data are omitted automatically.
-LANGS := gwen python ruby chez sbcl node lua
+# <lang>:<bench> pairs that exceed TIMEOUT -- dropped up front so the build never
+# pays the timeout wall for them (re-test by removing one and `make clean`).
+SKIP := owl:bell
 
-HAVE_PY   := $(shell command -v python3 2>/dev/null)
-HAVE_RB   := $(shell command -v ruby 2>/dev/null)
-HAVE_CHEZ := $(shell command -v chez 2>/dev/null)
-HAVE_SBCL := $(shell command -v sbcl 2>/dev/null)
-HAVE_NODE := $(shell command -v node 2>/dev/null)
-HAVE_LUA  := $(shell command -v lua 2>/dev/null)
+# every language, in report-column order (grouped by family). gwen first.
+ALL_LANGS := gwen \
+             chez petite guile racket mit-scheme chicken bigloo owl \
+             sbcl clisp ecl clojure hy fennel elixir \
+             python pypy ruby node deno lua luajit luajit-nojit
 
-.PHONY: all run gwen python ruby chez sbcl node lua raw clean $(GL)
+# the columns `make bench` shows by default.
+DEFAULT_LANGS := gwen python chez sbcl node luajit elixir
 
-all: run
+# per-language: source extension, harness file (a result depends on it), the
+# interpreter binary (for the PATH presence check), and any extra prereq.
+EXT_gwen := g
+EXT_chez := ss
+EXT_petite := ss
+EXT_guile := scm
+EXT_racket := rkt
+EXT_mit-scheme := mit
+EXT_chicken := ck
+EXT_bigloo := bgl
+EXT_owl := owl
+EXT_sbcl := lisp
+EXT_clisp := lisp
+EXT_ecl := lisp
+EXT_clojure := clj
+EXT_elixir := exs
+EXT_hy := hy
+EXT_fennel := fnl
+EXT_python := py
+EXT_pypy := py
+EXT_ruby := rb
+EXT_node := js
+EXT_deno := js
+EXT_lua := lua
+EXT_luajit := lua
+EXT_luajit-nojit := lua
+
+HARN_gwen := $(HARN)
+HARN_chez := lib/bench.ss
+HARN_petite := lib/bench.ss
+HARN_guile := lib/bench.scm
+HARN_racket := lib/bench.rkt
+HARN_mit-scheme := lib/bench.mit
+HARN_chicken := lib/bench.ck
+HARN_bigloo := lib/bench.bgl
+HARN_owl := lib/bench.owl
+HARN_sbcl := lib/bench.lisp
+HARN_clisp := lib/bench.lisp
+HARN_ecl := lib/bench.lisp
+HARN_clojure := lib/bench.clj
+HARN_elixir := lib/bench.exs
+HARN_hy := lib/bench.py
+HARN_fennel := lib/bench.lua
+HARN_python := lib/bench.py
+HARN_pypy := lib/bench.py
+HARN_ruby := lib/bench.rb
+HARN_node := lib/bench.js
+HARN_deno := lib/bench.js
+HARN_lua := lib/bench.lua
+HARN_luajit := lib/bench.lua
+HARN_luajit-nojit := lib/bench.lua
+
+BIN_chez := chez
+BIN_petite := petite
+BIN_guile := guile
+BIN_racket := racket
+BIN_mit-scheme := mit-scheme
+BIN_chicken := chicken-csi
+BIN_bigloo := bigloo
+BIN_owl := ol
+BIN_sbcl := sbcl
+BIN_clisp := clisp
+BIN_ecl := ecl
+BIN_clojure := clojure
+BIN_elixir := elixir
+BIN_hy := hy
+BIN_fennel := fennel
+BIN_python := python3
+BIN_pypy := pypy3
+BIN_ruby := ruby
+BIN_node := node
+BIN_deno := deno
+BIN_lua := lua
+BIN_luajit := luajit
+BIN_luajit-nojit := luajit
+
+EXTRA_gwen := $(GL)
+
+# gwen is always available (we build it); others only if their binary is on PATH.
+present = $(if $(filter gwen,$(1)),$(1),$(if $(shell command -v $(BIN_$(1)) 2>/dev/null),$(1)))
+PRESENT := $(foreach L,$(ALL_LANGS),$(call present,$(L)))
+SHOW    := $(filter $(PRESENT),$(DEFAULT_LANGS))
+
+txt = $(addprefix $(BDIR)/,$(addsuffix .txt,$(1)))
+
+.PHONY: all bench run raw clean $(ALL_LANGS)
+.DEFAULT_GOAL := bench
 
 # Build/refresh the host binary via the root Makefile.
 $(GL):
 	@$(MAKE) -s -C $(R) host
 
-run: raw
-	@awk -v langs="$(LANGS)" -f report.awk $(RAW)
-
-# Collect the raw result lines for the selected benches + languages. Each
-# non-gwen interpreter is guarded by `-f` so a missing implementation is skipped.
-raw: $(GL) | $(BDIR)
-	@: > $(RAW)
-	@for b in $(BENCHES); do \
-	  cat $(HARN) benches/$$b.$x | $(GL) >> $(RAW) ; \
-	  $(if $(HAVE_PY),  [ -f benches/$$b.py ]   && python3 benches/$$b.py       >> $(RAW) ;) \
-	  $(if $(HAVE_RB),  [ -f benches/$$b.rb ]   && ruby benches/$$b.rb          >> $(RAW) ;) \
-	  $(if $(HAVE_CHEZ),[ -f benches/$$b.ss ]   && chez --script benches/$$b.ss >> $(RAW) ;) \
-	  $(if $(HAVE_SBCL),[ -f benches/$$b.lisp ] && sbcl --script benches/$$b.lisp >> $(RAW) ;) \
-	  $(if $(HAVE_NODE),[ -f benches/$$b.js ]   && node benches/$$b.js          >> $(RAW) ;) \
-	  $(if $(HAVE_LUA), [ -f benches/$$b.lua ]  && lua benches/$$b.lua          >> $(RAW) ;) \
-	  : ; \
-	done
-	@$(if $(HAVE_PY),,  echo "note: python3 not found, skipped" >&2)
-	@$(if $(HAVE_RB),,  echo "note: ruby not found, skipped" >&2)
-	@$(if $(HAVE_CHEZ),,echo "note: chez not found, skipped" >&2)
-	@$(if $(HAVE_SBCL),,echo "note: sbcl not found, skipped" >&2)
-	@$(if $(HAVE_NODE),,echo "note: node not found, skipped" >&2)
-	@$(if $(HAVE_LUA),, echo "note: lua not found, skipped" >&2)
-
-# Single-language runs (handy when iterating on one implementation).
-gwen: $(GL) | $(BDIR)
-	@for b in $(BENCHES); do cat $(HARN) benches/$$b.$x | $(GL) ; done
-
-python: | $(BDIR)
-	@for b in $(BENCHES); do [ -f benches/$$b.py ]   && python3 benches/$$b.py || : ; done
-
-ruby: | $(BDIR)
-	@for b in $(BENCHES); do [ -f benches/$$b.rb ]   && ruby benches/$$b.rb || : ; done
-
-chez: | $(BDIR)
-	@for b in $(BENCHES); do [ -f benches/$$b.ss ]   && chez --script benches/$$b.ss || : ; done
-
-sbcl: | $(BDIR)
-	@for b in $(BENCHES); do [ -f benches/$$b.lisp ] && sbcl --script benches/$$b.lisp || : ; done
-
-node: | $(BDIR)
-	@for b in $(BENCHES); do [ -f benches/$$b.js ]   && node benches/$$b.js || : ; done
-
-lua: | $(BDIR)
-	@for b in $(BENCHES); do [ -f benches/$$b.lua ]  && lua benches/$$b.lua || : ; done
-
 $(BDIR):
 	@mkdir -p $(BDIR)
+
+# Per-language result file + single-language report target. The result file is
+# regenerated (benches re-run) only when its sources change; the phony <lang>
+# target just formats it, alongside gwen for contrast (gwen shows only itself).
+define LANG_rule
+$$(BDIR)/$(1).txt: $(HARN_$(1)) $$(wildcard benches/*.$(EXT_$(1))) run.sh $(EXTRA_$(1)) | $$(BDIR)
+	@./run.sh $(1) "$$(BENCHES)" $$(TIMEOUT) "$$(SKIP)" > $$@
+
+$(1): $$(call txt,$(1)) $(if $(filter gwen,$(1)),,$$(call txt,gwen))
+	@awk -v langs='$(if $(filter gwen,$(1)),gwen,gwen $(1))' -f report.awk $$^
+endef
+$(foreach L,$(ALL_LANGS),$(eval $(call LANG_rule,$(L))))
+
+# Default view: the chosen column set (minus any whose interpreter is absent).
+bench: $(call txt,$(SHOW))
+	@awk -v langs='$(SHOW)' -f report.awk $^
+
+# Full view: every language present on this machine.
+all run: $(call txt,$(PRESENT))
+	@awk -v langs='$(PRESENT)' -f report.awk $^
+
+raw: $(call txt,$(PRESENT))
+	@cat $^
 
 clean:
 	@rm -rf $(BDIR)

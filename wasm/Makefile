@@ -40,9 +40,10 @@ all: gwen.js
 # prelude.h/ev.h are serialized from lib/*.g by the top-level lcat rule;
 # host.c assembles them into the bootstrap via G_EGG_PRE/POST (no repl here --
 # the browser feeds the REPL through gwen_eval).
+../out/lib/egg.h: ../gwen/egg.g
 ../out/lib/prelude.h: ../gwen/prelude.g
 ../out/lib/ev.h: ../gwen/ev.g
-../out/lib/prelude.h ../out/lib/ev.h:
+../out/lib/egg.h ../out/lib/prelude.h ../out/lib/ev.h:
 	$(MAKE) -C .. out/lib/$(notdir $@)
 
 # Link step: emcc's link is multi-input, so ccache can't cache it -- use
@@ -50,7 +51,7 @@ all: gwen.js
 gwen.js: $(objs)
 	$(EMCC) $(CFLAGS) $(EMFLAGS) $(objs) -o $@
 
-$(o)/host.o: host.c ../out/lib/prelude.h ../out/lib/ev.h $(g_h)
+$(o)/host.o: host.c ../out/lib/egg.h ../out/lib/prelude.h ../out/lib/ev.h $(g_h)
 	@mkdir -p $(dir $@)
 	$(emcc) $(CFLAGS) -c $< -o $@
 

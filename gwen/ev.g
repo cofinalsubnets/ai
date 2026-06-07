@@ -79,7 +79,7 @@
                'len 'lidx 'assq 'memq 'last 'rev 'cat
                'nump 'symp 'twop 'hashp 'strp 'nilp 'flop 'cplxp 'atomp
                'ssub 'scat 'string
-               're 'im 'conj 'arg 'flo 'cplx
+               're 'im 'conj 'arg 'flo 'C
                'sin 'cos 'tan 'atan 'sqrt 'exp 'log 'atan2 'pow)
    pureset (foldl (\ t s (: v (globals s) (? v (put v -1 t) t))) (hashn 0) names)
    (add t s) (: v (globals s)

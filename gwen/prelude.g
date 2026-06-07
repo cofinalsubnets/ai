@@ -10,13 +10,12 @@
    (!= a b) (? (= a b) 0 1)
    AA (co A A) AB (co A B)
    BA (co B A) BB (co B B))
-; array element-type codes for `arr` (kernel/i.h enum g_vec_type)
-(: i8 0 i16 1 i32 2 i64 3 f32 4 f64 5)
+; array element-kind codes for `arr` (enum g_vec_type): one word per element, so
+; every integer width aliases Z=0 and every float width aliases R=1 (C=2 is the
+; rank-0 complex scalar, not a constructible array element).
+(: i8 0 i16 0 i32 0 i64 0 f32 1 f64 1 z 0 r 1 c 2 o 3)
 ; the imaginary unit: complex values are written e.g. (+ 2 (* 3 i))
-(: i (cplx 0 1))
-; integer math: `**` is exact exponentiation-by-squaring (distinct from the
-; float `pow` bif), `gcd` is Euclid, `modpow` is modular exponentiation. these
-; ride the numeric tower (* / %), so they stay exact across fixnum/box/bignum.
+(: i (C 0 1))
 (: (** b e) (? (< e 1) 1 (: h (** b (/ e 2)) h2 (* h h)
                            (? (= 0 (% e 2)) h2 (* h2 b))))
    (gcd a b) (? (= b 0) (? (< a 0) (- 0 a) a) (gcd b (% a b)))
@@ -93,6 +92,15 @@
    (all f l) (? (twop l) (? (f (car l)) (all f (cdr l))) 1)
    (any f l) (? (twop l) (? (f (car l)) 1 (any f (cdr l))))
    (cat a b) (foldr cons b a))
+; merge sort on lists: (sort le l) orders l by the strict less-than predicate
+; le (e.g. (sort < xs)). top-down alternating split + merge; O(n log n).
+(: (merge le a b) (? (atomp a) b (atomp b) a
+                     (le (car a) (car b)) (cons (car a) (merge le (cdr a) b))
+                     (cons (car b) (merge le a (cdr b))))
+   (sortsplit l) (? (atomp l) (cons l 0) (atomp (cdr l)) (cons l 0)
+                    (: r (sortsplit (cddr l)) (cons (cons (car l) (car r)) (cons (cadr l) (cdr r)))))
+   (sort le l) (? (atomp l) l (atomp (cdr l)) l
+                  (: s (sortsplit l) (merge le (sort le (car s)) (sort le (cdr s))))))
 (: catmap (co (flip foldr 0) (co cat))
    (assq x l) (? l (? (= x (caar l)) (car l) (assq x (cdr l))))
    (lidx x) ((: (f n l) (? (twop l) (? (= x (car l)) n (f (+ 1 n) (cdr l))) -1)) 0)

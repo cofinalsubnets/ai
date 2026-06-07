@@ -1,53 +1,77 @@
 # bench/ — gwen benchmark harness
 
-Times a small set of numeric and list-processing workloads written in **gwen**,
-**python**, **ruby**, **chez scheme**, **sbcl** (common lisp), **node** (js) and
-**lua**, and prints a side-by-side comparison. Each workload is implemented once
-per language, computing an identical checksum so the runs are verified
-equivalent (the `ok` column).
+Times a small set of numeric and list-processing workloads across **gwen** and
+every standard lisp / scripting language on the box, printing a side-by-side
+comparison. Each workload is implemented once per dialect, computing an identical
+checksum so the runs are verified equivalent (the `ok` column). The lineup:
+
+- **schemes** — `chez` (compiled), `petite` (Chez's interpreter), `guile`,
+  `racket`, `mit-scheme`, `chicken`, `bigloo`, `owl` (purely functional)
+- **common lisp** — `sbcl`, `clisp`, `ecl`
+- **on a host VM** — `clojure` (JVM), `hy` (→ CPython), `fennel` (→ Lua),
+  `elixir` (BEAM)
+- **others** — `python`/`pypy`, `ruby`, `node`/`deno` (js), `lua`, and `luajit`
+  with the JIT on and, separately, off via `-joff`
+
+Several interpreters share one implementation file, with `BENCH_LANG` setting the
+column label so they stay distinct: `chez`/`petite` over `.ss`, `sbcl`/`clisp`/`ecl`
+over `.lisp`, `python`/`pypy` over `.py`, `node`/`deno` over `.js`,
+`lua`/`luajit`/`luajit-nojit` over `.lua`. `hy` reuses the Python harness
+(`lib/bench.py`) and `fennel` the Lua harness (`lib/bench.lua`) by importing it.
+The per-dialect timing primitive lives in `lib/bench.*`; note `mit-scheme` has only
+a CPU-time clock (`(runtime)`, ~10 ms granularity) so its numbers are coarser, and
+`owl` is purely functional (immutable strings, `ff` maps for the `bell` memo).
 
 ## Running
 
-From the repo root:
-
 ```sh
-make bench
+make bench          # from the repo root, or `make` here: the default column set
+                    #   (gwen cpython chez sbcl node luajit elixir)
+make all            # every language present on this machine (a wide table)
+make chez           # one language, shown alongside gwen for contrast
+make pypy           # ... any language name works as a target
+make BENCHES=fib    # restrict the workloads (then `make clean` to refresh files)
+make TIMEOUT=60 …   # per-bench wall-clock cutoff in seconds (default 30)
+make SKIP= …        # clear the known-timeout drop list (default: owl:bell)
+make raw            # the raw result lines, unformatted
+make clean          # remove out/bench/
 ```
 
-or from this directory:
+**Results are cached per language.** Each language writes its lines to
+`out/bench/<lang>.txt`, and that file depends on the language's bench sources (and,
+for gwen, the `gl` binary). The user-facing targets just *pretty-print* those
+files — a bench is only (re)run when its result file is missing or older than the
+sources, so `make bench` reformats instantly once the files exist. Touch a source
+or `make clean` to force a re-run. The per-language run logic (extension,
+interpreter command, `BENCH_LANG`) lives in `run.sh`.
 
-```sh
-make            # run every bench in all available languages -> table
-make BENCHES=fib            # one bench
-make BENCHES="sum primes"   # a subset
-make gwen                   # one language only
-make python                 # also: ruby / chez / sbcl / node / lua
-make raw                    # the raw result lines, unformatted
-make clean                  # remove bench/out/
+A language whose interpreter isn't on `PATH` is **automatically omitted**; so is
+any bench a language has no implementation for (e.g. `lua`/`fennel` lack `bell` —
+no bignums). Pairs that exceed `TIMEOUT` are listed in the Makefile's `SKIP`
+variable (default `owl:bell`) and dropped up front, so the build never pays the
+30 s timeout wall for a cell that was never going to land — re-test one by
+removing it from `SKIP` and `make clean`. Such cells just drop out of the table.
+As benches run, `run.sh` prints a `  <lang> <bench>` tick per bench to stderr,
+with a `(dropped: …)`/`(skipped: …)` note for any pre-skipped, timed-out, or
+errored, so stdout stays clean for the table.
+
+Example output (one column per dialect — the real table is wide; abridged slice):
+
+```
+bench         gwen ms/it    chez ms/it  petite ms/it  racket ms/it    sbcl ms/it   clisp ms/it  luajit ms/it  python ms/it    pypy ms/it  ...   ok
+fib              27.1250        6.5312       67.2500        5.4180       12.5636      748.8520        8.0017      101.7170        9.0407  ...  yes
+sum               6.4688        0.5918        3.7812        0.2874        0.7579       50.0703        0.0792        2.9250        0.2941  ...  yes
+mapfilter         1.0742        0.1128        0.2314        0.1087        0.1069        2.6892        0.0348        0.9911        0.0983  ...  yes
 ```
 
-Each non-gwen interpreter (`python3`, `ruby`, `chez`, `sbcl`, `node`, `lua`) is
-auto-skipped if not on `PATH`, and is skipped for any individual bench it has no
-implementation file for; its column then drops out of the table. gwen always
-runs against `../out/host/gl` (built on demand via the root Makefile).
-
-Example output:
-
-```
-bench           gwen ms/it  python ms/it    ruby ms/it    chez ms/it    sbcl ms/it    node ms/it     lua ms/it   ok
--------------------------------------------------------------------------------------------------------------------
-fib                42.3750       87.1958       75.8413        5.6875       10.9072        7.4162       43.6644  yes
-tak                 8.5625       10.0101        9.8063        0.6211        4.0785        0.9480        5.8184  yes
-sum                 7.8125        2.6841        2.2309        0.4961        0.6973        0.7629        0.9479  yes
-mapfilter           1.0820        0.8505        0.9343        0.1108        0.0945        0.2110        0.2066  yes
-reverse             1.0508        0.0658        0.0159        0.0480        0.0392        0.0245        0.3441  yes
-primes             19.6875       23.7931       19.0537        1.7266        4.9692        0.7996        7.8247  yes
-bell               67.2500       54.5637      120.7780       66.0000       51.7548       28.6885             -  yes
-```
-
-Each `ms/it` column is that language's per-iteration time; lower is faster. `ok`
-confirms every present language's checksum for the bench agrees. `bell` has no
-`-` lua entry because lua has no arbitrary-precision integers (see below).
+Each `ms/it` column is that dialect's per-iteration time; lower is faster. `ok`
+confirms every present dialect's checksum for the bench agrees. Things to read out
+of it: the compiler/interpreter gap inside one language is huge — `chez` vs
+`petite`, `sbcl` (native compiler) vs `clisp`/`ecl` (bytecode CLs), `pypy` vs
+`cpython`, `luajit` vs `luajit-nojit` — often 10–100×; `racket` and `chez` lead the
+schemes; `mit-scheme`'s coarse CPU clock makes its column blocky. `bell` shows `-`
+for `lua`/`fennel`/`luajit` (no bignums) and for `owl` (its bignum `bell` exceeds
+the timeout). Run `make all` for the full table.
 
 ## How timing works
 
@@ -66,17 +90,56 @@ cancels out and benches of very different cost stay comparable. gwen's clock has
 | `tak`       | numeric | Takeuchi `tak(22,12,6)` — deep non-tail recursion          |
 | `sum`       | list    | build `1..100000`, fold-sum it                             |
 | `mapfilter` | list    | square 10000 elems, keep evens, sum                        |
-| `reverse`   | list    | reverse a 20000-element list                               |
 | `primes`    | numeric | count primes below 30000 by trial division                |
 | `bell`      | bignum  | Bell numbers in base 36 to 280 digits (port of `test/bell.g`) |
 | `strcat`    | string  | build a 4000-char string by single-char concatenation, then hash it |
 | `strscan`   | string  | rolling-hash scan over a fixed 20000-char string (read path) |
+| `hash`      | table   | mutable hash table: 10000 sparse-int-keyed insert / lookup / update ops |
+| `sort`      | sort    | merge/quick-sort 5000 LCG-random ints, hash the sorted order |
+| `tree`      | alloc   | build + traverse a depth-16 binary tree (small-aggregate alloc / GC churn) |
+| `float`     | float   | mandelbrot escape counts over a 64×64 grid (pure f64, integer checksum) |
+| `closure`   | closure | build & apply 2 closures per iter over 100000 iters (higher-order stress) |
 
 `bell` is the heavy one: it leans on the whole bignum tower (`*`/`/`/`%` over numbers
 hundreds of digits long) and rebuilds its memo tables each iteration so every rep recomputes
 from scratch. It's the most evaluator-neutral comparison here — every language does identical
-big-integer arithmetic (node via `BigInt`, the lisps/python/ruby natively). **lua is omitted**:
-its numbers are 64-bit int/double, so it has no `bell.lua` and its column shows `-`.
+big-integer arithmetic (node via `BigInt`, the lisps/python/ruby natively). **lua, fennel and
+luajit are omitted**: their numbers are 64-bit int/double, so there is no `bell.lua`/`bell.fnl`
+and the cell shows `-`. **owl** has bignums and a `bell.owl`, but its interpreter can't finish
+`bell` inside the timeout, so the pair is listed in `SKIP` (`owl:bell`) and dropped up front.
+The memo also shows off a dialect difference: most
+implementations use a mutable hashtable, but `owl` and `elixir` (both functional) thread
+immutable maps through the loop, and `chicken` (no hashtable egg installed) uses a vector —
+same result, same checksum.
+
+`hash` is the mutable-hash-table bench: into a fresh table it inserts N=10000
+integer keys, sum-looks-them-up, does a read-modify-write update pass, then
+sum-looks-up again (checksum = N²). Keys are sparse (stride 97) on purpose, so
+Lua/Python can't service them from a contiguous-integer *array* fast-path and
+must actually hash. Each dialect uses its native mutable table — gwen `hashn`/
+`put`/`get`, the schemes' `*-hashtable`, CL `gethash`, JS `Map`, Lua tables,
+etc.; **Clojure** (persistent core maps) uses `java.util.HashMap` via interop.
+The purely functional dialects (`owl`, `elixir`) have no mutable table, and
+`chicken` has no hashtable egg installed, so all three drop the `hash` cell.
+
+`sort` builds 5000 ints from a MINSTD LCG (`x = 16807·x mod 2³¹−1`, chosen so the
+multiply stays under 2⁵³ and every language — doubles included — produces the
+identical sequence), sorts ascending, and checksums an order-dependent rolling
+hash of the result (so the checksum verifies the *ordering*, not just the
+multiset). gwen uses the prelude's `sort` (a list merge sort added for this);
+every other dialect uses its built-in sort, so the column reads as library sort
+quality. `tree` is the classic binary-trees alloc/GC stress: build a perfect
+depth-16 tree (2¹⁶−1 nodes, leaves nil) and traverse counting nodes — it churns
+small two-field aggregates (cons pairs / 2-tuples / `[l r]`) and exercises the
+collector more than any other bench. `float` is mandelbrot escape counts over a
+64×64 grid: pure f64 `+`/`−`/`*`/`<=` (no transcendentals) over exactly
+representable constants, with an integer checksum, so it is bit-identical
+everywhere — including gwen's *boxed*-float path, which is the point (it's the
+only bench that touches floats; `owl` has no IEEE doubles so it drops the cell,
+and the Common Lisps need `d0` double-float literals to agree). `closure`
+stresses gwen's defining feature — every value a curried unary function: per
+iteration it builds `(adder i)` and `(twice (adder i))` and applies them, so it
+allocates and calls two closures 100000 times.
 
 The two string benches split the write and read paths. `strcat` builds a string
 one character at a time with each language's concatenation operator (gwen `scat`,
@@ -90,45 +153,56 @@ and doubles as the `ok` cross-check.
 
 The list benches compare *idiomatic* implementations: gwen and the lisps walk
 cons-cell linked lists, while python/ruby/node/lua use native dynamic arrays and
-built-ins — so `sum`/`reverse` largely measure linked lists vs. C array
+built-ins — so `sum`/`mapfilter` largely measure linked lists vs. C array
 primitives, not just the language. The numeric/recursion benches (`fib`, `tak`,
-`primes`) are the closest apples-to-apples comparison of the evaluators
-themselves.
+`primes`), `closure`, and `float` are the closest apples-to-apples comparison of
+the evaluators themselves; `float` in particular isolates the floating-point path
+(gwen boxes its floats, so it pays heap traffic the native-double languages do
+not), and `closure` isolates closure allocation + application.
 
 ## Layout
 
 ```
 bench.g          gwen harness — iota/iota1 + the (bench name work) timer
-lib/bench.py     python harness — bench(name, work)
+lib/bench.py     python harness — bench(name, work)   [also pypy, and hy imports it]
 lib/bench.rb     ruby harness   — bench(name) { work }
-lib/bench.ss     chez harness   — (bench name work)
-lib/bench.lisp   sbcl harness   — (bench name work)
-lib/bench.js     node harness   — bench(name, work)  [require("../lib/bench")]
-lib/bench.lua    lua harness    — bench(name, work)
-benches/<x>.{g,py,rb,ss,lisp,js,lua}   each language's implementation of a workload
-report.awk       formats the raw result lines into the table
-Makefile         orchestration
+lib/bench.ss     chez harness   — (bench name work)    [also petite]
+lib/bench.scm    guile harness  — (bench name work)
+lib/bench.rkt    racket harness — (provide bench)
+lib/bench.mit    mit-scheme harness
+lib/bench.ck     chicken harness (provides keep/sum-list; vector memo)
+lib/bench.bgl    bigloo harness
+lib/bench.owl    owl harness    — concatenated ahead of each bench, gwen-style
+lib/bench.lisp   sbcl harness   — (bench name work)    [also clisp, ecl]
+lib/bench.clj    clojure harness
+lib/bench.exs    elixir harness (BEAM monotonic clock; functional ff-style memo)
+lib/bench.js     node harness   — bench(name, work)    [also deno]
+lib/bench.lua    lua harness    — bench(name, work)    [also luajit; fennel requires it]
+benches/<x>.{g,ss,scm,rkt,mit,ck,bgl,owl,lisp,clj,exs,hy,fnl,py,rb,js,lua}
+                 each language's implementation of a workload
+run.sh           per-language run command + PATH check + per-bench timeout
+report.awk       formats the raw result lines into the table (skips bad lines)
+Makefile         orchestration — per-language out/bench/<lang>.txt result files
 ```
 
 ## Adding a benchmark
 
-1. Write `benches/<name>.{g,py,rb,ss,lisp,js,lua}` (skip any language whose
-   value model can't express the workload — as lua skips `bell`; a missing file
-   just drops that cell). Each ends in a single `bench("<name>", …)` call whose
-   thunk returns a deterministic checksum identical across every language (the
-   `ok` column checks this).
-   - gwen: `(bench "<name>" (\ _ <expr>))` — the thunk takes one ignored arg
-     since gwen has no nullary calls. Shared helpers (`iota`, `iota1`, `foldl`,
-     `map`, `filter`, `rev`, …) are already in scope.
-   - python: `bench("<name>", lambda: <expr>)`
-   - ruby: `bench("<name>") { <expr> }`
-   - chez: `(load "lib/bench.ss")` then `(bench "<name>" (lambda () <expr>))`
-   - sbcl: `(load "lib/bench.lisp")` then `(bench "<name>" (lambda () <expr>))`
-   - node: `const { bench } = require("../lib/bench");` then
-     `bench("<name>", () => <expr>)`
-   - lua: the two-line `package.path`/`require("bench")` preamble (copy it from
-     any `benches/*.lua`), then `bench("<name>", function() return <expr> end)`
+1. Write one `benches/<name>.<ext>` per language you want a column for (skip any
+   whose value model can't express the workload — as lua skips `bell`; a missing
+   file just drops that cell). The simplest path is to copy an existing bench
+   (`fib` is the smallest) for each extension and swap in the workload. Each ends
+   in a single `bench("<name>", …)` call whose thunk returns a deterministic
+   checksum identical across every language (the `ok` column checks this); see the
+   per-dialect preamble each existing file uses (`gwen`/`owl` rely on the harness
+   being concatenated ahead; the others `load`/`require`/`import` `lib/bench.*`).
 2. Add `<name>` to `BENCHES` in the `Makefile` (controls display order).
+
+To add a whole new **language**, give it a unique extension, add a `case` arm in
+`run.sh` (extension, interpreter binary, run command), and add its `EXT_`/`HARN_`/
+`BIN_` lines plus an `ALL_LANGS` entry in the `Makefile`. If it can reuse an
+existing harness (a Python-hosted lisp importing `lib/bench.py`, a Lua-hosted one
+requiring `lib/bench.lua`, etc.), point `HARN_<lang>` at that file; otherwise add a
+`lib/bench.<ext>` that reads `BENCH_LANG` for its column label.
 
 Each gwen bench is concatenated after `bench.g` before being piped to `gl`,
 exactly like the `test/` corpus — a top-level `:` form with no trailing body

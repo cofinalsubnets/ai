@@ -1,0 +1,17 @@
+#lang racket/base
+;; Mutable hash-table throughput (see bench/benches/hash.g). checksum = N*N.
+(require "../lib/bench.rkt")
+(define (hash-run n)
+  (define h (make-hash))
+  (let loop ([i 0]) (when (< i n) (hash-set! h (+ 1 (* 97 i)) i) (loop (+ i 1))))
+  (define (scan)
+    (let loop ([i 0] [a 0])
+      (if (< i n) (loop (+ i 1) (+ a (hash-ref h (+ 1 (* 97 i)) 0))) a)))
+  (let ([a (scan)])
+    (let loop ([i 0])
+      (when (< i n)
+        (let ([k (+ 1 (* 97 i))])
+          (hash-set! h k (+ 1 (hash-ref h k 0))))
+        (loop (+ i 1))))
+    (+ a (scan))))
+(bench "hash" (lambda () (hash-run 10000)))

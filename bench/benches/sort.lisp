@@ -1,0 +1,10 @@
+;;; sort N pseudo-random ints (MINSTD LCG), order-dependent rolling-hash checksum.
+(load "lib/bench.lisp")
+(defparameter *n* 5000)
+(defun gen (n)
+  (let ((x 1) (acc '()))
+    (dotimes (i n) (setf x (mod (* 16807 x) 2147483647)) (push x acc))
+    acc))
+(defun hsh (l)
+  (let ((h 0)) (dolist (v l) (setf h (mod (+ (* h 31) v) 1000000007))) h))
+(bench "sort" (lambda () (hsh (sort (gen *n*) #'<))))

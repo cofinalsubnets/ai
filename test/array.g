@@ -121,11 +121,11 @@
  (= f64 (atype (sqrt (arr i64 '(3)))))  ; result is a float array
 
  ; --- print as `,`-prefixed constructor forms ---
- ; rank-1 i64/f64 -> ,(vec …); other rank/type -> ,(arrl <type> '(shape) '(vals))
+ ; rank-1 -> ,(vec …); rank>=2 -> ,(arrl <type> '(shape) '(vals))
  (= ",(vec 10 20 30)" (inspect (arrl i64 '(3) '(10 20 30))))
  (= ",(arrl i64 '(2 2) '(1 2 3 4))" (inspect (arrl i64 '(2 2) '(1 2 3 4))))
  (= ",(vec 1.5 2.5)" (inspect (arrl f64 '(2) '(1.5 2.5))))
- (= ",(arrl i8 '(3) '(1 2 3))" (inspect (arrl i8 '(3) '(1 2 3))))
+ (= ",(vec 1 2 3)" (inspect (arrl i8 '(3) '(1 2 3))))   ; i8 aliases the word-int kind -> terse vec
  ; the printed form reads back to an equal array (`,` = uq = identity)
  (aall (= (arrl i64 '(3) '(10 20 30)) (vec 10 20 30)))
  (aall (= (arrl i64 '(2 2) '(1 2 3 4)) (arrl i64 '(2 2) '(1 2 3 4))))

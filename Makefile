@@ -32,11 +32,19 @@ all: host kernel playdate wasm rp2040
 # Drop a .g into gwen/ and it is picked up automatically -- no rule to edit.
 lib_h = $(patsubst gwen/%.$x,out/lib/%.h,$(wildcard gwen/*.$x))
 .PHONY: lib
-lib: $(lib_h)
+lib: $(lib_h) out/lib/cli0.h
 $(lib_h): out/lib/%.h: gwen/%.$x $(gl0) tools/lcat.$x
 	@mkdir -p out/lib
 	@echo GEN	$@
 	@$(gl0) -l gwen/prelude.$x tools/lcat.$x $< > $@
+# cli.g doubles as gl0's own CLI arg handler, so gl0 can't lcat it (chicken/egg).
+# gl0 #includes the sed-wrapped raw cli0.h below -- a text->literal needing no
+# interpreter (the gwen reader strips the ; comments at read time anyway). The
+# final gl gets the canonicalized lcat cli.h from the rule above.
+out/lib/cli0.h: gwen/cli.$x
+	@mkdir -p out/lib
+	@echo GEN	$@
+	@sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' $< > $@
 
 # ====================================================================
 # host (POSIX CLI) build -- outputs under out/host. Was host/Makefile.
@@ -72,11 +80,12 @@ $(ho)/vt.o: vt.c $(g_h)
 
 # Prelude-less bootstrap interpreter, compiled against the fallback top-level
 # vt.h (no -I$(ho)) + -DGL_BOOTSTRAP; runs the gwen build tools that generate
-# the headers below, so it must need none of them. Per-object into $(ho)/0/ so
-# ccache caches each TU.
-gl0_cc = $(CCACHE) $(CC) $(g_cflags) -DGL_BOOTSTRAP -I.
+# the lcat headers, so it must need none of those. The one exception is cli0.h
+# (its own CLI arg handler), which sed produces without an interpreter -- hence
+# -Iout/lib. Per-object into $(ho)/0/ so ccache caches each TU.
+gl0_cc = $(CCACHE) $(CC) $(g_cflags) -DGL_BOOTSTRAP -I. -Iout/lib
 gl0_o = $(ho)/0/main.o $(g_c:$(R)/%.c=$(ho)/0/%.o)
-$(ho)/0/main.o: main.c $(g_h)
+$(ho)/0/main.o: main.c $(g_h) out/lib/cli0.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(gl0_cc) -c $< -o $@
@@ -103,7 +112,7 @@ $(ho)/%.o: $(R)/%.c $(g_h) $(hvt_h)
 
 # main.c is compiled into the final gl inline (G_EGG_PRE/POST assemble the lib
 # headers); depend on them so it relinks when a lib source changes.
-$(ho)/$n: main.c $(ho)/lib$n.a out/lib/prelude.h out/lib/ev.h out/lib/repl.h $(hvt_h) $(vt_ld)
+$(ho)/$n: main.c $(ho)/lib$n.a out/lib/egg.h out/lib/prelude.h out/lib/ev.h out/lib/repl.h out/lib/cli.h $(hvt_h) $(vt_ld)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) $(ldflags) -o $@ main.c $(ho)/lib$n.a -lm
@@ -243,7 +252,7 @@ endif
 # The data-sentinel TU bootstraps from the portable header (no $(kvt_h) prereq
 # -- circular). On a clean build vt.h doesn't exist yet, so -I$(k_odir) finds
 # nothing and the compile falls through to the portable top-level vt.h.
-$(k_odir)/vt.o: $(R)/vt.c $(k_h) out/lib/prelude.h out/lib/ev.h out/lib/repl.h
+$(k_odir)/vt.o: $(R)/vt.c $(k_h) out/lib/egg.h out/lib/prelude.h out/lib/ev.h out/lib/repl.h
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
@@ -253,7 +262,7 @@ $(kvt_h): $(k_odir)/vt.o $(gen_vt) | $(m)
 	@$(m) $(gen_vt) $< -o $@
 
 # Shared C sources (gwen.c/vt.c, font/, c/) + per-arch arch/$a/.
-$(k_odir)/%.o: $(R)/%.c $(k_h) $(kvt_h) out/lib/prelude.h out/lib/ev.h out/lib/repl.h
+$(k_odir)/%.o: $(R)/%.c $(k_h) $(kvt_h) out/lib/egg.h out/lib/prelude.h out/lib/ev.h out/lib/repl.h
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
@@ -404,7 +413,7 @@ rp_rt := $(shell f=$$($(KCC) $(rp_triple) -print-libgcc-file-name 2>/dev/null); 
   arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb -print-libgcc-file-name 2>/dev/null)
 rp_h = $(g_h) $(wildcard $R/arch/rp2040/*.h)
 rp_vt_h = $(ro)/vt.h
-rp_lib_h = out/lib/prelude.h out/lib/ev.h out/lib/repl.h
+rp_lib_h = out/lib/egg.h out/lib/prelude.h out/lib/ev.h out/lib/repl.h
 rp_src = $(g_c) $(c_c) $R/arch/rp2040/rp2040.c $R/arch/rp2040/main.c
 rp_o = $(rp_src:$(R)/%.c=$(ro)/%.o)
 
@@ -477,7 +486,7 @@ vmret: host
 	@$m tools/vmret.g $m
 
 bench: host
-	$(MAKE) -C bench
+	$(MAKE) -C bench bench
 
 # --- install / uninstall --------------------------------------------
 PREFIX ?= .local/

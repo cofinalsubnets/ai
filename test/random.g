@@ -1,5 +1,5 @@
 ; step 8: random numbers (xoshiro256++ seeded by SplitMix64).
-; - state is a rank-1 i64 vec of length 4 (256 bits), riding the vec machinery.
+; - state is a rank-1 word-int vec of length 4 (256 bits), riding the vec machinery.
 ; - two streams share it: a global one in f->rng (rand / randf, mutated in place)
 ;   and a functional one threaded explicitly (rand-next / randf-next, pure: the
 ;   input state is copied, never mutated).
@@ -13,10 +13,11 @@
                     a (rand 0) b (rand 0) c (rand 0) (L a b c))
    (ffirst seed) (car (rand-next (rng-seed seed))))          ; 1st functional draw
 (assert
- ; --- state-vec structure: rank-1 i64 (atype 3), length 4 ---
+ ; --- state-vec structure: rank-1 word-int (Z) vec, length 4 (C-typed on 32-bit,
+ ; where C is the 8-byte-wide kind, so the 256-bit payload survives either way) ---
  (= 4 (alen (rng-seed 1)))
  (= 1 (arank (rng-seed 1)))
- (= 3 (atype (rng-seed 1)))
+ (= z (atype (rng-seed 1)))
  (= 4 (alen (rng-get 0)))                  ; the global is a valid state vec too
 
  ; --- determinism: same seed -> same sequence (global and functional) ---
