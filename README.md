@@ -9,13 +9,19 @@
 
 in gwen the function type includes every value. even "data" like
 numbers, strings, symbols, lists, etc. act like functions in a (hopefully)
-well-defined way. therefore many expressions that would be meaningless
-in other lisp are well defined and common in gwen, meanwhile certain common
-expressions in other lisp have unexpected meaning in gwen. in particular, an
-equation for function application is `(f x y z) = (((f x) y) z) = (foldl 1 f (list x y z))`
-which implies `(f) = f`, so "thunks" are given (arbitrary) arguments in gwen.
-this is not a meaningless choice: the input value corresponds to the output
-value at the memory level. function/argument evaluation order is unspecified.
+well-defined way. thus many expressions that would be wrong in other lisp
+are fine in gwen lisp, while some common expressions in other lisp have
+different meaning in gwen lisp. examples:
+
+- `1` is the identity function and `0` is the constant function of `1`
+- integers act efficiently as church numerals such that
+  `(3 3 3) = (27 3) = 7625597484987` (see below)
+- contrary to a standard pattern for thunks in other lisp, `(f) = f`
+  because function application modulo eval order is
+   `(f x y z) = (((f x) y) z) = (foldl 1 f (list x y z))` so
+   `(f) = (foldl 1 f '()) = f`
+
+function/argument evaluation order is unspecified.
 the `:` form is used for both variable naming and expression sequencing:
 
 ```
@@ -25,7 +31,8 @@ the `:` form is used for both variable naming and expression sequencing:
  (c a b))        ; last expression = final result
 ```
 
-comments begin with `;` or `#!`. sugar: `'` (quote) ; `#` (hash table) ;
+comments `;` or `#!`. reader sigils `'` (quote) ; `#` (hash table).
+`:` has scheme-like sugar for lambda definitions.
 in `:`  `(f x y) (y x) = f (\ x y (y x))` like (define (f x y) ...)` in scheme.
 dotted lists are not distinguished for reading/printing so `.` is a normal symbol.
 the three basic special forms are:
@@ -56,12 +63,11 @@ the three basic special forms are:
 ; gwen lisp follows this behavior
 (assert (= (3 3 3) 7625597484987))
 
-; so fizzbuzz may be written as
+; the classic fizzbuzz example may be written as
 (100
- (\ n (: f (? (% n 3) "" "fizz")
-         b (? (% n 5) "" "buzz")
-         fb (+ f b)
-         _ (? (len fb) (putln fb))
+ (\ n (: fb (+ (? (% n 3) "" "fizz")
+               (? (% n 5) "" "buzz"))
+         _ (? (len fb) (say fb))
        (+ 1 n)))
  1)
 ```

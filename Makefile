@@ -12,7 +12,7 @@ CCACHE ?= $(shell command -v ccache 2>/dev/null)
 .PHONY: host kernel playdate wasm rp2040 gl0
 .PHONY: test test_host test_all test_tools test_gl0
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench sim
-test: test_host
+test: test_host test_gl0
 test_all: test_host test_gl0 test_tools
 test_gl0: host
 	@echo TEST $(gl0)

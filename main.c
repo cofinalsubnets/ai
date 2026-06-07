@@ -255,7 +255,8 @@ g_noinline static struct g *host_run(struct g *f, g_word argv) {
  close(op[0]);
  { int st; while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}          // reap
    if (!g_ok(f)) return f;                                // OOM mid-drain
-   len(f->sp[0]) = n;                                     // fix logical length
+   if (n) len(f->sp[0]) = n;                              // fix logical length
+   else f->sp[0] = EMPTY_STR;                             // empty output -> the singleton
    int status = WIFEXITED(st) ? WEXITSTATUS(st)
               : WIFSIGNALED(st) ? 128 + WTERMSIG(st) : -1;
    if (!g_ok(f = g_have(f, Width(struct g_pair)))) return f;

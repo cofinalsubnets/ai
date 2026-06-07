@@ -45,7 +45,7 @@
 ; fixnum n to x is Church-numeral application -- numeric x exponentiates (x ** n), a
 ; function x composes n times. n<1 -> 1 (itself the identity numeral: (1 x) == x
 ; for every x, see below); n=1 -> x directly. numfn assembles the n-fold thread
-; directly via thd/poke (no `ev`, so applying a fixnum never re-enters the compiler):
+; directly via lam/poke (no `ev`, so applying a fixnum never re-enters the compiler):
 ; n quote-f's then n ap's -- apl2r's [head..][arg][ap..] shape -- via the interned
 ; opcode globals (kernel/g.c `insts`). Cell 0 is the source \-expr at value[-1] for
 ; the printer's fn_src (cf. ev.c c1); entry is cell 1, handed out via (seek 1 th), and
@@ -55,9 +55,9 @@
    (nfq th f i n) (? (< i n) (: _ (poke (+ 1 (* 2 i)) g_vm_quote th) _ (poke (+ 2 (* 2 i)) f th) (nfq th f (+ 1 i) n)) th)
    (nfa th i n) (? (< i n) (: _ (poke (+ (+ 3 (* 2 n)) i) g_vm_ap th) (nfa th (+ 1 i) n)) th)
    (numfn n f) (:                                  ; build (\ x (f (f ... (f x)))), n f's
-     src (cons '\ (cons 'x (cons (nfnest f n 'x) 0)))  ; alloc before thd; printer source
-     th (thd (+ 5 (* 3 n)))                         ; [src] n*[quote f] [arg n] n*[ap] [ret 1]
-     _ (poke 0 src th) _ (nfq th f 0 n)             ; no allocation past thd: th can't move
+     src (cons '\ (cons 'x (cons (nfnest f n 'x) 0)))  ; alloc before lam; printer source
+     th (lam (+ 5 (* 3 n)))                         ; [src] n*[quote f] [arg n] n*[ap] [ret 1]
+     _ (poke 0 src th) _ (nfq th f 0 n)             ; no allocation past lam: th can't move
      _ (poke (+ 1 (* 2 n)) g_vm_arg th) _ (poke (+ 2 (* 2 n)) n th)   ; arg n: x, now under n f's
      _ (nfa th 0 n)
      _ (poke (+ 3 (* 3 n)) g_vm_ret th) _ (poke (+ 4 (* 3 n)) 1 th)
@@ -78,6 +78,17 @@
    (num-ap n x) (? (numericp x) (powg x n)
                    (: k (int (abs n)) (? (< k 1) 1 (= k 1) x (numfn k x))))
    _ (set-numap num-ap))
+; thread (function) combinators for + and *, installed like num-ap. a thread operand
+; takes precedence over every other type, so +/* of a function build a function. these
+; are the README's Church numeral arithmetic, so +/* on numerals agree with the numbers:
+;   (+ f g) = Church add     ((+ f g) a x) = (f a (g a x))   -- README `add`
+;   (* f g) = composition    ((* f g) x)   = (f (g x))       -- README `mul`
+; the C handlers (g_vm_addl / g_vm_mull) build the 2-arg partial (scomb f g)
+; / (bcomb f g); scomb's extra a-slot (threaded into both operands) is what makes + agree
+; with addition rather than the S combinator's (f x (g x)).
+(: (scomb f g a x) (f a (g a x))
+   (bcomb f g x) (f (g x))
+   _ (set-scomb scomb) _ (set-bcomb bcomb))
 (: (map f l) (? (twop l) (cons (f (car l)) (map f (cdr l))))
    (foldl f z l) (? (twop l) (foldl f (f z (car l)) (cdr l)) z)
    (foldr f z l) (? (twop l) (f (car l) (foldr f z (cdr l))) z))
@@ -112,9 +123,9 @@
    (part p) (foldr (\ a m (? (p a) (cons (cons a (car m)) (cdr m))
                                         (cons (car m) (cons a (cdr m))))) '(0)))
 (: (strin cl)
- (poke -1 (peek 0 in) (poke -1 -4 (poke -1 -1 (poke -1 0 (poke 4 cl (thd 5))))))
+ (poke -1 (peek 0 in) (poke -1 -4 (poke -1 -1 (poke -1 0 (poke 4 cl (lam 5))))))
  (strout _)
-  (poke -1 (peek 0 in) (poke -1 -2 (poke -1 -1 (poke -1 0 (poke -1 "  " (poke 5 0 (thd 6)))))))
+  (poke -1 (peek 0 in) (poke -1 -2 (poke -1 -1 (poke -1 0 (poke -1 "  " (poke 5 0 (lam 6)))))))
  (outstr o) (ssub (peek 4 o) 0 (peek 5 o))
  (slurp i) (: (rl i) (: c (fgetc i) (? (!= c -1) (X c (rl i)))) (string (rl i)))
  (inspect x) (: o (strout 0) _ (fputx o x) (outstr o)))
