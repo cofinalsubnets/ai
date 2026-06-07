@@ -1,6 +1,6 @@
 ; arithmetic, comparison, equality:
 ; - fixnum fast paths unchanged
-; - mixed nump/flop promotes to float
+; - mixed fixp/flop promotes to float
 ; - integer overflow promotes to a boxed wide int (see test/box.g)
 ; - /0 promotes to IEEE inf/-inf/NaN
 ; - non-numeric operands return nil
@@ -13,7 +13,7 @@
  (= 2 (/ 5 2))
  (= 1 (mod 5 2))
 
- ; --- mixed nump + flop promotes ---
+ ; --- mixed fixp + flop promotes ---
  (= 3.5 (+ 1 2.5))
  (= 3.5 (+ 2.5 1))
  (= -1.5 (- 0 1.5))
@@ -31,11 +31,11 @@
  ; 2^61 is the largest power of two that's still a fixnum; doubling it
  ; overflows the 62-bit tag into a box that holds the exact integer
  ; (which then demotes back to a fixnum once it fits again).
- (~ (nump (* 2 2305843009213693952)))   ; 2^62: now a box, not a fixnum
+ (~ (fixp (* 2 2305843009213693952)))   ; 2^62: now a box, not a fixnum
  (~ (flop (* 2 2305843009213693952)))   ; ...and integer, not float
  (= 2305843009213693952 (/ (* 2 2305843009213693952) 2))           ; box / 2 demotes
  (= 2305843009213693952 (- (* 2 2305843009213693952) 2305843009213693952)) ; box - fix demotes
- (nump (- (* 2 2305843009213693952) 2305843009213693952))          ; ...to a fixnum
+ (fixp (- (* 2 2305843009213693952) 2305843009213693952))          ; ...to a fixnum
  (= (* 2 2305843009213693952) (* 2 2305843009213693952))           ; equal boxes compare =
 
  ; --- /0 promotes to IEEE inf / -inf / NaN ---
@@ -73,7 +73,7 @@
  (= '(1 2 5) (+ '(1 2) 5))          ; list + num -> append at back
  (nilp (- "a" "b"))
 
- ; --- equality with promotion across nump/flop ---
+ ; --- equality with promotion across fixp/flop ---
  (= 3 3)
  (= 3 3.0)
  (= 3.0 3)

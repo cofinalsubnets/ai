@@ -29,8 +29,8 @@
   (: r (run (L "printf" "%s-%s" "ab" "cd")) (= "ab-cd" (cdr r)))
 
   ; --- a program that can't be spawned -> positive errno fixnum, NOT a pair ---
-  (: r (run (L "/no/such/prog-xyzzy")) (&& (nump r) (< 0 r)))   ; abs path: ENOENT
-  (: r (run (L "no-such-prog-xyzzy"))  (&& (nump r) (< 0 r)))   ; PATH miss: ENOENT
+  (: r (run (L "/no/such/prog-xyzzy")) (&& (fixp r) (< 0 r)))   ; abs path: ENOENT
+  (: r (run (L "no-such-prog-xyzzy"))  (&& (fixp r) (< 0 r)))   ; PATH miss: ENOENT
 
   ; --- our-side misuse -> -1 (a negative fixnum, distinct from any errno) ---
   (= -1 (run 0))                                ; empty argv (nil)

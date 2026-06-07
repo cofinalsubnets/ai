@@ -9,7 +9,7 @@
  (= 4 (len (bufnew 4)))
  (= 0 (len (bufnew 0)))
  (~ (strp (bufnew 4)))                          ; a buf is not a string
- (~ (nump (bufnew 4)))                          ; ...nor a number
+ (~ (fixp (bufnew 4)))                          ; ...nor a number
 
  ; --- a fresh buf is zeroed ---
  (: b (bufnew 4) (= 0 (+ (get 0 0 b) (get 0 1 b) (get 0 2 b) (get 0 3 b))))

@@ -4,36 +4,56 @@ if exists("b:current_syntax")
   finish
 endif
 
-syn iskeyword @,!,37-38,42-57,:,60-63,_,\,`,|,~,^
+" symbol-constituent chars (the reader ends a token only on whitespace and
+" ( ) " ' ` , # ; ). sigils @ % # $ are excluded so they highlight standalone.
+"  33 !  38 &  42 *  43 +  45 -  46 .  47 /  48-57 digits  58 :
+"  60-63 < = > ?  92 \  94 ^  95 _  124 |  126 ~   (@ = alphabetics)
+syn iskeyword @,33,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
 
-" The four special forms: cond, let, quote, lambda
-syn keyword PForm ? : \\ `
+" The three special forms: : (letrec*/seq), ? (cond), \ (lambda/quote)
+syn keyword PForm : ? \\
 
-" Built-in functions
+" Built-in functions (C bifs) + prelude functions
 syn keyword PFunc X A B AA AB BA BB AAA AAB ABA ABB BAA BAB BBA BBB
 syn keyword PFunc cons car cdr caar cadr cdar cddr caaar caadr cadar caddr cdaar cdadr cddar cdddr
-syn keyword PFunc foldl foldr foldl1 foldr1 map filter id const cat each
-syn keyword PFunc all any init last rev take drop catmap
-syn keyword PFunc inc dec flip diag part len ldel puts zip lidx memq assq
-syn keyword PFunc twop nump symp nomp hashp strp nilp lamp ev ap not atomp
-syn keyword PFunc str scat ssub sym nom putc co putn read fputc fputs fputn fread
-syn keyword PFunc hasht hash hashn thas hashk hashd set put get
-syn keyword PFunc :: < <= = >= > != + - ~ ! * / % .
-syn keyword PFunc assert
+syn keyword PFunc id co const flip
+syn keyword PFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
+syn keyword PFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge
+syn keyword PFunc + - * / mod ** < <= = >= > != same inc dec abs gcd modpow int
+syn keyword PFunc ~ << >> & \| ^
+syn keyword PFunc sin cos tan atan sqrt exp log atan2 pow C re im conj arg
+syn keyword PFunc nump intp powg num-ap numfn randint
+syn keyword PFunc twop strp symp mapp lamp tupp bigp boxp arrp Cp flop fixp nilp atomp not
+syn keyword PFunc arr arrl array arank alen ashape atype asum aprod amax amin aall aany
+syn keyword PFunc a-rank a-shape a-type a-dim
+syn keyword PFunc string ssub scat intern gensym slurp inspect strin strout outstr
+syn keyword PFunc hashn hashk hash hashd get put bufnew bcopy
+syn keyword PFunc lam peek poke trim seek len
+syn keyword PFunc fgetc fungetc feof fputc fputs fputn fputx fflush fread
+syn keyword PFunc putc puts putn putx getc read in out
+syn keyword PFunc ev call_cc yield spawn wait sleep done? kill key?
+syn keyword PFunc rand randf rand-next randf-next rng-seed rng-get rng-set
+syn keyword PFunc set-numap set-scomb set-bcomb clock vminfo globals macros assert
 
-" Macros
-syn keyword PMacro L list vprintf >>= >=> <=< :- ?- ,
-syn keyword PMacro && \|\| \| & ^ << >>
+" Macros (head-symbol rewrites installed with ::)
+syn keyword PMacro :: L list do begin progn let if cond quote qq gsym tuple hasht
+syn keyword PMacro && \|\| :- ?- >>= <=<
 
-" Boolean constants
-syn keyword PBool true false
+" Constants: booleans (1/0), array element-type codes, pi
+syn keyword PConst true false pi
+syn keyword PConst i8 i16 i32 i64 f32 f64
 
-
-" Quoted atoms: 'foo
+" Quoted atoms: 'foo   (' is one-operand \ = quote)
 syn match PAtomMark "'"
-syn match PAtom "'[^ \t()]\+" contains=PAtomMark
+syn match PAtom "'[^ \t\n()`',;#\"]\+" contains=PAtomMark
 
-" Numbers (integer literals, possibly negative)
+" Quasiquote marks: `tmpl  ,unquote  ,@unquote-splice
+syn match PQuasi ",@\|[`,]"
+
+" Data sigils: @(…) array  %(…) map  #x len  $x gensym
+syn match PSigil "[@%#$]"
+
+" Numbers (integer / bignum literals, possibly negative)
 syn match PNumber "\<-\?\d\+\>"
 
 " Floating point literals: 1.5  -1.5  .5  1.  1e10  1.5e-3  (a point and/or exponent)
@@ -45,9 +65,10 @@ syn match PFloat "\<-\?\d\+[eE][-+]\?\d\+\>"
 " Strings
 syn region PString start='"' skip='\\\\\|\\"' end='"'
 
-" Comments — with TODO/FIXME highlighting inside
+" Comments — ; to end of line, #! shebang; with TODO/FIXME highlighting inside
 syn match PCommentTodo /\<\(TODO\|FIXME\|NOTE\|XXX\|HACK\)\>/ contained
 syn match PComment ";.*$" contains=PCommentTodo
+syn match PComment "^#!.*$" contains=PCommentTodo
 
 " Unmatched close paren is an error
 syn match PParenError ")"
@@ -55,12 +76,15 @@ syn match PParenError ")"
 syn sync lines=100
 
 hi def link PAtomMark       Delimiter
+hi def link PSigil          Delimiter
 hi def link PAtom           Identifier
 hi def link PComment        Comment
 hi def link PCommentTodo    Todo
 hi def link PForm           Statement
 hi def link PFunc           Function
 hi def link PMacro          Operator
+hi def link PConst          Constant
+hi def link PQuasi          Special
 hi def link PNumber         Number
 hi def link PFloat          Float
 hi def link PParenError     Error
@@ -70,7 +94,7 @@ hi def link PBool           Boolean
 " Rainbow parentheses — each nesting level gets its own colour.
 " Each region contains the cluster plus the next level; level 9 wraps to 0.
 " Toggle with \r (or :GwRainbow) — controlled by g:gw_rainbow (default: 1).
-syn cluster PListCluster contains=PAtom,PAtomMark,PBool,PComment,PCommentTodo,PFunc,PNumber,PFloat,PSymbol,PForm,PString,PMacro
+syn cluster PListCluster contains=PAtom,PAtomMark,PConst,PComment,PCommentTodo,PFunc,PNumber,PFloat,PSymbol,PForm,PString,PMacro,PQuasi,PSigil
 
 if !exists("g:gw_rainbow")
   let g:gw_rainbow = 0

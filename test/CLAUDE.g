@@ -30,7 +30,7 @@
 ; $ make valg   tests under valgrind      $ make perf / flame   profiling
 ; $ make disasm rizin    $ make gdb    in-language: (inspect x), (clock t), globals
 (assert (strp (inspect @(1 2 3)))               ; (inspect x): value -> its printed string
-        (nump (clock 0)))                       ; (clock t): ms since t
+        (fixp (clock 0)))                       ; (clock t): ms since t
 
 ; ============================================================ THREE special forms
 ; only `:` (letrec*/seq), `?` (cond), `\` (lambda/quote). everything else is a fn.
@@ -67,13 +67,13 @@
 ; fixnum (tagged int, odd machine word). everything else is a heap object whose
 ; first word is a VM handler dispatched on application. predicates end in `p`.
 (assert
- (nump 5)            (twop '(1 2))   (strp "hi")   (symp 'x)         ; core scalars/cells
- (bigp (** 2 100))   (flop 1.5)      (cplxp (C 0 1))   (arrp @(1 2 3))  ; numeric tower extensions
- (tuplep 1.5) (tuplep @(1 2 3))  (hashp %(1 2))         ; box/complex/array ARE tuples; maps
- (numericp 1.5) (numericp (** 2 99)) (atomp 'x) (nilp (atomp '(1))))
-; NUMERIC TOWER (numericp): fixnum -> auto-bignum on overflow. every boxed member --
-; float (flop), complex (cplxp), rank-N array (arrp) -- is one heap type, the TUPLE
-; (tuplep); those p's refine it. `i` == (C 0 1); @(…) is the rank-1 array literal.
+ (fixp 5)            (twop '(1 2))   (strp "hi")   (symp 'x)         ; core scalars/cells
+ (bigp (** 2 100))   (flop 1.5)      (Cp (C 0 1))   (arrp @(1 2 3))  ; numeric tower extensions
+ (tupp 1.5) (tupp @(1 2 3))  (mapp %(1 2))         ; box/complex/array ARE tuples; maps
+ (nump 1.5) (nump (** 2 99)) (atomp 'x) (nilp (atomp '(1))))
+; NUMERIC TOWER (nump): fixnum -> auto-bignum on overflow. every boxed member --
+; float (flop), complex (Cp), rank-N array (arrp) -- is one heap type, the TUPLE
+; (tupp); those p's refine it. `i` == (C 0 1); @(…) is the rank-1 array literal.
 (assert
  (= (** 2 64) (* 2 (** 2 63)))                  ; overflow promotes to an exact bignum
  (= 5.0 (abs (C 3 4)))                          ; complex modulus; arg/re/im/conj also exist
@@ -131,7 +131,7 @@
 ; the compiler with c0, recompile the whole corpus through ITSELF (exercising wev),
 ; install the result as `ev`. No runtime alloc -- adjacent string literals, built at
 ; C compile time (freestanding-safe). Boot time lands in (get 0 'boot_ms globals).
-(assert (lamp ev) (nump (get 0 'boot_ms globals)))
+(assert (lamp ev) (fixp (get 0 'boot_ms globals)))
 
 ; ------------------------------------------------------------------- architecture
 ; runtime: gwen.c (+ gwen.h). one cell = one machine word; low bit tags fixnums;

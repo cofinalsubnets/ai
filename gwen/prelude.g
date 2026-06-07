@@ -62,8 +62,8 @@
      _ (nfa th 0 n)
      _ (poke (+ 3 (* 3 n)) g_vm_ret th) _ (poke (+ 4 (* 3 n)) 1 th)
    (seek 1 th))
-   (numericp x) (| (nump x) (| (tuplep x) (bigp x)))   ; whole tower: fixnum / float box / wide-int box / complex / array / bignum
-   (intp n) (| (nump n) (| (boxp n) (bigp n)))       ; integer-valued numeral (exact ** exponent / composition count)
+   (nump x) (| (fixp x) (| (tupp x) (bigp x)))   ; whole tower: fixnum / float box / wide-int box / complex / array / bignum
+   (intp n) (| (fixp n) (| (boxp n) (bigp n)))       ; integer-valued numeral (exact ** exponent / composition count)
    ; x ** n across the whole tower. array exponent -> elementwise pow (broadcasts
    ; via the vmap2 engine, float result); integer exponent -> exact squaring
    ; (broadcasts over an array base, complex base via complex *); otherwise pow,
@@ -75,7 +75,7 @@
    ; numeral to a non-negative integer count -- a float floors, a complex takes its
    ; modulus, a vector its L2 norm (all via abs, then int). k<1 -> 1 (the zero
    ; numeral, == const 1); k=1 -> identity.
-   (num-ap n x) (? (numericp x) (powg x n)
+   (num-ap n x) (? (nump x) (powg x n)
                    (: k (int (abs n)) (? (< k 1) 1 (= k 1) x (numfn k x))))
    _ (set-numap num-ap))
 ; thread (function) combinators for + and *, installed like num-ap. a thread operand
@@ -179,7 +179,7 @@
 ; d)): abs is the modulus for a complex / the Euclidean norm for a vector). a list
 ; shape is coerced per-dim; a lone numeric is a rank-1 length (so (array 2.5 …) and
 ; (array (C 3 4) …) both mean "rank-1, length (int |n|)").
-(: (a-rank x) (? (flop x) 1 (| (nump x) (boxp x)) 0 2)
+(: (a-rank x) (? (flop x) 1 (| (fixp x) (boxp x)) 0 2)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
    (a-type d) (: r (foldl a-emax 0 d) (? (= r 0) i64 (= r 1) f64 o))
    (a-dim d) (int (abs d))

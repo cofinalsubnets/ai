@@ -85,7 +85,7 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 // width to R (g_flo_t), and C is the rank-0 complex scalar (two g_flo_t). Ordered
 // Z < R < C so `>= g_R` is the float-domain test and C is the widest *numeric* tier.
 // arr/arrl reject ty == C, so C never appears as a rank>=1 array element -- complex
-// only ever shows up as a rank-0 scalar (cplxp), handled by explicit cplx branches.
+// only ever shows up as a rank-0 scalar (Cp), handled by explicit cplx branches.
 // O (object) is the odd tier out: its slots hold live gwen words (any value --
 // fixnum, bignum, box, complex, string, pair...), so it is the ONE tuple type the
 // copying GC must trace element-by-element (evac_tuple). It sits outside the numeric
@@ -104,12 +104,12 @@ g_vm_t g_vm_kcall,
  g_vm_putn, g_vm_info,    g_vm_clock,
  g_vm_nilp,  g_vm_putc, g_vm_gensym, g_vm_intern, g_vm_twop,
  g_vm_len, g_vm_get, g_vm_fputx, g_vm_buf, g_vm_bufnew, g_vm_bcopy,
- g_vm_nump,  g_vm_symp,   g_vm_strp,   g_vm_hashp, g_vm_band,   g_vm_bor,  g_vm_flo,  g_vm_flop,
+ g_vm_fixp,  g_vm_symp,   g_vm_strp,   g_vm_mapp, g_vm_band,   g_vm_bor,  g_vm_flo,  g_vm_flop,
  g_vm_sin, g_vm_cos, g_vm_tan, g_vm_atan, g_vm_atan2,
  g_vm_sqrt, g_vm_exp, g_vm_log, g_vm_pow,
  // Step 7 -- complex (kernel/cplx.c). g_vm_cplx_bin (declared apart, below) is
  // the arithmetic lane the scalar arith slow paths divert into.
- g_vm_cplx, g_vm_cplxp, g_vm_re, g_vm_im, g_vm_conj, g_vm_abs, g_vm_carg,
+ g_vm_cplx, g_vm_Cp, g_vm_re, g_vm_im, g_vm_conj, g_vm_abs, g_vm_carg,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_bnot, g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
  g_vm_getc,  g_vm_string, g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_same, g_vm_gt,  g_vm_ge,
@@ -130,7 +130,7 @@ g_vm_t g_vm_kcall,
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  g_vm_arr, g_vm_arrl, g_vm_arank, g_vm_alen, g_vm_ashape, g_vm_atype,
  g_vm_asum, g_vm_aprod, g_vm_amax, g_vm_amin, g_vm_aall, g_vm_aany,
- g_vm_tuplep, g_vm_bigp, g_vm_boxp, g_vm_arrp, g_vm_intf;
+ g_vm_tupp, g_vm_bigp, g_vm_boxp, g_vm_arrp, g_vm_intf, g_vm_lamp;
 // Carry extra operands, so (like g_vm_gc) they are declared apart from the
 // plain g_vm_t list, which fixes the 4-argument handler signature. g_vm_vbin
 // is the elementwise/broadcast binary engine (vop selects the op); g_vm_vmap1
@@ -152,10 +152,10 @@ g_vm(g_vm_obin, int);
 #include <data.h>
 char const *g_bif_name(intptr_t);
 #define tuple(_) ((struct g_tuple*)(_))
-#define nump oddp
+#define fixp oddp
 #define sym(_) ((struct g_atom*)(_))
 static g_inline bool symp(word _) { return lamp(_) && cell(_)->ap == g_vm_sym; }
-static g_inline bool tuplep(word _) { return lamp(_) && cell(_)->ap == g_vm_tuple; }
+static g_inline bool tupp(word _) { return lamp(_) && cell(_)->ap == g_vm_tuple; }
 static g_inline bool strp(word _) { return lamp(_) && cell(_)->ap == g_vm_str; }
 // Mutable flat byte string. NOT a data kind: its head word is the
 // behaves-as-0 g_vm_buf (like g_vm_port_io for ports), so the GC walks a buf
@@ -203,7 +203,7 @@ static g_inline struct g_str *bytes_of(word x) { return bufp(x) ? buf_str(x) : s
 // bignum (it demotes to the fixnum nil), so slen is never 0 and the sign is
 // unambiguous. Canonical demotion keeps the tiers disjoint: a value in fixnum
 // range is a fixnum, one in intptr_t range a wide-int box, only wider values a
-// bignum -- so nump/boxp/bigp are mutually exclusive and =/eqv stay well defined.
+// bignum -- so fixp/boxp/bigp are mutually exclusive and =/eqv stay well defined.
 struct g_big { g_vm_t *ap; intptr_t slen; uint32_t limb[]; };
 static g_inline bool bigp(word _) { return lamp(_) && cell(_)->ap == g_vm_big; }
 static g_inline struct g_big *ini_big(struct g_big *b, intptr_t slen) {
@@ -221,22 +221,22 @@ struct g *g_big_dec(struct g*);             // sp[0] bignum -> decimal string
 struct g *g_big_read_dec(struct g*);        // sp[0] [+-]?digits token -> canonical value
 
 static g_inline bool flop(word _) {
-  return tuplep(_) && tuple(_)->rank == 0 && tuple(_)->type == g_R; }
+  return tupp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_R; }
 // Wide-integer box: a rank-0 g_Z scalar tuple. Arises only from
 // transparent fixnum overflow (kernel/math.c); never holds a value that
 // fits the fixnum tag (canonical demotion keeps box and fixnum ranges
-// disjoint), so boxp and nump never both hold for the same number.
+// disjoint), so boxp and fixp never both hold for the same number.
 static g_inline bool boxp(word _) {
-  return tuplep(_) && tuple(_)->rank == 0 && tuple(_)->type == g_Z; }
+  return tupp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_Z; }
 // A complex scalar: a rank-0 g_C tuple (two g_flo_t, re then im). Deliberately
 // NOT folded into ISNUM -- the real-tower macros (TOFLO/TOINT) would misread its
-// two-word payload, so the arith/eq paths handle complex via explicit cplxp
+// two-word payload, so the arith/eq paths handle complex via explicit Cp
 // branches placed before the real lanes (decision: complex > float > int/bignum).
-static g_inline bool cplxp(word _) {
-  return tuplep(_) && tuple(_)->rank == 0 && tuple(_)->type == g_C; }
+static g_inline bool Cp(word _) {
+  return tupp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_C; }
 // A rank>=1 typed array (vs a rank-0 scalar box, which flop/boxp catch). The
 // elementwise arith/compare lanes divert to g_vm_vbin when either operand arrp.
-static g_inline bool arrp(word _) { return tuplep(_) && tuple(_)->rank >= 1; }
+static g_inline bool arrp(word _) { return tupp(_) && tuple(_)->rank >= 1; }
 
 // Max array rank (bounds the stack index/stride arrays in the broadcast loop).
 #define G_VEC_MAXRANK 8
@@ -283,7 +283,7 @@ bool g_all_zero(struct g_tuple*);
 // present value (non-empty container, symbol incl. anonymous, function, port,
 // bignum) is truthy. Kept in sync with g_vm_len's zero case.
 static g_inline bool g_false(word x) {
-  return nilp(x) || (tuplep(x) && g_all_zero(tuple(x)))
+  return nilp(x) || (tupp(x) && g_all_zero(tuple(x)))
       || (strp(x) && len(x) == 0)                       // empty string
       || (bufp(x) && len(buf_str(x)) == 0)              // empty buf
       || (mapp(x) && map_len(x) == 0); }                // empty table
@@ -302,12 +302,12 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 
 // --- numeric tower helpers (shared by math.c, arr.c, hash.c) ----------------
 // Numeric scalar = a fixnum, a boxed float (flop), or a boxed wide int (boxp).
-#define ISNUM(x) (nump(x) || flop(x) || boxp(x) || bigp(x))
+#define ISNUM(x) (fixp(x) || flop(x) || boxp(x) || bigp(x))
 // Integer value of a fixnum-or-box operand (callers must exclude floats AND
 // bignums -- a bignum doesn't fit an intptr_t; integer lanes guard on !bigp).
-#define TOINT(x) (nump(x) ? (intptr_t) getnum(x) : box_get(x))
+#define TOINT(x) (fixp(x) ? (intptr_t) getnum(x) : box_get(x))
 // Double value of any numeric operand (a bignum widens via g_big_to_flo).
-#define TOFLO(x) (nump(x) ? (g_flo_t) getnum(x) : flop(x) ? flo_get(x) : boxp(x) ? (g_flo_t) box_get(x) : g_big_to_flo(x))
+#define TOFLO(x) (fixp(x) ? (g_flo_t) getnum(x) : flop(x) ? flo_get(x) : boxp(x) ? (g_flo_t) box_get(x) : g_big_to_flo(x))
 // Heap words for one scalar box. The float box (g_flo_t) and the wide-int box
 // (intptr_t) are both one pointer-width word, so one reservation fits.
 #define BOX_REQ (Width(struct g_tuple) + Width(intptr_t))
@@ -498,7 +498,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
 
 #define RED_EXTREME(nom, c_op, kind) g_vm(nom) { \
  word x = Sp[0]; \
- if (!tuplep(x)) return Ip++, Continue(); \
+ if (!tupp(x)) return Ip++, Continue(); \
  if (tuple(x)->type == g_O) { \
   Pack(f); f = ored(f, kind); \
   if (!g_ok(f)) return gtrap(f); \
@@ -575,7 +575,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_sin, "sin", S1(g_vm_sin)) _(bif_cos, "cos", S1(g_vm_cos)) _(bif_tan, "tan", S1(g_vm_tan)) _(bif_atan, "atan", S1(g_vm_atan))\
  _(bif_sqrt, "sqrt", S1(g_vm_sqrt)) _(bif_exp, "exp", S1(g_vm_exp)) _(bif_log, "log", S1(g_vm_log))\
  _(bif_atan2, "atan2", S2(g_vm_atan2)) _(bif_pow, "pow", S2(g_vm_pow))\
- _(bif_cplx, "C", S2(g_vm_cplx)) _(bif_cplxp, "cplxp", S1(g_vm_cplxp))\
+ _(bif_cplx, "C", S2(g_vm_cplx)) _(bif_Cp, "Cp", S1(g_vm_Cp))\
  _(bif_re, "re", S1(g_vm_re)) _(bif_im, "im", S1(g_vm_im)) _(bif_conj, "conj", S1(g_vm_conj))\
  _(bif_abs, "abs", S1(g_vm_abs)) _(bif_arg, "arg", S1(g_vm_carg))\
  _(bif_arr, "arr", S2(g_vm_arr)) _(bif_arrl, "arrl", S3(g_vm_arrl))\
@@ -585,9 +585,10 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_asum, "asum", S1(g_vm_asum)) _(bif_aprod, "aprod", S1(g_vm_aprod))\
  _(bif_amax, "amax", S1(g_vm_amax)) _(bif_amin, "amin", S1(g_vm_amin))\
  _(bif_aall, "aall", S1(g_vm_aall)) _(bif_aany, "aany", S1(g_vm_aany))\
- _(bif_tuplep, "tuplep", S1(g_vm_tuplep)) _(bif_bigp, "bigp", S1(g_vm_bigp)) _(bif_boxp, "boxp", S1(g_vm_boxp))\
+ _(bif_tupp, "tupp", S1(g_vm_tupp)) _(bif_bigp, "bigp", S1(g_vm_bigp)) _(bif_boxp, "boxp", S1(g_vm_boxp))\
  _(bif_arrp, "arrp", S1(g_vm_arrp)) _(bif_intf, "int", S1(g_vm_intf))\
- _(bif_symp, "symp", S1(g_vm_symp)) _(bif_hashp, "hashp", S1(g_vm_hashp)) _(bif_nump, "nump", S1(g_vm_nump))\
+ _(bif_symp, "symp", S1(g_vm_symp)) _(bif_mapp, "mapp", S1(g_vm_mapp)) _(bif_fixp, "fixp", S1(g_vm_fixp))\
+ _(bif_lamp, "lamp", S1(g_vm_lamp))\
  _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))\
  _(bif_callk, "call_cc", S1(g_vm_callk)) _(bif_yield, "yield", S1(g_vm_yield_bif)) \
  _(bif_spawn, "spawn", S2(g_vm_spawn)) _(bif_wait, "wait", S1(g_vm_wait)) \
@@ -917,7 +918,7 @@ static g_inline word copy_thread(struct g *f, union u *src, word const *const p0
 
 static g_noinline intptr_t gcp(struct g *f, word x, word const *p0, word const *t0) {
  // if it's a number or it's outside managed memory then return it
- if (nump(x) || ptr(x) < p0 || ptr(x) >= t0) return x;
+ if (fixp(x) || ptr(x) < p0 || ptr(x) >= t0) return x;
  union u *src = cell(x);
  x = src->x; // get its contents
  // if it contains a pointer to the new space then return the pointer
@@ -1781,7 +1782,7 @@ g_vm(g_vm_sleep) {
  word n = Sp[0];
  Sp[0] = nil;
  Ip += 1;
- if (!nump(n) || getnum(n) <= 0) return Continue();
+ if (!fixp(n) || getnum(n) <= 0) return Continue();
  f->next_wake_at = (uintptr_t) g_clock() + getnum(n);
  return Ap(g_vm_yield_sw, f); }
 
@@ -1934,7 +1935,7 @@ static g_inline intptr_t len_sat(g_flo_t m) {
 g_vm(g_vm_len) {
   word x = Sp[0];
   intptr_t l = 0;
-  if (nump(x)) { intptr_t n = getnum(x); l = n == FIX_MIN ? FIX_MAX : n < 0 ? -n : n; }  // fixnum: |x|
+  if (fixp(x)) { intptr_t n = getnum(x); l = n == FIX_MIN ? FIX_MAX : n < 0 ? -n : n; }  // fixnum: |x|
   else if (bufp(x)) l = len(buf_str(x));                         // mutable byte string
   else if (mapp(x)) l = map_len(x);                              // table: key count
   else if (datp(x)) switch (typ(x)) {
@@ -2402,7 +2403,7 @@ static struct g *gzput_fn_body(struct g *f, word x, uintptr_t off) {
  return s ? gzputx(f, s, off) : gzprintf(f, "\\%z", x); }
 
 static g_noinline struct g *gzputx(struct g *f, intptr_t x, uintptr_t off) {
- if (nump(x)) return gzprintf(f, "%d", getnum(x));
+ if (fixp(x)) return gzprintf(f, "%d", getnum(x));
  if (!datp(x)) return mapp(x) ? gzput_map(f, x, off) : gzput_fn(f, x, off);
  // Maps are the only mutable/self-referential value, and gzput_map guards its
  // own recursion (the seen list); the data kinds below are acyclic.
@@ -2607,7 +2608,7 @@ g_vm(g_vm_fread) {
 g_vm(g_vm_string) {
  word x = Sp[0];
  if (x == nil) return Ip++, Continue();             // nil is the empty string (0)
- if (nump(x)) {                                     // fixnum -> one-byte string
+ if (fixp(x)) {                                     // fixnum -> one-byte string
   uintptr_t req = str_type_width + b2w(1);
   Have(req);
   struct g_str *s = (void*) Hp;
@@ -2958,7 +2959,10 @@ static g_vm(g_vm_map_lookup) {
  word v = g_mapget(f, nil, Sp[0], (word) Ip);
  return Ip = cell(*++Sp), *Sp = v, Continue(); }
 
-op11(g_vm_hashp, mapp(Sp[0]) ? putnum(1) : nil)
+op11(g_vm_mapp, mapp(Sp[0]) ? putnum(1) : nil)
+// (lamp x): is x a heap object (a pointer), i.e. not a fixnum? true for every
+// present non-fixnum value -- pairs, symbols, strings, tuples, maps, threads.
+op11(g_vm_lamp, lamp(Sp[0]) ? putnum(1) : nil)
 
 // (hash x) -- the general hashing method exposed to gwen as a fixnum.
 op11(g_vm_hashof, putnum(hash(f, Sp[0])))
@@ -2967,7 +2971,7 @@ g_vm(g_vm_get) {
  word z = Sp[0], k = Sp[1], x = Sp[2], n;
  if (bufp(x)) {                                  // mutable byte string: byte index
   struct g_str *s = buf_str(x);
-  if (nump(k) && (n = getnum(k)) >= 0 && n < (word) len(s))
+  if (fixp(k) && (n = getnum(k)) >= 0 && n < (word) len(s))
    z = putnum((unsigned char) txt(s)[n]); }
  else if (mapp(x)) z = g_mapget(f, z, k, x);     // map lookup (not a data sentinel)
  else if (lamp(x) && datp(x)) switch (typ(x)) {
@@ -2980,7 +2984,7 @@ g_vm(g_vm_get) {
    struct g_tuple *v = tuple(x);
    uintptr_t R = v->rank, off = 0; bool ok = false;
    if (R == 0) ok = nilp(k);
-   else if (R == 1 && nump(k)) {
+   else if (R == 1 && fixp(k)) {
     intptr_t ix = getnum(k);
     if (ix >= 0 && ix < (intptr_t) v->shape[0]) off = ix, ok = true; }
    else if (twop(k)) {
@@ -2988,7 +2992,7 @@ g_vm(g_vm_get) {
     for (word l = k;; l = B(l)) {
      if (!twop(l)) { ok = a == R; break; }
      word ki = A(l);
-     if (a >= R || !nump(ki)) { ok = false; break; }
+     if (a >= R || !fixp(ki)) { ok = false; break; }
      intptr_t ix = getnum(ki);
      if (ix < 0 || ix >= (intptr_t) v->shape[a]) { ok = false; break; }
      off = off * v->shape[a] + ix, a++; } }
@@ -3002,11 +3006,11 @@ g_vm(g_vm_get) {
    // Byte as its unsigned value 0..255 -- bytes are data, signedness is the
    // operator's job. txt is signed char[], so cast to avoid sign-extending a
    // high byte (e.g. 0xff -> -1) when binary data is indexed.
-   if (nump(k) && (n = getnum(k)) >= 0 && n < (word) len(x))
+   if (fixp(k) && (n = getnum(k)) >= 0 && n < (word) len(x))
     z = putnum((unsigned char) txt(x)[n]);
    break;
   case K_TWO:
-   if (nump(k) && (n = getnum(k)) >= 0) {
+   if (fixp(k) && (n = getnum(k)) >= 0) {
     while (n-- && twop(x = B(x)));
     if (twop(x)) z = A(x); } }
  return Sp[2] = z, Sp += 2, Ip += 1, Continue(); }
@@ -3022,7 +3026,7 @@ g_vm(g_vm_put) {
   if (!g_ok(f = g_mapput(f))) return gtrap(f);
   Unpack(f); }
  else {
-  if (bufp(x) && nump(Sp[0]) && (n = getnum(Sp[0])) >= 0 && n < (word) len(buf_str(x)))
+  if (bufp(x) && fixp(Sp[0]) && (n = getnum(Sp[0])) >= 0 && n < (word) len(buf_str(x)))
    txt(buf_str(x))[n] = (char) getnum(Sp[1]);
   Sp += 2; }
  return Ip += 1, Continue(); }
@@ -3058,7 +3062,7 @@ static g_noinline uintptr_t hash_two(struct g *f, word x) {
 
 // general hashing method...
 uintptr_t hash(struct g *f, intptr_t x) {
- if (nump(x)) return rot(x*mix);
+ if (fixp(x)) return rot(x*mix);
  if (!datp(x)) {
    // out-of-pool (static bif): stable distinct address. in-pool: a compiled lambda
    // parks its source \-expr one cell before the entry (the tag head points there),
@@ -3155,7 +3159,7 @@ g_vm(g_vm_buf) {
 // backing g_str holding the bytes, and the length-2 wrapper thread
 // [g_vm_buf, str, terminator] that gives it its identity.
 g_vm(g_vm_bufnew) {
- intptr_t n = nump(Sp[0]) ? getnum(Sp[0]) : 0;
+ intptr_t n = fixp(Sp[0]) ? getnum(Sp[0]) : 0;
  if (n < 0) n = 0;
  uintptr_t sreq = str_type_width + b2w(n),
            breq = Width(struct g_buf) + Width(struct g_tag);
@@ -3244,7 +3248,7 @@ g_noinline struct g_atom *intern_checked(struct g *v, struct g_str *b) {
   y = i < 0 ? &z->l : &z->r; } }
 
 op11(g_vm_symp, symp(Sp[0]) ? putnum(1) : nil)
-op11(g_vm_tuplep, tuplep(Sp[0]) ? putnum(1) : nil)
+op11(g_vm_tupp, tupp(Sp[0]) ? putnum(1) : nil)
 op11(g_vm_bigp, bigp(Sp[0]) ? putnum(1) : nil)
 op11(g_vm_boxp, boxp(Sp[0]) ? putnum(1) : nil)
 op11(g_vm_arrp, arrp(Sp[0]) ? putnum(1) : nil)
@@ -3270,7 +3274,7 @@ g_vm(g_vm_cons) {
 #define AVM_SLOW(op, vop, ovf, fexpr) static g_vm(g_vm_##op##n) { \
  word a = Sp[0], b = Sp[1]; \
  if (arrp(a) || arrp(b)) return Ap(g_vm_vbin, f, vop); \
- if (cplxp(a) || cplxp(b)) return Ap(g_vm_cplx_bin, f, vop); \
+ if (Cp(a) || Cp(b)) return Ap(g_vm_cplx_bin, f, vop); \
  if (!ISNUM(a) || !ISNUM(b)) return *++Sp = nil, Ip++, Continue(); \
  if (flop(a) || flop(b)) { word _res; Have(BOX_REQ); \
   g_flo_t ad = TOFLO(a), bd = TOFLO(b); \
@@ -3286,7 +3290,7 @@ g_vm(g_vm_cons) {
 #define AVM_SLOWDIV(op, vop, c_op, fexpr) static g_vm(g_vm_##op##n) { \
  word a = Sp[0], b = Sp[1]; \
  if (arrp(a) || arrp(b)) return Ap(g_vm_vbin, f, vop); \
- if (cplxp(a) || cplxp(b)) return Ap(g_vm_cplx_bin, f, vop); \
+ if (Cp(a) || Cp(b)) return Ap(g_vm_cplx_bin, f, vop); \
  if (!ISNUM(a) || !ISNUM(b)) return *++Sp = nil, Ip++, Continue(); \
  if (flop(a) || flop(b) || b == nil) { word _res; Have(BOX_REQ); \
   g_flo_t ad = TOFLO(a), bd = TOFLO(b); \
@@ -3301,14 +3305,14 @@ g_vm(g_vm_cons) {
  return Unpack(f), Continue(); }
 #define AVM_OVF(op, builtin) g_vm(g_vm_##op) { \
  word a = Sp[0], b = Sp[1]; \
- if (nump(a) && nump(b)) { intptr_t t; \
+ if (fixp(a) && fixp(b)) { intptr_t t; \
   if (!builtin((intptr_t) getnum(a), (intptr_t) getnum(b), &t) && \
       t >= FIX_MIN && t <= FIX_MAX) \
    return *++Sp = putnum(t), Ip++, Continue(); } \
  return Ap(g_vm_##op##n, f); }
 #define AVM_DIV(op, c_op) g_vm(g_vm_##op) { \
  word a = Sp[0], b = Sp[1]; \
- if (nump(a) && nump(b)) { \
+ if (fixp(a) && fixp(b)) { \
   intptr_t av = getnum(a), bv = getnum(b); \
   if (bv != 0 && !(av == INTPTR_MIN && bv == -1)) { \
    intptr_t t = av c_op bv; \
@@ -3325,12 +3329,12 @@ g_vm(g_vm_cons) {
  return *++Sp = x, Ip++, Continue(); }
 #define CMP_OP(nom, vop, c_op) CMP_SLOW(nom, vop, c_op) g_vm(nom) {    \
  word a = Sp[0], b = Sp[1];                                           \
- if (__builtin_expect(nump(a) && nump(b), 1))                         \
+ if (__builtin_expect(fixp(a) && fixp(b), 1))                         \
   return *++Sp = (a c_op b) ? putnum(1) : nil, Ip++, Continue();     \
  return Ap(nom##_slow, f); }
 #define BIT_SLOW(n, c_op) static g_vm(g_vm_##n##_slow) {               \
  word a = Sp[0], b = Sp[1], _res;                                     \
- if (!(nump(a) || boxp(a)) || !(nump(b) || boxp(b)))                  \
+ if (!(fixp(a) || boxp(a)) || !(fixp(b) || boxp(b)))                  \
   return *++Sp = nil, Ip++, Continue();                               \
  Have(BOX_REQ);                                                       \
  EMIT_INT(TOINT(a) c_op TOINT(b));                                    \
@@ -3369,7 +3373,7 @@ static bool g_add_lr = true;
 // coerce a numeric to a string byte: floor(|x|) mod 256, where |x| of a complex
 // is its modulus (matching abs's L2 vector->scalar coercion, see g_vm_abs).
 static g_inline unsigned char seq_byte(word x) {
- g_flo_t v = cplxp(x)
+ g_flo_t v = Cp(x)
   ? g_sqrt(cplx_re(x) * cplx_re(x) + cplx_im(x) * cplx_im(x)) : TOFLO(x);
  if (v < 0) v = -v;
  return (unsigned char) (uintptr_t) g_trunc(v); }
@@ -3451,7 +3455,7 @@ static g_vm(g_vm_0) {                             // unsupported mix (array <-> 
 // slot shift). No subtype classification here; that is the handler's job. Exported (not
 // inline) so data.c's apply sentinels share it.
 enum q g_kind(word x) {
- return nump(x) ? K_FIX : !datp(x) ? K_LAM : typ(x); }
+ return fixp(x) ? K_FIX : !datp(x) ? K_LAM : typ(x); }
 
 // ============================================================================
 // generic-op lane handlers, then all three dispatch matrices adjacent, then the
@@ -3472,8 +3476,8 @@ static g_vm(g_vm_mul_rep) {
  word a = Sp[0], b = Sp[1];
  bool aseq = strp(a) || symp(a) || twop(a);
  word seq = aseq ? a : b, cnt = aseq ? b : a;
- if (!ISNUM(cnt) && !cplxp(cnt)) return *++Sp = nil, Ip++, Continue();   // array/non-number count
- g_flo_t cv = cplxp(cnt)
+ if (!ISNUM(cnt) && !Cp(cnt)) return *++Sp = nil, Ip++, Continue();   // array/non-number count
+ g_flo_t cv = Cp(cnt)
   ? g_sqrt(cplx_re(cnt) * cplx_re(cnt) + cplx_im(cnt) * cplx_im(cnt)) : TOFLO(cnt);
  if (cv < 0) cv = -cv;
  uintptr_t n = (uintptr_t) g_trunc(cv);
@@ -3610,14 +3614,14 @@ g_vm_t *g_apply_mx[K_N][K_N] = {
 // === the `+`/`*` dispatchers (fixnum fast path, then the matrix) ============
 g_vm(g_vm_add) {
  word a = Sp[0], b = Sp[1]; intptr_t t;
- if (nump(a) && nump(b)
+ if (fixp(a) && fixp(b)
      && !__builtin_add_overflow((intptr_t) getnum(a), (intptr_t) getnum(b), &t)
      && t >= FIX_MIN && t <= FIX_MAX)
   return *++Sp = putnum(t), Ip++, Continue();
  return Ap(g_add_mx[g_kind(a)][g_kind(b)], f); }
 g_vm(g_vm_mul) {
  word a = Sp[0], b = Sp[1];
- if (nump(a) && nump(b)) { intptr_t t;
+ if (fixp(a) && fixp(b)) { intptr_t t;
   if (!__builtin_mul_overflow((intptr_t) getnum(a), (intptr_t) getnum(b), &t)
       && t >= FIX_MIN && t <= FIX_MAX)
    return *++Sp = putnum(t), Ip++, Continue(); }
@@ -3641,19 +3645,19 @@ CMP_OP(g_vm_gt, VOP_GT, >) CMP_OP(g_vm_ge, VOP_GE, >=)
 // integer-only, so a float (or any non-integer) operand yields nil.
 BIT_SLOW(band, &) BIT_SLOW(bor, |) BIT_SLOW(bxor, ^)
 g_vm(g_vm_band) { word a = Sp[0], b = Sp[1];
- if (nump(a) && nump(b)) return *++Sp = (a & b) | 1, Ip++, Continue();
+ if (fixp(a) && fixp(b)) return *++Sp = (a & b) | 1, Ip++, Continue();
  return Ap(g_vm_band_slow, f); }
 g_vm(g_vm_bor) { word a = Sp[0], b = Sp[1];
- if (nump(a) && nump(b)) return *++Sp = (a | b) | 1, Ip++, Continue();
+ if (fixp(a) && fixp(b)) return *++Sp = (a | b) | 1, Ip++, Continue();
  return Ap(g_vm_bor_slow, f); }
 g_vm(g_vm_bxor) { word a = Sp[0], b = Sp[1];
- if (nump(a) && nump(b)) return *++Sp = (a ^ b) | 1, Ip++, Continue();
+ if (fixp(a) && fixp(b)) return *++Sp = (a ^ b) | 1, Ip++, Continue();
  return Ap(g_vm_bxor_slow, f); }
 
 // ~ : fixnum complement keeps the tag (no allocation); a boxed value is
 // complemented full-width and demoted-or-boxed; a non-integer yields nil.
 g_vm(g_vm_bnot) { word a = Sp[0], _res;
- if (nump(a)) return Sp[0] = ~a | 1, Ip++, Continue();
+ if (fixp(a)) return Sp[0] = ~a | 1, Ip++, Continue();
  if (!boxp(a)) return Sp[0] = nil, Ip++, Continue();
  Have(BOX_REQ);
  EMIT_INT(~box_get(a));
@@ -3662,12 +3666,12 @@ g_vm(g_vm_bnot) { word a = Sp[0], _res;
 // >> : arithmetic right shift. A fixnum value only shrinks, so it keeps a
 // non-allocating fast path; a boxed value routes to the slow handler.
 static g_vm(g_vm_bsr_slow) { word a = Sp[0], b = Sp[1], _res;
- if (!(nump(a) || boxp(a)) || !nump(b)) return *++Sp = nil, Ip++, Continue();
+ if (!(fixp(a) || boxp(a)) || !fixp(b)) return *++Sp = nil, Ip++, Continue();
  Have(BOX_REQ);
  EMIT_INT(TOINT(a) >> getnum(b));
  return *++Sp = _res, Ip++, Continue(); }
 g_vm(g_vm_bsr) { word a = Sp[0], b = Sp[1];
- if (nump(a) && nump(b))
+ if (fixp(a) && fixp(b))
   return *++Sp = putnum(getnum(a) >> getnum(b)), Ip++, Continue();
  return Ap(g_vm_bsr_slow, f); }
 
@@ -3675,12 +3679,12 @@ g_vm(g_vm_bsr) { word a = Sp[0], b = Sp[1];
 // (EMIT_INT still demotes small results — only genuinely wide values
 // allocate). Shift done in uintptr_t for well-defined overflow.
 g_vm(g_vm_bsl) { word a = Sp[0], b = Sp[1], _res;
- if (!(nump(a) || boxp(a)) || !nump(b)) return *++Sp = nil, Ip++, Continue();
+ if (!(fixp(a) || boxp(a)) || !fixp(b)) return *++Sp = nil, Ip++, Continue();
  Have(BOX_REQ);
  EMIT_INT((intptr_t)((uintptr_t) TOINT(a) << getnum(b)));
  return *++Sp = _res, Ip++, Continue(); }
 
-op(g_vm_nump, 1, oddp(Sp[0]) ? putnum(1) : nil)
+op(g_vm_fixp, 1, oddp(Sp[0]) ? putnum(1) : nil)
 // `nilp`/`not`: the language falsy predicate (nil/0 OR an all-zero tuple --
 // boxed 0.0, zero int box, all-zero array). Use `(= x 0)` for a literal
 // scalar-zero test; `(aall (= x 0))` over an array.
@@ -3804,7 +3808,7 @@ void g_rng_seed(struct g_tuple *v, uint64_t seed) {
 
 // Is x a well-formed state tuple (rank-1 i64, length 4)?
 static g_inline bool rng_state_p(word x) {
- return tuplep(x) && tuple(x)->rank == 1 && tuple(x)->type == RNG_VT
+ return tupp(x) && tuple(x)->rank == 1 && tuple(x)->type == RNG_VT
         && tuple(x)->shape[0] == RNG_STATE_LEN; }
 
 // Build a fresh state tuple at Hp, copying the 4 limbs of `src` into it. Caller
@@ -3821,7 +3825,7 @@ static g_inline struct g_tuple *rng_copy(g_word **hp, struct g_tuple *src) {
 // non-fixnum seeds from 0.
 g_vm(g_vm_rng_seed) {
  word n = Sp[0];
- uint64_t seed = nump(n) ? (uint64_t) (intptr_t) getnum(n) : 0;
+ uint64_t seed = fixp(n) ? (uint64_t) (intptr_t) getnum(n) : 0;
  Have(RNG_VEC_REQ);
  struct g_tuple *v = (struct g_tuple*) Hp; Hp += RNG_VEC_REQ;
  g_rng_seed(v, seed);
@@ -3848,7 +3852,7 @@ g_vm(g_vm_rng_set) {
 g_vm(g_vm_rand) {
  word n = Sp[0];
  uint64_t r = rng_step(tuple_data(tuple(f->rng)));
- intptr_t out = nump(n) && getnum(n) > 0
+ intptr_t out = fixp(n) && getnum(n) > 0
    ? (intptr_t) (r % (uint64_t) getnum(n))
    : (intptr_t) (r & (uint64_t) FIX_MAX);
  return Sp[0] = putnum(out), Ip++, Continue(); }
@@ -3938,10 +3942,10 @@ g_vm(g_vm_eq) {
  // so the cross-real case `(= (cplx 2 0) 2)` is true (numeric widening, like
  // `(= 2 2.0)`); a non-numeric operand makes it false. Done before the float
  // lane so a complex never reaches TOFLO (which would misread its two words).
- if (cplxp(a) || cplxp(b)) {
-  bool r = (cplxp(a) || ISNUM(a)) && (cplxp(b) || ISNUM(b))
-        && (cplxp(a) ? cplx_re(a) : TOFLO(a)) == (cplxp(b) ? cplx_re(b) : TOFLO(b))
-        && (cplxp(a) ? cplx_im(a) : 0) == (cplxp(b) ? cplx_im(b) : 0);
+ if (Cp(a) || Cp(b)) {
+  bool r = (Cp(a) || ISNUM(a)) && (Cp(b) || ISNUM(b))
+        && (Cp(a) ? cplx_re(a) : TOFLO(a)) == (Cp(b) ? cplx_re(b) : TOFLO(b))
+        && (Cp(a) ? cplx_im(a) : 0) == (Cp(b) ? cplx_im(b) : 0);
   Sp[1] = r ? putnum(1) : nil;
   return Sp++, Ip++, Continue(); }
  bool r;
@@ -4100,7 +4104,7 @@ static g_noinline void mag_divmod(uint32_t *q, uint32_t *r,
 static int load_int_mag(word x, uint32_t scratch[2], uint32_t const **out, bool *neg) {
  if (bigp(x)) { struct g_big *b = (struct g_big*) x; intptr_t s = b->slen;
   *neg = s < 0, *out = b->limb; return (int) (s < 0 ? -s : s); }
- intptr_t v = nump(x) ? (intptr_t) getnum(x) : box_get(x);
+ intptr_t v = fixp(x) ? (intptr_t) getnum(x) : box_get(x);
  *neg = v < 0;
  uintptr_t u = *neg ? (uintptr_t) 0 - (uintptr_t) v : (uintptr_t) v;
  scratch[0] = (uint32_t) u;
@@ -4294,13 +4298,13 @@ struct g *g_big_dec(struct g *f) {
 // Bad type / negative dim / over-rank -> nil.
 g_vm(g_vm_arr) {
  word t = Sp[0], shp = Sp[1];
- if (!nump(t)) return *++Sp = nil, Ip++, Continue();
+ if (!fixp(t)) return *++Sp = nil, Ip++, Continue();
  intptr_t ty = getnum(t);
  if (ty < 0 || ty > g_O || ty == g_C) return *++Sp = nil, Ip++, Continue();
  uintptr_t rank = 0, nelem = 1;
  for (word l = shp; twop(l); l = B(l)) {
   word d = A(l);
-  if (!nump(d) || getnum(d) < 0) return *++Sp = nil, Ip++, Continue();
+  if (!fixp(d) || getnum(d) < 0) return *++Sp = nil, Ip++, Continue();
   rank++, nelem *= (uintptr_t) getnum(d); }
  if (rank > G_VEC_MAXRANK || (ty == g_O && rank == 0)) return *++Sp = nil, Ip++, Continue();
  uintptr_t bytes = sizeof(struct g_tuple) + rank * sizeof(word) + nelem * g_T[ty];
@@ -4319,13 +4323,13 @@ g_vm(g_vm_arr) {
 // code build a specific array before array-literal syntax lands.
 g_vm(g_vm_arrl) {
  word t = Sp[0], shp = Sp[1];                  // vals = Sp[2]
- if (!nump(t)) return Sp[2] = nil, Sp += 2, Ip++, Continue();
+ if (!fixp(t)) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  intptr_t ty = getnum(t);
  if (ty < 0 || ty > g_O || ty == g_C) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  uintptr_t rank = 0, nelem = 1;
  for (word l = shp; twop(l); l = B(l)) {
   word d = A(l);
-  if (!nump(d) || getnum(d) < 0) return Sp[2] = nil, Sp += 2, Ip++, Continue();
+  if (!fixp(d) || getnum(d) < 0) return Sp[2] = nil, Sp += 2, Ip++, Continue();
   rank++, nelem *= (uintptr_t) getnum(d); }
  if (rank > G_VEC_MAXRANK || (ty == g_O && rank == 0)) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  uintptr_t bytes = sizeof(struct g_tuple) + rank * sizeof(word) + nelem * g_T[ty];
@@ -4343,19 +4347,19 @@ g_vm(g_vm_arrl) {
   if (ty == g_O) { tuple_put_obj(v, i, e); continue; }   // store any value verbatim
   if (!ISNUM(e)) continue;
   if (ty >= g_R) tuple_put_flo(v, i, TOFLO(e));
-  else tuple_put_int(v, i, nump(e) ? (intptr_t) getnum(e)
+  else tuple_put_int(v, i, fixp(e) ? (intptr_t) getnum(e)
                        : flop(e) ? (intptr_t) flo_get(e) : box_get(e)); }
  return Sp[2] = word(v), Sp += 2, Ip++, Continue(); }
 
 // --- accessors -------------------------------------------------------------
 // rank / element-type code as fixnums; nil for a non-tuple. Both 0 for a scalar box.
-op11(g_vm_arank, tuplep(Sp[0]) ? putnum(tuple(Sp[0])->rank) : nil)
-op11(g_vm_atype, tuplep(Sp[0]) ? putnum(tuple(Sp[0])->type) : nil)
+op11(g_vm_arank, tupp(Sp[0]) ? putnum(tuple(Sp[0])->rank) : nil)
+op11(g_vm_atype, tupp(Sp[0]) ? putnum(tuple(Sp[0])->type) : nil)
 
 // total element count (1 for a scalar box), nil for a non-tuple.
 g_vm(g_vm_alen) {
  word x = Sp[0];
- if (!tuplep(x)) return Sp[0] = nil, Ip++, Continue();
+ if (!tupp(x)) return Sp[0] = nil, Ip++, Continue();
  uintptr_t n = 1;
  for (uintptr_t i = 0; i < tuple(x)->rank; i++) n *= tuple(x)->shape[i];
  return Sp[0] = putnum(n), Ip++, Continue(); }
@@ -4363,7 +4367,7 @@ g_vm(g_vm_alen) {
 // dimensions as a list (allocates rank cons cells), nil for a non-tuple.
 g_vm(g_vm_ashape) {
  word x = Sp[0];
- if (!tuplep(x)) return Sp[0] = nil, Ip++, Continue();
+ if (!tupp(x)) return Sp[0] = nil, Ip++, Continue();
  uintptr_t r = tuple(x)->rank;
  Have(r * Width(struct g_pair));
  struct g_tuple *v = tuple(Sp[0]);                 // re-read post-Have
@@ -4403,7 +4407,7 @@ static struct g *ored(struct g *f, int kind);   // kind: 0 sum, 1 prod, 2 max, 3
 // same expression works whether a/b are scalars or arrays.
 g_vm(g_vm_asum) {
  word x = Sp[0];
- if (!tuplep(x)) return Ip++, Continue();        // scalar: (asum 5) = 5
+ if (!tupp(x)) return Ip++, Continue();        // scalar: (asum 5) = 5
  if (tuple(x)->type == g_O) {
   Pack(f); f = ored(f, 0);
   if (!g_ok(f)) return gtrap(f);
@@ -4426,7 +4430,7 @@ g_vm(g_vm_asum) {
 
 g_vm(g_vm_aprod) {
  word x = Sp[0];
- if (!tuplep(x)) return Ip++, Continue();
+ if (!tupp(x)) return Ip++, Continue();
  if (tuple(x)->type == g_O) {
   Pack(f); f = ored(f, 1);
   if (!g_ok(f)) return gtrap(f);
@@ -4454,7 +4458,7 @@ RED_EXTREME(g_vm_amin, <, 3)
 // disjunction. Empty array: aall true (vacuous), aany false.
 g_vm(g_vm_aall) {
  word x = Sp[0];
- if (!tuplep(x)) return Ip++, Continue();
+ if (!tupp(x)) return Ip++, Continue();
  struct g_tuple *v = tuple(x);
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
  if (v->type == g_O) {                         // object: a falsy element fails the conjunction
@@ -4469,7 +4473,7 @@ g_vm(g_vm_aall) {
 
 g_vm(g_vm_aany) {
  word x = Sp[0];
- if (!tuplep(x)) return Ip++, Continue();
+ if (!tupp(x)) return Ip++, Continue();
  struct g_tuple *v = tuple(x);
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
  if (v->type == g_O) {                         // object: a truthy element satisfies the disjunction
@@ -4567,8 +4571,8 @@ static g_noinline void vbin_fill(struct g_tuple *r, word a, word b, int op, bool
  // by low bits (modular). A *comparison* against a bignum, though, is decided
  // exactly by the bignum's sign below -- never by these low bits.
  g_flo_t sa = aarr ? 0 : TOFLO(a), sb = barr ? 0 : TOFLO(b);
- intptr_t ia = aarr ? 0 : nump(a) ? getnum(a) : bigp(a) ? g_big_low(a) : box_get(a),
-          ib = barr ? 0 : nump(b) ? getnum(b) : bigp(b) ? g_big_low(b) : box_get(b);
+ intptr_t ia = aarr ? 0 : fixp(a) ? getnum(a) : bigp(a) ? g_big_low(a) : box_get(a),
+          ib = barr ? 0 : fixp(b) ? getnum(b) : bigp(b) ? g_big_low(b) : box_get(b);
  bool abig = !aarr && bigp(a), bbig = !barr && bigp(b);   // at most one (the other is an array)
  int asign = abig ? (((struct g_big*) a)->slen < 0 ? -1 : 1) : 0;
  int bsign = bbig ? (((struct g_big*) b)->slen < 0 ? -1 : 1) : 0;
@@ -4697,7 +4701,7 @@ g_vm(g_vm_vmap2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
 // the result value, or nil for a non-numeric / complex operand (deferred).
 static word obin_elem(struct g **fp, int op, word a, word b) {
  if (op >= VOP_LT) {                            // comparison -> 1 / nil, no allocation
-  if (!ISNUM(a) || !ISNUM(b)) return nil;       // cplxp not in ISNUM -> unordered -> nil
+  if (!ISNUM(a) || !ISNUM(b)) return nil;       // Cp not in ISNUM -> unordered -> nil
   intptr_t t = (flop(a) || flop(b)) ? vcmp_flo(op, TOFLO(a), TOFLO(b))
              : (bigp(a) || bigp(b)) ? vcmp_int(op, g_big_cmp(a, b), 0)
                                     : vcmp_int(op, TOINT(a), TOINT(b));
@@ -4850,10 +4854,10 @@ static struct g *ored(struct g *f, int kind) {
 // (re, im) of an operand for the complex lane / equality: a complex contributes
 // its two parts; a real number contributes (value, 0). TOFLO widens a fixnum /
 // float box / wide-int box / bignum -- a bignum narrows to double here, since
-// complex is a floating domain (decision 5). Caller guarantees x is cplxp or
+// complex is a floating domain (decision 5). Caller guarantees x is Cp or
 // ISNUM. The &out params stay inside g_noinline callers, off the VM tail call.
 static g_inline void cplx_parts(word x, g_flo_t *re, g_flo_t *im) {
- if (cplxp(x)) *re = cplx_re(x), *im = cplx_im(x);
+ if (Cp(x)) *re = cplx_re(x), *im = cplx_im(x);
  else *re = TOFLO(x), *im = 0; }
 
 // Fill the rank-0 complex box v with a `vop` b. All the &-taking lives in this
@@ -4876,7 +4880,7 @@ static g_noinline void cplx_fill(struct g_tuple *v, word a, word b, int vop) {
 // and box are in the body (no &local), the math is in cplx_fill.
 g_vm(g_vm_cplx_bin, int vop) {
  word a = Sp[0], b = Sp[1];
- if (!(cplxp(a) || ISNUM(a)) || !(cplxp(b) || ISNUM(b)) || vop > VOP_QUOT)
+ if (!(Cp(a) || ISNUM(a)) || !(Cp(b) || ISNUM(b)) || vop > VOP_QUOT)
   return *++Sp = nil, Ip++, Continue();
  Have(CPLX_REQ);
  a = Sp[0], b = Sp[1];                              // re-read post-Have
@@ -4902,8 +4906,8 @@ static g_noinline void cplx_pow_fill(struct g_tuple *v, word wbase, word zexp) {
 // the real/array lanes (g_vm_math2 -> real pow, or vmap2 elementwise over arrays).
 g_vm(g_vm_pow) {
  word a = Sp[0], b = Sp[1];
- if (cplxp(a) || cplxp(b)) {
-  if (!(cplxp(a) || ISNUM(a)) || !(cplxp(b) || ISNUM(b)))
+ if (Cp(a) || Cp(b)) {
+  if (!(Cp(a) || ISNUM(a)) || !(Cp(b) || ISNUM(b)))
    return *++Sp = nil, Ip++, Continue();
   Have(CPLX_REQ);
   a = Sp[0], b = Sp[1];                              // re-read post-Have
@@ -4924,21 +4928,21 @@ g_vm(g_vm_cplx) {
  cplx_put(v, re, im);
  return *++Sp = word(v), Ip++, Continue(); }
 
-// (cplxp x): is x a complex scalar?
-op11(g_vm_cplxp, cplxp(Sp[0]) ? putnum(1) : nil)
+// (Cp x): is x a complex scalar?
+op11(g_vm_Cp, Cp(Sp[0]) ? putnum(1) : nil)
 
 // (re z) / (im z): real / imaginary part as a rank-0 float box. On a real
 // number, re is the number itself and im is 0; on a non-number, nil.
 g_vm(g_vm_re) {
  word a = Sp[0], _res;
- if (cplxp(a)) { g_flo_t re = cplx_re(a); Have(BOX_REQ); EMIT_FLO(re);
+ if (Cp(a)) { g_flo_t re = cplx_re(a); Have(BOX_REQ); EMIT_FLO(re);
   return Sp[0] = _res, Ip++, Continue(); }
  if (ISNUM(a)) return Ip++, Continue();            // re of a real is itself
  return Sp[0] = nil, Ip++, Continue(); }
 
 g_vm(g_vm_im) {
  word a = Sp[0], _res;
- if (cplxp(a)) { g_flo_t im = cplx_im(a); Have(BOX_REQ); EMIT_FLO(im);
+ if (Cp(a)) { g_flo_t im = cplx_im(a); Have(BOX_REQ); EMIT_FLO(im);
   return Sp[0] = _res, Ip++, Continue(); }
  if (ISNUM(a)) return Sp[0] = putnum(0), Ip++, Continue();   // im of a real is 0
  return Sp[0] = nil, Ip++, Continue(); }
@@ -4946,7 +4950,7 @@ g_vm(g_vm_im) {
 // (conj z): complex conjugate (re, -im). On a real number, the number itself.
 g_vm(g_vm_conj) {
  word a = Sp[0];
- if (cplxp(a)) { g_flo_t re = cplx_re(a), im = cplx_im(a);
+ if (Cp(a)) { g_flo_t re = cplx_re(a), im = cplx_im(a);
   Have(CPLX_REQ);
   struct g_tuple *v = ini_scalar((struct g_tuple*) Hp, g_C); Hp += CPLX_REQ;
   cplx_put(v, re, -im);
@@ -4962,9 +4966,9 @@ g_vm(g_vm_conj) {
 // arith INT_MIN/-1 edge.
 g_vm(g_vm_abs) {
  word a = Sp[0], _res;
- if (cplxp(a)) { g_flo_t re = cplx_re(a), im = cplx_im(a), m = g_sqrt(re * re + im * im);
+ if (Cp(a)) { g_flo_t re = cplx_re(a), im = cplx_im(a), m = g_sqrt(re * re + im * im);
   Have(BOX_REQ); EMIT_FLO(m); return Sp[0] = _res, Ip++, Continue(); }
- if (nump(a)) { intptr_t n = getnum(a);
+ if (fixp(a)) { intptr_t n = getnum(a);
   Have(BOX_REQ); EMIT_INT(n < 0 ? (intptr_t) (0 - (uintptr_t) n) : n);
   return Sp[0] = _res, Ip++, Continue(); }
  if (flop(a)) { g_flo_t v = flo_get(a); if (v < 0) v = -v;
@@ -4993,7 +4997,7 @@ g_vm(g_vm_abs) {
 // non-negative and pi for negative; on a non-number, nil.
 g_vm(g_vm_carg) {
  word a = Sp[0], _res;
- if (cplxp(a)) { g_flo_t r = g_atan2(cplx_im(a), cplx_re(a));
+ if (Cp(a)) { g_flo_t r = g_atan2(cplx_im(a), cplx_re(a));
   Have(BOX_REQ); EMIT_FLO(r); return Sp[0] = _res, Ip++, Continue(); }
  if (ISNUM(a)) { g_flo_t r = g_atan2(0, TOFLO(a));
   Have(BOX_REQ); EMIT_FLO(r); return Sp[0] = _res, Ip++, Continue(); }

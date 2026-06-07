@@ -1,5 +1,5 @@
 ; step 7: complex arithmetic.
-; - a complex is a rank-0 scalar (cplxp), the widest numeric tier: complex >
+; - a complex is a rank-0 scalar (Cp), the widest numeric tier: complex >
 ;   float > int/bignum. (C re im) builds one; `i` = (C 0 1) is the unit.
 ; - + - * / promote a real operand to (r, 0); % is undefined (-> nil).
 ; - sticky: never demotes to a real, even when im is 0 (eql-distinct keys).
@@ -25,10 +25,10 @@
  (= (+ 2 (* 3 i)) (C 2 3))              ; 2+3i built through the arith lanes
 
  ; --- sticky: a real-valued complex stays complex (distinct from the real) ---
- (cplxp (C 2 0))
- (cplxp i)
- (nilp (cplxp 5))
- (nilp (cplxp 5.0))
+ (Cp (C 2 0))
+ (Cp i)
+ (nilp (Cp 5))
+ (nilp (Cp 5.0))
 
  ; --- componentwise add / sub; Gaussian mul; div by conjugate ---
  (= (+ (C 1 2) (C 3 4)) (C 4 6))
@@ -48,7 +48,7 @@
  ; --- abs: type-aware. complex -> float magnitude; real stays in its tier ---
  (= 5.0 (abs (C 3 4)))
  (= 13.0 (abs (C -5 12)))
- (= 5 (abs -5))   (nump (abs -5))          ; fixnum abs stays a fixnum
+ (= 5 (abs -5))   (fixp (abs -5))          ; fixnum abs stays a fixnum
  (= 5 (abs 5))
  (= 5.5 (abs -5.5))                        ; float abs stays a float
  (= B100 (abs (- 0 B100)))                 ; bignum abs flips the sign, stays a bignum
@@ -79,7 +79,7 @@
  (nilp (nilp i))
 
  ; --- complex meets bignum: the bignum narrows to double (floating domain) ---
- (cplxp (+ i B100))
+ (Cp (+ i B100))
  (= 1.0 (im (+ i B100)))                   ; imaginary part untouched
  (< 1e29 (re (+ i B100)))                  ; real part ~ 2^100
 

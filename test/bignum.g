@@ -23,19 +23,19 @@
  (= (bpow2 64) 18446744073709551616)
 
  ; --- a bignum is its own tier: not a fixnum, truthy, not falsy, not a pair ---
- (nilp (nump B100))                       ; (nump bignum) is false
+ (nilp (fixp B100))                       ; (fixp bignum) is false
  (? B100 -1 0)                            ; a bignum is truthy
  (nilp (nilp B100))                       ; ...hence not falsy
  (atomp B100)
 
  ; --- canonical demotion: shrinking results fall back to the smallest tier ---
  (= 0 (- F25 F25))
- (nump (- F25 F25))                       ; demoted all the way to a fixnum
+ (fixp (- F25 F25))                       ; demoted all the way to a fixnum
  (= 25 (/ F25 F24))
- (nump (/ F25 F24))
+ (fixp (/ F25 F24))
  (= F24 (/ F25 25))
  (= 1 (/ B100 B100))
- (nump (/ B100 B100))
+ (fixp (/ B100 B100))
 
  ; --- divmod identities: a == (a/b)*b + a%b ---
  (= B100 (+ (* (/ B100 1000000007) 1000000007) (mod B100 1000000007)))
@@ -77,7 +77,7 @@
  (< B100 1e40)
  (> B100 1e20)
  (= 0 (* B100 0))                         ; * fixnum 0 -> exact 0
- (nump (* B100 0))
+ (fixp (* B100 0))
 
  ; --- printer round-trip (base 10, with sign) ---
  (= "1267650600228229401496703205376" (inspect B100))
@@ -93,7 +93,7 @@
  ; --- prelude ** / gcd / modpow: exact across the tower via * / % ---
  ; (`**` is exact-integer power; the float `pow` bif is tested in math.g)
  (= 8 (** 2 3))                           ; small ints stay fixnums
- (nump (** 2 3))                          ; ...and stay integers (not float pow)
+ (fixp (** 2 3))                          ; ...and stay integers (not float pow)
  (= B100 (** 2 100))                      ; promotes to a bignum
  (= (bpow2 200) (** 2 200))
  (= 1 (** 999 0))                         ; e <= 0 -> 1

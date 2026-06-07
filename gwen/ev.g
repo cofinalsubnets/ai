@@ -23,9 +23,9 @@
   ; is a heavyweight polymorphic bif (type-dispatch + hash + eql), costing far more
   ; than a few fixnum compares that short-circuit on the common small values
   ; (measured: a hash made boot +13% vs +5% for this chain; frequency-reordering
-  ; the chain was a wash). The nump guard keeps spq from ever hashing a heap value.
+  ; the chain was a wash). The fixp guard keeps spq from ever hashing a heap value.
   (spa i) (? (= i 0) g_vm_arg0 (= i 1) g_vm_arg1 (= i 2) g_vm_arg2 (= i 3) g_vm_arg3 0)
-  (spq v) (? (nump v) (? (= v 0) g_vm_quo0 (= v 1) g_vm_quo1 (= v 2) g_vm_quo2
+  (spq v) (? (fixp v) (? (= v 0) g_vm_quo0 (= v 1) g_vm_quo1 (= v 2) g_vm_quo2
                          (= v 3) g_vm_quo3 (= v -1) g_vm_quom1 (= v -2) g_vm_quom2 0) 0)
   (fuse a o t sp x k n)                          ; a=ap-op o=tap-op(0=none) t=plain-op sp=specializer
    (: tail (k (+ 2 n)) h (peek 0 tail)
@@ -44,7 +44,7 @@
   ; printer (gzput_fn) finds it. entry = cell 1, src = cell 0.
   (k0s c n) (poke -1 g_vm_ret (poke (+ 2 n) (ary c) (lam (+ 3 n))))
   (ary c) (+ (len (c 'arg)) (len (c 'imp)))
-  (pro f) (? (nump f) f (: a (peek 0 f) (?- f
+  (pro f) (? (fixp f) f (: a (peek 0 f) (?- f
    (= a g_vm_unc) (pro (seek -2 (peek 2 f)))
    (= a g_vm_cur) (?- f (= g_vm_unc (peek 2 f))
                           (pro (seek -2 (peek 4 f)))))))
@@ -59,7 +59,7 @@
                (atomp e) (cons -1 e)
                (&& (= (car e) '\) (atomp (cddr e))) (cons -1 (cadr e))
                (cons 0 0))
-   (bake v) (? (nump v) v (list '\ v))           ; value -> source: fixnum bare else quote
+   (bake v) (? (fixp v) v (list '\ v))           ; value -> source: fixnum bare else quote
    ; (op . arity) iff v is a bif. `same` (identity) not `=`: a non-bif global may peek to
    ; a word that looks like a heap pointer, which `=`/eql would deref and crash on.
    (opof v) (? (same g_vm_ret0 (peek 1 v)) (cons (peek 0 v) 1)
@@ -77,13 +77,13 @@
                '< '<= '= '>= '> 'same '** 'gcd 'modpow 'inc 'dec 'abs
                'cons 'car 'cdr 'X 'A 'B 'caar 'cadr 'cdar 'cddr
                'len 'lidx 'assq 'memq 'last 'rev 'cat
-               'nump 'symp 'twop 'hashp 'strp 'nilp 'flop 'cplxp 'atomp
+               'fixp 'symp 'twop 'mapp 'lamp 'strp 'nilp 'flop 'Cp 'atomp
                'ssub 'scat 'string
                're 'im 'conj 'arg 'flo 'C
                'sin 'cos 'tan 'atan 'sqrt 'exp 'log 'atan2 'pow)
    pureset (foldl (\ t s (: v (globals s) (? v (put v -1 t) t))) (hashn 0) names)
    (add t s) (: v (globals s)
-    (? (nump v) t
+    (? (fixp v) t
      (: o (opof v) p (pureset v)
       (? (|| o p)
        (: op (? o (car o) 0)
@@ -121,7 +121,7 @@
     (cons (wx (car bs) bnd) (cons (wx (cadr bs) bnd) (wxc (cddr bs) bnd))))
    ; napof: v is a non-bif multi-arg fn whose arity matches the n>1 call args -> n-ary apply.
    ; `same`-safe peeks (a non-fn value never matches g_vm_cur); mirrors app's old `fa`/`na`.
-   (napof v args) (? (nump v) 0
+   (napof v args) (? (fixp v) 0
     (? (same g_vm_cur (peek 0 v)) (: ar (peek 1 v) (&& (< 1 ar) (= (len args) ar))) 0))
    ; fold: un-shadowed global head -> handler (fold/iop/apx); else mark the call as an apx
    ; node (apx nary head . args) carrying the n-ary-vs-l2r strategy (-1 = n-ary, 0 = l2r).

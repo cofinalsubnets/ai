@@ -2,7 +2,8 @@
 (: t (hasht 1 100 2 200 3 300))
 (assert
  ; the constructor builds a working hash
- (hashp t)
+ (mapp t) (nilp (mapp 5)) (nilp (mapp '(1 2)))   ; mapp: only maps, not fixnums/lists
+ (lamp t) (lamp car) (nilp (lamp 5)) (nilp (lamp 0))  ; lamp: any heap object, not a fixnum/nil
  (= 100 (get 0 1 t))
  (= 200 (get 0 2 t))
  (= 300 (get 0 3 t))
@@ -14,7 +15,7 @@
  (= "%(1 \"hi\")" (inspect (hasht 1 "hi")))
  (strp (inspect t))                             ; multi-entry: just exercise the path
  ; (hash x) exposes the runtime hashing method: a fixnum, equal for eql keys
- (nump (hash 'k))
+ (fixp (hash 'k))
  (= (hash 'k) (hash 'k))
  (= (hash '(1 2)) (hash '(1 2))))
 
@@ -22,10 +23,10 @@
 ; and %() builds a fresh empty hash. Hashes print as %(…), round-tripping via %.
 (: ht %(1 100 2 200 3 300))
 (assert
- (hashp ht)
+ (mapp ht)
  (= 100 (get 0 1 ht))
  (= 300 (get 0 3 ht))
- (hashp %())                                     ; %() -> empty hash
+ (mapp %())                                     ; %() -> empty hash
  (= 50 (get 0 5 (put 5 50 %())))                ; the empty hash is mutable
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (hashk %(1 10 2 20 3 30))))   ; splice builds all entries
  (= "%0" (inspect %()))

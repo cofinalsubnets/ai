@@ -19,7 +19,7 @@
  (= 49 (: p (spawn (\ x (* x x)) 7) (wait p)))
 
  ; spawn returns a positive integer pid (main reserves pid 0).
- (: p (spawn (\ _ 0) 0) _ (wait p) (&& (nump p) (> p 0)))
+ (: p (spawn (\ _ 0) 0) _ (wait p) (&& (fixp p) (> p 0)))
 
  ; pids are monotonically increasing within a VM.
  (: a (spawn (\ x x) 0)
