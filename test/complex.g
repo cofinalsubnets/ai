@@ -64,9 +64,12 @@
  (nilp (< i 1))   (nilp (> i 1))   (nilp (<= i 1))   (nilp (>= i 1))
  (nilp (< 1 i))   (nilp (<= (cplx 1 1) (cplx 2 2)))
 
- ; --- % is undefined on complex; libm fns are real-domain (complex deferred) ---
+ ; --- % is undefined on complex; sin/sqrt/atan2 stay real-domain (deferred) ---
  (nilp (% i 2))
- (nilp (sin i))   (nilp (sqrt i))   (nilp (pow i 2))   (nilp (atan2 i 1))
+ (nilp (sin i))   (nilp (sqrt i))   (nilp (atan2 i 1))
+ ; pow IS defined on complex: w^z = exp(z Log w). i^2 = -1, i^i = e^(-pi/2) (real)
+ (close -1 (re (pow i 2)))   (close 0 (im (pow i 2)))
+ (close 0.20787957635076193 (re (pow i i)))   (close 0 (im (pow i i)))
 
  ; --- truthiness: a complex zero is falsy, any nonzero part is truthy ---
  (nilp (cplx 0 0))

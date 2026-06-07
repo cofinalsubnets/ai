@@ -1,6 +1,6 @@
 ; prelude.g -- gwen prelude: data + function + macro definitions.
-(: (co f g x) (f (g x))
-   id 1
+(: id 1
+   (co f g x) (f (g x))
    (const x _) x
    (flip f x y) (f y x))
 (: macros (get 0 0 globals))
@@ -63,7 +63,21 @@
      _ (nfa th 0 n)
      _ (poke (+ 3 (* 3 n)) g_vm_ret th) _ (poke (+ 4 (* 3 n)) 1 th)
    (seek 1 th))
-   (num-ap n x) (? (nump x) (** x n) (< n 1) 1 (= n 1) x (numfn n x))
+   (numericp x) (| (nump x) (| (vecp x) (bigp x)))   ; whole tower: fixnum / float box / wide-int box / complex / array / bignum
+   (intp n) (| (nump n) (| (boxp n) (bigp n)))       ; integer-valued numeral (exact ** exponent / composition count)
+   ; x ** n across the whole tower. array exponent -> elementwise pow (broadcasts
+   ; via the vmap2 engine, float result); integer exponent -> exact squaring
+   ; (broadcasts over an array base, complex base via complex *); otherwise pow,
+   ; which carries a complex lane (w^z = exp(z Log w)) and a real lane.
+   (powg x n) (? (arrp n) (pow x n) (intp n) (** x n) (pow x n))
+   ; Church-numeral application generalized across the whole tower. n is the
+   ; operator (the numeral), x the operand. numeric operand -> x ** n. non-numeric
+   ; operand (a function) -> compose floor(|n|) times: (int (abs n)) reduces ANY
+   ; numeral to a non-negative integer count -- a float floors, a complex takes its
+   ; modulus, a vector its L2 norm (all via abs, then int). k<1 -> 1 (the zero
+   ; numeral, == const 1); k=1 -> identity.
+   (num-ap n x) (? (numericp x) (powg x n)
+                   (: k (int (abs n)) (? (< k 1) 1 (= k 1) x (numfn k x))))
    _ (set-numap num-ap))
 (: (map f l) (? (twop l) (cons (f (car l)) (map f (cdr l))))
    (foldl f z l) (? (twop l) (foldl f (f z (car l)) (cdr l)) z)

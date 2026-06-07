@@ -241,6 +241,8 @@ struct g
  *str0(struct g*, uintptr_t);
 g_vm(g_vm_gc, uintptr_t);
 extern g_vm_t *g_data_ap[G_DATA_VT_N]; // per-data-kind apply handlers (kernel/vt.c), indexed by enum q
+extern g_word g_numap;                 // gwen num-ap handler (vm.c); the numeral-apply driver below targets it
+extern union u numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
 g_vm_t g_vm_ap, g_vm_two, g_vm_vec, g_vm_sym, g_vm_hash, g_vm_text, g_vm_big; // sentinels + ap: vt.c & inline predicates
 uintptr_t hash(struct g*, word), g_vec_bytes(struct g_vec*);
 word g_hget(struct g*, word, word, struct g_hash*);

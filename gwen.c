@@ -133,7 +133,8 @@ g_vm_t g_vm_kcall,
  // Step 5a -- typed multi-rank arrays (kernel/arr.c). g_vm_vbin is the shared
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  g_vm_arr, g_vm_arrl, g_vm_arank, g_vm_alen, g_vm_ashape, g_vm_atype,
- g_vm_asum, g_vm_aprod, g_vm_amax, g_vm_amin, g_vm_aall, g_vm_aany;
+ g_vm_asum, g_vm_aprod, g_vm_amax, g_vm_amin, g_vm_aall, g_vm_aany,
+ g_vm_vecp, g_vm_bigp, g_vm_boxp, g_vm_arrp, g_vm_intf;
 // Carry extra operands, so (like g_vm_gc) they are declared apart from the
 // plain g_vm_t list, which fixes the 4-argument handler signature. g_vm_vbin
 // is the elementwise/broadcast binary engine (vop selects the op); g_vm_vmap1
@@ -158,7 +159,7 @@ static g_inline bool symp(word _) { return homp(_) && cell(_)->ap == g_vm_sym; }
 static g_inline bool vecp(word _) { return homp(_) && cell(_)->ap == g_vm_vec; }
 static g_inline bool strp(word _) { return homp(_) && cell(_)->ap == g_vm_text; }
 // Mutable flat byte string. NOT a data_vt kind: its head word is the
-// self-quoting g_vm_buf (like g_vm_port_io for ports), so the GC walks a buf
+// behaves-as-0 g_vm_buf (like g_vm_port_io for ports), so the GC walks a buf
 // as a plain length-2 thread -- [g_vm_buf, backing g_str, terminator] -- and
 // the generic thread scan forwards the embedded string pointer for free; no
 // bespoke evac/copy rule, and the data-sentinel mechanism stays reserved for
@@ -529,7 +530,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
 #define mvm1(n) g_vm(g_vm_##n) { return Ap(g_vm_math1, f, g_##n); }
 #define mvm2(n) g_vm(g_vm_##n) { return Ap(g_vm_math2, f, g_##n); }
 #define m1(_) _(sin) _(cos) _(tan) _(atan) _(sqrt) _(exp) _(log)
-#define m2(_) _(atan2) _(pow)
+#define m2(_) _(atan2)   // pow is hand-written (g_vm_pow, cplx section): it adds a complex lane
 
 
 
@@ -621,6 +622,8 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_asum, "asum", S1(g_vm_asum)) _(bif_aprod, "aprod", S1(g_vm_aprod))\
  _(bif_amax, "amax", S1(g_vm_amax)) _(bif_amin, "amin", S1(g_vm_amin))\
  _(bif_aall, "aall", S1(g_vm_aall)) _(bif_aany, "aany", S1(g_vm_aany))\
+ _(bif_vecp, "vecp", S1(g_vm_vecp)) _(bif_bigp, "bigp", S1(g_vm_bigp)) _(bif_boxp, "boxp", S1(g_vm_boxp))\
+ _(bif_arrp, "arrp", S1(g_vm_arrp)) _(bif_intf, "int", S1(g_vm_intf))\
  _(bif_symp, "symp", S1(g_vm_symp)) _(bif_hashp, "hashp", S1(g_vm_hashp)) _(bif_nump, "nump", S1(g_vm_nump))\
  _(bif_nilp, "nilp", S1(g_vm_nilp)) _(bif_ev, "ev", S1(g_vm_eval))\
  _(bif_callk, "call_cc", S1(g_vm_callk)) _(bif_yield, "yield", S1(g_vm_yield_bif)) \
@@ -1556,7 +1559,7 @@ g_vm(g_vm_set_numap) { g_numap = Sp[0]; return Ip++, Continue(); }
 static g_vm(numap_swap) {
  word t = Sp[0]; Sp[0] = Sp[1], Sp[1] = t;
  return Ap(g_vm_ap, f); }
-static union u numap_drive[] = { {g_vm_ap}, {.ap = numap_swap}, {.ap = g_vm_ret0} };
+union u numap_drive[] = { {g_vm_ap}, {.ap = numap_swap}, {.ap = g_vm_ret0} };
 static g_vm(g_vm_numap) {
  Have(2);
  word n = Sp[1], x = Sp[0], *dst = Sp - 2, ret = word(Ip + 1);
@@ -1841,10 +1844,11 @@ g_vm(g_vm_quote) {
  Ip += 2;
  return Continue(); }
 
+// A port has no function meaning either: applying it behaves as 0 (yields 1), like
+// a buf (byte-identical body, kept distinct by g_noicf -- see g_vm_buf).
 g_vm(g_vm_port_io) {
-  word x = word(Ip);
   Ip = cell(*++Sp);
-  *Sp = x;
+  *Sp = putnum(1);
   return Continue(); }
 
 // push a value from the stack
@@ -3117,14 +3121,13 @@ g_vm(g_vm_scat) {
   *++Sp = word(z); }
  return Ip++, Continue(); }
 
-// buf self-quotes when applied -- its address is the kind tag, exactly like
-// g_vm_port_io for ports. Body byte-identical to g_vm_port_io; g_noicf (on
-// every g_vm) keeps the two distinct so bufp and iop never collide. NOT a
-// data_vt sentinel, so the GC copies a buf via the generic thread path and the
-// cheney scan forwards its backing-string pointer -- no bespoke evac/copy.
+// A buf has no function meaning, so applying it behaves as 0 (yields 1, the const-1
+// identity numeral) -- like every structureless value. Its address is still the
+// kind tag: g_noicf (on every g_vm) keeps this byte-identical to g_vm_port_io so
+// bufp and iop never collide. NOT a data_vt sentinel, so the GC copies a buf via the
+// generic thread path and the cheney scan forwards its backing-string pointer.
 g_vm(g_vm_buf) {
- word x = word(Ip);
- return Ip = cell(*++Sp), *Sp = x, Continue(); }
+ return Ip = cell(*++Sp), *Sp = putnum(1), Continue(); }
 
 // (bufnew n) — allocate a zeroed n-byte mutable buf (n<0 / non-numeric -> 0).
 // Two heap objects under one Have (so no GC sees a half-built buf): the
@@ -3216,6 +3219,13 @@ g_noinline struct g_atom *intern_checked(struct g *v, struct g_str *b) {
   y = i < 0 ? &z->l : &z->r; } }
 
 op11(g_vm_symp, symp(Sp[0]) ? putnum(1) : nil)
+op11(g_vm_vecp, vecp(Sp[0]) ? putnum(1) : nil)
+op11(g_vm_bigp, bigp(Sp[0]) ? putnum(1) : nil)
+op11(g_vm_boxp, boxp(Sp[0]) ? putnum(1) : nil)
+op11(g_vm_arrp, arrp(Sp[0]) ? putnum(1) : nil)
+// (int x): truncate a float scalar to a fixnum; other numbers pass through. Used by
+// num-ap to get an integer composition count from a non-integer numeral operator.
+op11(g_vm_intf, flop(Sp[0]) ? putnum((intptr_t) flo_get(Sp[0])) : Sp[0])
 
 // ============================================================================
 // pair
@@ -4364,6 +4374,34 @@ g_vm(g_vm_cplx_bin, int vop) {
  cplx_fill(v, a, b, vop);
  return *++Sp = word(v), Ip++, Continue(); }
 
+// Fill complex box v with w ** z via the principal branch: w^z = exp(z * Log w),
+// Log w = ln|w| + i*arg w. A real operand promotes to (r, 0) (cplx_parts). w == 0
+// falls out as the IEEE limit (exp(-inf) -> 0 for Re z > 0), same domain stance as
+// real pow. &-locals stay in this g_noinline helper, off g_vm_pow's tail call.
+static g_noinline void cplx_pow_fill(struct g_vec *v, word wbase, word zexp) {
+ g_flo_t wr, wi, zr, zi;
+ cplx_parts(wbase, &wr, &wi); cplx_parts(zexp, &zr, &zi);
+ g_flo_t lr = (g_flo_t) 0.5 * g_log(wr * wr + wi * wi),    // ln|w|
+         li = g_atan2(wi, wr);                             // arg w
+ g_flo_t pr = zr * lr - zi * li, pi = zr * li + zi * lr,   // z * Log w
+         e = g_exp(pr);
+ cplx_put(v, e * g_cos(pi), e * g_sin(pi)); }
+
+// (pow b e) = b ** e. Complex base or exponent -> the complex lane above; otherwise
+// the real/array lanes (g_vm_math2 -> real pow, or vmap2 elementwise over arrays).
+g_vm(g_vm_pow) {
+ word a = Sp[0], b = Sp[1];
+ if (cplxp(a) || cplxp(b)) {
+  if (!(cplxp(a) || ISNUM(a)) || !(cplxp(b) || ISNUM(b)))
+   return *++Sp = nil, Ip++, Continue();
+  Have(CPLX_REQ);
+  a = Sp[0], b = Sp[1];                              // re-read post-Have
+  struct g_vec *v = ini_scalar((struct g_vec*) Hp, G_VT_CPLX);
+  Hp += CPLX_REQ;
+  cplx_pow_fill(v, a, b);
+  return *++Sp = word(v), Ip++, Continue(); }
+ return Ap(g_vm_math2, f, g_pow); }
+
 // (cplx re im): build a complex from two real numbers. Non-numeric arg -> nil.
 g_vm(g_vm_cplx) {
  word a = Sp[0], b = Sp[1];
@@ -4431,6 +4469,11 @@ g_vm(g_vm_abs) {
   struct g_big *y = (struct g_big*) Hp; Hp += b2w(bytes);
   memcpy(y, x, bytes); y->slen = -x->slen;           // flip the sign
   return Sp[0] = word(y), Ip++, Continue(); }
+ if (arrp(a)) {                                       // vector -> scalar: the Euclidean (L2) norm
+  struct g_vec *v = vec(a); uintptr_t i, n = 1;       // sqrt(sum of squares) -- the same magnitude
+  for (i = 0; i < v->rank; i++) n *= v->shape[i];     // abs gives a complex (its 2-vector modulus)
+  g_flo_t s = 0; for (i = 0; i < n; i++) { g_flo_t e = vec_get_flo(v, i); s += e * e; }
+  Have(BOX_REQ); EMIT_FLO(g_sqrt(s)); return Sp[0] = _res, Ip++, Continue(); }
  return Sp[0] = nil, Ip++, Continue(); }
 
 // (arg z): phase angle atan2(im, re) as a float. On a real number this is 0 for

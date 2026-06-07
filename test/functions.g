@@ -13,10 +13,31 @@
  (= 2 (1 2))                                  ; (1 2) = 2 ** 1
  (= 1 (2 1))                                  ; (2 1) = 1 ** 2
  (= 9 ((\ f n (f n)) 2 3))                    ; (2 3) = 3 ** 2
- (= 'a ('a 'b 'c 'd))                         ; symbols still self-quote when applied
- (= 'a ((\ a b c d (a b c d)) 'a 'b 'c 'd))
+ (= 97 ('abc 0))                              ; applying a symbol indexes its name string ('a)
+ (= 99 ('abc 2))                              ; ('c)
+ (= 1 ('abc 9))                               ; out of range -> act same as 0 ("" k == k**0 == 1)
+ (= 1 ('abc 'x))                              ; non-numeric key -> same as 0
+ (= 1 ((gensym 0) 5))                         ; anonymous gensym has no name -> act same as 0
  (= 8 (3 2))                                  ; (3 2) = 2 ** 3
  (= 13 ((3 (+ 1)) 10)))                       ; non-numeric operand -> (+ 1) composed 3 times on 10
+; the whole numeric tower is a Church numeral, not just fixnums (vt.c data_num_apply
+; routes float/box/complex/array/bignum operators through num-ap, like the odd-tag
+; fixnum path). 0 applied to anything is 1 -- it *is* const-1, the zero numeral.
+(assert
+ (= 8 (3 2.0))                                ; float operand: 2.0 ** 3 = 8.0, = bridges to 8
+ (= 9 (2.0 3))                                ; float operator: 3 ** 2.0 via real pow = 9.0
+ (= 12 ((2.5 (+ 1)) 10))                      ; float operator on a fn: floor(|2.5|)=2 compositions
+ (= 12 (((- 0 2.5) (+ 1)) 10))                ; |n| first: floor(abs(-2.5))=2 too
+ (= 10 ((0 (+ 1)) 10))                        ; (0 f) = 1 = identity numeral -> 10 unchanged
+ (= 1 (0 'anything))                          ; 0 is const-1: (0 x) = 1 for every x
+ (= 1 ((bufnew 4) 'anything))                 ; opaque handles (buf/port) behave as 0 too
+ (aall (= (2 (arrl i64 '(3) '(2 3 4))) (arrl i64 '(3) '(4 9 16))))  ; array operand: elementwise ** broadcast
+ (aall (= ((arrl i64 '(3) '(2 3 4)) 5) (arrl f64 '(3) '(25.0 125.0 625.0))))  ; array OPERATOR: 5 ** [2 3 4] elementwise (vmap2 pow)
+ (= 13 (((arrl i64 '(2) '(2 3)) (+ 1)) 10))   ; array operator on a fn: compose floor(L2 norm |[2 3]|=sqrt13)=3
+ (= 15 (((cplx 3 4) (+ 1)) 10))               ; complex operator on a fn: compose floor(|3+4i|=5)=5
+ (cplxp ((cplx 0 1) 5))                       ; complex operator on a number -> complex pow (5^i), no longer fenced
+ (< (abs (- 1 (abs ((cplx 0 1) 5)))) 0.0001)  ; |5^i| = 1 exactly (w^z = exp(z Log w))
+ (< (abs (im ((cplx 0 1) (cplx 0 1)))) 0.0001)) ; i^i = e^(-pi/2) is real
 ; basic arithmetic
 (: zero? (= 0)
 (assert

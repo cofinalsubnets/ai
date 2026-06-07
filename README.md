@@ -12,7 +12,7 @@ numbers, strings, symbols, lists, etc. act like functions in a (hopefully)
 well-defined way. therefore many expressions that would be meaningless
 in other lisp are well defined and common in gwen, meanwhile certain common
 expressions in other lisp have unexpected meaning in gwen. in particular, an
-equation for function application is `(f x y z) = (((f x) y) z) = (foldl id f (list x y z))`
+equation for function application is `(f x y z) = (((f x) y) z) = (foldl 1 f (list x y z))`
 which implies `(f) = f`, so "thunks" are given (arbitrary) arguments in gwen.
 this is not a meaningless choice: the input value corresponds to the output
 value at the memory level. function/argument evaluation order is unspecified.
@@ -37,10 +37,10 @@ the three basic special forms are:
 | <code>(&#92; x)</code> | `(quote x)` |
 | <code>(&#92; a b c d e)</code> | `(lambda (a) (lambda (b) (lambda (c) (lambda (d) e))))`|
 
-## code example: fizz buzz via church numerals
+## church fizz buzz (code example)
 
 ```
-; define church numerals
+; church numerals
 (: (add a b f x) (a f (b f x))
    (mul a b f) (a (b f))
    (zero a b) b
@@ -52,7 +52,12 @@ the three basic special forms are:
    six (mul two three)
    seven (add one six)
  (assert (= 420 (mul (mul two five) (mul six seven) (+ 1) 0))))
-; equal behavior is built in to the language
+
+; gwen lisp follows this behavior
 (assert (= (3 3 3) 7625597484987))
-; thus an efficient fizz buzz would be
+
+; so fizzbuzz is
+(100
+ (\ n (: _3 (= 0 (% n 3)) _5 (= 0 (% n 5)) (? _3 (? _5  'fizzbuz 'fizz) _5 'buzz)))
+ 1)
 ```
