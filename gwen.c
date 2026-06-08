@@ -698,6 +698,12 @@ static struct g *g_ini_0(struct g*f, uintptr_t len0, void *(*ma)(struct g*, size
    {"err", (word) &g_stderr}, };
   f = g_defn(f, def0, LEN(def0));
   f = g_defn(f, def1, LEN(def1));
+  // Pre-intern the dict keys for the prelude-installed handlers so the apply path can
+  // resolve them lazily (resolve_handler) without allocating in a tail-jump handler.
+  // Idempotent with the prelude's own bindings; the symbols are GC-forwarded in gcg. §3.
+  if (g_ok(f = intern(g_strof(f, "num-ap")))) g_numap_sym = pop1(f);
+  if (g_ok(f = intern(g_strof(f, "scomb"))))  g_scomb_sym = pop1(f);
+  if (g_ok(f = intern(g_strof(f, "bcomb"))))  g_bcomb_sym = pop1(f);
   // Eager-seed the global RNG stream so f->rng is always a valid state tuple (gl0
   // bootstrap included). The seed mixes the clock with the rotated pool address.
   if (g_ok(f = g_have(f, RNG_VEC_REQ))) {
@@ -835,6 +841,8 @@ static g_noinline struct g *gcg(struct g*g, struct g *p1, uintptr_t len1, struct
  for (word i = 0; i < g->end - &g->v0; i++) (&g->v0)[i] = gcp(g, (&g->v0)[i], p0, t0);               // core live variables
  g_numap = gcp(g, g_numap, p0, t0);                                                  // singleton fixnum-apply handler (vm.c)
  g_scomb = gcp(g, g_scomb, p0, t0), g_bcomb = gcp(g, g_bcomb, p0, t0);               // `+`/`*` thread combinators
+ g_numap_sym = gcp(g, g_numap_sym, p0, t0);                                          // pre-interned dict keys for lazy resolve (§3)
+ g_scomb_sym = gcp(g, g_scomb_sym, p0, t0), g_bcomb_sym = gcp(g, g_bcomb_sym, p0, t0);
  for (word n = 0; n < h; n++) g->sp[n] = gcp(g, sp0[n], p0, t0);                     // stack
  for (struct g_r *s = g->root; s; s = s->n) *s->x = gcp(g, *s->x, p0, t0); // C live variables
  while (g->cp < g->hp) (datp(g->cp) ? evac_data : evac_thd)(g, p0, t0);              // cheney algorithm
@@ -1503,9 +1511,23 @@ g_noinline struct g *g_evals_(struct g*f, char const*s) {
 // vm
 // ============================================================================
 // (set-numap fn): install the gwen handler for fixnum-as-function application.
-// Called once from prelude.g; the value stays as the bif's result.
-g_word g_numap;
+// Called once from prelude.g; the value stays as the bif's result. This is now a
+// fast-path cache, not a precondition: resolve_handler below lazily looks the handler
+// up in the global dict on first use if it is not installed, so a numeric application
+// can no longer reach an uninstalled handler and fault. gwen.c §3.
+g_word g_numap, g_numap_sym;
 g_vm(g_vm_set_numap) { g_numap = Sp[0]; return Ip++, Continue(); }
+
+// A valid handler is a non-null even word (a heap closure); an unset 0, nil
+// (=putnum(0)=1, odd), and any fixnum are not. If `cur` isn't valid, resolve `nom`
+// from the global dict and return it (the caller caches into the g_* slot); trap loud
+// if it is genuinely undefined -- a prelude-ordering contract violation -- rather than
+// emit a fault. g_mapget is a read, so no Have is needed in the tail-jump callers.
+static g_inline g_word resolve_handler(struct g *f, g_word cur, g_word nom) {
+ if (cur && lamp(cur)) return cur;
+ cur = g_mapget(f, nil, nom, f->dict);
+ if (!lamp(cur)) __builtin_trap();
+ return cur; }
 
 // Thread (function) combinators for `+` and `*`, installed from the prelude like
 // num-ap. A thread operand takes precedence over every other type, so `+`/`*` of a
@@ -1515,14 +1537,14 @@ g_vm(g_vm_set_numap) { g_numap = Sp[0]; return Ip++, Continue(); }
 // holds the 4-arg add lambda, g_bcomb the 3-arg compose lambda; the C handlers reuse
 // numap_drive to compute the partial (scomb f g) / (bcomb f g) -- itself the new
 // function -- and leave it as the result, resuming at Ip+1.
-g_word g_scomb, g_bcomb;
+g_word g_scomb, g_bcomb, g_scomb_sym, g_bcomb_sym;
 g_vm(g_vm_set_scomb) { g_scomb = Sp[0]; return Ip++, Continue(); }
 g_vm(g_vm_set_bcomb) { g_bcomb = Sp[0]; return Ip++, Continue(); }
 
 // Fixnum-as-function application. A fixnum operator n applied to x is dispatched
 // to the gwen handler in g_numap as (num-ap n x): numeric x -> x**n, a function
-// x -> x iterated n times (Church numerals). prelude.g installs num-ap before any
-// fixnum apply can run (boot itself applies none), so there is no fallback path.
+// x -> x iterated n times (Church numerals). g_numap is resolved lazily on first use
+// (resolve_handler) if the prelude hasn't installed it yet -- no install-order assumption.
 //
 // The driver mirrors the pair driver: with the stack laid out [n, num-ap, x, ret]
 // it applies num-ap to n (a partial), swaps so that partial becomes the operator,
@@ -1547,11 +1569,13 @@ union u numap_drive[] = { {g_vm_ap}, {.ap = numap_swap}, {.ap = g_vm_ret0} };
  return Unpack(f), Ap(self, f); }
 static g_vm(g_vm_numap) {
  NumapHave(g_vm_numap);
+ g_numap = resolve_handler(f, g_numap, g_numap_sym);
  word n = Sp[1], x = Sp[0], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = n, dst[1] = g_numap, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = numap_drive, Continue(); }
 static g_vm(g_vm_numtap) {
  NumapHave(g_vm_numtap);
+ g_numap = resolve_handler(f, g_numap, g_numap_sym);
  word fs = getnum(Ip[1].x), n = Sp[1], x = Sp[0], *dst = &Sp[fs + 2] - 3, ret = Sp[fs + 2];
  dst[0] = n, dst[1] = g_numap, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = numap_drive, Continue(); }
@@ -1563,11 +1587,13 @@ static g_vm(g_vm_numtap) {
 // opcode (a re-runnable instruction), so a plain Have is safe; operands re-read after.
 static g_vm(g_vm_addl) {
  Have(2);
+ g_scomb = resolve_handler(f, g_scomb, g_scomb_sym);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = g_scomb, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = numap_drive, Continue(); }
 static g_vm(g_vm_mull) {
  Have(2);
+ g_bcomb = resolve_handler(f, g_bcomb, g_bcomb_sym);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = g_bcomb, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = numap_drive, Continue(); }
@@ -3140,15 +3166,17 @@ static g_noinline uintptr_t hash_two(struct g *f, word x) {
   if (w == base) return h; } }
 
 // general hashing method...
+struct arib; static uintptr_t shash(struct g *f, word x, struct arib *env);  // α-invariant source hash
 uintptr_t hash(struct g *f, intptr_t x) {
  if (fixp(x)) return rot(x*mix);
  if (!datp(x)) {
    // out-of-pool (static bif): stable distinct address. in-pool: a compiled lambda
-   // parks its source \-expr one cell before the entry (the tag head points there),
-   // a better key than length; else by length. All GC-stable (buckets survive copy).
+   // parks its source \-expr one cell before the entry (the tag head points there) and
+   // hashes it α-invariantly (so the order agrees with `=`'s α-equivalence); else by
+   // length. All GC-stable (buckets survive copy).
    if ((word*) x < ptr(f) || (word*) x >= topof(f)) return rot(x * mix);
    union u *k = cell(x); struct g_tag *tg = ttag(f, k);
-   if (tag_head(tg) < k) return hash(f, k[-1].x);
+   if (tag_head(tg) < k) return shash(f, k[-1].x, 0);
    uintptr_t r = mix;
    for (union u *y = k; y < (union u*) tg; y++) r ^= r * mix;
    return r; }
@@ -4012,10 +4040,83 @@ g_vm(g_vm_randf_next) {
 // ============================================================================
 // eq
 // ============================================================================
+// α-equivalence of two stored lambda source \-exprs. Bound variables (a \ form's
+// leading params -- imports + params, since a closure parks (\ imps… params… body))
+// match by binder position, not name, so (\ x x) and (\ y y) compare equal; free
+// variables match by symbol. `:` binders are not tracked (a sound, conservative
+// incompleteness: a let-rebound name needs the same spelling); a one-operand \ is
+// quote -- compared as data via eqv, never walked for binders.
+struct arib { word la, lb; int na, nb; struct arib *up; };  // binder rib: (p…body) lists + param counts
+static int arib_pos(word s, word l, int n) {                // index of s among the first n of l, else -1
+ for (int i = 0; i < n && twop(l); i++, l = B(l)) if (A(l) == s) return i;
+ return -1; }
+static bool g_isbs(word h) {                                // h is the `\` symbol?
+ struct g_str *n; return symp(h) && (n = sym(h)->nom) && n->len == 1 && n->bytes[0] == '\\'; }
+static bool salpha(struct g *f, word a, word b, struct arib *env) {
+ if (symp(a) || symp(b)) {
+  if (!symp(a) || !symp(b)) return false;
+  for (struct arib *r = env; r; r = r->up) {
+   int ia = arib_pos(a, r->la, r->na), ib = arib_pos(b, r->lb, r->nb);
+   if (ia >= 0 || ib >= 0) return ia == ib; }               // bound at this rib: positions agree
+  return a == b; }                                          // both free: same symbol
+ if (!twop(a) || !twop(b)) return eqv(f, a, b);             // numbers / strings / atoms
+ if (g_isbs(A(a)) && g_isbs(A(b))) {                        // both `\`-headed
+  word pa = B(a), pb = B(b);
+  if (!twop(B(pa)) || !twop(B(pb))) return eqv(f, a, b);    // one-operand \ = quote: data
+  int na = 0, nb = 0;                                       // (\ p1..pn body): params = init, body = last
+  word t = pa;
+  for (; twop(B(t)); t = B(t)) na++;
+  word ba = A(t);
+  for (t = pb; twop(B(t)); t = B(t)) nb++;
+  word bb = A(t);
+  if (na != nb) return false;
+  struct arib r = { pa, pb, na, nb, env };
+  return salpha(f, ba, bb, &r); }
+ return salpha(f, A(a), A(b), env) && salpha(f, B(a), B(b), env); }  // structural: app / ? / :
+// α-invariant hash of a source \-expr, parallel to salpha: a bound variable hashes by its
+// binder coordinate (rib depth, position), a free variable by its symbol code, so α-equal
+// lambdas hash equal and the total order (cmp3, by repr hash) agrees with `=`.
+static uintptr_t shash(struct g *f, word x, struct arib *env) {
+ if (symp(x)) {
+  int d = 0;
+  for (struct arib *r = env; r; r = r->up, d++) {
+   int i = arib_pos(x, r->la, r->na);
+   if (i >= 0) return rot((uintptr_t) (d * 131 + i + 1) * mix); }
+  return sym(x)->code; }
+ if (!twop(x)) return hash(f, x);
+ if (g_isbs(A(x))) {
+  word p = B(x);
+  if (!twop(B(p))) return hash(f, x);                       // one-operand \ = quote: data
+  int n = 0;
+  word t = p;
+  for (; twop(B(t)); t = B(t)) n++;
+  word body = A(t);
+  struct arib r = { p, p, n, n, env };
+  return (mix * (uintptr_t) (n + 7)) ^ (shash(f, body, &r) * mix); }
+ return (mix ^ (shash(f, A(x), env) * mix)) ^ (shash(f, B(x), env) * mix); }
 g_noinline bool eqv(struct g *f, word a, word b) {
  word *base = off_pool(f), *top = base + f->len, *w = base;
+ struct g *c = g_core_of(f);
  for (;;) {
   if (a != b) {
+   // Function values: structural equality of compiled lambdas/closures. A no-capture
+   // lambda parks its source \-expr (fn_src) -> compare those structurally. A closure
+   // is a partial-application chain (fn_partialp) -> compare the base function and each
+   // captured arg pairwise, so (\ y (+ x y))[x=1] != [x=2]. Bifs / source-less / maps /
+   // ports / mixed fall through to identity (a==b already failed -> false).
+   if (lamp(a) && lamp(b) && !datp(a) && !datp(b)) {
+    union u *ka = cell(a), *kb = cell(b);
+    if (fn_partialp(ka) && fn_partialp(kb)) {
+     int na, nb; union u *ba = fn_base(ka, &na), *bb = fn_base(kb, &nb);
+     if (na != nb) return false;
+     if (top - w < 2 * (na + 1)) __builtin_trap();        // worklist overflow / cycle
+     for (int i = 0; i < na; i++) *w++ = fn_arg(ka, i, na), *w++ = fn_arg(kb, i, nb);
+     a = (word) ba, b = (word) bb; continue; }
+    word sa = fn_src(c, ka, a), sb = fn_src(c, kb, b);
+    if (sa && sb && !fn_partialp(ka) && !fn_partialp(kb)) {
+     if (!salpha(f, sa, sb, 0)) return false;             // α-equivalence of source \-exprs
+     a = b; continue; }                                   // equal -> drain worklist
+    return false; }
    if (((a | b) & 1) || !datp(a) || !datp(b) || typ(a) != typ(b)) return false;
    switch (typ(a)) {
     default: return false;

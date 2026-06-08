@@ -70,7 +70,9 @@ out/lib/tests0.h: $t
 ho = out/host
 h_o = $(g_c:$(R)/%.c=$(ho)/%.o)
 # -I$(ho) first so the generated $(ho)/data.h shadows the portable top-level data.h.
-hcc = $(CC) $(g_cflags) -fpic -I$(ho) -I. -Iout/lib
+# -Dg_tco=0: the host gl runs the unified register-passing trampoline (the kernel
+# session is collapsing the g_tco split); gl0 already builds at g_tco=0.
+hcc = $(CC) $(g_cflags) -Dg_tco=0 -fpic -I$(ho) -I. -Iout/lib
 data_ld = data.ld
 ldflags = -Wl,-T,$(data_ld)
 hdata_h = $(ho)/data.h
@@ -210,7 +212,11 @@ ifdef EFI
 kcppflags += -DK_EFI
 endif
 ifdef K_TEST
-kcppflags += -DK_TEST
+# Trampoline (g_tco=0), like gl0/rp2040: the stackless cooperative scheduler needs a
+# single dispatch loop to be reentrant under nested (ev …), which the threaded
+# tail-call path (g_tco=1) is not -- spawn/wait/yield run from the strin→fread→ev
+# runner hang on the TCO path. gl0 runs the identical corpus at g_tco=0, 1812 green.
+kcppflags += -DK_TEST -Dg_tco=0
 endif
 
 ifeq ($(KCC_IS_CLANG),1)

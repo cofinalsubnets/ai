@@ -271,6 +271,7 @@ enum q g_kind(word);
 extern g_vm_t *g_apply_mx[KN][KN];
 extern g_word g_numap;                 // gwen num-ap handler (vm.c); the numeral-apply driver below targets it
 extern g_word g_scomb, g_bcomb;        // `+`/`*` thread combinators (S / compose), installed from the prelude
+extern g_word g_numap_sym, g_scomb_sym, g_bcomb_sym; // their dict keys, pre-interned at init -> lazy resolve (§3)
 extern union u numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
 g_vm_t g_vm_ap, g_vm_two, g_vm_tuple, g_vm_sym, g_vm_str, g_vm_big; // sentinels + ap: data.c & inline predicates
 uintptr_t hash(struct g*, word), g_tuple_bytes(struct g_tuple*);

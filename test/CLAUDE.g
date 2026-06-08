@@ -76,8 +76,8 @@
 ; ORDERED compare < <= > >= : a TOTAL ORDER over ALL values -- cross-kind by the
 ; enum q type lattice the matrix DIAGONAL encodes (number < string < symbol < pair
 ; < lambda, fixnum low), within a kind by value/lexicographic (complex by (re,im),
-; lambda by hash; array operand -> elementwise 0/1 mask). `> >=` reverse `< <=`.
-; `=` is eqv (promotes across tower), `same` is eq (identity). bitwise << >> & | ^
+; lambda by α-invariant repr hash; array operand -> elementwise 0/1 mask). `> >=` reverse `< <=`.
+; `=` is eqv (promotes across tower; FUNCTIONS by α-equivalence + captured values), `same` is eq (identity). bitwise << >> & | ^
 ; (int; complement is (^ x -1)). logical negation is `!` (= the `nilp` bif); != is gone (use !(= ..)).
 (assert
  (= 3 (+ 1 2)) (= 6 (* 2 3)) (= 2.5 (/ 5 2)) (= 2 (// 5 2)) (= 0.5 (/ 1 2)) (= 1 (mod 5 2)) (= 3.5 (+ 1 2.5))
@@ -86,6 +86,20 @@
  (= 3 3.0) !(= 3 4) (< 1 1.5) (>= 3.0 3) !(= 3 4) (same 'a 'a) !(same '(1) '(1))
  (= -2 (^ 1 -1)) (= 15 (| 8 (| 4 (| 2 1)))) (= 16 (>> 64 2)) (= 16 (<< 2 3))
  (< 1 "a") (< "a" 'x) (< 'x '(0)) !(< "a" 1))   ; total order: number < string < sym < pair
+; === FUNCTION equality: `=` on two functions is α + structural -- their source \-exprs are
+; compared α-equivalently (a \ form's leading binders, imports then params, match by POSITION
+; not name; free vars by name) AND their captured values pairwise; `same` stays identity and
+; `<` agrees (the repr hash is α-invariant). η ((\ x (f x)) = f) and β are NOT bridged: a
+; lambda vs its operator / normal form is a representation-crossing edge -- a closure is `lamp`
+; while its operator may be a fixnum -- that stays false (the Wall-2 incompleteness boundary). ===
+(assert
+ (= (\ x x) (\ y y)) (= (\ a b (+ a b)) (\ x y (+ x y)))            ; α: bound vars by position
+ (= (\ x (+ x 1)) (\ x (+ x 1))) !(same (\ x (+ x 1)) (\ x (+ x 1)))  ; structural -- but distinct objects
+ !(= (\ x x) (\ y z)) !(= (\ x (+ x 1)) (\ x (+ x 2)))              ; free != bound ; different body
+ (: g (\ a (\ b (+ a b))) (&& (= (g 1) (g 1)) !(= (g 1) (g 2))))    ; closures: equal iff captures match
+ (= (+ 1) (+ 1))                                                    ; partial applications too
+ !(< (\ x x) (\ y y)) !(< (\ y y) (\ x x))                          ; order agrees with = (α-invariant hash)
+ !(= (\ x (A x)) A))                                                ; η NOT bridged: lambda vs bif (Wall-2)
 ; `+` GENERIC (order-preserving): num add; str/sym concat (num=1 byte; text tower
 ; str<usym<isym lifts a num, mixing demotes); list append. `-` numeric only (nil).
 (assert
