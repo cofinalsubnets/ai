@@ -73,8 +73,8 @@
 (: same? (\ x (= (? (nilp x) 1 0) (? (= 0 (len x)) 1 0)))
 (assert
  (nilp "") (nilp %()) (nilp (bufnew 0)) (nilp @0) (nilp 0) (nilp ())  ; empties/zeros are false
- (not (nilp "x")) (not (nilp %(1 2))) (not (nilp (gensym 0)))         ; present values are true
- (not (nilp A)) (not (nilp out)) (not (nilp (\ x x)))               ; functions/ports too
+ !!"x" !!%(1 2) !!(gensym 0)                                        ; present values are true
+ !!A !!out !!(\ x x)                                                ; functions/ports too
  (same? "") (same? %()) (same? (bufnew 0)) (same? @0) (same? 0)
  (same? "x") (same? %(1 2)) (same? (gensym 0)) (same? A) (same? out)
  (same? ~(0 0)) (same? ~(0.3 0.4)) (same? @(0 0)) (same? @(0.1 0))

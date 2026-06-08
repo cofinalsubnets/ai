@@ -79,7 +79,7 @@
 ; < lambda, fixnum low), within a kind by value/lexicographic (complex by (re,im),
 ; lambda by hash; array operand -> elementwise 0/1 mask). `> >=` reverse `< <=`.
 ; `=` is eqv (promotes across tower), `same` is eq (identity). bitwise << >> & | ^
-; (int; complement is (^ x -1)). logical not is `!` (= `not` = `nilp`); != is gone (use !(= ..)).
+; (int; complement is (^ x -1)). logical negation is `!` (= the `nilp` bif); != is gone (use !(= ..)).
 (assert
  (= 3 (+ 1 2)) (= 6 (* 2 3)) (= 2.5 (/ 5 2)) (= 2 (// 5 2)) (= 0.5 (/ 1 2)) (= 1 (mod 5 2)) (= 3.5 (+ 1 2.5))
  (= 2 (/ 4 2)) (fixp (/ 4 2)) (= -2 (// -5 2))   ; / exact->int, // truncates toward zero

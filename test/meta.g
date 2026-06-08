@@ -2,7 +2,7 @@
  evr '(: ; expression for the evaluator
   (meta_eval x) (?
    (symp x) (\ l (l x))
-   (not (twop x)) (const x)
+   !(twop x) (const x)
    (: x0 (A x) a (B x)
     (? (= x0 'do) (foldl (\ a b l (do (a l) (b l))) 0 (map meta_eval a))
        (= x0 '\) (? (atomp (B a)) (const (A a)) ; one operand: quote

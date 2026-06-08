@@ -6,7 +6,7 @@
   ; the literal "" reads as a real string object, distinct from 0 ...
   (strp "")                                  ; "" is a string
   (nilp "")                                  ; ... but falsy now -- an empty container
-  (not (same "" 0))                          ; truthiness aside, "" is its own object, not 0/nil
+  !(same "" 0)                               ; truthiness aside, "" is its own object, not 0/nil
   (nilp (= "" 0))                            ; "" is not equal to 0
   (nilp (same "" 0))                         ; ... nor identical to it
   (= "" "")                                  ; but all empty strings are equal

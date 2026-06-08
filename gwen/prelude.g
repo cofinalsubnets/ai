@@ -6,7 +6,7 @@
 (: macros (get 0 0 globals))
 (: pi 3.141592653589793
    e 2.718281828459045                          ; Euler's number; exp is (\ x (x e))
-   true 1 false 0 not nilp
+   true 1 false 0
    (atomp x) (nilp (twop x))
    AA (co A A) AB (co A B)
    BA (co B A) BB (co B B))

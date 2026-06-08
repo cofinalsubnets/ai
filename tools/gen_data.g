@@ -97,7 +97,7 @@
       ; called with n/okeq/unit in scope -- not at definition time.
       (? (= n 0)     (die (scat (scat "found no " prefix) "* sections"))
          !(= n N)    (die "wrong number of sentinel sections (does enum q in i.h match?)")
-         (not okeq)  (die "sentinel sections have unequal sizes -- they no longer tile evenly")
+         !okeq       (die "sentinel sections have unequal sizes -- they no longer tile evenly")
          (emit p unit (pow2? unit) (- (bitlen unit) 1)))))
 
 ; --- driver: (B argv) = (data.o [-o out]) --------------------------

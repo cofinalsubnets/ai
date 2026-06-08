@@ -36,7 +36,7 @@
  (= 'nz (: (f x) (? (nilp x) 'z 'nz) (f 5)))        ; truthy e -> alternative
  (= 'z  (: (f x) (? (nilp x) 'z 'nz) (f "")))       ; empty string is falsy
  (= 'nz (: (f x) (? (nilp x) 'z 'nz) (f '(1))))     ; non-empty list is truthy
- (= 'z  (: (f x) (? (not x) 'z 'nz) (f 0)))         ; `not` (= nilp) flips too
+ (= 'z  (: (f x) (? !x 'z 'nz) (f 0)))              ; the `!` sigil reads as (nilp x), flips too
  (= 'c  (: (f x) (? (< 5 x) 'a (nilp x) 'c 'b) (f 0)))  ; final-clause flip inside a chain
  (= 'b  (: (f x) (? (< 5 x) 'a (nilp x) 'c 'b) (f 3)))  ; ... fall-through to the else
  (= 'a  (: (f x) (? (< 5 x) 'a (nilp x) 'c 'b) (f 9)))  ; ... first clause still wins

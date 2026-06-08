@@ -118,10 +118,10 @@
    (wxc bs bnd) (?                                ; cond clauses (ant con ant con ... else)
     (atomp bs) bs
     (atomp (B bs)) (list (wx (A bs) bnd))
-    ; peephole: a FINAL (nilp e)/(not e) test flips its branches, dropping the wrapper --
+    ; peephole: a FINAL (nilp e) test flips its branches, dropping the wrapper --
     ; (.. (nilp e) con else) == (.. e else con), since the cond tests g_false(e), == nilp(e).
     (&& (twop (BB bs)) (atomp (B (BB bs)))                  ; bs is exactly (ant con else)
-        (twop (A bs)) (|| (= (A (A bs)) 'nilp) (= (A (A bs)) 'not))
+        (twop (A bs)) (= (A (A bs)) 'nilp)
         (twop (B (A bs))) (atomp (BB (A bs))) (nilp (memq (A (A bs)) bnd)))
      (X (wx (AB (A bs)) bnd) (X (wx (A (BB bs)) bnd) (list (wx (AB bs) bnd))))
     (X (wx (A bs) bnd) (X (wx (AB bs) bnd) (wxc (BB bs) bnd))))

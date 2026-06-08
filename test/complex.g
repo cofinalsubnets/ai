@@ -159,7 +159,7 @@
 
  ; --- len / nilp: the invariant (nilp x) == (= 0 (len x)) holds here too ---
  (= 0 (len ca-z))   (nilp ca-z)
- (not (nilp ca-v))   (= 6 (len ca-v))             ; ceil(sqrt 30) = 6
+ !!ca-v   (= 6 (len ca-v))                        ; ceil(sqrt 30) = 6
  (= (? (nilp ca-v) 1 0) (? (= 0 (len ca-v)) 1 0))
  (= (? (nilp ca-z) 1 0) (? (= 0 (len ca-z)) 1 0))
 

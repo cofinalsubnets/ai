@@ -11,20 +11,20 @@ a numeric list evaluates to an exponential tower.
 - `(2 f x) = (f (f x))`
 - `(2 3 4) = 4 ** (3 ** 2) = 262144`
 
-reader sigils (prefix operators)
+the core language has three special forms
+- `:` let
+- `\` lambda/quote
+- `?` cond
+
+plus reader sigils (prefix operators)
 - `.` print
 - `'` quote
 - `%` hash literal
 - `@` array literal
 - `$` gensym literal
-- `~` complex literal
-- `#` saturating projection to non-negative fixnum (len on lists/strings/hashes)
+- `~` complex literal: `a + bi = ~(a b)`
+- `#` saturating projection to non-negative fixnum (len on list/string/map)
 - `!` 1 when `#` is 0 else 0
-
-style special forms
-- `:` let
-- `\` lambda
-- `?` cond
 
 ## code examples
 

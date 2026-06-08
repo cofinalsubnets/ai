@@ -142,10 +142,10 @@
 (assert
  (= c (atype oa-z2)) (= c (atype oa-c2)) (= o (atype oa-b2))
  (= 0 (len oa-z2)) (nilp oa-z2)                   ; all-zero object array -> falsy, len 0
- (= 5 (len oa-c2)) (not (nilp oa-c2))             ; one nonzero element -> truthy, ceil(5)
- (not (nilp oa-b2))                               ; a bignum element is truthy
+ (= 5 (len oa-c2)) !!oa-c2                         ; one nonzero element -> truthy, ceil(5)
+ !!oa-b2                                          ; a bignum element is truthy
  (= 0 (len (arr o '(2 2))))                       ; all-nil object array -> len 0
- (not (nilp (array 2 'a 'b)))                     ; symbol elements -> truthy
+ !!(array 2 'a 'b)                                ; symbol elements -> truthy
  ; the defining invariant (nilp x) == (= 0 (len x)) on each:
  (= (? (nilp oa-z2) 1 0) (? (= 0 (len oa-z2)) 1 0))
  (= (? (nilp oa-c2) 1 0) (? (= 0 (len oa-c2)) 1 0))
