@@ -110,7 +110,7 @@ g_vm_t g_vm_kcall,
  // Step 7 -- complex (kernel/cplx.c). g_vm_cplx_bin (declared apart, below) is
  // the arithmetic lane the scalar arith slow paths divert into.
  g_vm_cplx, g_vm_Cp, g_vm_re, g_vm_im, g_vm_conj, g_vm_abs, g_vm_carg,
- g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_bnot, g_vm_ssub,
+ g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
  g_vm_getc,  g_vm_string, g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_same, g_vm_gt,  g_vm_ge,
  g_vm_put, g_vm_hashd,   g_vm_hnew,   g_vm_hashk,  g_vm_hashof,
@@ -129,7 +129,7 @@ g_vm_t g_vm_kcall,
  // Step 5a -- typed multi-rank arrays (kernel/arr.c). g_vm_vbin is the shared
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  g_vm_arr, g_vm_arrl, g_vm_arank, g_vm_alen, g_vm_ashape, g_vm_atype,
- g_vm_asum, g_vm_aprod, g_vm_amax, g_vm_amin, g_vm_aall, g_vm_aany,
+ g_vm_asum, g_vm_aprod, g_vm_amax, g_vm_amin, g_vm_aall,
  g_vm_tupp, g_vm_bigp, g_vm_boxp, g_vm_arrp, g_vm_intf, g_vm_lamp;
 // Carry extra operands, so (like g_vm_gc) they are declared apart from the
 // plain g_vm_t list, which fixes the 4-argument handler signature. g_vm_vbin
@@ -142,6 +142,10 @@ g_vm(g_vm_vmap2, g_flo_t (*)(g_flo_t, g_flo_t));
 // Complex arithmetic lane (kernel/cplx.c): the scalar arith slow paths divert
 // here when either operand is complex; vop selects add/sub/mul/quot (rem -> nil).
 g_vm(g_vm_cplx_bin, int);
+// Complex-array elementwise lane (g_C): g_vm_vbin diverts here when an operand is
+// a packed (re,im) g_C array (or a complex scalar paired with an array). Same
+// numpy broadcast as vbin, complex domain; `=` -> mask, ordering/% -> nil.
+g_vm(g_vm_cbin, int);
 // Object-array elementwise lane (g_O): the broadcast engine g_vm_vbin diverts
 // here when an operand is a g_O array, so each element op runs the promoting
 // scalar dispatch (exact bignum results) instead of the typed raw-C lanes.
@@ -505,6 +509,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
   Pack(f); f = ored(f, kind); \
   if (!g_ok(f)) return gtrap(f); \
   return Unpack(f), Continue(); } \
+ if (tuple(x)->type == g_C) return Sp[0] = nil, Ip++, Continue(); /* complex: unordered */ \
  struct g_tuple *v = tuple(x); \
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i]; \
  if (!n) return Sp[0] = nil, Ip++, Continue(); \
@@ -558,7 +563,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_lt, "<", S2(g_vm_lt))  _(bif_le, "<=", S2(g_vm_le)) _(bif_eq, "=", S2(g_vm_eq))\
  _(bif_ge, ">=", S2(g_vm_ge))  _(bif_gt, ">", S2(g_vm_gt)) \
  _(bif_same, "same", S2(g_vm_same)) \
- _(bif_bnot, "~", S1(g_vm_bnot)) _(bif_bsl, "<<", S2(g_vm_bsl)) _(bif_bsr, ">>", S2(g_vm_bsr))\
+ _(bif_bsl, "<<", S2(g_vm_bsl)) _(bif_bsr, ">>", S2(g_vm_bsr))\
  _(bif_band, "&", S2(g_vm_band)) _(bif_bor, "|", S2(g_vm_bor)) _(bif_bxor, "^", S2(g_vm_bxor))\
  _(bif_cons, "X", S2(g_vm_cons)) _(bif_car, "A", S1(g_vm_car)) _(bif_cdr, "B", S1(g_vm_cdr)) \
  _(bif_ssub, "ssub", S3(g_vm_ssub)) _(bif_scat, "scat", S2(g_vm_scat)) \
@@ -585,7 +590,7 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_atype, "atype", S1(g_vm_atype))\
  _(bif_asum, "asum", S1(g_vm_asum)) _(bif_aprod, "aprod", S1(g_vm_aprod))\
  _(bif_amax, "amax", S1(g_vm_amax)) _(bif_amin, "amin", S1(g_vm_amin))\
- _(bif_aall, "aall", S1(g_vm_aall)) _(bif_aany, "aany", S1(g_vm_aany))\
+ _(bif_aall, "aall", S1(g_vm_aall))\
  _(bif_tupp, "tupp", S1(g_vm_tupp)) _(bif_bigp, "bigp", S1(g_vm_bigp)) _(bif_boxp, "boxp", S1(g_vm_boxp))\
  _(bif_arrp, "arrp", S1(g_vm_arrp)) _(bif_intf, "int", S1(g_vm_intf))\
  _(bif_symp, "symp", S1(g_vm_symp)) _(bif_mapp, "mapp", S1(g_vm_mapp)) _(bif_fixp, "fixp", S1(g_vm_fixp))\
@@ -2192,6 +2197,15 @@ static struct g *gzput_tuple_elem(struct g *f, uintptr_t i) {
   return g_dtoa2(f, tuple_get_flo(v, i));
  return gzputn(f, tuple_get_int(v, i), 10); }
 
+// Print element i of a packed g_C array (at f->sp[0]) as (C re im) -- the same
+// read-back form as a complex scalar. re/im are copied to C locals before any
+// gzputc/g_dtoa2 (which may grow a string port and relocate the array).
+static struct g *gzput_carr_elem(struct g *f, uintptr_t i) {
+ g_flo_t *fp = tuple_data(tuple(f->sp[0]));
+ g_flo_t re = fp[2*i], im = fp[2*i+1];
+ f = gzprintf(f, "(C "); f = g_dtoa2(f, re); f = gzputc(f, ' ');
+ f = g_dtoa2(f, im); return gzputc(f, ')'); }
+
 // element-kind code -> a prelude symbol bound to it, so the printed `arrl` form
 // round-trips: Z prints as the `i64` alias, R as `f64`. `c` only labels the
 // 32-bit RNG state tuple (never a constructible array -- arrl rejects ty > R).
@@ -2211,12 +2225,22 @@ static struct g *gzput_arr(struct g *f, uintptr_t off) {
  struct g_tuple *v = tuple(f->sp[0]);
  uintptr_t rank = v->rank, type = v->type, nelem = 1;
  for (uintptr_t i = 0; i < rank; i++) nelem *= v->shape[i];
- if (rank == 1 && (type == g_Z || type == g_R)) {     // terse rank-1 numeric: @(a b …)
-  if (nelem == 0) return gzputcs(f, "@0");            // empty array prints @0 (reads back via @0/@())
-  f = gzputc(f, '@'); f = gzputc(f, '(');
+ if (rank == 1 && nelem == 0 && (type == g_Z || type == g_R))
+  return gzputcs(f, "@0");                             // empty numeric -> @0 (reads back via @0/@())
+ if (rank == 1 && nelem > 0 && (type == g_Z || type == g_R || type == g_C)) {  // terse rank-1: @(…)
+  f = gzputc(f, '@'); f = gzputc(f, '(');              // a complex elem prints as (C re im)
   for (uintptr_t i = 0; g_ok(f) && i < nelem; i++) {
    if (i) f = gzputc(f, ' ');
-   f = gzput_tuple_elem(f, i); }
+   f = type == g_C ? gzput_carr_elem(f, i) : gzput_tuple_elem(f, i); }
+  return g_ok(f) ? gzputc(f, ')') : f; }
+ if (type == g_C) {                                    // rank>=2 / empty complex: (array '(shape) (C…)…)
+  f = gzprintf(f, "(array '(");                        // array's trailing args are evaluated -> a-type
+  for (uintptr_t i = 0; g_ok(f) && i < rank; i++) {    // infers c, so the (C …) elems pack back exactly
+   if (i) f = gzputc(f, ' ');
+   f = gzputn(f, tuple(f->sp[0])->shape[i], 10); }
+  f = gzputc(f, ')');
+  for (uintptr_t i = 0; g_ok(f) && i < nelem; i++) {
+   f = gzputc(f, ' '); f = gzput_carr_elem(f, i); }
   return g_ok(f) ? gzputc(f, ')') : f; }
  f = gzprintf(f, "(arrl ");                            // explicit: (arrl type '(shape) '(vals))
  for (char const *s = g_vt_names[type]; g_ok(f) && *s; s++) f = gzputc(f, *s);
@@ -2701,6 +2725,7 @@ static struct g *gz_parse(struct g *f, bool multi) {
    case '#':  f = push_wrap(f, "len"); continue;       // #x->(len x): wrap operand in len
    case '@':  f = push_wrap(f, "tuple"); continue;       // @(e …)->(tuple e …) [array], @()->(tuple)
    case '$':  f = push_wrap(f, "gsym"); continue;      // $x->(gsym x)->(gensym 'x): a fresh gensym
+   case '!':  f = push_wrap(f, "nilp"); continue;      // !x->(nilp x): logical not (`!=` is gone, use !(= …))
    case ',':                                            // unquote / unquote-splice
     if (!g_ok(f = zgetc(f))) return f;
     if ((c2 = f->b) == '@') { f = push_wrap(f, "uqs"); continue; }
@@ -2998,6 +3023,11 @@ g_vm(g_vm_get) {
      if (ix < 0 || ix >= (intptr_t) v->shape[a]) { ok = false; break; }
      off = off * v->shape[a] + ix, a++; } }
    if (ok && v->type == g_O) z = tuple_get_obj(v, off);   // object: the slot IS the value
+   else if (ok && v->type == g_C) {                       // packed complex -> a (re,im) box
+    Have(CPLX_REQ); v = tuple(Sp[2]);                      // re-read post-Have
+    g_flo_t *fp = tuple_data(v);
+    struct g_tuple *bx = ini_scalar((struct g_tuple*) Hp, g_C); Hp += CPLX_REQ;
+    cplx_put(bx, fp[2*off], fp[2*off+1]); z = word(bx); }
    else if (ok) { word _res; Have(BOX_REQ); v = tuple(Sp[2]);
     if (v->type >= g_R) EMIT_FLO(tuple_get_flo(v, off));
     else EMIT_INT(tuple_get_int(v, off));
@@ -3131,7 +3161,7 @@ g_vm(g_vm_scat) {
  intptr_t a = Sp[0], b = Sp[1];
  if (!strp(a)) Sp += 1;
  else if (!strp(b)) Sp[1] = a, Sp += 1;
- else if (!(len(str(a)) + len(str(b)))) *++Sp = EmptyString;   // both empty -> singleton
+ else if (a == EmptyString && b == EmptyString) *++Sp = EmptyString;  // both empty -> singleton
  else {
   struct g_str *x = str(a), *y = str(b), *z;
   uintptr_t
@@ -3206,7 +3236,7 @@ bool g_strp(g_word x) { return strp(x); }
 // never interned into the tree and stays unique.
 g_vm(g_vm_intern) {
  if (strp(Sp[0])) {
-  if (!len(str(Sp[0]))) return Sp[0] = EMPTY_SYM, Ip += 1, Continue();
+  if (Sp[0] == EmptyString) return Sp[0] = EMPTY_SYM, Ip += 1, Continue();
   struct g_atom *y;
   Have(Width(struct g_atom));
   Pack(f), y = intern_checked(f, (struct g_str*) f->sp[0]), Unpack(f);
@@ -3218,7 +3248,7 @@ g_vm(g_vm_intern) {
 // that naming SYMBOL as its nom, which marks it uninterned (interned syms have a
 // string nom; see ini_usym). Any other arg yields an anonymous gensym (nom 0).
 g_vm(g_vm_gensym) {
- if (strp(Sp[0]) && !len(str(Sp[0]))) return Sp[0] = EMPTY_SYM, Ip += 1, Continue(); // ""->the empty sym
+ if (Sp[0] == EmptyString) return Sp[0] = EMPTY_SYM, Ip += 1, Continue(); // ""->the empty sym
  Have(2 * Width(struct g_atom));               // room for the wrapper + a fresh intern
  struct g_atom *nom;
  if (strp(Sp[0]))                              // (sym "x"): intern "x" -> the symbol it names
@@ -3321,19 +3351,8 @@ g_vm(g_vm_cons) {
    if (t >= FIX_MIN && t <= FIX_MAX) \
     return *++Sp = putnum(t), Ip++, Continue(); } } \
  return Ap(g_vm_##op##n, f); }
-#define CMP_SLOW(nom, vop, c_op) static g_vm(nom##_slow) {                   \
- word a = Sp[0], b = Sp[1], x = nil;                                   \
- if (arrp(a) || arrp(b)) return Ap(g_vm_vbin, f, vop);                 \
- if (ISNUM(a) && ISNUM(b))                                             \
-  x = ((flop(a) || flop(b)) ? (TOFLO(a) c_op TOFLO(b))                 \
-     : (bigp(a) || bigp(b)) ? (g_big_cmp(a, b) c_op 0)                 \
-                            : (TOINT(a) c_op TOINT(b))) ? putnum(1) : nil; \
- return *++Sp = x, Ip++, Continue(); }
-#define CMP_OP(nom, vop, c_op) CMP_SLOW(nom, vop, c_op) g_vm(nom) {    \
- word a = Sp[0], b = Sp[1];                                           \
- if (__builtin_expect(fixp(a) && fixp(b), 1))                         \
-  return *++Sp = (a c_op b) ? putnum(1) : nil, Ip++, Continue();     \
- return Ap(nom##_slow, f); }
+// the ordered comparisons (< <= > >=) and their total order over all values are
+// defined after vcmp_int/vcmp_flo (the per-op helpers they reuse), by g_vm_vbin.
 #define BIT_SLOW(n, c_op) static g_vm(g_vm_##n##_slow) {               \
  word a = Sp[0], b = Sp[1], _res;                                     \
  if (!(fixp(a) || boxp(a)) || !(fixp(b) || boxp(b)))                  \
@@ -3648,14 +3667,8 @@ g_vm(g_vm_mul) {
 AVM_DIV(quot, /)
 AVM_DIV(rem, %)
 
-// Mixed-numeric ordered comparison, split like the arith handlers so the
-// both-fixnum case is a compact, contiguous fast path: load/test/compare/
-// store/jmp in source order. The slow handler widens to the integer lane
-// (signed compare, valid across boxes) or the float lane (either operand a
-// flop). Non-numeric operands return nil.
-
-CMP_OP(g_vm_lt, VOP_LT, <) CMP_OP(g_vm_le, VOP_LE, <=)
-CMP_OP(g_vm_gt, VOP_GT, >) CMP_OP(g_vm_ge, VOP_GE, >=)
+// The ordered comparisons (g_vm_lt/le/gt/ge) and their total order are defined
+// after vcmp_int/vcmp_flo (the per-op trichotomy helpers), near g_vm_vbin.
 
 // Bitwise and/or/xor: fast both-fixnum tag trick (two odds stay odd under &
 // and |; ^ clears the tag bit so we re-set it). A box operand routes to the
@@ -3671,15 +3684,7 @@ g_vm(g_vm_bor) { word a = Sp[0], b = Sp[1];
 g_vm(g_vm_bxor) { word a = Sp[0], b = Sp[1];
  if (fixp(a) && fixp(b)) return *++Sp = (a ^ b) | 1, Ip++, Continue();
  return Ap(g_vm_bxor_slow, f); }
-
-// ~ : fixnum complement keeps the tag (no allocation); a boxed value is
-// complemented full-width and demoted-or-boxed; a non-integer yields nil.
-g_vm(g_vm_bnot) { word a = Sp[0], _res;
- if (fixp(a)) return Sp[0] = ~a | 1, Ip++, Continue();
- if (!boxp(a)) return Sp[0] = nil, Ip++, Continue();
- Have(BOX_REQ);
- EMIT_INT(~box_get(a));
- return Sp[0] = _res, Ip++, Continue(); }
+// (bitwise complement is `(^ x -1)`; logical not is the `!` reader sigil / `nilp`.)
 
 // >> : arithmetic right shift. A fixnum value only shrinks, so it keeps a
 // non-allocating fast path; a boxed value routes to the slow handler.
@@ -3705,7 +3710,7 @@ g_vm(g_vm_bsl) { word a = Sp[0], b = Sp[1], _res;
 op(g_vm_fixp, 1, oddp(Sp[0]) ? putnum(1) : nil)
 // `nilp`/`not`: the falsy predicate -- the efficient generic form of (= 0 (len x)),
 // via g_nilp, which short-circuits and never materializes len (a pair/sym/fn is truthy
-// with no walk). The single truthiness oracle: `?` (g_vm_cond), nilp, and aall/aany all
+// with no walk). The single truthiness oracle: `?` (g_vm_cond), nilp, and aall all
 // consult g_nilp, so `(? (nilp e) a b)` == `(? e b a)` -- the wev pass drops such a
 // nilp wrapper. Use `(= x 0)` for a literal scalar-zero test.
 op11(g_vm_nilp, g_nilp(Sp[0]) ? putnum(1) : nil)
@@ -3714,7 +3719,9 @@ op11(g_vm_nilp, g_nilp(Sp[0]) ? putnum(1) : nil)
 // Non-numeric arg → nil. TCO-clean (no & escapes).
 static g_vm(g_vm_math1, g_flo_t (*fn)(g_flo_t)) {
  word a = Sp[0];
- if (arrp(a)) return Ap(g_vm_vmap1, f, fn);   // (sin arr) etc. -> float array
+ if (arrp(a)) {                               // (sin arr) etc. -> float array; complex array undefined
+  if (tuple(a)->type == g_C) return Sp[0] = nil, Ip++, Continue();
+  return Ap(g_vm_vmap1, f, fn); }
  if (!ISNUM(a)) return Sp[0] = nil, Ip++, Continue();
  g_flo_t ad = TOFLO(a), rd = fn(ad);
  uintptr_t req = Width(struct g_tuple) + Width(g_flo_t);
@@ -3726,7 +3733,10 @@ static g_vm(g_vm_math1, g_flo_t (*fn)(g_flo_t)) {
 
 static g_vm(g_vm_math2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
  word a = Sp[0], b = Sp[1];
- if (arrp(a) || arrp(b)) return Ap(g_vm_vmap2, f, fn);   // (pow arr ..) etc. -> float array
+ if (arrp(a) || arrp(b)) {                               // (pow arr ..) etc. -> float array
+  if ((arrp(a) && tuple(a)->type == g_C) || (arrp(b) && tuple(b)->type == g_C))
+   return *++Sp = nil, Ip++, Continue();                 // complex array undefined here
+  return Ap(g_vm_vmap2, f, fn); }
  if (!ISNUM(a) || !ISNUM(b)) return
   *++Sp = nil, Ip++, Continue();
  g_flo_t ad = TOFLO(a), bd = TOFLO(b), rd = fn(ad, bd);
@@ -4313,14 +4323,15 @@ struct g *g_big_dec(struct g *f) {
  return f; }
 
 // --- (arr type shape-list): zero-filled array ------------------------------
-// `type` is a fixnum element-type code (i8..f64, named in the prelude); `shape`
-// is a list of non-negative fixnum dimensions (empty -> a rank-0 scalar box).
-// Bad type / negative dim / over-rank -> nil.
+// `type` is a fixnum element-type code (i64/f64/c/o, named in the prelude); `shape`
+// is a list of non-negative fixnum dimensions (empty -> a rank-0 scalar box). A
+// `c` array packs two floats (re,im) per element; zero-fill is 0+0i. Bad type /
+// negative dim / over-rank -> nil.
 g_vm(g_vm_arr) {
  word t = Sp[0], shp = Sp[1];
  if (!fixp(t)) return *++Sp = nil, Ip++, Continue();
  intptr_t ty = getnum(t);
- if (ty < 0 || ty > g_O || ty == g_C) return *++Sp = nil, Ip++, Continue();
+ if (ty < 0 || ty > g_O) return *++Sp = nil, Ip++, Continue();
  uintptr_t rank = 0, nelem = 1;
  for (word l = shp; twop(l); l = B(l)) {
   word d = A(l);
@@ -4345,7 +4356,7 @@ g_vm(g_vm_arrl) {
  word t = Sp[0], shp = Sp[1];                  // vals = Sp[2]
  if (!fixp(t)) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  intptr_t ty = getnum(t);
- if (ty < 0 || ty > g_O || ty == g_C) return Sp[2] = nil, Sp += 2, Ip++, Continue();
+ if (ty < 0 || ty > g_O) return Sp[2] = nil, Sp += 2, Ip++, Continue();
  uintptr_t rank = 0, nelem = 1;
  for (word l = shp; twop(l); l = B(l)) {
   word d = A(l);
@@ -4365,6 +4376,11 @@ g_vm(g_vm_arrl) {
  for (word l = Sp[2]; twop(l) && i < nelem; l = B(l), i++) {
   word e = A(l);
   if (ty == g_O) { tuple_put_obj(v, i, e); continue; }   // store any value verbatim
+  if (ty == g_C) {                                        // pack (re,im): a real -> (r,0)
+   g_flo_t *fp = tuple_data(v);
+   if (Cp(e)) fp[2*i] = cplx_re(e), fp[2*i+1] = cplx_im(e);
+   else if (ISNUM(e)) fp[2*i] = TOFLO(e), fp[2*i+1] = 0;
+   continue; }
   if (!ISNUM(e)) continue;
   if (ty >= g_R) tuple_put_flo(v, i, TOFLO(e));
   else tuple_put_int(v, i, fixp(e) ? (intptr_t) getnum(e)
@@ -4436,6 +4452,15 @@ g_vm(g_vm_asum) {
   Pack(f); f = ored(f, 0);
   if (!g_ok(f)) return gtrap(f);
   return Unpack(f), Continue(); }
+ if (tuple(x)->type == g_C) {                   // complex sum -> a complex box
+  struct g_tuple *v = tuple(x); uintptr_t n = 1;
+  for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
+  g_flo_t *fp = tuple_data(v), sr = 0, si = 0;  // read all parts before Have (no alloc here)
+  for (uintptr_t i = 0; i < n; i++) sr += fp[2*i], si += fp[2*i+1];
+  Have(CPLX_REQ);
+  struct g_tuple *r = ini_scalar((struct g_tuple*) Hp, g_C); Hp += CPLX_REQ;
+  cplx_put(r, sr, si);
+  return Sp[0] = word(r), Ip++, Continue(); }
  struct g_tuple *v = tuple(x);
  uintptr_t n = 1;
  for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
@@ -4459,6 +4484,17 @@ g_vm(g_vm_aprod) {
   Pack(f); f = ored(f, 1);
   if (!g_ok(f)) return gtrap(f);
   return Unpack(f), Continue(); }
+ if (tuple(x)->type == g_C) {                   // complex product -> a complex box
+  struct g_tuple *v = tuple(x); uintptr_t n = 1;
+  for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
+  g_flo_t *fp = tuple_data(v), pr = 1, pi = 0;
+  for (uintptr_t i = 0; i < n; i++) {
+   g_flo_t ar = pr, ai = pi, br = fp[2*i], bi = fp[2*i+1];
+   pr = ar*br - ai*bi; pi = ar*bi + ai*br; }
+  Have(CPLX_REQ);
+  struct g_tuple *r = ini_scalar((struct g_tuple*) Hp, g_C); Hp += CPLX_REQ;
+  cplx_put(r, pr, pi);
+  return Sp[0] = word(r), Ip++, Continue(); }
  struct g_tuple *v = tuple(x);
  uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
  bool fdom = v->type >= g_R; word _res;
@@ -4476,10 +4512,11 @@ g_vm(g_vm_aprod) {
 RED_EXTREME(g_vm_amax, >, 2)
 RED_EXTREME(g_vm_amin, <, 3)
 
-// aall/aany: bool reductions. Scalar -> identity (so (aall 1) = 1, the linchpin
-// of the rank-agnostic compare idiom). Over an array: aall = "no zero element",
-// aany = "some nonzero element" -- the falsy rule lifted to a conjunction/
-// disjunction. Empty array: aall true (vacuous), aany false.
+// aall: the bool conjunction reduction. Scalar -> identity (so (aall 1) = 1, the
+// linchpin of the rank-agnostic compare idiom). Over an array: "no zero element"
+// (the falsy rule lifted to a conjunction); empty array -> true (vacuous). The
+// DISJUNCTION (was `aany`) is just `len`: an array is truthy iff some element is
+// nonzero, i.e. (nilp x) == (= 0 (len x)) -- so `(len x)` replaces `(aany x)`.
 g_vm(g_vm_aall) {
  word x = Sp[0];
  if (!tupp(x)) return Ip++, Continue();
@@ -4489,26 +4526,16 @@ g_vm(g_vm_aall) {
   for (uintptr_t i = 0; i < n; i++)
    if (g_nilp(tuple_get_obj(v, i))) return Sp[0] = nil, Ip++, Continue();
   return Sp[0] = putnum(1), Ip++, Continue(); }
+ if (v->type == g_C) {                         // complex: a 0+0i element fails the conjunction
+  g_flo_t *fp = tuple_data(v);
+  for (uintptr_t i = 0; i < n; i++)
+   if (fp[2*i] == 0 && fp[2*i+1] == 0) return Sp[0] = nil, Ip++, Continue();
+  return Sp[0] = putnum(1), Ip++, Continue(); }
  bool fdom = v->type >= g_R;
  for (uintptr_t i = 0; i < n; i++)
   if (fdom ? tuple_get_flo(v, i) == 0 : tuple_get_int(v, i) == 0)
    return Sp[0] = nil, Ip++, Continue();
  return Sp[0] = putnum(1), Ip++, Continue(); }
-
-g_vm(g_vm_aany) {
- word x = Sp[0];
- if (!tupp(x)) return Ip++, Continue();
- struct g_tuple *v = tuple(x);
- uintptr_t n = 1; for (uintptr_t i = 0; i < v->rank; i++) n *= v->shape[i];
- if (v->type == g_O) {                         // object: a truthy element satisfies the disjunction
-  for (uintptr_t i = 0; i < n; i++)
-   if (!g_nilp(tuple_get_obj(v, i))) return Sp[0] = putnum(1), Ip++, Continue();
-  return Sp[0] = nil, Ip++, Continue(); }
- bool fdom = v->type >= g_R;
- for (uintptr_t i = 0; i < n; i++)
-  if (fdom ? tuple_get_flo(v, i) != 0 : tuple_get_int(v, i) != 0)
-   return Sp[0] = putnum(1), Ip++, Continue();
- return Sp[0] = nil, Ip++, Continue(); }
 
 // --- elementwise monadic math over an array (sin/cos/sqrt/... ) --------------
 // Reached from g_vm_math1 when its operand arrp. Result is a float array
@@ -4559,6 +4586,88 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
   case VOP_LT: return a < b; case VOP_LE: return a <= b;
   case VOP_GT: return a > b; case VOP_GE: return a >= b;
   default: return a == b; } }                   // VOP_EQ
+
+// === ordered comparison: a total order over lisp values ======================
+// `< <= > >=` extend across EVERY kind, not just numbers. The CROSS-kind order is
+// the enum q type lattice (gwen.h) -- fixnum/number LOW, lambda HIGH, the very
+// order the generic-op matrix diagonals encode: number < string < symbol < pair <
+// lambda. (Arrays are the exception: an array operand compares ELEMENTWISE -> a
+// 0/1 mask via g_vm_vbin, never the scalar order.) WITHIN a kind:
+//   numbers  by value across the tower; a real r is the complex (r, 0), so complex
+//            sorts lexicographically by (re, im). IEEE-faithful: NaN is unordered,
+//            so every ordering of it is false.
+//   strings  lexicographic over bytes (a prefix sorts first)
+//   symbols  lexicographic over the name (anonymous == the empty name)
+//   pairs    lexicographic over (car, then cdr), recursively
+//   lambdas  by representation hash (maps/ports/bufs too) -- a GC-stable order
+// ANTISYMMETRY: only `<` and `<=` are implemented; `>` and `>=` REVERSE the
+// operands and reuse them (a > b == b < a), which is also the right NaN behaviour
+// (swap, never negate). A total PREORDER: agrees with `=` (eqv) except where eqv
+// is finer -- distinct same-name uninterned symbols, or hash-colliding lambdas,
+// compare EQUAL in the order but are not `=`.
+// cross-kind rank = the enum q kind, every numeric kind folded to the arith lane
+// (KFix) so fix/box/big/float/complex order by VALUE, not representation. Arrays
+// divert to g_vm_vbin before this, so KArr* never appear. One source of truth:
+// the enum q order itself.
+static g_inline int cmp_rank(word x) { return (ISNUM(x) || Cp(x)) ? KFix : (int) g_kind(x); }
+static g_inline intptr_t bytes_cmp(const char *pa, uintptr_t la, const char *pb, uintptr_t lb) {
+ uintptr_t n = la < lb ? la : lb;
+ int c = n ? memcmp(pa, pb, n) : 0;
+ return c ? (c < 0 ? -1 : 1) : la < lb ? -1 : la > lb ? 1 : 0; }
+static g_inline intptr_t sym_cmp(word a, word b) {          // by name (anon -> "")
+ struct g_str *na = add_name(a), *nb = add_name(b);
+ return bytes_cmp(na ? txt(na) : "", na ? na->len : 0, nb ? txt(nb) : "", nb ? nb->len : 0); }
+// 3-way total-order comparator (-1/0/1); the recursive engine for the pair case.
+// Floats collapse NaN to "equal" here (a structural total order can't carry IEEE
+// unorderedness); the scalar lane below keeps NaN unordered at the top level. hash
+// is alloc-free + GC-stable, so the lambda case is safe to call mid-comparison.
+static intptr_t cmp3(struct g *f, word a, word b) {
+ int ra = cmp_rank(a), rb = cmp_rank(b);
+ if (ra != rb) return ra < rb ? -1 : 1;                    // cross-kind: type lattice
+ switch (ra) {
+  case KFix:                                               // number band, by value
+   if (Cp(a) || Cp(b)) {                                   // complex: (re, im) lexicographic
+    g_flo_t ar = Cp(a) ? cplx_re(a) : TOFLO(a), br = Cp(b) ? cplx_re(b) : TOFLO(b);
+    if (ar != br) return ar < br ? -1 : 1;
+    g_flo_t ai = Cp(a) ? cplx_im(a) : 0, bi = Cp(b) ? cplx_im(b) : 0;
+    return ai < bi ? -1 : ai > bi ? 1 : 0; }
+   if (flop(a) || flop(b)) { g_flo_t av = TOFLO(a), bv = TOFLO(b); return av < bv ? -1 : av > bv ? 1 : 0; }
+   return g_big_cmp(a, b);                                 // exact fix/box/big tower
+  case KString: return bytes_cmp(txt(a), len(a), txt(b), len(b));
+  case KSym:    return sym_cmp(a, b);
+  case KTwo: { intptr_t c = cmp3(f, A(a), A(b)); return c ? c : cmp3(f, B(a), B(b)); }  // car, then cdr
+  default: { uintptr_t ha = hash(f, a), hb = hash(f, b);   // lambda/map/port/buf: by repr hash
+             return ha < hb ? -1 : ha > hb ? 1 : 0; } } }
+// the `<` / `<=` lane (op is VOP_LT or VOP_LE). An array operand -> elementwise
+// mask (g_vm_vbin); a top-level float/complex pair is IEEE-faithful (NaN ->
+// unordered -> false), so e.g. (<= nan nan) is nil.
+static g_vm(g_vm_cmp_ord, int op) {
+ word a = Sp[0], b = Sp[1]; intptr_t r;
+ if (arrp(a) || arrp(b)) return Ap(g_vm_vbin, f, op);      // array -> elementwise
+ int ra = cmp_rank(a), rb = cmp_rank(b);
+ if (ra != rb) r = vcmp_int(op, ra, rb);                   // cross-kind: type lattice
+ else if (ra != KFix) r = vcmp_int(op, cmp3(f, a, b), 0);  // string / sym / pair / lambda
+ else if (Cp(a) || Cp(b)) {                                // complex: lexicographic, per op
+  g_flo_t ar = Cp(a) ? cplx_re(a) : TOFLO(a), br = Cp(b) ? cplx_re(b) : TOFLO(b);
+  r = ar != br ? vcmp_flo(op, ar, br)
+              : vcmp_flo(op, Cp(a) ? cplx_im(a) : 0, Cp(b) ? cplx_im(b) : 0); }
+ else if (flop(a) || flop(b)) r = vcmp_flo(op, TOFLO(a), TOFLO(b));
+ else if (bigp(a) || bigp(b)) r = vcmp_int(op, g_big_cmp(a, b), 0);
+ else r = vcmp_int(op, TOINT(a), TOINT(b));
+ return *++Sp = r ? putnum(1) : nil, Ip++, Continue(); }
+// `<` `<=` -- the implemented side: both-fixnum fast path (tagged order is
+// monotonic), else the lane. `>` `>=` are the other side: reverse the operands and
+// reuse `<` `<=` (a > b == b < a; a >= b == b <= a).
+#define CMP_LT(nom, vop) g_vm(nom) { \
+ word a = Sp[0], b = Sp[1]; \
+ if (__builtin_expect(fixp(a) && fixp(b), 1)) \
+  return *++Sp = vcmp_int(vop, a, b) ? putnum(1) : nil, Ip++, Continue(); \
+ return Ap(g_vm_cmp_ord, f, vop); }
+CMP_LT(g_vm_lt, VOP_LT) CMP_LT(g_vm_le, VOP_LE)
+#undef CMP_LT
+g_vm(g_vm_gt) { word t = Sp[0]; Sp[0] = Sp[1], Sp[1] = t; return Ap(g_vm_lt, f); }  // a > b == b < a
+g_vm(g_vm_ge) { word t = Sp[0]; Sp[0] = Sp[1], Sp[1] = t; return Ap(g_vm_le, f); }  // a >= b == b <= a
+
 // Comparison from a 3-way sign of (lhs - rhs). Used when one operand is a bignum
 // scalar: a bignum is always out of machine-int range (|bignum| > INTPTR_MAX, by
 // canonical demotion), so it orders against any int element by its sign alone --
@@ -4620,6 +4729,13 @@ static g_noinline void vbin_fill(struct g_tuple *r, word a, word b, int op, bool
 g_vm(g_vm_vbin, int op) {
  word a = Sp[0], b = Sp[1];
  bool aarr = arrp(a), barr = arrp(b);
+ // complex lane first: a packed g_C array, or a complex scalar paired with an
+ // array (a complex scalar isn't ISNUM, so it must divert before the gate below).
+ // Mixing g_C with a g_O object array is unsupported (neither reads the other's
+ // element encoding) -- the g_O lane wins there.
+ if (((aarr && tuple(a)->type == g_C) || (barr && tuple(b)->type == g_C) || Cp(a) || Cp(b))
+     && !(aarr && tuple(a)->type == g_O) && !(barr && tuple(b)->type == g_O))
+  return Ap(g_vm_cbin, f, op);
  if (!(aarr || ISNUM(a)) || !(barr || ISNUM(b)))   // each operand: array or scalar
   return *++Sp = nil, Ip++, Continue();
  if ((aarr && tuple(a)->type == g_O) || (barr && tuple(b)->type == g_O))
@@ -4913,6 +5029,86 @@ g_vm(g_vm_cplx_bin, int vop) {
  cplx_fill(v, a, b, vop);
  return *++Sp = word(v), Ip++, Continue(); }
 
+// --- complex-array elementwise lane (g_C) ----------------------------------
+// The complex twin of g_vm_vbin: packed (re,im) numpy broadcast. An array operand
+// is a g_C (packed) array or a real g_Z/g_R array (each element promotes to (v,0));
+// a scalar operand is a complex box or any real number. + - * / use cplx_fill's
+// formulas; `=` writes a g_Z 0/1 mask (componentwise equal); ordering and % are
+// undefined on complex (handled in the wrapper -> nil). The &-taking odometer/
+// stride arrays live in this g_noinline fill so the wrapper keeps its tail call.
+static g_inline void cbin_part(bool isarr, struct g_tuple *v, g_flo_t sre, g_flo_t sim,
+                               uintptr_t o, g_flo_t *re, g_flo_t *im) {
+ if (!isarr) { *re = sre; *im = sim; return; }
+ if (v->type == g_C) { g_flo_t *fp = tuple_data(v); *re = fp[2*o]; *im = fp[2*o+1]; }
+ else { *re = tuple_get_flo(v, o); *im = 0; } }
+
+static g_noinline void cbin_fill(struct g_tuple *r, word a, word b, int op, bool cmp) {
+ uintptr_t R = r->rank, n = 1;
+ for (uintptr_t i = 0; i < R; i++) n *= r->shape[i];
+ bool aarr = arrp(a), barr = arrp(b);
+ struct g_tuple *va = aarr ? tuple(a) : 0, *vb = barr ? tuple(b) : 0;
+ intptr_t ca[G_VEC_MAXRANK], cb[G_VEC_MAXRANK], idx[G_VEC_MAXRANK];
+ for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
+ if (aarr) { intptr_t s = 1;
+  for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
+   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank;
+   ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
+ if (barr) { intptr_t s = 1;
+  for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
+   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank;
+   cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ g_flo_t sar = 0, sai = 0, sbr = 0, sbi = 0;
+ if (!aarr) { if (Cp(a)) sar = cplx_re(a), sai = cplx_im(a); else sar = TOFLO(a); }
+ if (!barr) { if (Cp(b)) sbr = cplx_re(b), sbi = cplx_im(b); else sbr = TOFLO(b); }
+ g_flo_t *rf = cmp ? 0 : tuple_data(r);
+ for (uintptr_t p = 0; p < n; p++) {
+  intptr_t oa = 0, ob = 0;
+  for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
+  g_flo_t ar, ai, br, bi, re, im;
+  cbin_part(aarr, va, sar, sai, oa, &ar, &ai);
+  cbin_part(barr, vb, sbr, sbi, ob, &br, &bi);
+  if (cmp) tuple_put_int(r, p, (ar == br && ai == bi) ? 1 : 0);
+  else {
+   switch (op) {
+    case VOP_SUB: re = ar - br; im = ai - bi; break;
+    case VOP_MUL: re = ar * br - ai * bi; im = ar * bi + ai * br; break;
+    case VOP_QUOT: { g_flo_t d = br * br + bi * bi;
+     re = (ar * br + ai * bi) / d; im = (ai * br - ar * bi) / d; break; }
+    default: re = ar + br; im = ai + bi; }            // VOP_ADD
+   rf[2*p] = re; rf[2*p+1] = im; }
+  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {  // odometer
+   if (++idx[j] < (intptr_t) r->shape[j]) break;
+   idx[j] = 0; } } }
+
+g_vm(g_vm_cbin, int op) {
+ word a = Sp[0], b = Sp[1];
+ bool aarr = arrp(a), barr = arrp(b);
+ // operand: array / complex scalar / real number. % and the orderings are
+ // undefined on complex; only `=` survives among the comparisons (-> a mask).
+ if (!(aarr || Cp(a) || ISNUM(a)) || !(barr || Cp(b) || ISNUM(b))
+     || op == VOP_REM || (op >= VOP_LT && op != VOP_EQ))
+  return *++Sp = nil, Ip++, Continue();
+ bool cmp = op == VOP_EQ;
+ uintptr_t ra = aarr ? tuple(a)->rank : 0, rb = barr ? tuple(b)->rank : 0;
+ uintptr_t R = ra > rb ? ra : rb, n = 1;
+ for (uintptr_t k = 0; k < R; k++) {                  // broadcast shape + conformance, right-aligned
+  uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
+  uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
+  if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
+  n *= da > db ? da : db; }
+ enum g_tuple_type rt = cmp ? g_Z : g_C;              // compare -> i64 mask, else packed complex
+ uintptr_t bytes = sizeof(struct g_tuple) + R * sizeof(word) + n * g_T[rt];
+ Have(b2w(bytes));
+ a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);     // re-read post-Have
+ struct g_tuple *r = (struct g_tuple*) Hp; Hp += b2w(bytes);
+ ini_tuple(r, rt, R);
+ for (uintptr_t k = 0; k < R; k++) {
+  uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
+  uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
+  r->shape[R - 1 - k] = da > db ? da : db; }
+ cbin_fill(r, a, b, op, cmp);
+ return *++Sp = word(r), Ip++, Continue(); }
+
 // Fill complex box v with w ** z via the principal branch: w^z = exp(z * Log w),
 // Log w = ln|w| + i*arg w. A real operand promotes to (r, 0) (cplx_parts). w == 0
 // falls out as the IEEE limit (exp(-inf) -> 0 for Re z > 0), same domain stance as
@@ -5011,7 +5207,9 @@ g_vm(g_vm_abs) {
  if (arrp(a)) {                                       // vector -> scalar: the Euclidean (L2) norm
   struct g_tuple *v = tuple(a); uintptr_t i, n = 1;       // sqrt(sum of squares) -- the same magnitude
   for (i = 0; i < v->rank; i++) n *= v->shape[i];     // abs gives a complex (its 2-vector modulus)
-  g_flo_t s = 0; for (i = 0; i < n; i++) { g_flo_t e = tuple_get_flo(v, i); s += e * e; }
+  g_flo_t s = 0;                                      // a g_C array sums its 2n packed (re,im) floats
+  if (v->type == g_C) { g_flo_t *fp = tuple_data(v); for (i = 0; i < 2*n; i++) s += fp[i] * fp[i]; }
+  else for (i = 0; i < n; i++) { g_flo_t e = tuple_get_flo(v, i); s += e * e; }
   Have(BOX_REQ); EMIT_FLO(g_sqrt(s)); return Sp[0] = _res, Ip++, Continue(); }
  if (mapp(a)) {                                       // table: its key count (so (int (abs t)) == (len t))
   Have(BOX_REQ); EMIT_INT((intptr_t) map_len(a)); return Sp[0] = _res, Ip++, Continue(); }

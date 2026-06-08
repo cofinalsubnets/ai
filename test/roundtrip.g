@@ -29,6 +29,9 @@
  (aall (= (arrl i8 '(2 2) '(1 2 3 4)) (rt (arrl i8 '(2 2) '(1 2 3 4)))))
  (aall (= (arrl f64 '(2) '(1.5 2.5)) (rt (arrl f64 '(2) '(1.5 2.5)))))
  (= (C 2 -3) (rt (C 2 -3)))
+ ; complex arrays round-trip: rank-1 via @((C…)…)->tuple, rank>=2 via (array…) (ca-* from complex.g)
+ (aall (= ca-v (rt ca-v)))
+ (aall (= ca-m (rt ca-m)))
  (= 100 (get 0 1 (rt (hasht 1 100 2 200))))
  (= 200 (get 0 2 (rt (hasht 1 100 2 200))))
  ; functions reconstruct a working function

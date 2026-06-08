@@ -24,7 +24,7 @@
 (: (cstr s o) ((: (f i) (? (= 0 (u8 s i)) (ssub s o i) (f (+ i 1)))) o))
 
 (: (prefix? p s) (= p (ssub s 0 (len p)))
-   (align-up x a) (& (+ x (- a 1)) (~ (- a 1)))
+   (align-up x a) (& (+ x (- a 1)) (^ (- a 1) -1))
    (pow2? n) (&& (< 0 n) (= 0 (& n (- n 1))))
    (bitlen n) ((: (f n k) (? (< 0 n) (f (>> n 1) (+ k 1)) k)) n 0))
 
@@ -96,7 +96,7 @@
       ; the (? ...) is the BODY of this binding block, so it runs when gen is
       ; called with n/okeq/unit in scope -- not at definition time.
       (? (= n 0)     (die (scat (scat "found no " prefix) "* sections"))
-         (!= n N)    (die "wrong number of sentinel sections (does enum q in i.h match?)")
+         !(= n N)    (die "wrong number of sentinel sections (does enum q in i.h match?)")
          (not okeq)  (die "sentinel sections have unequal sizes -- they no longer tile evenly")
          (emit p unit (pow2? unit) (- (bitlen unit) 1)))))
 

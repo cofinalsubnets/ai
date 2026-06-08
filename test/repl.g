@@ -134,18 +134,18 @@
 
      ; --- emptybuf: true iff all four halves are nil ---
      (emptybuf 0 0 0 0)
-     (~ (emptybuf 0 '(1) 0 0))
-     (~ (emptybuf (X '(1) 0) 0 0 0))
-     (~ (emptybuf 0 0 '(1) 0))
-     (~ (emptybuf 0 0 0 (X '(1) 0)))
+     !(emptybuf 0 '(1) 0 0)
+     !(emptybuf (X '(1) 0) 0 0 0)
+     !(emptybuf 0 0 '(1) 0)
+     !(emptybuf 0 0 0 (X '(1) 0))
 
      ; --- parses: true iff parseall yields at least one value ---
      ; "1" (charlist [49]) parses to the integer 1
      (parses 0 (X 49 0) 0 0)
      ; empty buffer doesn't parse to a value
-     (~ (parses 0 0 0 0))
+     !(parses 0 0 0 0)
      ; "(" (unclosed list) returns m -- not twop
-     (~ (parses 0 (X 40 0) 0 0))
+     !(parses 0 (X 40 0) 0 0)
      ; multi-line "(\n)" -- u=["("], current line ")"
      (parses (X (X 40 0) 0) (X 41 0) 0 0)
 
@@ -191,7 +191,7 @@
      ; trailing whitespace OK, empty yields 0
      (= 0 (parseall 0))
      ; unclosed list yields m -- we can detect via twop being false
-     (~ (twop (parseall '(40 49))))
+     !(twop (parseall '(40 49)))
 
      ; --- floats: parse and round-trip via the gwen reader ---
      ; "1.5" parses to (1.5); the value is an actual flo, not a symbol

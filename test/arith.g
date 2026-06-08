@@ -31,8 +31,8 @@
  ; 2^61 is the largest power of two that's still a fixnum; doubling it
  ; overflows the 62-bit tag into a box that holds the exact integer
  ; (which then demotes back to a fixnum once it fits again).
- (~ (fixp (* 2 2305843009213693952)))   ; 2^62: now a box, not a fixnum
- (~ (flop (* 2 2305843009213693952)))   ; ...and integer, not float
+ !(fixp (* 2 2305843009213693952))   ; 2^62: now a box, not a fixnum
+ !(flop (* 2 2305843009213693952))   ; ...and integer, not float
  (= 2305843009213693952 (/ (* 2 2305843009213693952) 2))           ; box / 2 demotes
  (= 2305843009213693952 (- (* 2 2305843009213693952) 2305843009213693952)) ; box - fix demotes
  (fixp (- (* 2 2305843009213693952) 2305843009213693952))          ; ...to a fixnum
@@ -44,13 +44,13 @@
  (flop (/ -1 0))
  (flop (/ 0 0))
  (flop (/ 1.0 0.0))
- (~ (= 0 (/ 1 0)))
+ !(= 0 (/ 1 0))
  ; +inf is greater than every finite double we can write
  (< 1e308 (/ 1 0))
  ; -inf is less than every finite double
  (< (/ -1 0) -1e308)
  ; NaN compares unequal to itself
- (~ (= (/ 0 0) (/ 0 0)))
+ !(= (/ 0 0) (/ 0 0))
 
  ; --- rem via fmod, works on floats and mixed ---
  (= 1.0 (mod 7.0 2.0))
@@ -77,8 +77,8 @@
  (= 3 3)
  (= 3 3.0)
  (= 3.0 3)
- (~ (= 3 4))
- (~ (= 3 3.5))
+ !(= 3 4)
+ !(= 3 3.5)
  (= 1.5 1.5)
 
  ; --- ordered comparison with promotion ---
@@ -86,13 +86,14 @@
  (< 1 1.5)
  (< 1.5 2)
  (< 1.5 2.5)
- (~ (< 2 1))
- (~ (< 1.5 1.0))
+ !(< 2 1)
+ !(< 1.5 1.0)
  (<= 3 3.0)
  (<= 3.0 3)
  (> 2 1.5)
  (>= 3.0 3)
 
- ; --- non-numeric compare → nil ---
- (nilp (< "a" 1))
- (nilp (< 1 "a")))
+ ; --- comparison is a TOTAL ORDER over all values: a number sorts below any
+ ;     string (number < string < sym < pair < lambda); full lattice in matrix.g ---
+ (< 1 "a")
+ !(< "a" 1))

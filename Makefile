@@ -14,9 +14,16 @@ CCACHE ?= $(shell command -v ccache 2>/dev/null)
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench sim
 test: test_host test_gl0
 test_all: test_host test_gl0 test_tools
-test_gl0: host
+# gl0 bakes prelude+ev+repl + the whole test corpus (sed headers) and self-tests
+# BOTH compilers in one run: eval prelude (c0), run the corpus, bootstrap ev.g
+# through c0, run the corpus again via the self-hosted ev. Built with -Dg_tco=0,
+# so this also exercises the non-tail-threaded trampoline dispatch path.
+# stdin is /dev/null: the corpus reads from the baked string, not stdin, but
+# test/io.g exercises the real `in` port (a bare fgetc), which would otherwise
+# block on a tty (the old `cat $t | gl0` fed the test stream in on stdin).
+test_gl0: $(gl0)
 	@echo TEST $(gl0)
-	@cat $t | $(gl0) -l gwen/prelude.$x -l gwen/repl.$x
+	@$(gl0) </dev/null
 test_host: host
 	@echo TEST $m
 	@cat $t | $m
@@ -39,20 +46,28 @@ all: host kernel playdate wasm rp2040
 # #include these and assemble the bootstrap with G_EGG_PRE/POST (gwen.h).
 # Drop a .g into gwen/ and it is picked up automatically -- no rule to edit.
 lib_h = $(patsubst gwen/%.$x,out/lib/%.h,$(wildcard gwen/*.$x))
+# gl0's bootstrap headers: sed-wrapped raw source (a text->C-literal needing no
+# interpreter -- the gwen reader strips the ; comments at read time), since gl0
+# can't lcat the very sources it is assembled from (chicken/egg). cli.g doubles as
+# gl0's CLI arg handler; prelude/ev/egg/repl + the whole concatenated test corpus
+# are baked in so gl0 self-tests both compilers in one run (see main.c). The final
+# gl uses the canonicalized lcat headers from the rule below instead.
+sed_lit = sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/'
+gl0_h = out/lib/cli0.h out/lib/egg0.h out/lib/prelude0.h out/lib/ev0.h out/lib/repl0.h out/lib/tests0.h
 .PHONY: lib
-lib: $(lib_h) out/lib/cli0.h
+lib: $(lib_h) $(gl0_h)
 $(lib_h): out/lib/%.h: gwen/%.$x $(gl0) tools/lcat.$x
 	@mkdir -p out/lib
 	@echo GEN	$@
 	@$(gl0) -l gwen/prelude.$x tools/lcat.$x $< > $@
-# cli.g doubles as gl0's own CLI arg handler, so gl0 can't lcat it (chicken/egg).
-# gl0 #includes the sed-wrapped raw cli0.h below -- a text->literal needing no
-# interpreter (the gwen reader strips the ; comments at read time anyway). The
-# final gl gets the canonicalized lcat cli.h from the rule above.
-out/lib/cli0.h: gwen/cli.$x
+out/lib/%0.h: gwen/%.$x
 	@mkdir -p out/lib
 	@echo GEN	$@
-	@sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' $< > $@
+	@$(sed_lit) $< > $@
+out/lib/tests0.h: $t
+	@mkdir -p out/lib
+	@echo GEN	$@
+	@cat $t | $(sed_lit) > $@
 
 # ====================================================================
 # host (POSIX CLI) build -- outputs under out/host. Was host/Makefile.
@@ -86,14 +101,15 @@ $(ho)/data.o: data.c $(g_h)
 	@mkdir -p $(dir $@)
 	@$(hcc) -c $< -o $@
 
-# Prelude-less bootstrap interpreter, compiled against the fallback top-level
-# data.h (no -I$(ho)) + -DGL_BOOTSTRAP; runs the gwen build tools that generate
-# the lcat headers, so it must need none of those. The one exception is cli0.h
-# (its own CLI arg handler), which sed produces without an interpreter -- hence
-# -Iout/lib. Per-object into $(ho)/0/ so ccache caches each TU.
-gl0_cc = $(CCACHE) $(CC) $(g_cflags) -DGL_BOOTSTRAP -I. -Iout/lib
+# Bootstrap interpreter, compiled against the fallback top-level data.h (no
+# -I$(ho)) + -DGL_BOOTSTRAP -Dg_tco=0 (also exercises the non-threaded trampoline
+# dispatch). Runs the gwen build tools that generate the lcat headers, so it can't
+# depend on those; instead it #includes the sed-wrapped $(gl0_h) (cli0 + the baked
+# prelude/ev/egg/repl + the test corpus), all produced without an interpreter --
+# hence -Iout/lib. Per-object into $(ho)/0/ so ccache caches each TU.
+gl0_cc = $(CCACHE) $(CC) $(g_cflags) -DGL_BOOTSTRAP -Dg_tco=0 -I. -Iout/lib
 gl0_o = $(ho)/0/main.o $(g_c:$(R)/%.c=$(ho)/0/%.o)
-$(ho)/0/main.o: main.c $(g_h) out/lib/cli0.h
+$(ho)/0/main.o: main.c $(g_h) $(gl0_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(gl0_cc) -c $< -o $@

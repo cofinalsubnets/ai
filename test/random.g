@@ -26,13 +26,13 @@
  (= (gfirst 100) (gfirst 100))
 
  ; --- different seeds give different streams ---
- (!= (gfirst 1) (gfirst 2))
- (!= (ffirst 1) (ffirst 2))
+ !(= (gfirst 1) (gfirst 2))
+ !(= (ffirst 1) (ffirst 2))
 
  ; --- functional purity: rand-next does not mutate its input state ---
  (: st (rng-seed 7) a (A (rand-next st)) b (A (rand-next st)) (= a b))
  ; ...and chaining the returned state advances the stream
- (: st (rng-seed 7) p (rand-next st) q (rand-next (B p)) (!= (A p) (A q)))
+ (: st (rng-seed 7) p (rand-next st) q (rand-next (B p)) !(= (A p) (A q)))
  (: st (rng-seed 7) p (rand-next st) (= 4 (alen (B p))))   ; st' is a state tuple
 
  ; --- rng-get / rng-set snapshot + restore reproduces a draw ---

@@ -2,14 +2,13 @@
 (: s0 (gensym 0)
    s1 (gensym 0)
    s2 (gensym 0)
-   (!= a b) (~ (= a b))
- (assert (!= s0 s1)
-         (!= s0 s2)
-         (!= s1 s2)
+ (assert !(= s0 s1)
+         !(= s0 s2)
+         !(= s1 s2)
          (= 'asdf (intern "asdf"))          ; intern: string -> the interned symbol
          (= 'asdf (intern 'asdf))           ; ...identity on any non-string arg
-         (!= 'asdf (gensym "asdf"))         ; gensym str/sym is uninterned: distinct from the interned symbol
-         (!= (gensym "asdf") (gensym "asdf")) ; ...and from each other
+         !(= 'asdf (gensym "asdf"))         ; gensym str/sym is uninterned: distinct from the interned symbol
+         !(= (gensym "asdf") (gensym "asdf")) ; ...and from each other
          (= "asdf" (string (gensym "asdf")))  ; but carries the name -> (string sym) (string arg)
          (= "asdf" (string (gensym 'asdf)))   ; ...and (symbol arg)
          (= "asdf" (string 'asdf))))

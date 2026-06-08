@@ -27,7 +27,7 @@
 ; NUL-terminated ascii at offset o -> string.
 (: (cstr s o) ((: (f i) (? (= 0 (u8 s i)) (ssub s o i) (f (+ i 1)))) o))
 
-(: (align-up x a) (& (+ x (- a 1)) (~ (- a 1)))
+(: (align-up x a) (& (+ x (- a 1)) (^ (- a 1) -1))
    (prefix? p s) (= p (ssub s 0 (len p))))
 
 ; --- writers ---------------------------------------------------------
@@ -100,7 +100,7 @@
          more (collect s (B secs) all)
          (? (&& (= 4 (sec-type sec)) (prefix? ".rela" (sec-name sec)))
             (: tgt (find-sec all (ssub (sec-name sec) 5 (len (sec-name sec))))
-               (? (&& tgt (!= 0 (& (sec-flags tgt) 2)))             ; SHF_ALLOC == 2
+               (? (&& tgt !(= 0 (& (sec-flags tgt) 2)))             ; SHF_ALLOC == 2
                   (cat (relocs-in s (sec-off sec) (/ (sec-size sec) 24) 0) more)
                   more))
             more))
@@ -109,7 +109,7 @@
 ; --- build the PE .reloc blob (one IMAGE_REL_BASED_DIR64 per RVA) ----
 ; Each block: <page RVA u32><block size u32> then u16 entries (type:4|off:12),
 ; padded to a 4-byte multiple with a type-0 (ABSOLUTE) no-op entry.
-(: (pageof r) (& r (~ 4095))
+(: (pageof r) (& r (^ 4095 -1))
    (samepage page lst) (? (&& (twop lst) (= page (pageof (A lst)))) (X (A lst) (samepage page (B lst))))
    (dropsame page lst) (? (&& (twop lst) (= page (pageof (A lst)))) (dropsame page (B lst)) lst))
 
@@ -183,7 +183,7 @@
    text-seg   (? loval la lb)
    data-seg   (? loval lb la)
    _          (? (= 0 (& (get 0 0 text-seg) 2)) 0 (die "first PT_LOAD is writable; section ordering is wrong"))
-   _          (? (!= 0 (& (get 0 0 data-seg) 2)) 0 (die "second PT_LOAD is not writable; section ordering is wrong"))
+   _          (? !(= 0 (& (get 0 0 data-seg) 2)) 0 (die "second PT_LOAD is not writable; section ordering is wrong"))
    text-off   (get 0 1 text-seg)  text-va (get 0 2 text-seg)  text-fsize (get 0 3 text-seg)  text-msize (get 0 4 text-seg)
    data-off   (get 0 1 data-seg)  data-va (get 0 2 data-seg)  data-fsize (get 0 3 data-seg)  data-msize (get 0 4 data-seg)
    _          (? (>= text-va 0x1000) 0 (die "text VA overlaps PE header span"))

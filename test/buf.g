@@ -8,8 +8,8 @@
  ; --- construction + length, and what a buf is NOT ---
  (= 4 (len (bufnew 4)))
  (= 0 (len (bufnew 0)))
- (~ (strp (bufnew 4)))                          ; a buf is not a string
- (~ (fixp (bufnew 4)))                          ; ...nor a number
+ !(strp (bufnew 4))                          ; a buf is not a string
+ !(fixp (bufnew 4))                          ; ...nor a number
 
  ; --- a fresh buf is zeroed ---
  (: b (bufnew 4) (= 0 (+ (get 0 0 b) (get 0 1 b) (get 0 2 b) (get 0 3 b))))
@@ -45,4 +45,4 @@
 
  ; --- equality is by identity (a buf is mutable) ---
  (: b (bufnew 2) (= b b))                       ; a buf equals itself
- (~ (= (bufnew 2) (bufnew 2))))                 ; distinct bufs never compare =
+ !(= (bufnew 2) (bufnew 2)))                 ; distinct bufs never compare =

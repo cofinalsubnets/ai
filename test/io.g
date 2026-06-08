@@ -44,7 +44,7 @@
   (strp (inspect (strin 0)))
   (< 0 (len (inspect (strin 0))))
   ; Each call allocates a fresh port object.
-  (: p (strin 0) q (strin 0) (~ (= p q)))
+  (: p (strin 0) q (strin 0) !(= p q))
 
   ; --- fread: one datum per call from a port. ---
   ; fread returns datum on success, the caller-supplied sentinel `e` on
@@ -83,7 +83,7 @@
 
   ; --- g_status_more cases: fread returns the port itself, distinct from e ---
   ; Unclosed list.
-  (: p (strin '(40)) r (fread p 99) (do (= r p) (~ (= r 99))))
+  (: p (strin '(40)) r (fread p 99) (do (= r p) !(= r 99)))
   ; Unterminated string.
   (: p (strin '(34 97)) (= p (fread p 99)))                ; "\"a"
   ; Dangling quote.
@@ -111,4 +111,4 @@
   ; `read` in the prelude is defined as (fread in) -- a curried fread
   ; bound to the stdin port. Verify the binding is a function (callable
   ; closure), not the raw port or sentinel value.
-  (~ (= read in)))
+  !(= read in))

@@ -19,6 +19,8 @@ g_noinline uintptr_t g_clock(void) {
 
 
 // --- raw terminal mode -----------------------------------------------
+// Only the REPL (full gl) needs it; gl0 is non-interactive (build tool / self-test).
+#ifndef GL_BOOTSTRAP
 static struct termios saved_termios;
 static void restore_termios(void) {
   tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios); }
@@ -33,6 +35,7 @@ static void raw_mode(void) {
   raw.c_cc[VTIME] = 0;
   tcsetattr(STDIN_FILENO, TCSANOW, &raw); }
   // c_oflag is left alone, so '\n' on output still becomes CR-LF.
+#endif
 
 static noreturn g_vm(g_vm_exit) { exit(g_getnum(Sp[0])); }
 // Shared EINTR-retry skeleton for poll-based wait. ms=0 means infinite.
@@ -302,23 +305,43 @@ static union u const
  bif_run[] = {{g_vm_run}, {g_vm_ret0}},
  bif_getenv[] = {{g_vm_getenv}, {g_vm_ret0}};
 
+#ifndef GL_BOOTSTRAP
 static char const
- rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(gensym 0)))",
- // host CLI driver from gwen/cli.g: gl0 takes the sed-wrapped raw text (it can't
- // lcat its own arg handler); the final gl takes the canonicalized lcat header.
- cli[] =
+ rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(gensym 0)))";
+#endif
+// host CLI driver from gwen/cli.g: gl0 takes the sed-wrapped raw text (it can't
+// lcat its own arg handler); the final gl takes the canonicalized lcat header.
+static char const cli[] =
 #ifdef GL_BOOTSTRAP
 #include "cli0.h"
 #else
 #include "cli.h"
 #endif
   ;
+#ifdef GL_BOOTSTRAP
+// gl0 self-test: the whole test corpus, baked in (sed-wrapped), run twice -- once
+// compiled by the C bootstrap compiler (c0), once by the self-hosted ev installed
+// from ev.g -- so one gl0 invocation exercises both compilers (and -Dg_tco=0 makes
+// it the trampoline path). s2cldef installs s2cl (string -> charlist); runner reads
+// the baked corpus (the global `tests`) through a strin port and evals each form via
+// `(ev 'ev r)` -- the `'ev` indirection late-binds to whatever `ev` is now, so the
+// same source drives the c0 pass and (after the egg) the self-hosted pass.
+static char const tests0[] =
+#include "tests0.h"
+ ;
+static char const
+ s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (len s)) (X (get 0 i s) (g (+ 1 i))))) 0))",
+ runner[] = "(: p (strin (s2cl tests))"
+            " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (gensym 0)))";
+#endif
 
 int main(int argc, char const **argv) {
   struct g *f = g_ini();
   bool argp = argc > 1;
+#ifndef GL_BOOTSTRAP
   bool replp = !argp && isatty(STDIN_FILENO);
   if (replp) raw_mode();
+#endif
   char const **av = argp ? argv + 1 : argv;
   int ac = argp ? argc - 1 : argc;
   for (; *av; f = g_strof(f, *av++));
@@ -331,7 +354,29 @@ int main(int argc, char const **argv) {
                         {"getenv", (g_word) bif_getenv},
                         {"argv", g_pop1(f)}, };
     f = g_defn(f, d, LEN(d));
-#ifndef GL_BOOTSTRAP
+#ifdef GL_BOOTSTRAP
+    // gl0: with args, run the build tool (lcat / gen_data) through the CLI driver.
+    // With no args, self-test -- eval prelude+repl and run the baked corpus via c0,
+    // then bootstrap the self-hosted ev (egg) and run the corpus again through it.
+    if (argp) f = g_evals_(f, cli);
+    else {
+      f = g_strof(f, tests0);                          // the baked corpus, as a string
+      struct g_def td[] = {{"tests", g_pop1(f)}};
+      f = g_defn(f, td, LEN(td));
+      f = g_evals_(f,                                  // prelude + repl, compiled by c0
+#include "prelude0.h"
+#include "repl0.h"
+      );
+      f = g_evals_(f, s2cldef);
+      f = g_evals_(f, runner);                         // pass 1: corpus via ev = the c0 bif
+      f = g_evals_(f, "("                              // bootstrap: install the self-hosted ev
+#include "egg0.h"
+        "'("
+#include "prelude0.h"
+#include "ev0.h"
+        "))");
+      f = g_evals_(f, runner); }                       // pass 2: corpus via the self-hosted ev
+#else
     f = g_evals_(f, "("
 #include "egg.h"
         "'("
@@ -340,8 +385,9 @@ int main(int argc, char const **argv) {
         "))"
 #include "repl.h"
     );
+    f = g_evals_(f, argp ? cli : replp ? "(repl 0 0)" : rel);
 #endif
-    f = g_evals_(f, argp ? cli : replp ? "(repl 0 0)" : rel); }
+  }
   switch (g_code_of(f)) {
    default: break;
    case g_status_oom: fprintf(stderr, "# oom@len=%ld\n", (long) g_core_of(f)->len); break; }

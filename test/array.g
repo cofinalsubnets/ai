@@ -75,14 +75,14 @@
 
  ; --- comparison -> 0/1 bool array ---
  (aall (< (arrl i64 '(3) '(1 2 3)) 10))
- (~ (aall (< (arrl i64 '(3) '(1 2 30)) 10)))
- (aany (< (arrl i64 '(3) '(1 20 30)) 10))
- (~ (aany (< (arrl i64 '(3) '(10 20 30)) 5)))
+ !(aall (< (arrl i64 '(3) '(1 2 30)) 10))
+ (len (< (arrl i64 '(3) '(1 20 30)) 10))
+ !(len (< (arrl i64 '(3) '(10 20 30)) 5))
  (aall (= (arrl i8 '(3) '(1 0 1)) (< (arrl i64 '(3) '(1 5 2)) 3)))
  (= i8 (atype (< (arr i64 '(3)) 1)))               ; bool array is i8
  ; whole-array equality is (aall (= a b))
  (aall (= (arrl i64 '(2) '(5 6)) (arrl i64 '(2) '(5 6))))
- (~ (aall (= (arrl i64 '(2) '(5 6)) (arrl i64 '(2) '(5 7)))))
+ !(aall (= (arrl i64 '(2) '(5 6)) (arrl i64 '(2) '(5 7))))
 
  ; --- reductions ---
  (= 60 (asum (arrl i64 '(3) '(10 20 30))))
@@ -92,9 +92,9 @@
  (= 6.0 (asum (arrl f64 '(3) '(1.0 2.0 3.0))))
  (= 21 (asum (arrl i64 '(2 3) '(1 2 3 4 5 6))))    ; reduces over all axes
  (aall (arrl i64 '(3) '(1 2 3)))                   ; no zero element
- (~ (aall (arrl i64 '(3) '(1 0 3))))               ; a zero element
- (aany (arrl i64 '(3) '(0 0 3)))
- (~ (aany (arr i64 '(3))))                         ; all zero
+ !(aall (arrl i64 '(3) '(1 0 3)))               ; a zero element
+ (len (arrl i64 '(3) '(0 0 3)))
+ !(len (arr i64 '(3)))                         ; all zero
 
  ; --- reductions are the identity on a scalar (rank-agnostic idiom) ---
  (= 5 (asum 5))
@@ -102,7 +102,7 @@
  (= 1 (aall 1))
  (= 0 (aall 0))
  (aall (< 1 2))                                    ; scalar: (< 1 2) = 1, (aall 1) = 1
- (~ (aall (< 2 1)))
+ !(aall (< 2 1))
  (aall (< (arrl i64 '(2) '(1 2)) (arrl i64 '(2) '(3 4))))  ; array: same expression
 
  ; --- truthiness is zero-magnitude (L2 norm): a value is false iff |x| == 0 ---
@@ -110,17 +110,17 @@
  (nilp (arr f64 '(2 2)))                ; zero float array -> false
  (nilp (arr i64 '(0)))                  ; empty array -> vacuously false
  (nilp 0.0)                             ; boxed 0.0 -> false (was a truthy wart)
- (~ (nilp 2.5))                         ; nonzero float -> true
- (~ (nilp -5))                          ; negatives are true
- (~ (nilp (+ (arr i64 '(2)) 1)))        ; nonzero array -> true
+ !(nilp 2.5)                         ; nonzero float -> true
+ !(nilp -5)                          ; negatives are true
+ !(nilp (+ (arr i64 '(2)) 1))        ; nonzero array -> true
  (= 1 (? (arr i64 '(3)) 0 1))         ; zero array takes the false arm
  (= 0 (? (+ (arr i64 '(3)) 1) 0 1))    ; nonzero array takes the true arm
  ; a single non-zero component makes the norm non-zero (truthy), per the tower:
- (~ (nilp @(0 0 5)))                    ; one non-zero element -> true
+ !(nilp @(0 0 5))                    ; one non-zero element -> true
  (nilp @(0.0 0.0))                      ; all-zero float tuple -> false
  (nilp (C 0 0))                         ; complex 0+0i (|z|=0) -> false
- (~ (nilp (C 0 1)))                     ; 0+1i (|z|=1) -> true
- (~ (nilp i))                           ; the imaginary unit is truthy
+ !(nilp (C 0 1))                     ; 0+1i (|z|=1) -> true
+ !(nilp i)                           ; the imaginary unit is truthy
 
  ; --- elementwise transcendentals over an array ---
  (aall (= (arrl f64 '(2) '(2.0 3.0)) (sqrt (arrl f64 '(2) '(4.0 9.0)))))

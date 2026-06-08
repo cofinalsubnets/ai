@@ -10,8 +10,8 @@
 
 (assert
  ; --- promotion / demotion boundary ---
- (~ (fixp (<< 1 62)))                 ; 2^62 is boxed, not a fixnum
- (~ (flop (<< 1 62)))                 ; ...integer, not float
+ !(fixp (<< 1 62))                 ; 2^62 is boxed, not a fixnum
+ !(flop (<< 1 62))                 ; ...integer, not float
  (fixp (>> (<< 1 62) 1))              ; 2^62 >> 1 = 2^61 demotes to a fixnum
  (= 2305843009213693952 (>> (<< 1 62) 1))
  (fixp (- (<< 1 62) (<< 1 62)))       ; box - box = 0, a fixnum
@@ -19,22 +19,22 @@
  ; -2^62 is exactly FIX_MIN, so it stays a fixnum (the tagged range is
  ; asymmetric: [-2^62, 2^62-1]); one less overflows into a box
  (fixp (- 0 (<< 1 62)))
- (~ (fixp (- (- 0 (<< 1 62)) 1)))
+ !(fixp (- (- 0 (<< 1 62)) 1))
 
  ; --- two equal boxes compare = (rides eqv's tuple arm); a box never = a fixnum
  (= (<< 1 62) (<< 1 62))
  (= (* 2200000000 2200000000) (* 2200000000 2200000000))
- (~ (= (<< 1 62) 0))
+ !(= (<< 1 62) 0)
 
  ; --- bitwise identities reduce a box back to a small fixnum ---
  (= 0  (^ (<< 1 62) (<< 1 62)))       ; X ^ X = 0
- (= -1 (| (~ (<< 1 62)) (<< 1 62)))   ; ~X | X = -1
- (= 0  (& (~ (<< 1 62)) (<< 1 62)))   ; ~X & X = 0
- (= -1 (^ (~ (<< 1 62)) (<< 1 62)))   ; ~X ^ X = -1
+ (= -1 (| (^ (<< 1 62) -1) (<< 1 62)))   ; ~X | X = -1
+ (= 0  (& (^ (<< 1 62) -1) (<< 1 62)))   ; ~X & X = 0
+ (= -1 (^ (^ (<< 1 62) -1) (<< 1 62)))   ; ~X ^ X = -1
 
  ; --- masked shift-right byte extraction with bit 63 set (the rd64 idiom:
  ; the mask discards the arithmetic-vs-logical shift difference) ---
- (~ (fixp (<< 171 56)))                       ; 0xAB << 56 sets bit 63 -> box
+ !(fixp (<< 171 56))                       ; 0xAB << 56 sets bit 63 -> box
  (= 171 (& (>> (<< 171 56) 56) 255))          ; top byte reads back as 0xAB
  (= 205 (& (>> (| (<< 171 56) (<< 205 48)) 48) 255))  ; byte 6 of 0xABCD... = 0xCD
  (= 171 (& (>> (| (<< 171 56) (<< 205 48)) 56) 255))  ; byte 7 = 0xAB
@@ -49,15 +49,15 @@
  (< (<< 1 62) (* 3 2305843009213693952))          ; box < box
  (<= (<< 1 62) (<< 1 62))
  (> (* 3 2305843009213693952) (<< 1 62))
- (~ (< (<< 1 62) 2305843009213693952))
+ !(< (<< 1 62) 2305843009213693952)
  (< 1e18 (<< 1 62))                                ; float < box
  (< (<< 1 62) 1e19)                                ; box < float
 
  ; --- 2^63 = i64 INT_MIN: still a (negative) box, compares and prints right ---
- (~ (fixp (<< 1 63)))
+ !(fixp (<< 1 63))
  (< (<< 1 63) (- 0 (<< 1 62)))         ; INT_MIN < -2^62
 
  ; --- a box prints as a plain decimal integer (same as a fixnum) ---
  (= "4611686018427387904" (inspect (<< 1 62)))
- (= "-4611686018427387905" (inspect (~ (<< 1 62))))
+ (= "-4611686018427387905" (inspect (^ (<< 1 62) -1)))
  (= "-9223372036854775808" (inspect (<< 1 63))))

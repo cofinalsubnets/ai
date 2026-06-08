@@ -7,7 +7,6 @@
 (: pi 3.141592653589793
    true 1 false 0 not nilp
    (atomp x) (nilp (twop x))
-   (!= a b) (? (= a b) 0 1)
    AA (co A A) AB (co A B)
    BA (co B A) BB (co B B))
 ; array element-kind codes for `arr` (enum g_tuple_type): one word per element, so
@@ -129,7 +128,7 @@
  (strout _)
   (poke -1 (peek 0 in) (poke -1 -2 (poke -1 -1 (poke -1 0 (poke -1 "  " (poke 5 0 (lam 6)))))))
  (outstr o) (ssub (peek 4 o) 0 (peek 5 o))
- (slurp i) (: (rl i) (: c (fgetc i) (? (!= c -1) (X c (rl i)))) (string (rl i)))
+ (slurp i) (: (rl i) (: c (fgetc i) (? !(= c -1) (X c (rl i)))) (string (rl i)))
  (inspect x) (: o (strout 0) _ (fputx o x) (outstr o)))
 ; here are some macro definitions
 (: l (foldr (\ a l (X X (X a (X l 0)))) 0) (: _ (:: 'L l) _ (:: 'list l)))
@@ -173,17 +172,18 @@
 (: uq (\ x x))                                               ; stray ,x evaluates x
 
 ; --- array element-type inference + shape coercion (shared by `tuple` and `array`).
-; a-type: the element type code, the highest of {i64=0 < f64=1 < o=2} present in
-; a list of values -- a box still fits i64; only a value past the real 64-bit
-; tower (bignum, complex, non-number) lifts the array to an object (o) array.
+; a-type: the element type code, the highest of {i64=0 < f64=1 < c=2 < o=3} present
+; in a list of values -- a box still fits i64; a complex value lifts to a packed
+; (re,im) `c` array; only a value past the real numeric tower (bignum, symbol,
+; string, nested array, …) lifts the whole array to an object (o) array.
 ; a-dim/a-shape: a shape dimension may be any numeric -- a float, complex, or even
 ; a vector -- and is coerced to a non-negative integer by its L2 norm ((int (abs
 ; d)): abs is the modulus for a complex / the Euclidean norm for a vector). a list
 ; shape is coerced per-dim; a lone numeric is a rank-1 length (so (array 2.5 …) and
 ; (array (C 3 4) …) both mean "rank-1, length (int |n|)").
-(: (a-rank x) (? (flop x) 1 (| (fixp x) (boxp x)) 0 2)
+(: (a-rank x) (? (flop x) 1 (| (fixp x) (boxp x)) 0 (Cp x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
-   (a-type d) (: r (foldl a-emax 0 d) (? (= r 0) i64 (= r 1) f64 o))
+   (a-type d) (: r (foldl a-emax 0 d) (? (= r 0) i64 (= r 1) f64 (= r 2) c o))
    (a-dim d) (int (abs d))
    (a-shape s) (? (twop s) (map a-dim s) (L (a-dim s))))
 

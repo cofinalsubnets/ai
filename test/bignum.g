@@ -67,8 +67,8 @@
  (< (- 0 B100) 5)
  (< (- 0 B100) B100)
  (= F25 (bfact 25))                       ; two independent computations are equal
- (!= F25 B100)
- (!= B100 (+ B100 1))
+ !(= F25 B100)
+ !(= B100 (+ B100 1))
  (< B100 (+ B100 1))
 
  ; --- mixed with floats: a float operand widens the bignum to double ---

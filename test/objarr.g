@@ -88,8 +88,8 @@
  (= -3 (amin (arrl o '(3) (L 5 -3 7))))
  (aall (arrl o '(2) '(1 2)))
  (nilp (aall (arrl o '(2) '(1 0))))
- (aany (arrl o '(2) '(0 5)))
- (nilp (aany (arrl o '(2) '(0 0))))
+ (len (arrl o '(2) '(0 5)))
+ (nilp (len (arrl o '(2) '(0 0))))
 
  ; --- arithmetic under GC pressure: bignum products survive collection ---
  (= 0 (oa-churn 40))
@@ -132,14 +132,15 @@
  (= o (atype @((** 2 100) 1)))                    ; bignum element -> object array
  (aall (= @(1 2 3) (array 3 1 2 3))))
 
-; --- len / truthiness of object arrays: (nilp x) == (= 0 (len x)) holds here too, via
-; g_len recursing into each element's own magnitude (so an all-zero object array is len 0,
-; not the garbage that a raw word-bits L2 norm would give). Complex/bignum elements force o.
-(: oa-z2 (array 2 (C 0 0) (C 0 0))               ; two zero complexes
+; --- len / truthiness: (nilp x) == (= 0 (len x)) holds across tuple types, via
+; g_len recursing into each element's own magnitude (so an all-zero array is len 0,
+; not the garbage that a raw word-bits L2 norm would give). A bignum element forces
+; an o array; a complex element packs into a c array (both keep the invariant).
+(: oa-z2 (array 2 (C 0 0) (C 0 0))               ; two zero complexes -> packed c array
    oa-c2 (array 2 (C 0 0) (C 3 4))               ; |0|²+|3+4i|² = 25 -> ceil 5
-   oa-b2 (array 2 (** 2 100) 0))                 ; bignum element saturates len
+   oa-b2 (array 2 (** 2 100) 0))                 ; bignum element saturates len, forces o
 (assert
- (= o (atype oa-z2)) (= o (atype oa-c2)) (= o (atype oa-b2))
+ (= c (atype oa-z2)) (= c (atype oa-c2)) (= o (atype oa-b2))
  (= 0 (len oa-z2)) (nilp oa-z2)                   ; all-zero object array -> falsy, len 0
  (= 5 (len oa-c2)) (not (nilp oa-c2))             ; one nonzero element -> truthy, ceil(5)
  (not (nilp oa-b2))                               ; a bignum element is truthy

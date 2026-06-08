@@ -25,8 +25,8 @@
 (: (wr out o n v)
    ((: (f k v) (? (< k n) (: _ (put (+ o k) (& v 255) out) (f (+ k 1) (>> v 8))) (+ o n))) 0 v))
 
-(: (align-up x a)   (& (+ x (- a 1)) (~ (- a 1)))
-   (align-down x a) (& x (~ (- a 1))))
+(: (align-up x a)   (& (+ x (- a 1)) (^ (- a 1) -1))
+   (align-down x a) (& x (^ (- a 1) -1)))
 
 ; --- UF2 constants --------------------------------------------------
 (: UF2-MAGIC0   0x0a324655

@@ -73,7 +73,7 @@
             (&& (< 1 ar) (= n ar)) (X apx (X -1 x))      ; multi-arg fn -> n-ary apply
             (X apx (X 0 x))))))                          ; generic l2r apply
     (go v as))
-   names '(+ - * / mod ~ << >> & | ^
+   names '(+ - * / mod << >> & | ^
            < <= = >= > same ** gcd modpow inc dec abs
            X A B AA AB BA BB
            len lidx assq memq last rev cat
@@ -231,7 +231,7 @@
   (avb c d x)
    (? (nilp d) ; outside all lexical scopes?
        (: y (get Z x globals) ; check global scope
-        (? (!= y Z) (kim y) ; if it's there use that
+        (? !(= y Z) (kim y) ; if it's there use that
          (: _ (? (c 'par) (push c 'imp x))
           (em2 g_vm_freev x))))
     (: lfd (assq x (d 'lam))
@@ -314,7 +314,7 @@
     l (jj 0 prs)
     _ (put 'stk s c)
     (cl n l k1 k2) (?
-     (&& k1 k2 (!= k1 k2) (memq (AA k1) (BBA k2)))
+     (&& k1 k2 !(= k1 k2) (memq (AA k1) (BBA k2)))
       (>>= n (BBA k1) (: (kk n v)
        (? (nilp v) (cl n l k1 (B k2))
         (: var (A v)

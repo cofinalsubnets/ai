@@ -59,14 +59,20 @@
 ; index bytes: ("abc" 0)->97. opaque: buf/port/thread. #x (len) = count | floored magnitude.
 (assert (= 97 ("abc" 0)) (= 3 #"abc") (= 4 #3.9) (= 5 #@(3 4)))   ; #@(3 4)=ceil(L2 norm)
 
-; === arithmetic + - * / mod, compare < <= = >= > : fixnum fast path; fixp/flop promotes
-; to float; int overflow -> wide-int box -> bignum; /0 -> IEEE inf/nan; non-num -> nil.
-; `=` is eqv (promotes across tower), `same` is eq (identity). bitwise ~ << >> & | ^ (int).
+; === arithmetic + - * / mod : fixnum fast path; fixp/flop promotes to float; int
+; overflow -> wide-int box -> bignum; /0 -> IEEE inf/nan; non-num -> nil.
+; ORDERED compare < <= > >= : a TOTAL ORDER over ALL values -- cross-kind by the
+; enum q type lattice the matrix DIAGONAL encodes (number < string < symbol < pair
+; < lambda, fixnum low), within a kind by value/lexicographic (complex by (re,im),
+; lambda by hash; array operand -> elementwise 0/1 mask). `> >=` reverse `< <=`.
+; `=` is eqv (promotes across tower), `same` is eq (identity). bitwise << >> & | ^
+; (int; complement is (^ x -1)). logical not is `!`/`not`/`nilp`; != is gone (use !(= ..)).
 (assert
  (= 3 (+ 1 2)) (= 6 (* 2 3)) (= 2 (/ 5 2)) (= 1 (mod 5 2)) (= 3.5 (+ 1 2.5))
- (~ (fixp (* 2 2305843009213693952))) (flop (/ 1 0)) (< 1e308 (/ 1 0)) (~ (= (/ 0 0) (/ 0 0)))
- (= 3 3.0) (~ (= 3 4)) (< 1 1.5) (>= 3.0 3) (!= 3 4) (same 'a 'a) (nilp (same '(1) '(1)))
- (= -2 (~ 1)) (= 15 (| 8 (| 4 (| 2 1)))) (= 16 (>> 64 2)) (= 16 (<< 2 3)) (nilp (< "a" 1)))
+ !(fixp (* 2 2305843009213693952)) (flop (/ 1 0)) (< 1e308 (/ 1 0)) !(= (/ 0 0) (/ 0 0))
+ (= 3 3.0) !(= 3 4) (< 1 1.5) (>= 3.0 3) !(= 3 4) (same 'a 'a) (nilp (same '(1) '(1)))
+ (= -2 (^ 1 -1)) (= 15 (| 8 (| 4 (| 2 1)))) (= 16 (>> 64 2)) (= 16 (<< 2 3))
+ (< 1 "a") (< "a" 'x) (< 'x '(0)) !(< "a" 1))   ; total order: number < string < sym < pair
 ; `+` GENERIC (order-preserving): num add; str/sym concat (num=1 byte; text tower
 ; str<usym<isym lifts a num, mixing demotes); list append. `-` numeric only (nil).
 (assert
@@ -85,10 +91,16 @@
  (= 2.0 (sqrt 4)) (= 1024.0 (pow 2 10)) (flop (sin 0)) (nilp (sqrt '(1 2))))
 
 ; === complex: rank-0 scalar (Cp), widest tier (complex>float>int). (C re im), i=(C 0 1).
-; + - * / promote a real; sticky (no demote); unordered (< -> nil) but `=` bridges reals.
+; + - * / promote a real; sticky (no demote); ORDERED lexicographically by (re,im)
+; -- a real is (r,0) -- and `=` bridges reals (a c array operand stays elementwise).
+; rank-N complex packs (re,im) pairs into a `c` array (atype c): arr/arrl/array/@ build it,
+; get -> a (C..) box, + - * / broadcast (numpy) and `=` -> a mask, asum/aprod fold complex.
 (assert
  (= (* i i) -1) (= (C 2 0) 2) (= (* (C 1 2) (C 3 4)) (C -5 10)) (Cp (C 2 0)) (nilp (Cp 5))
- (= 2.0 (re (C 2 3))) (= (conj (C 2 3)) (C 2 -3)) (nilp (< i 1)) (= "(C 0.0 1.0)" (inspect i)))
+ (= 2.0 (re (C 2 3))) (= (conj (C 2 3)) (C 2 -3)) (< i 1) !(< 1 i) (= "(C 0.0 1.0)" (inspect i))
+ (: v (array 2 (C 1 2) (C 3 4)) (&& (= c (atype v)) (= (C 1 2) (get 0 0 v)) (= (C 4 6) (asum v))
+    (= (C 2 4) (get 0 0 (+ v v))) (= (C 2 4) (get 0 0 (* (C 2 0) v))) (nilp (< v v))
+    (= "@((C 1.0 2.0) (C 3.0 4.0))" (inspect v)))))
 
 ; === pairs & lists: X=cons, A=car, B=cdr; AA AB .. BBB = the c[ad]+r compounds. NATIVE
 ; names are X/A/B + the AB-compound; cons/car/cdr/caar/cadr/.. are prelude compat ALIASES
@@ -107,13 +119,14 @@
 ; (str k) indexes a byte (oob/non-num -> 1); string coerces; intern/gensym ; \n escapes.
 (assert
  (= 4 (len "slen")) (= "bidden" (ssub "forbidden planet" 3 9)) (= "abcd" (scat "ab" "cd"))
- (= 104 ("hi" 0)) (= 1 ("hi" 9)) (= 'asdf (intern "asdf")) (!= (gensym 0) (gensym 0))
+ (= 104 ("hi" 0)) (= 1 ("hi" 9)) (= 'asdf (intern "asdf")) !(= (gensym 0) (gensym 0))
  (= "asdf" (string 'asdf)) (= "\"a\\nb\"" (inspect "a\nb")) (= "$x" (inspect (gensym "x"))))
 
 ; === arrays: (arr type shape) zero ; (arrl type shape vals) ; (array shape elem…) infers
 ; type+curries ; @(…) rank-1 literal. arank/alen/ashape/atype ; get (oob->default).
 ; + - * / < = broadcast (numpy, widest type, compare->i8) ; reduce asum aprod amax amin
-; aall aany (identity on a scalar) ; zero-norm falsy ; sin..sqrt map elementwise.
+; aall (conjunction; identity on a scalar; the disjunction "any nonzero" is just
+; `len`, truthy iff not all-zero) ; zero-norm falsy ; sin..sqrt map elementwise.
 (assert
  (= 6 (alen (arr i64 '(2 3)))) (= 2 (arank (arr i64 '(2 3)))) (= '(2 3) (ashape (arr i64 '(2 3))))
  (= i64 (atype (arr i64 '(2 3)))) (= 20 (get -1 1 @(10 20 30))) (= -1 (get -1 9 @(10 20 30)))
@@ -134,13 +147,13 @@
 (assert
  (: b (bufnew 3) _ (put 0 65 b) (= 65 (get 0 0 b))) (= 4 (len (bufnew 4)))
  (: b (bufnew 1) _ (put 0 257 b) (= 1 (get 0 0 b))) (: b (bufnew 4) _ (bcopy b 0 "ABCD" 0 4) (= 68 (get 0 3 b)))
- (~ (= (bufnew 2) (bufnew 2))))
+ !(= (bufnew 2) (bufnew 2)))
 
 ; === reader & sigils: ; line comment, #! shebang (NO block comments). ' quote (=1-arg \),
-; ` quasiquote , unquote ,@ splice ; @ array %  map # len $ gensym.
+; ` quasiquote , unquote ,@ splice ; @ array %  map # len $ gensym ! nilp (!x->(nilp x)).
 (assert
  (= '(1 (\ x) 3) `(1 'x 3)) (= '(1 2 3 4) (: xs '(2 3) `(1 ,@xs 4)))
- (= 5 #"hello") (= 42 #42) (symp $x))
+ (= 5 #"hello") (= 42 #42) (symp $x) (= 1 !0) (nilp !5) (= !(= 3 4) (nilp (= 3 4))))
 
 ; === macros (arg-list -> code, install via `::`): prelude do/let/if/cond/quote && || L/list
 ; tuple hasht array, body-first :- ?- , pipes >>= <=< .
