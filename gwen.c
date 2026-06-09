@@ -2803,7 +2803,11 @@ static struct g *gz_parse(struct g *f, bool multi) {
    case '@':  f = push_wrap(f, "tuple"); continue;       // @(e …)->(tuple e …) [array], @()->(tuple)
    case '$':  f = push_wrap(f, "gsym"); continue;      // $x->(gsym x)->(gensym 'x): a fresh gensym
    case '!':  f = push_wrap(f, "nilp"); continue;      // !x->(nilp x): logical not (`!=` is gone, use !(= …))
-   case '~':  f = push_wrap(f, "com"); continue;       // ~(re im)->(com re im) [complex]; ~x->(com x)
+   case '~':                                            // ~(re im)->(com re im) [construct]; ~x->(clift x)
+    if (!g_ok(f = zgetc(f))) return f;                 // peek the char after ~: `(` -> splice into com (build
+    c2 = f->b;                                         // a complex / curry); anything else -> monadic lift/conj
+    if (c2 != EOF) f = zungetc(f, c2);                 // (clift: real r -> ~(r 0); complex z -> conj z)
+    f = push_wrap(f, c2 == '(' ? "com" : "clift"); continue;
    case '.':  f = push_wrap(f, "dot"); continue;       // .x->(dot x): print x (raw if string, else inspect), return x
    case ',':                                            // unquote / unquote-splice
     if (!g_ok(f = zgetc(f))) return f;

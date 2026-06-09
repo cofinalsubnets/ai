@@ -16,6 +16,11 @@
 (: i8 0 i16 0 i32 0 i64 0 f32 1 f64 1 z 0 r 1 c 2 o 3)
 ; the imaginary unit: complex values are written e.g. (+ 2 (* 3 i))
 (: i ~(0 1))
+; the monadic ~ sigil (~x, i.e. ~ not followed by `(`): lift a real to ~(r 0),
+; conjugate a complex to ~(re -im), ~0 -> ~(0 0). One formula -- com of the real
+; part and the negated imaginary part -- since (re r)=r, (im r)=0 for a real, and
+; (re z)/(im z) for a complex. (The 2-operand ~(a b) splices into (com a b).)
+(: (clift x) (com (re x) (- 0 (im x))))
 ; integer power (b ** k) is just numeral application: (k b) == b**k. The squaring
 ; algorithm lives in `ipow`, local to the num-ap block below, so there is no `**`.
 (: (gcd a b) (? (= b 0) (? (< a 0) (- 0 a) a) (gcd b (mod a b)))

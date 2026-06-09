@@ -47,6 +47,14 @@
  (nilp (im 7))                             ; im of a real is 0
  (= 5 (conj 5))                            ; conj of a real is itself
 
+ ; --- monadic ~ (clift): bare ~x (the `~` sigil not before `(`) lifts a real to
+ ;     (r 0) and conjugates a complex; the 2-operand ~(a b) still splices into com ---
+ (= ~(5 0) ~5)   (comp ~5)                 ; ~r lifts a real to (r, 0) -- a true complex
+ (= ~(0 0) ~0)   (= ~(-3.5 0) ~-3.5)       ; ~0 -> (0, 0); lift works on a negative real
+ (= (conj ~(2 3)) ~~(2 3))                 ; ~z conjugates -- ~ generalizes conj
+ (= ~(2 -3) ~~(2 3))   (= i ~~(0 -1))      ; ~~(r i) = ~(r -i)
+ (= (~(2 3) 4) ~(2 3 4))                   ; 3+ operands curry: ~(a b c) = (~(a b) c)
+
  ; --- abs: type-aware. complex -> float magnitude; real stays in its tier ---
  (= 5.0 (abs ~(3 4)))
  (= 13.0 (abs ~(-5 12)))

@@ -122,9 +122,10 @@
  (= 2.0 ((/ 1 2) 4)) (= 1024.0 (pow 2 10)) (= 1 (0 e)) (= e (1 e)) (= 2.718281828459045 e)
  (= 0.0 (arg ~(1 0))) (= 0.0 (/ (sin 0) (cos 0))) (flop (sin 0)))
 
-; === complex: rank-0 scalar (comp), widest tier (complex>float>int). ~(re im) reads AND
-; prints a complex -- the `~` reader macro splices its list into (com re im); i=~(0 1).
-; com/comp are the constructor/predicate bifs. + - * / promote a real; sticky (no demote);
+; === complex: rank-0 scalar (comp), widest tier (complex>float>int). the `~` reader sigil
+; before `(` splices into (com re im) (3+ operands curry: ~(a b c)=(~(a b) c)); a BARE ~x is
+; the monadic op clift: ~r lifts a real to ~(r 0), ~z conjugates (~~(r i)=~(r -i)), ~0=~(0 0).
+; i=~(0 1). com/comp are the constructor/predicate bifs. + - * / promote a real; sticky (no demote);
 ; ORDERED lexicographically by (re,im) -- a real is (r,0) -- and `=` bridges reals. com and
 ; arg BROADCAST over arrays (a real operand -> a packed `c` array / a real-array result), so
 ; the derived (arg ~(1 x)) = atan etc. stay elementwise. rank-N complex packs (re,im) into a
@@ -132,6 +133,7 @@
 ; and `=` -> a mask, asum/aprod fold complex.
 (assert
  (= (* i i) -1) (= ~(2 0) 2) (= (* ~(1 2) ~(3 4)) ~(-5 10)) (comp ~(2 0)) !(comp 5)
+ (= ~(5 0) ~5) (comp ~5) (= ~(0 0) ~0) (= (conj ~(2 3)) ~~(2 3))  ; ~r lifts a real; ~z conjugates
  (= 2.0 (re ~(2 3))) (= (conj ~(2 3)) ~(2 -3)) (< i 1) !(< 1 i) (= "~(0.0 1.0)" (inspect i))
  (= 0.0 (get 0 1 (arg ~(1 @(1 0)))))            ; com/arg broadcast: (arg ~(1 x)) = atan, per element
  (: v (array 2 ~(1 2) ~(3 4)) (&& (= c (atype v)) (= ~(1 2) (get 0 0 v)) (= ~(4 6) (asum v))
@@ -189,11 +191,11 @@
 
 ; === reader & sigils: ; line comment, #! shebang (NO block comments). ' quote (=1-arg \),
 ; ` quasiquote , unquote ,@ splice ; @ array % map # len $ gensym ! nilp ~ complex
-; (~(re im)->(com re im), splices like @/%) ; . dot (.x->(dot x), see I/O).
+; (~(re im)->(com re im) splice; bare ~x->(clift x) lift/conj) ; . dot (.x->(dot x), see I/O).
 (assert
  (= '(1 (\ x) 3) `(1 'x 3)) (= '(1 2 3 4) (: xs '(2 3) `(1 ,@xs 4)))
  (= 5 #"hello") (= 42 #42) (symp $x) (= 1 !0) (= 0 !5) !!5
- (= i ~(0 1)) (= ~(2 3) (com 2 3))              ; ~(re im) splices into (com re im)
+ (= i ~(0 1)) (= ~(2 3) (com 2 3)) (= '~x '(clift x))  ; ~(re im) splices; bare ~x->(clift x)
  (= '(dot x) '.x) (lamp dot))                   ; .x->(dot x): the `.` sigil wraps `dot`
 
 ; === macros (arg-list -> code, install via `::`): prelude do/let/if/cond/quote && || L/list
