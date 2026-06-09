@@ -1648,7 +1648,6 @@ g_vm(g_vm_ret0) { return
  Sp += 1,
  Continue(); }
 
-
 // kcall : x = Sp[0], k = Ip[1] -> Ip = k, Sp[0] = x
 g_vm(g_vm_kcall) {
  word x = Sp[0];
@@ -1795,7 +1794,13 @@ g_vm(g_vm_wait) {
    while (prev->m != node) prev = prev->m;
    prev->m = node->m;
    break; }
-   // still running: yield without advancing Ip (re-enter wait on resume)
+   // still running: yield without advancing Ip (re-enter wait on resume).
+   // A task blocked in `wait` is polling a peer, NOT blocked on I/O or a timer,
+   // so clear any stale next_wait_fd/next_wake_at (e.g. a serial-read fd left set
+   // by the kernel's cooperative input) -- otherwise yield_sw saves this task as
+   // parked on an unready fd and find_runnable never reschedules it (deadlock).
+   f->next_wake_at = 0;
+   f->next_wait_fd = -1;
   return Ap(g_vm_yield_sw, f); }
  return *Sp = ret, Ip++, Continue(); }
 
