@@ -19,10 +19,10 @@
   ; interned symbols print as their name
   (= "foo" (inspect 'foo))
   ; gensyms print with the `$` sigil: named-uninterned as $<name>, anonymous as
-  ; $<addr>. the `$` reader macro wraps with gensym, so $x re-reads to a symbol.
-  (= "$x" (inspect (gensym "x")))
-  (= "$foo" (inspect (gensym 'foo)))
-  (= "$" (ssub (inspect (gensym 0)) 0 1))           ; anonymous -> $<addr>
+  ; $<addr>. the `$` reader macro wraps with nom, so $x re-reads to a symbol.
+  (= "$x" (inspect (nom "x")))
+  (= "$foo" (inspect (nom 'foo)))
+  (= "$" (ssub (inspect (nom 0)) 0 1))           ; anonymous -> $<addr>
   (symp $x)                                          ; $x reads back as a (fresh) symbol
   (= "$bar" (inspect $bar))
 
@@ -50,7 +50,7 @@
   (: (rng n) (? (= n 0) 0 (X n (rng (- n 1))))
      s (inspect (rng 200))
      ; 200 numbers + 199 separators + 2 parens = at least 400 chars
-   (do (strp s) (< 400 (len s))))
+   (do (strp s) (< 400 (pin s))))
 
   ; GC stress: 500 inspects in a loop. Each call alloc'd a heap port + buf,
   ; provoking many GCs. Final call must still produce the expected output.

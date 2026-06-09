@@ -8,12 +8,12 @@
  (dict_set d k v) (X (X k (A d)) (X v (B d)))
  (anon? x) (&& (symp x) (symp (string x)))   ; string of a named sym is its name; of an anon sym, itself
  (var? x) (&& (twop x) (anon? (B x)))
- (var x) (X x (gensym 0))
+ (var x) (X x (nom 0))
  empty_dict '(0)
  has_s dict_has
  ext_s dict_set
  (unord_eq a b) (&&
-  (= (len a) (len b))
+  (= (pin a) (pin b))
   (all (flip memq a) b))
  (sX x s n m y) (y x s)
  (sno n m y) (n sno)
@@ -58,7 +58,7 @@
     (? it (L k (walk_star (A it) st))))))
   (map reify ((? n (stake n) slist) (g empty_dict)))))
 
-(:: 'zz (\ x (: s (gensym 0) n (gensym 0) m (gensym 0) y (gensym 0) x (A x)
+(:: 'zz (\ x (: s (nom 0) n (nom 0) m (nom 0) y (nom 0) x (A x)
  (L '\ s n m y (L m (L x s))))))
 (:: 'et (\ xs (: x (A xs) xs (B xs)
  (foldl (\ a b (L (\ a b s (s_star (a s) b)) a b)) x xs))))

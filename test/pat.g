@@ -17,7 +17,7 @@
   ks (hashk t)
 
   lam (X '\ (cat ks (list b)))
-  y (gensym 0)
+  y (nom 0)
   (ev (list '\ y (X lam (map (\ k (list (get 0 k t) y)) ks)))))
 
  (pmatch x1 x2 f) (:

@@ -1,6 +1,6 @@
 # Validation gates for the gwen rewrites of the old Python build tools.
 #
-# Each gwen tool in this directory (gen_data.g, elf2efi.g, vmret.g) must
+# Each gwen tool in this directory (gen_data.g, vmret.g) must
 # produce output identical to the frozen Python reference under py/ (see
 # py/README.md). These targets diff the two over every relevant build artifact
 # present in the tree -- so they only check what you've actually built. Run all
@@ -11,8 +11,8 @@
 R := ..
 include $(R)/common.mk
 
-.PHONY: all test_gen_data test_elf2efi test_vmret test_pad_checksum test_elf2uf2
-all: test_gen_data test_elf2efi test_vmret test_pad_checksum test_elf2uf2
+.PHONY: all test_gen_data test_vmret test_pad_checksum test_elf2uf2
+all: test_gen_data test_vmret test_pad_checksum test_elf2uf2
 
 # Build the host gl on demand (it runs the .g tools); only if it's missing.
 $(m):
@@ -30,17 +30,6 @@ test_gen_data: | $(m)
 	  cmp -s $(R)/out/host/.data.py.h $(R)/out/host/.data.g.h && echo "  ok   $$o" \
 	    || { echo "  FAIL $$o"; rm -f $(R)/out/host/.data.py.h $(R)/out/host/.data.g.h; exit 1; }; \
 	done; rm -f $(R)/out/host/.data.py.h $(R)/out/host/.data.g.h
-
-# elf2efi.g vs py/elf2efi.py over every EFI ELF present (riscv64/loongarch64).
-# Build them first with `make -C free EFI=1 a=riscv64` (and a=loongarch64).
-test_elf2efi: | $(m)
-	@echo TEST elf2efi.g
-	@for e in `find $(R)/out/free -name '*.efi.elf' 2>/dev/null`; do \
-	  python3 $(R)/tools/py/elf2efi.py $$e $(R)/out/host/.efi.py; \
-	  $(m) $(R)/tools/elf2efi.$x $$e $(R)/out/host/.efi.g; \
-	  cmp -s $(R)/out/host/.efi.py $(R)/out/host/.efi.g && echo "  ok   $$e" \
-	    || { echo "  FAIL $$e"; rm -f $(R)/out/host/.efi.py $(R)/out/host/.efi.g; exit 1; }; \
-	done; rm -f $(R)/out/host/.efi.py $(R)/out/host/.efi.g
 
 # vmret.g vs py/vmret.py over the host binaries plus any kernel arch ELFs
 # present (each arch exercises a different ret matcher + the objdump choice).

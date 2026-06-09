@@ -43,13 +43,13 @@
   ; by one) for ala to stash the lambda's source \-expr at value[-1], where the
   ; printer (gzput_fn) finds it. entry = cell 1, src = cell 0.
   (k0s c n) (poke -1 g_vm_ret (poke (+ 2 n) (ary c) (lam (+ 3 n))))
-  (ary c) (+ (len (c 'arg)) (len (c 'imp)))
+  (ary c) (+ (pin (c 'arg)) (pin (c 'imp)))
   (pro f) (? (fixp f) f (: a (peek 0 f) (?- f
    (= a g_vm_unc) (pro (seek -2 (peek 2 f)))
    (= a g_vm_cur) (?- f (= g_vm_unc (peek 2 f))
                           (pro (seek -2 (peek 4 f)))))))
-  iop (gensym 'iop)   ; inline-op marker: (iop op . args), emitted by wev, compiled by iap
-  apx (gensym 'apx)   ; apply marker: (apx nary head . args), emitted by wev, compiled by apxh
+  iop (nom 'iop)   ; inline-op marker: (iop op . args), emitted by wev, compiled by iap
+  apx (nom 'apx)   ; apply marker: (apx nary head . args), emitted by wev, compiled by apxh
   ; wevs: value->handler for global fns. A handler folds an application to a value when
   ; its args are constant (pure fns only), else emits an (iop op . args) node iap inlines
   ; (any bif of matching arity), else leaves it. Built by scanning every global: a bif is
@@ -65,7 +65,7 @@
    (opof v) (? (same g_vm_ret0 (peek 1 v)) (X (peek 0 v) 1)
                (&& (same g_vm_cur (peek 0 v)) (same g_vm_ret0 (peek 3 v))) (X (peek 2 v) (peek 1 v))
                0)
-   (hgen v op ar pure x) (: as (B x) n (len as)
+   (hgen v op ar pure x) (: as (B x) n (pin as)
     (go hv a) (? (atomp a) (bake hv)             ; all args constant -> fold
      (: cv (cval (A a))
       (? (&& pure (A cv)) (go (hv (B cv)) (B a))
@@ -76,7 +76,7 @@
    names '(+ - * / // mod << >> & | ^
            < <= = >= > same gcd modpow inc dec abs
            X A B AA AB BA BB
-           len lidx assq memq last rev cat
+           pin lidx assq memq last rev cat
            fixp symp twop mapp lamp strp nilp flop comp atomp
            ssub scat string
            re im conj arg flo com
@@ -128,7 +128,7 @@
    ; napof: v is a non-bif multi-arg fn whose arity matches the n>1 call args -> n-ary apply.
    ; `same`-safe peeks (a non-fn value never matches g_vm_cur); mirrors app's old `fa`/`na`.
    (napof v args) (? (fixp v) 0
-    (? (same g_vm_cur (peek 0 v)) (: ar (peek 1 v) (&& (< 1 ar) (= (len args) ar))) 0))
+    (? (same g_vm_cur (peek 0 v)) (: ar (peek 1 v) (&& (< 1 ar) (= (pin args) ar))) 0))
    ; fold: un-shadowed global head -> handler (fold/iop/apx); else mark the call as an apx
    ; node (apx nary head . args) carrying the n-ary-vs-l2r strategy (1 = n-ary, 0 = l2r).
    (fold x bnd) (: h (A x)
@@ -159,7 +159,7 @@
   ; else l2r 1-ary chain. kap detects tail vs non-tail by peeking the continuation.
   (apxh c b) (: nary (A b) head (AB b) args (BB b)
               f (ana c head) s (c 'stk) _ (push c 'stk 0)
-              g (? nary (co (apr2l c args) (kap (len args))) (apl2r c args))
+              g (? nary (co (apr2l c args) (kap (pin args))) (apl2r c args))
               _ (put 'stk s c)
             (co f g))
   (app c a b) (: f (ana c a)
@@ -196,7 +196,7 @@
             j (g (acx k) (+ 2 n))
             (p2 g_vm_cond (pop c 'alt) j)))))))))
 
-  Z (gensym 'Z)
+  Z (nom 'Z)
   ; recursive-fn ref: bake `quote code` if the closure is built, else `quote 0`
   ; + a backpatch site `(lfd . cell)` on the scope for l3 to resolve.
   (qsite site k n) (: cell (poke -1 0 (k (+ 2 n)))
@@ -226,7 +226,7 @@
            (q i j m) (karg (+ i (stki c)) j m)
          (?- (avb c (c 'par) x)
           (memq x s) (karg (lidx x s))
-          (>= (stki c) 0) (q (len (c 'stk)))))))))
+          (>= (stki c) 0) (q (pin (c 'stk)))))))))
 
   (avb c d x)
    (? (nilp d) ; outside all lexical scopes?
@@ -241,9 +241,9 @@
            (q i j m) (karg (+ i (stki c)) j m)
          (?- (avb c (d 'par) x)
           (memq x s) (: _ (? (c 'par) (push c 'imp x))
-                         (q (len (c 'stk))))
+                         (q (pin (c 'stk))))
           (>= (stki d) 0) (: _ (? (c 'par) (push c 'imp x))
-                           (q (len (c 'stk)))))))))
+                           (q (pin (c 'stk)))))))))
   ; lambda analyzer
   (ala c imp exp) (:
    d (sco c (init exp) imp)
@@ -355,6 +355,6 @@
     _ (put 'stk s c)
     ; body-lambda analyzed AFTER inits (it takes bindings as args; never makes sites)
     f (ana c (X '\ (cat (rev (map A prs)) (list body))))
-    h (kap (len prs))
+    h (kap (pin prs))
     _ (put 'stk s c)
     (\ x (f (g (h x))))))))

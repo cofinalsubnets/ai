@@ -1,23 +1,17 @@
-; printing functions: like tuple/hash, a function is a `,`-prefixed value form
-; (reads back via uq=identity). builtins -> ,name; compiled lambdas -> ,(\ …)
-; source; partial applications/closures -> ,(base captured-args…).
+; functions print as value forms (read back via uq=identity): builtins -> ,name;
+; lambdas -> ,(\ …) source with \-bound vars as interned d<lvl> de Bruijn LEVELS
+; (a-canonical: outermost binder = d0). Interned names -> the print form round-trips
+; (see roundtrip.g). a-equivalent lambdas print identically; capture = a leading binder.
 (assert
- ; builtins print by name
  (= "\+" (inspect +))
- (= "\X" (inspect X))              ; prelude `X` is the bif `X`
- ; a compiled lambda prints as its source \-expr
- (= "(\\ x x)" (inspect (\ x x)))
- (= "(\\ a b (+ a b))" (inspect (\ a b (+ a b))))
- ; a one-arg lambda body that is itself quote still round-trips structurally
- (= "(\\ x 'y)" (inspect (\ x 'y)))
- ; partial application of a builtin
+ (= "\X" (inspect X))
+ (= "(\\ d0 d0)" (inspect (\ x x)))
+ (= "(\\ d0 d1 (+ d0 d1))" (inspect (\ a b (+ a b))))
+ (= (inspect (\ x x)) (inspect (\ y y)))               ; a-equivalent -> identical print
+ (= "(\\ d0 (\\ d1 d1))" (inspect (\ x (\ x x))))      ; shadow: inner binder = d1
+ (= "(\\ d0 'y)" (inspect (\ x 'y)))                   ; quoted datum not renamed
  (= "(+ 1)" (inspect (+ 1)))
- ; partial app of a lambda: only the OUTER form gets the comma, not the base
- (= "((\\ a b (+ a b)) 1)" (inspect ((\ a b (+ a b)) 1)))
- ; a closure (captures a free var) prints as a partial application over its base
- ; lambda; the captured var is shown as a LEADING param (frame layout [imps args]),
- ; so the form round-trips: applying the base to the captures reconstructs it.
- (= "((\\ y x (+ x y)) 5)" (: y 5 (inspect (\ x (+ x y)))))
- ; a prelude function prints its (non-trivial) source
+ (= "((\\ d0 d1 (+ d0 d1)) 1)" (inspect ((\ a b (+ a b)) 1)))
+ (= "((\\ d0 d1 (+ d1 d0)) 5)" (: y 5 (inspect (\ x (+ x y)))))  ; closure: capture is leading binder
  (strp (inspect map))
- (< 10 (len (inspect map))))
+ (< 10 (pin (inspect map))))

@@ -1,16 +1,16 @@
 
-(: s0 (gensym 0)
-   s1 (gensym 0)
-   s2 (gensym 0)
+(: s0 (nom 0)
+   s1 (nom 0)
+   s2 (nom 0)
  (assert !(= s0 s1)
          !(= s0 s2)
          !(= s1 s2)
          (= 'asdf (intern "asdf"))          ; intern: string -> the interned symbol
          (= 'asdf (intern 'asdf))           ; ...identity on any non-string arg
-         !(= 'asdf (gensym "asdf"))         ; gensym str/sym is uninterned: distinct from the interned symbol
-         !(= (gensym "asdf") (gensym "asdf")) ; ...and from each other
-         (= "asdf" (string (gensym "asdf")))  ; but carries the name -> (string sym) (string arg)
-         (= "asdf" (string (gensym 'asdf)))   ; ...and (symbol arg)
+         !(= 'asdf (nom "asdf"))         ; nom str/sym is uninterned: distinct from the interned symbol
+         !(= (nom "asdf") (nom "asdf")) ; ...and from each other
+         (= "asdf" (string (nom "asdf")))  ; but carries the name -> (string sym) (string arg)
+         (= "asdf" (string (nom 'asdf)))   ; ...and (symbol arg)
          (= "asdf" (string 'asdf))))
 (:
  t (hashn 0)
@@ -22,18 +22,18 @@
  _ (Put 3 4)
  _ (Put 't 'f)
  _ (assert
-    (= 4 (len t))
-    (= 4 (len (hashk t))))
+    (= 4 (pin t))
+    (= 4 (pin (hashk t))))
  _ (Del 2)
  _ (Del 't)
  (assert
-    (= 2 (len t))
-    (= 2 (len (hashk t)))
+    (= 2 (pin t))
+    (= 2 (pin (hashk t)))
     (: (lll t) (foldl (\ l k (X k (X (Get k) l))) 0 (hashk t))
-     (= (* 2 (len t)) (len (lll t))))))
+     (= (* 2 (pin t)) (pin (lll t))))))
 
 (:
- (stripPrefix p s) (? (= p (ssub s 0 (len p))) (ssub s (len p) (len s)))
+ (stripPrefix p s) (? (= p (ssub s 0 (pin p))) (ssub s (pin p) (pin s)))
  (lit l y n s) ((\ ss (? ss (y ss (X l 0)) (n s))) (stripPrefix l s))
  (drop p y) (p (\ s _ (y s 0)))
  (opt p y _) (p y (\ s (y s 0)))
@@ -44,7 +44,7 @@
   (= "xx" (scat "xx" ""))
   (= "xx" (scat "x" "x"))
   (= "xx" (scat "" "xx"))
-  (= 4 (len "slen"))
+  (= 4 (pin "slen"))
   (= "bidden" (ssub "forbidden planet" 3 9))
   (= "all of it" (ssub "all of it" -9 100))
   ; applying a string indexes it: a byte 0..255, or 1 when out of range --

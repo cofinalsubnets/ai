@@ -145,11 +145,11 @@
 ; here are some macro definitions
 (: l (foldr (\ a l (X X (X a (X l 0)))) 0) (: _ (:: 'L l) _ (:: 'list l)))
 (:: '&& (\ l (: (and l) (? (B l) (X '? (X (A l) (X (and (B l)) 0))) (A l)) (? l (and l) 1))))
-(:: '|| (\ l (: (or l) (? l (: y (gensym 0) (list ': y (A l) (list '? y y (or (B l)))))) (or l))))
+(:: '|| (\ l (: (or l) (? l (: y (nom 0) (list ': y (A l) (list '? y y (or (B l)))))) (or l))))
 (:: ':- (\ a (X ': (cat (B a) (X (A a) 0)))))
 (:: '?- (\ a (X '? (cat (B a) (X (A a) 0)))))
 (:: '>>= (\ l (X (last l) (init l))))
-(:: '<=< (\ g (: y (gensym 0) (list '\ y (foldr (\ f x (list f x)) y g)))))
+(:: '<=< (\ g (: y (nom 0) (list '\ y (foldr (\ f x (list f x)) y g)))))
 ; readability / lisp-compat aliases by head-symbol substitution.
 ; do/begin/progn sequence side effects and return the last (identical to the
 ; current `,` macro -> `(: _ a _ b ... last)`); let -> the `:` let form;
@@ -208,11 +208,11 @@
 (: (hashtx a) (? (twop a) (list 'put (A a) (AB a) (hashtx (BB a))) '(hashn 0)))
 (:: 'hasht (\ a (hashtx a)))
 
-; the `$` reader sigil wraps its operand with gensym: `$x` -> (gsym x) -> the macro
-; quotes the operand, giving (gensym 'x) -- a fresh uninterned symbol named x. a
-; non-name operand (e.g. the $<addr> an anonymous gensym prints as) quotes to itself
-; and gensym makes it anonymous. mirrors the printer in gzput_sym.
-(:: 'gsym (\ a (list 'gensym (list '\ (A a)))))
+; the `$` reader sigil wraps its operand with nom: `$x` -> (gsym x) -> the macro
+; quotes the operand, giving (nom 'x) -- a fresh uninterned symbol named x. a
+; non-name operand (e.g. the $<addr> an anonymous nom prints as) quotes to itself
+; and nom makes it anonymous. mirrors the printer in gzput_sym.
+(:: 'gsym (\ a (list 'nom (list '\ (A a)))))
 
 ; (array shape elem…): the ergonomic N-D array constructor. `shape` is either a
 ; dimension *list* (rank-N) or a single number n (a rank-1 vector of length |n|),
@@ -261,7 +261,7 @@
    (boxset prs) (: nm (map A prs)
      (filter (\ v (&& (nilp (lambp (B (assq v prs))))
                       (any (\ p (w v (B p) 0 0)) (take (+ 1 (lidx v nm)) prs)))) nm))
-   (mkcs bx) (map (\ v (X v (gensym 0))) bx)
+   (mkcs bx) (map (\ v (X v (nom 0))) bx)
    (cellbinds cs) (map (\ c (X (B c) (list 'X 0 0))) cs))
 ; boxfix-core (c0): same prep + rewrites refs via sub/subl (c0 has no analysis-time
 ; redirect). Returns (prepped-prs . body') or 0.

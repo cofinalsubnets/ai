@@ -1,4 +1,4 @@
-; buf (Phase 3): a mutable flat byte string. One constructor (bufnew); len /
+; buf (Phase 3): a mutable flat byte string. One constructor (bufnew); pin /
 ; get / put fold into the generic ops (get/put dispatch on the value's kind);
 ; bcopy blits a byte range from a string or buf into a buf. Bytes are data, so
 ; a stored byte reads back as its unsigned value 0..255. Equality is by
@@ -6,8 +6,8 @@
 
 (assert
  ; --- construction + length, and what a buf is NOT ---
- (= 4 (len (bufnew 4)))
- (= 0 (len (bufnew 0)))
+ (= 4 (pin (bufnew 4)))
+ (= 0 (pin (bufnew 0)))
  !(strp (bufnew 4))                          ; a buf is not a string
  !(fixp (bufnew 4))                          ; ...nor a number
 
@@ -41,7 +41,7 @@
     (&& (= 7 (get 0 0 d)) (= 9 (get 0 2 d))))
 
  ; --- bcopy clamps an oversized count rather than trampling the heap ---
- (: b (bufnew 2) _ (bcopy b 0 "ABCD" 0 100) (= 2 (len b)))
+ (: b (bufnew 2) _ (bcopy b 0 "ABCD" 0 100) (= 2 (pin b)))
 
  ; --- equality is by identity (a buf is mutable) ---
  (: b (bufnew 2) (= b b))                       ; a buf equals itself

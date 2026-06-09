@@ -10,7 +10,7 @@
 ; (gwen/{prelude,ev,repl}.g). Source files are .g; the host binary is `gl`. Read README.md.
 ; SOURCE OF TRUTH for CLAUDE.md: a real test in the corpus that, wrapped in a gwen code
 ; fence, IS CLAUDE.md -- rewrite this, then regenerate the doc by hand (wrap this file).
-; STYLE: prefer the sigils `!` over `nilp` and `#` over `len`, in code and prose.
+; STYLE: prefer the sigils `!` over `nilp` and `#` over `pin`, in code and prose.
 
 ; --- build/test --- ($ make -> out/host/gl; make repl; make test runs test/*.g through
 ; gl AND gl0; make test_all + js/tools diffs; make catav pre-commit). one file:
@@ -63,7 +63,7 @@
  (nump 1.5) (intp (62 2)) (atomp 'x) !(atomp '(1))
  (= (64 2) (* 2 (63 2)))                        ; overflow -> exact bignum (numeral power (k b)==b**k)
  (= 5.0 (abs ~(3 4))) (= ~(2.0 3.0) (+ 2 (* 3 i))))  ; mixed arith -> wider type
-; SYMBOLS: interned 'x, named-uninterned $x (gensym 'x), anonymous (gensym 0). STRINGS
+; SYMBOLS: interned 'x, named-uninterned $x (nom 'x), anonymous (nom 0). STRINGS
 ; index bytes: ("abc" 0)->97. opaque: buf/port/thread. #x = a SATURATING NON-NEGATIVE size:
 ; container count | symbol name length | ceil magnitude, a non-positive scalar clamped to 0
 ; (#-3.9=0); an array = ceil(L2 norm). abs is the raw magnitude, so they DIVERGE: (abs -5)=5.
@@ -154,11 +154,11 @@
  (all (\ x (< 0 x)) '(1 2 3)) (any (\ x (< 2 x)) '(1 2 3)) (= 3 #'(a b c)))
 
 ; === strings & symbols: # /get index; ssub (half-open) ; scat (lenient, "" identity);
-; (str k) indexes a byte (oob/non-num -> 1); string coerces; intern/gensym ; \n escapes.
+; (str k) indexes a byte (oob/non-num -> 1); string coerces; intern/nom ; \n escapes.
 (assert
  (= 4 #"slen") (= "bidden" (ssub "forbidden planet" 3 9)) (= "abcd" (scat "ab" "cd"))
- (= 104 ("hi" 0)) (= 1 ("hi" 9)) (= 'asdf (intern "asdf")) !(= (gensym 0) (gensym 0))
- (= "asdf" (string 'asdf)) (= "\"a\\nb\"" (inspect "a\nb")) (= "$x" (inspect (gensym "x"))))
+ (= 104 ("hi" 0)) (= 1 ("hi" 9)) (= 'asdf (intern "asdf")) !(= (nom 0) (nom 0))
+ (= "asdf" (string 'asdf)) (= "\"a\\nb\"" (inspect "a\nb")) (= "$x" (inspect (nom "x"))))
 
 ; === arrays: (arr type shape) zero ; (arrl type shape vals) ; (array shape elem…) infers
 ; type+curries ; @(…) rank-1 literal. arank/alen/ashape/atype ; get (oob->default).
@@ -189,9 +189,10 @@
  (: b (bufnew 1) _ (put 0 257 b) (= 1 (get 0 0 b))) (: b (bufnew 4) _ (bcopy b 0 "ABCD" 0 4) (= 68 (get 0 3 b)))
  !(= (bufnew 2) (bufnew 2)))
 
-; === reader & sigils: ; line comment, #! shebang (NO block comments). ' quote (=1-arg \),
-; ` quasiquote , unquote ,@ splice ; @ array % map # len $ gensym ! nilp ~ complex
-; (~(re im)->(com re im) splice; bare ~x->(clift x) lift/conj) ; . dot (.x->(dot x), see I/O).
+; === reader sigils: ; line comment, #! pinbang (NO block comments). 8 are monadic
+; (sigil/name/->call): # pin (len), ' quote (=1-arg \), ! bang (nilp), . dot, ~ wave
+; (clift), $ nom (gensym), @ tup (array), % map. QUASIQUOTE sigils (NOT monadic operators):
+; ` quasiquote , unquote ,@ splice. ~(re im)->(com re im) splice; bare ~x->(clift x) lift/conj; .x->(dot x), see I/O.
 (assert
  (= '(1 (\ x) 3) `(1 'x 3)) (= '(1 2 3 4) (: xs '(2 3) `(1 ,@xs 4)))
  (= 5 #"hello") (= 42 #42) (symp $x) (= 1 !0) (= 0 !5) !!5
@@ -260,7 +261,7 @@
 ;
 ; gwen/ = .g layers (prelude ev repl cli egg) baked into every frontend. glue: main.c
 ; (host -> out/host/gl); kmain.c + arch/<arch> (freestanding -> out/free: x86_64 aarch64
-; riscv64 loongarch64 playdate rp2040); wasm/. build codegen (gen_data elf2efi vmret) is
+; riscv64 loongarch64 playdate rp2040); wasm/. build codegen (gen_data vmret) is
 ; gwen in tools/; tools/py/ are frozen golden refs (update on output change). CLAUDE.md is
 ; hand-maintained (wrap this file); there is no generator.
 ; STYLE: terse, dense; short names; comments only for non-obvious invariants. C freestanding,

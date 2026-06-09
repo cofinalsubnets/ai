@@ -10,20 +10,22 @@ and a list represents an exponential tower.
 - `(2 f x) = (f (f x))`
 - `(2 3 4) = 262144`
 - `(* i pi e) = -1`
-the language is built around three special forms plus prefix operators (sigils).
+the language is built around three special forms plus reader sigils.
 the special forms are:
-- `:` let
-- `?` cond
 - `\` lam
-the sigils are:
-- `#` pin (saturating projection to non-negative fixnum; length operator on list/string/map)
-- `!` bang (1 when pin is 0 else 0; `!!#` = truth value)
-- `.` dot (print)
-- `'` quote (monadic case of lam)
-- `~` wave (complex literal / conjugate)
-- `@` at (array literal)
-- `%` hash (map literal)
-- `$` cash (gensym literal)
+- `?` cond
+- `:` let
+the reader sigils are:
+- `#` pin (saturating projection to non-negative fixnum, length operator on list/string/map)
+- `'` quote (literally the zero-variable lambda case)
+- `!` bang (`!!#` defines truth values)
+- `.` dot (printing identity)
+- `~` wave (complex constructor / conjugate)
+- `$` nom (gensym constructor)
+- `@` tup (array constructor)
+- `%` map (map constructor)
+
+quasiquotation — `` ` `` quasiquote, `,` unquote, `,@` splice — are reader sigils, not monadic operators.
 
 ## code examples
 

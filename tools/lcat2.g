@@ -65,12 +65,12 @@
    (pickname u) ((: (g k) (: nm (intern (shortlex k)) (? (avail? nm u) nm (g (+ 1 k))))) 0)
    (cntle a b) (: ca (get 0 a cnt) cb (get 0 b cnt)    ; order a scope's bindings: count desc,
        (? (> ca cb) 1 (< ca cb) 0                      ; then length desc, then name -- deterministic
-          (: la (len (string a)) lb (len (string b)) (? (> la lb) 1 (< la lb) 0 (< a b)))))
+          (: la (pin (string a)) lb (pin (string b)) (? (> la lb) 1 (< la lb) 0 (< a b)))))
    ; assign fresh names to a scope's co-live bindings (count order). a frozen (tainted)
    ; or can't-shrink binding is kept (mapped to itself, no name spent). -> (env-frame . used').
    (assign syms used) ((: (g ss m u) (? (twop ss)
          (: s (A ss) nm (pickname u)
-            (? (&& !(get 0 s taint) (< (len nm) (len (string s))))
+            (? (&& !(get 0 s taint) (< (pin nm) (pin (string s))))
                (: i (intern nm) (g (B ss) (X (X s i) m) (X i u)))
                (g (B ss) (X (X s s) m) u)))
          (X m u))) (sort cntle syms) 0 used)
@@ -123,9 +123,9 @@
 
 ; --- minify (identical to lcat): drop a space only where the two flanking bytes
 ; re-parse to the same datum count without it; then C-escape the survivors. ---
-(: (s2cl s) ((: (g i) (? (< i (len s)) (X (get 0 i s) (g (+ 1 i))))) 0)
+(: (s2cl s) ((: (g i) (? (< i (pin s)) (X (get 0 i s) (g (+ 1 i))))) 0)
    (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
-               (strin (s2cl s)) (gensym 0) 0)
+               (strin (s2cl s)) (nom 0) 0)
    (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
    (eb c) (? (= c 10) (fputs out "\\n")
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
@@ -135,7 +135,7 @@
    (joinforms fs) (? (atomp fs) "" (atomp (B fs)) (inspect (rn (A fs) 0 0 1 rn))
        (scat (scat (inspect (rn (A fs) 0 0 1 rn)) " ") (joinforms (B fs))))
    (emit acc) (: _ (fputc out 34)
-       _ ((: (g i pc instr) (? (< i (len acc))
+       _ ((: (g i pc instr) (? (< i (pin acc))
             (: c (get 0 i acc) (? instr
                (? (= c 92) (: _ (eb c) _ (eb (get 0 (+ i 1) acc)) (g (+ i 2) 0 1))
                   (: _ (eb c) (g (+ i 1) c (? (= c 34) 0 1))))
@@ -146,7 +146,7 @@
        (fputc out 34))
    p (open (A (B argv)) "r")
    _ (? p 0 (: _ (fputs err "lcat2: cannot open input") (exit 1)))
-   e (gensym 0)
+   e (nom 0)
    forms (readforms p e)
    _ (map (\ m (put m (+ 1 (get 0 m cnt)) cnt)) (hashk macros))  ; macro heads bypass scoping
    _ (map collect forms)                                        ; count symbols + taint qq

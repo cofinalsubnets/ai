@@ -23,7 +23,7 @@
 ; up navigates history toward older; mirrored for down. on first edit
 ; to a recalled entry, the pristine version is restored to its slot
 ; and the buffer becomes a new entry, so the original survives.
-(: m (gensym 0) eofsym (gensym 0)
+(: m (nom 0) eofsym (nom 0)
 
    (revcat a b) (foldl (flip X) b a)
 
@@ -100,11 +100,11 @@
         (k u (revcat r l) 0 d))
    (edup k u l r d)
      (? (twop u) (splitat (\ ll rr (k (B u) ll rr (X (revcat l r) d)))
-                          0 (len l) (A u))
+                          0 (pin l) (A u))
         (k u l r d))
    (eddown k u l r d)
      (? (twop d) (splitat (\ ll rr (k (X (revcat l r) u) ll rr (B d)))
-                          0 (len l) (A d))
+                          0 (pin l) (A d))
         (k u l r d))
 
    ; --- history zipper ---
@@ -193,8 +193,8 @@
         _ (each (rev u) (\ ln (do (each ln prc) (putc 10))))
         _ (each (revcat l r) prc)
         _ (each d (\ ln (do (putc 10) (each ln prc))))
-        ld (len d)
-        col (+ (? (twop u) 0 pl) (len l))
+        ld (pin d)
+        col (+ (? (twop u) 0 pl) (pin l))
         _ (? (< 0 ld) (do (putc 27) (putc 91) (putn ld 10) (putc 65)) 0)
         _ (putc 13)
         _ (? (< 0 col) (do (putc 27) (putc 91) (putn col 10) (putc 67)) 0)
@@ -214,7 +214,7 @@
    ; before redrawing, so we never rely on a saved absolute cursor
    ; position -- terminal scrolling stays consistent. since nothing
    ; between renders moves the cursor (no putc except in the submit
-   ; branch which exits), the next render's pra is always (len u) of
+   ; branch which exits), the next render's pra is always (pin u) of
    ; the CURRENT frame, regardless of how the state transitions; we
    ; cache it as npra and route every recursion through it.
    ;
@@ -226,11 +226,11 @@
    (edline hu hd)
      (: pr ps1
         _ (puts pr)
-        pl (len pr)
+        pl (pin pr)
         (loop pra u l r d hu hd cur)
           (: _ (edrender pl pra u l r d)
              c (edev 0)
-             npra (len u)
+             npra (pin u)
              (kloop uu ll rr dd) (loop npra uu ll rr dd hu hd cur)
              (kedit uu ll rr dd) (loop npra uu ll rr dd (detach hu cur) hd 0)
              (khist uu ll rr dd nhu nhd ncur) (loop npra uu ll rr dd nhu nhd ncur)

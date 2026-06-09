@@ -307,7 +307,7 @@ static union u const
 
 #ifndef GL_BOOTSTRAP
 static char const
- rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(gensym 0)))";
+ rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(nom 0)))";
 #endif
 // host CLI driver from gwen/cli.g: gl0 takes the sed-wrapped raw text (it can't
 // lcat its own arg handler); the final gl takes the canonicalized lcat header.
@@ -332,7 +332,7 @@ static char const tests0[] =
 static char const
  s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (len s)) (X (get 0 i s) (g (+ 1 i))))) 0))",
  runner[] = "(: p (strin (s2cl tests))"
-            " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (gensym 0)))";
+            " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))";
 #endif
 
 int main(int argc, char const **argv) {

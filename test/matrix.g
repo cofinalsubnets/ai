@@ -57,7 +57,7 @@
  ; --- row KSym: applying a symbol indexes its name (== indexing the name str) ---
  (= 97 ('abc 0))   (= 99 ('abc 2))            ; interned: name bytes
  (= 1 ('abc 9))    (= 1 ('abc 'x))            ; oob / non-number -> 1
- (= 1 ((gensym 0) 5))                         ; anonymous: no name -> act as 0
+ (= 1 ((nom 0) 5))                         ; anonymous: no name -> act as 0
 
  ; --- row KTuple: a rank-0 box / array is a Church numeral (operand ** operator,
  ;     or operator-fold over a function). Full tower coverage in functions.g. ---
@@ -131,7 +131,7 @@
  (= '(1 2 3 4) (+ '(1 2) '(3 4)))             ; list + list
  (= '(5 1 2) (+ 5 '(1 2)))   (= '(1 2 5) (+ '(1 2) 5))   ; num <-> list
  (= '("ab" 1 2) (+ "ab" '(1 2)))              ; str <-> list (str is one element)
- (= 3 (len (+ @(1 2) '(7 8))))                ; array <-> list (array is one element)
+ (= 3 (pin (+ @(1 2) '(7 8))))                ; array <-> list (array is one element)
 
  ; --- addl lane: a lambda operand anywhere -> CHURCH-NUMERAL add (not pointwise):
  ;     (m + n) a x == m a (n a x), so the result is a function awaiting (f x).

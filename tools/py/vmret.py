@@ -40,7 +40,7 @@ EM_LOONGARCH = 258
 # A disassembly line is a function header `<addr> <name>:` or an
 # instruction `<addr>: <text>`. Both GNU objdump and llvm-objdump emit
 # this shape (with --no-show-raw-insn the raw bytes are gone).
-HEADER_RE = re.compile(r"^\s*[0-9a-fA-F]+\s+<(.+)>:\s*$")
+HEADER_RE = re.compile(r"^\s*([0-9a-fA-F]+)\s+<(.+)>:\s*$")   # 1 = start addr, 2 = name
 # llvm-objdump also prints intra-function *local labels* as headers of the
 # same shape (e.g. `<.L0 >`, `<.Ltmp3>`) -- on loongarch64 it emits
 # thousands of them. They are NOT function boundaries; a ret in the segment
@@ -95,6 +95,34 @@ def elf_machine(path):
     return machine, names.get(machine, "0x%x" % machine)
 
 
+def func_sizes(path):
+    """Map {st_value: st_size} for sized STT_FUNC symbols, read from .symtab.
+    The text scan charges any `ret` in inter-function padding to the nearest
+    preceding <name>: header (e.g. a stray aligned `ret` after a clean tail-
+    jump). Bounding each function to [start, start+size) drops those orphans.
+    Empty if stripped (-> scan falls back to its old unbounded behaviour)."""
+    with open(path, "rb") as f:
+        data = f.read()
+    (e_shoff,) = struct.unpack_from("<Q", data, 0x28)
+    e_shentsize, e_shnum = struct.unpack_from("<HH", data, 0x3a)
+    symtab = None
+    for k in range(e_shnum):
+        sh = e_shoff + k * e_shentsize
+        (sh_type,) = struct.unpack_from("<I", data, sh + 4)
+        if sh_type == 2:                                  # SHT_SYMTAB
+            symtab = struct.unpack_from("<QQ", data, sh + 24)   # (sh_offset, sh_size)
+            break
+    sizes = {}
+    if symtab:
+        off, size = symtab
+        for p in range(off, off + size, 24):              # Elf64_Sym is 24 bytes
+            st_info = data[p + 4]
+            st_value, st_size = struct.unpack_from("<QQ", data, p + 8)
+            if (st_info & 0xf) == 2 and st_size:          # STT_FUNC, sized
+                sizes[st_value] = st_size
+    return sizes
+
+
 def find_objdump(explicit, machine):
     # The system `objdump` is typically built for the host arch only (x86-64
     # here), so it can't disassemble the kernel's other-arch ELFs --
@@ -132,12 +160,16 @@ def mnemonic(insn_text):
     return ""
 
 
-def scan(lines, prefix, ret_re):
+def scan(lines, prefix, ret_re, sizes):
     """Walk the disassembly, grouping by function header. Return
     [(name, [ret_addr, ...]), ...] for matching functions, and the total
-    number of matching functions seen (flagged or not)."""
+    number of matching functions seen (flagged or not). `sizes` maps a
+    function start address to its symtab byte size; a ret at or past
+    start+size is padding (not the function's) and is ignored -- unsized
+    symbols stay unbounded (old behaviour)."""
     flagged, total = [], 0
     name, watching, rets = None, False, []
+    lim = 1 << 64                       # current function's extent end (unbounded until a header)
 
     def close():
         if watching and rets:
@@ -146,20 +178,23 @@ def scan(lines, prefix, ret_re):
     for line in lines:
         h = HEADER_RE.match(line)
         if h:
-            hname = h.group(1).strip()
+            hname = h.group(2).strip()
             if LABEL_RE.match(hname):
                 continue                # local label: stay inside this function
             close()
             name = hname
             watching = name.startswith(prefix)
             rets = []
+            start = int(h.group(1), 16)
+            sz = sizes.get(start, 0)
+            lim = start + sz if sz else (1 << 64)   # bound to the symtab extent; unsized -> unbounded
             if watching:
                 total += 1
             continue
         if not watching:
             continue
         m = INSN_RE.match(line)
-        if m and ret_re.match(mnemonic(m.group(2))):
+        if m and int(m.group(1), 16) < lim and ret_re.match(mnemonic(m.group(2))):
             rets.append(m.group(1))
     close()
     return flagged, total
@@ -196,7 +231,7 @@ def main():
         ret_re = RET_DEFAULT
 
     od = find_objdump(objdump, machine)
-    flagged, total = scan(disassemble(od, path), prefix, ret_re)
+    flagged, total = scan(disassemble(od, path), prefix, ret_re, func_sizes(path))
 
     base = os.path.basename(path)
     if total == 0:

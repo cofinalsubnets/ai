@@ -158,18 +158,18 @@
  ; --- aall/aany lift the 0+0i-is-falsy rule ---
  (aall ca-v)
  (nilp (aall (arrl c '(2) (L ~(0 0) ~(1 1)))))   ; a 0+0i element fails aall
- (len (arrl c '(2) (L ~(0 0) ~(1 1))))          ; one nonzero satisfies aany
- (nilp (len ca-z))
+ (pin (arrl c '(2) (L ~(0 0) ~(1 1))))          ; one nonzero satisfies aany
+ (nilp (pin ca-z))
 
  ; --- abs of a complex array = the flat L2 norm over every (re, im) ---
  (= 5.0 (abs (arrl c '(1) (L ~(3 4)))))          ; |3+4i| = 5
  (close ((/ 1 2) 30) (abs ca-v))                     ; sqrt(1+4+9+16)
 
- ; --- len / nilp: the invariant (nilp x) == (= 0 (len x)) holds here too ---
- (= 0 (len ca-z))   (nilp ca-z)
- !!ca-v   (= 6 (len ca-v))                        ; ceil(sqrt 30) = 6
- (= (? (nilp ca-v) 1 0) (? (= 0 (len ca-v)) 1 0))
- (= (? (nilp ca-z) 1 0) (? (= 0 (len ca-z)) 1 0))
+ ; --- pin / nilp: the invariant (nilp x) == (= 0 (pin x)) holds here too ---
+ (= 0 (pin ca-z))   (nilp ca-z)
+ !!ca-v   (= 6 (pin ca-v))                        ; ceil(sqrt 30) = 6
+ (= (? (nilp ca-v) 1 0) (? (= 0 (pin ca-v)) 1 0))
+ (= (? (nilp ca-z) 1 0) (? (= 0 (pin ca-z)) 1 0))
 
  ; --- printer: rank-1 terse @((C…)…); rank>=2 (array '(…) (C…)…) ---
  (= "@(~(1.0 2.0) ~(3.0 4.0))" (inspect ca-v))

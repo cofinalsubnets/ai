@@ -105,8 +105,8 @@ struct g_atom *intern_checked(struct g*, struct g_str*);
 g_vm_t g_vm_kcall,
  g_vm_two, g_vm_tuple, g_vm_sym, g_vm_str, g_vm_big, // data sentinels (enum q order); apply dispatches through g_apply_mx
  g_vm_putn, g_vm_info,    g_vm_clock,
- g_vm_nilp,  g_vm_putc, g_vm_gensym, g_vm_intern, g_vm_twop,
- g_vm_len, g_vm_get, g_vm_fputx, g_vm_buf, g_vm_bufnew, g_vm_bcopy,
+ g_vm_nilp,  g_vm_putc, g_vm_nom, g_vm_intern, g_vm_twop,
+ g_vm_pin, g_vm_get, g_vm_fputx, g_vm_buf, g_vm_bufnew, g_vm_bcopy,
  g_vm_fixp,  g_vm_symp,   g_vm_strp,   g_vm_mapp, g_vm_band,   g_vm_bor,  g_vm_flo,  g_vm_flop,
  g_vm_sin, g_vm_cos, g_vm_log, g_vm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not bifs
  // Step 7 -- complex (kernel/cplx.c). g_vm_cplx_bin (declared apart, below) is
@@ -170,8 +170,8 @@ static g_inline bool strp(word _) { return lamp(_) && cell(_)->ap == g_vm_str; }
 // the generic thread scan forwards the embedded string pointer for free; no
 // bespoke evac/copy rule, and the data-sentinel mechanism stays reserved for
 // kinds that need one. The bytes live in an ordinary g_str we mutate in place
-// (cf. the `to` output port). Earned by tools/elf2efi.g, which back-patches a
-// PE image. Recognized by ap, like iop() for ports.
+// (cf. the `to` output port). Earned by the build tools that back-patch a
+// binary image in place. Recognized by ap, like iop() for ports.
 struct g_buf { g_vm_t *ap; struct g_str *str; };
 static g_inline bool bufp(word _) { return lamp(_) && cell(_)->ap == g_vm_buf; }
 // A map is a lookup-lambda with stable identity across growth, like the hash it
@@ -299,12 +299,23 @@ bool g_all_zero(struct g_tuple*);
 // NO magnitude walk: the empty singletons (nil = the 0 word; EmptyString), an empty table,
 // a negative fixnum/bignum, or a tuple via g_all_zero (rank-0 scalar <=0, else norm-zero
 // scan that short-circuits). Pair, symbol, non-empty string/table/array, buf, fn, port are
-// truthy without traversal. Lockstep with g_len (g_vm_len): same zero-conditions.
+// truthy without traversal. Lockstep with g_pin (g_vm_pin): same zero-conditions.
+// a symbol's # (pin) value, shared by g_mag (#) and g_nilp (!). THE empty symbol
+// (EMPTY_SYM, prints as ()) has no name -> 0 -> falsy. Every other present symbol
+// (interned, named-uninterned, anonymous nom) floors to >=1 -> truthy.
+static g_inline intptr_t pin_sym(word x) {
+  if (x == EMPTY_SYM) return 0;                        // the empty symbol: falsy (prints as ())
+  struct g_atom *s = (struct g_atom*) x;
+  intptr_t nl = !s->nom ? 0
+    : strp(word(s->nom)) ? (intptr_t) len(s->nom)
+    : ((struct g_atom*) s->nom)->nom ? (intptr_t) len(((struct g_atom*) s->nom)->nom) : 0;
+  return nl ? nl : 1; }                                // present symbol -> truthy
 static g_inline bool g_nilp(word x) {
   if (x == nil || x == EmptyString) return true;
   if (fixp(x)) return getnum(x) < 0;                 // 0 is nil (caught above); negatives false
   if (mapp(x)) return map_len(x) == 0;
   if (bigp(x)) return ((struct g_big*) x)->slen < 0; // a negative bignum is false
+  if (symp(x)) return pin_sym(x) == 0;               // empty/anonymous symbol name -> nil (pin lockstep)
   return tupp(x) && g_all_zero(tuple(x)); }          // boxed scalar <=0 / array norm 0
 
 // Truncation toward zero / float remainder. Pure, freestanding-safe (no libm):
@@ -405,7 +416,7 @@ static g_inline g_flo_t cplx_mod(word x) {
  return g_sqrt(re * re + im * im); }
 // Total-order non-positive test for a complex scalar (re first, then im): the
 // falsiness oracle for `~(re im)` -- false iff it sorts <= 0+0i (re < 0, or re == 0
-// and im <= 0). Lockstep with g_nilp/g_len: negative-or-zero is FALSE, positive TRUE.
+// and im <= 0). Lockstep with g_nilp/g_pin: negative-or-zero is FALSE, positive TRUE.
 static g_inline bool cplx_nonpos(word x) {
  g_flo_t re = cplx_re(x); return re < 0 || (re == 0 && cplx_im(x) <= 0); }
 static g_inline void cplx_put(struct g_tuple *v, g_flo_t re, g_flo_t im) {
@@ -566,10 +577,10 @@ static g_inline struct g*g_pop(struct g*f, uintptr_t n) {
  _(bif_ssub, "ssub", S3(g_vm_ssub)) _(bif_scat, "scat", S2(g_vm_scat)) \
  _(bif_fread, "fread", S2(g_vm_fread))\
  _(bif_string, "string", S1(g_vm_string))\
- _(bif_intern, "intern", S1(g_vm_intern)) _(bif_gensym, "gensym", S1(g_vm_gensym))\
+ _(bif_intern, "intern", S1(g_vm_intern)) _(bif_nom, "nom", S1(g_vm_nom))\
  _(bif_lam, "lam", S1(g_vm_lam))\
  _(bif_peek, "peek", S2(g_vm_peek2)) _(bif_poke, "poke", S3(g_vm_poke2)) _(bif_trim, "trim", S1(g_vm_trim))\
- _(bif_seek, "seek", S2(g_vm_seek)) _(bif_len, "len", S1(g_vm_len)) _(bif_get, "get", S3(g_vm_get))\
+ _(bif_seek, "seek", S2(g_vm_seek)) _(bif_pin, "pin", S1(g_vm_pin)) _(bif_get, "get", S3(g_vm_get))\
  _(bif_put, "put", S3(g_vm_put)) _(bif_hnew, "hashn", S1(g_vm_hnew)) _(bif_hashk, "hashk", S1(g_vm_hashk))\
  _(bif_hash, "hash", S1(g_vm_hashof))\
  _(bif_bufnew, "bufnew", S1(g_vm_bufnew)) _(bif_bcopy, "bcopy", S5(g_vm_bcopy))\
@@ -1490,11 +1501,14 @@ g_noinline struct g *g_evals_(struct g*f, char const*s) {
 // vm
 // ============================================================================
 // (set-numap fn): install the gwen handler for fixnum-as-function application into the
-// per-instance f->numap field. Called once from prelude.g; the value stays as the bif's
-// result. f->numap is a fast-path cache, not a precondition: resolve_handler below lazily
-// looks the handler up in the dict on first use if a slot is still 0, so a numeric
-// application can no longer reach an uninstalled handler and fault.
-g_vm(g_vm_set_numap) { f->numap = Sp[0]; return Ip++, Continue(); }
+// the global dict under numap_sym. The dict is GC-traced and egg-baked, so the handler
+// survives into the runtime image (the f->numap field is NOT baked and reads 0 there);
+// resolve_handler then finds it via the dict. Mirrors g_vm_defglob's k/v/dict + g_mapput.
+g_vm(g_vm_set_numap) {
+ Have(3); Sp -= 3;
+ word v = Sp[3];
+ return Sp[0] = f->numap_sym, Sp[1] = v, Sp[2] = f->dict, Pack(f),
+  !g_ok(f = g_mapput(f)) ? gtrap(f) : (Unpack(f), Sp += 1, Ip += 1, Continue()); }
 
 // A valid handler is a non-null even word (a heap closure); an unset 0, nil
 // (=putnum(0)=1, odd), and any fixnum are not. If `cur` isn't valid, resolve `nom`
@@ -1515,8 +1529,16 @@ static g_inline g_word resolve_handler(struct g *f, g_word cur, g_word nom) {
 // holds the 4-arg add lambda, f->bcomb the 3-arg compose lambda; the C handlers reuse
 // numap_drive to compute the partial (scomb f g) / (bcomb f g) -- itself the new
 // function -- and leave it as the result, resuming at Ip+1.
-g_vm(g_vm_set_scomb) { f->scomb = Sp[0]; return Ip++, Continue(); }
-g_vm(g_vm_set_bcomb) { f->bcomb = Sp[0]; return Ip++, Continue(); }
+g_vm(g_vm_set_scomb) {
+ Have(3); Sp -= 3;
+ word v = Sp[3];
+ return Sp[0] = f->scomb_sym, Sp[1] = v, Sp[2] = f->dict, Pack(f),
+  !g_ok(f = g_mapput(f)) ? gtrap(f) : (Unpack(f), Sp += 1, Ip += 1, Continue()); }
+g_vm(g_vm_set_bcomb) {
+ Have(3); Sp -= 3;
+ word v = Sp[3];
+ return Sp[0] = f->bcomb_sym, Sp[1] = v, Sp[2] = f->dict, Pack(f),
+  !g_ok(f = g_mapput(f)) ? gtrap(f) : (Unpack(f), Sp += 1, Ip += 1, Continue()); }
 
 // Fixnum-as-function application. A fixnum operator n applied to x is dispatched
 // to the gwen handler in f->numap as (num-ap n x): numeric x -> x**n, a function
@@ -1951,7 +1973,7 @@ g_vm(g_vm_lam) {
 // list pairs, table keys, rank-n array shape-product). Numbers -> floored |x|
 // (fixnum/box/float/complex), so it agrees with (int (abs x)); a bignum saturates
 // to the nearest representable fixnum (sign-preserving). Symbol -> its name length
-// (anonymous gensym -> 0). Everything else (code, ports) -> 0.
+// (anonymous nom -> 0). Everything else (code, ports) -> 0.
 // ceil a non-negative magnitude into a fixnum, saturating at FIX_MAX. ceil (not
 // floor) so the result is 0 *only* when m is exactly 0 -- len then doubles as a
 // zero test: (= 0 (len x)) iff x is zero/empty. Never overflows putnum's tag.
@@ -1964,7 +1986,7 @@ static g_inline intptr_t len_sat(g_flo_t m) {
 //   g_C  packed (re,im) float pairs at tuple_data -> sum all 2n floats squared
 //   g_O  object words -> each element's own g_mag (recursive; depth bounded by nesting)
 //   g_Z/g_R  the element values directly (tuple_get_flo)
-// g_len uses this for arrays/containers (no sign) and for g_O element norms, so a negative
+// g_pin uses this for arrays/containers (no sign) and for g_O element norms, so a negative
 // array element keeps the array truthy (matching g_all_zero's per-family magnitude scan).
 static intptr_t g_mag(word x) {
   if (fixp(x)) { intptr_t n = getnum(x); return n == FIX_MIN ? FIX_MAX : n < 0 ? -n : n; }  // fixnum |x|
@@ -1976,11 +1998,7 @@ static intptr_t g_mag(word x) {
     case KString: return len(x);                                 // string: byte count
     case KTwo: { intptr_t l = 0; word p = x; do l++, p = B(p); while (twop(p)); return l; }  // list
     case KBig: return FIX_MAX;                                  // |bignum| > FIX_MAX: saturate
-    case KSym: { struct g_atom *s = sym(x);                      // symbol: name length, floored at 1
-      intptr_t nl = !s->nom ? 0
-        : strp(word(s->nom)) ? (intptr_t) len(s->nom)
-        : ((struct g_atom*) s->nom)->nom ? (intptr_t) len(((struct g_atom*) s->nom)->nom) : 0;
-      return nl ? nl : 1; }
+    case KSym: return pin_sym(x);                                // symbol: name length (0 if anonymous/empty)
     case KTuple: { struct g_tuple *v = tuple(x);                 // boxed scalar or rank-n array
       uintptr_t i, n = tuple_nelem(v);
       if (!v->rank) {                                            // rank-0 scalar magnitude
@@ -1996,7 +2014,7 @@ static intptr_t g_mag(word x) {
 // so (nilp x) == (= 0 (len x)) and a negative real / non-positive complex is FALSE. An ordered
 // scalar (fix/float/wide-int box/bignum/complex) clamps by the TOTAL ORDER (complex: re then
 // im); arrays and containers have no single sign and pass straight to g_mag. Lockstep w/ g_nilp.
-static intptr_t g_len(word x) {
+static intptr_t g_pin(word x) {
   if (fixp(x)) { intptr_t n = getnum(x); return n <= 0 ? 0 : n; }   // <= 0 -> 0 (0 is nil)
   if (bigp(x)) return ((struct g_big*) x)->slen < 0 ? 0 : FIX_MAX;  // negative bignum -> 0
   if (tupp(x) && !tuple(x)->rank) {                                 // boxed scalar: total-order <= 0 -> 0
@@ -2005,7 +2023,7 @@ static intptr_t g_len(word x) {
     if (v->type == g_C) return cplx_nonpos(x) ? 0 : len_sat(cplx_mod(x));
     return box_get(x) < 0 ? 0 : FIX_MAX; }                          // g_Z wide-int box
   return g_mag(x); }                                                // arrays / strings / lists / syms / maps / bufs / fns
-g_vm(g_vm_len) { Sp[0] = putnum(g_len(Sp[0])); Ip += 1; return Continue(); }
+g_vm(g_vm_pin) { Sp[0] = putnum(g_pin(Sp[0])); Ip += 1; return Continue(); }
 
 // ============================================================================
 // io
@@ -2231,8 +2249,9 @@ static g_inline struct g*gzput_two(struct g*f, word _, uintptr_t off) {
  struct g_str *n;
  // a one-operand `\` pair (`(\ x)`) is quote -> print as 'x; ≥2 operands is a lambda.
  if (symp(A(f->sp[0])) && (n = sym(A(f->sp[0]))->nom) && len(n) == 1 && txt(n)[0] == '\\'
-     && twop(B(f->sp[0])) && !twop(BB(f->sp[0])))
-  f = gzputx(gzputc(f, '\''), AB(f->sp[0]), off);
+     && twop(B(f->sp[0])) && !twop(BB(f->sp[0]))) {
+  f = gzputc(f, '\'');                          // GC here may relocate sp[0]; read AB after
+  f = gzputx(f, AB(f->sp[0]), off); }
  else for (f = gzputc(f, '(');; f = gzputc(f, ' '), f->sp[0] = B(f->sp[0])) {
   f = gzputx(f, A(f->sp[0]), off);            // off threaded so nested tables are still tracked
   if (!twop(B(f->sp[0]))) { f = gzputc(f, ')'); break; } }
@@ -2346,16 +2365,16 @@ static g_inline struct g*gzput_str(struct g*f, word _) {
   f = gzputc(f, c); }
  return g_pop(gzputc(f, '"'), 1); }
 
-// A symbol's nom encodes its kind: 0 = anonymous gensym, a string = interned, a
+// A symbol's nom encodes its kind: 0 = anonymous nom, a string = interned, a
 // symbol = named-uninterned (the naming symbol, whose own nom is the name string).
 // Interned syms print bare; gensyms get the `$` sigil (the `$` reader macro wraps
-// its operand with gensym): a named-uninterned gensym as `$<name>` (re-reads to a
-// fresh gensym of the same name), an anonymous one as `$<addr>` (unique, doesn't
+// its operand with nom): a named-uninterned nom as `$<name>` (re-reads to a
+// fresh nom of the same name), an anonymous one as `$<addr>` (unique, doesn't
 // round-trip to identity -- the addr just makes the printout distinguishable).
 static g_inline struct g*gzput_sym(struct g*f, word _) {
  if (g_ok(f = g_push(f, 1, _))) {
   word nom = word(sym(f->sp[0])->nom);
-  if (!nom) f = gzprintf(f, "$%z", f->sp[0]);              // anonymous gensym -> $<addr>
+  if (!nom) f = gzprintf(f, "$%z", f->sp[0]);              // anonymous nom -> $<addr>
   else if (strp(nom)) {                                     // interned: bare name
    f->sp[0] = nom;
    for (uintptr_t l = len(nom), i = 0; g_ok(f) && i < l;)
@@ -2448,6 +2467,69 @@ static word fn_src(struct g *c, union u *k, word x) {
  return ptr(x) > ptr(c) && ptr(x) < ptr(c) + c->len
      && lamp(s) && ptr(s) >= ptr(c) && ptr(s) < ptr(c) + c->len && twop(s) ? s : 0; }
 
+// --- de Bruijn canonical printing of a lambda's source ---------------------
+// A \-bound variable prints as $<level> where the level (de Bruijn LEVEL:
+// outermost binder 0, counting inward, left-to-right within a \-group) is
+// rendered in a-z shortlex ($a,$b,…,$z,$aa,…), so a-equivalent lambdas print
+// identically -- (\ x x) and (\ y y) both -> (\ $a $a) -- and inspect agrees
+// with = (same binder convention as salpha). Free/global/:-bound vars keep
+// their names; quoted data (one-operand \) is shared verbatim, never renamed.
+// gz_canon rebuilds the source with bound syms replaced: it pre-interns the
+// d<lvl> names and pre-reserves the cell count, so the rebuild itself allocates
+// nothing and cannot GC -- pointers into the parked source stay stable. The
+// names are interned plain symbols (d0,d1,…) so the printed form round-trips.
+struct gz_bv { word sym; uintptr_t lev; struct gz_bv *up; };  // a \-binder in scope
+static g_inline bool gz_lamhead(word a) {                     // is a the symbol \ ?
+ struct g_str *nm;
+ return symp(a) && (nm = sym(a)->nom) && strp(word(nm)) && len(nm) == 1 && txt(nm)[0] == '\\'; }
+static g_inline bool gz_islam(word x) {                       // (\ b.. body): >=2 operands
+ return twop(x) && gz_lamhead(A(x)) && twop(B(x)) && twop(BB(x)); }
+static g_inline bool gz_isquote(word x) {                     // (\ datum): exactly 1 operand
+ return twop(x) && gz_lamhead(A(x)) && twop(B(x)) && !twop(BB(x)); }
+static uintptr_t gz_cells(word x) {                           // pairs the rebuild will bump
+ return !twop(x) || gz_isquote(x) ? 0 : 1 + gz_cells(A(x)) + gz_cells(B(x)); }
+static uintptr_t gz_depth(word x, uintptr_t d) {              // max binder level + 1 (= # d-syms)
+ if (!twop(x) || gz_isquote(x)) return d;
+ if (gz_islam(x)) {
+  word o = B(x); uintptr_t nb = 0;
+  while (twop(B(o))) nb++, o = B(o);                          // every operand but the last = a binder
+  uintptr_t here = d + nb, body = gz_depth(A(o), here);
+  return here > body ? here : body; }
+ uintptr_t a = gz_depth(A(x), d), b = gz_depth(B(x), d);
+ return a > b ? a : b; }
+static word gz_build_ops(struct g *f, word o, struct gz_bv *sc, uintptr_t d, uintptr_t D);
+static word gz_build(struct g *f, word x, struct gz_bv *sc, uintptr_t d, uintptr_t D) {
+ if (!twop(x)) {                                              // atom: a bound sym -> d<lev>, else as-is
+  if (symp(x)) for (struct gz_bv *p = sc; p; p = p->up) if (p->sym == x) return f->sp[D - 1 - p->lev];
+  return x; }
+ if (gz_isquote(x)) return x;                                 // quoted data: share, do not descend
+ word a, b;
+ if (gz_islam(x)) a = A(x), b = gz_build_ops(f, B(x), sc, d, D);  // share \, rename the operand spine
+ else a = gz_build(f, A(x), sc, d, D), b = gz_build(f, B(x), sc, d, D);
+ struct g_pair *p = bump(f, Width(struct g_pair));
+ return ini_two(p, a, b), (word) p; }
+static word gz_build_ops(struct g *f, word o, struct gz_bv *sc, uintptr_t d, uintptr_t D) {
+ word car, rest;
+ if (!twop(B(o))) car = gz_build(f, A(o), sc, d, D), rest = nil;  // last operand = the body
+ else { struct gz_bv fr = { A(o), d, sc };                        // a binder, level d, in scope for the rest
+        car = f->sp[D - 1 - d], rest = gz_build_ops(f, B(o), &fr, d + 1, D); }
+ struct g_pair *p = bump(f, Width(struct g_pair));
+ return ini_two(p, car, rest), (word) p; }
+// sp[0] = a lambda's source \-expr; replace it with the de Bruijn-renamed copy.
+static struct g *gz_canon(struct g *f) {
+ word s = f->sp[0];
+ if (!gz_islam(s)) return f;                                  // not a lambda -> leave as-is
+ uintptr_t P = gz_cells(s), D = gz_depth(s, 0);
+ for (uintptr_t i = 0; i < D; i++) {                          // push d0,d1,… (de Bruijn level); src parked below
+  char b[24], *e = b + sizeof b; uintptr_t n = i;            // interned d<lvl> -> reads back as the same sym
+  *--e = 0;
+  do { *--e = '0' + n % 10; } while (n /= 10);
+  *--e = 'd';
+  if (!g_ok(f = intern(g_strof(f, e)))) return f; }
+ if (!g_ok(f = g_have(f, P * Width(struct g_pair)))) return f;  // reserve cells: the last possible GC
+ word r = gz_build(f, f->sp[D], 0, 0, D);                     // alloc-free, GC-free; f->sp stays put
+ return f->sp[D] = r, f->sp += D, f; }
+
 // Print a function value. Like tuple/cplx/hash it's a `,`-prefixed value form (so it
 // reads back via uq=identity): ,(base arg…) for a partial application / closure,
 // ,name for a builtin, ,(\ …) for a compiled lambda (its stored source). An opaque
@@ -2478,7 +2560,11 @@ static struct g *gzput_fn_body(struct g *f, word x, uintptr_t off) {
  char const *nm = g_bif_name(x);                    // builtin -> name
  if (nm) return gzputcs(f, nm);
  word s = fn_src(c, k, x);                          // compiled lambda -> source \-expr
- return s ? gzputx(f, s, off) : gzprintf(f, "\\%z", x); }
+ if (!s) return gzprintf(f, "\\%z", x);
+ if (!g_ok(f = g_push(f, 1, s))) return f;          // park source across gz_canon's allocs
+ f = gz_canon(f);                                   // sp[0] := de Bruijn-renamed copy
+ if (g_ok(f)) f = gzputx(f, f->sp[0], off);
+ return g_ok(f) ? g_pop(f, 1) : f; }
 
 static g_noinline struct g *gzputx(struct g *f, intptr_t x, uintptr_t off) {
  if (fixp(x)) return gzprintf(f, "%d", getnum(x));
@@ -2771,13 +2857,13 @@ static struct g *gz_parse(struct g *f, bool multi) {
   if (!g_ok(f = g_z_getc(f))) return f;
   int c = f->b, c2 = EOF;
   switch (c) {
-   case '(':  f = push_frame(f); continue;
+   case '(': case '[': case '{': f = push_frame(f); continue;   // [ ] { } are () synonyms
    case '\'': f = push_wrap(f, "\\"); continue;
    case '`':  f = push_wrap(f, "qq"); continue;
    case '%':  f = push_wrap(f, "hasht"); continue;     // %(k v …)->(hasht k v …), %x->(hasht x)
-   case '#':  f = push_wrap(f, "len"); continue;       // #x->(len x): wrap operand in len
+   case '#':  f = push_wrap(f, "pin"); continue;       // #x->(len x): wrap operand in len
    case '@':  f = push_wrap(f, "tuple"); continue;       // @(e …)->(tuple e …) [array], @()->(tuple)
-   case '$':  f = push_wrap(f, "gsym"); continue;      // $x->(gsym x)->(gensym 'x): a fresh gensym
+   case '$':  f = push_wrap(f, "gsym"); continue;      // $x->(gsym x)->(nom 'x): a fresh nom
    case '!':  f = push_wrap(f, "nilp"); continue;      // !x->(nilp x): logical not (`!=` is gone, use !(= …))
    case '~':                                            // ~(re im)->(com re im) [construct]; ~x->(clift x)
     if (!g_ok(f = zgetc(f))) return f;                 // peek the char after ~: `(` -> splice into com (build
@@ -2790,7 +2876,7 @@ static struct g *gz_parse(struct g *f, bool multi) {
     if ((c2 = f->b) == '@') { f = push_wrap(f, "uqs"); continue; }
     if (c2 != EOF) f = zungetc(f, c2);
     f = push_wrap(f, "uq"); continue;
-   case ')':
+   case ')': case ']': case '}':
     if (nilp(f->sp[0])) return encode(g_core_of(f), g_status_eof);   // stray ) / read1
     if (symp(A(f->sp[0]))) return encode(g_core_of(f), g_status_more); // wrap wants an operand
     f = g_push(f, 1, AA(f->sp[0]));                    // d = head of the closed frame
@@ -2873,7 +2959,8 @@ static g_inline struct g *gzread1sym(struct g*f, int c) {
     switch (c = f->b) {
      default: continue;
      case ' ': case '\n': case '\t': case '\r': case '\f': case ';': case '#':
-     case '(': case ')': case '"': case '\'': case '`': case ',': case 0 : case EOF:
+     case '(': case ')': case '[': case ']': case '{': case '}':
+     case '"': case '\'': case '`': case ',': case 0 : case EOF:
       if (!g_ok(f = zungetc(f, c))) return f;
       struct g_str *s = str(f->sp[0]);
       txt(s)[len(s) = n] = 0; // zero terminate for strtol ; n < lim so this is safe
@@ -3304,11 +3391,11 @@ g_vm(g_vm_intern) {
   Sp[0] = word(y); }
  return Ip += 1, Continue(); }
 
-// (gensym name) -> a fresh *uninterned* symbol named after `name`: a string (the
+// (nom name) -> a fresh *uninterned* symbol named after `name`: a string (the
 // symbol it would intern to) or a symbol (used directly). The new symbol stores
 // that naming SYMBOL as its nom, which marks it uninterned (interned syms have a
-// string nom; see ini_usym). Any other arg yields an anonymous gensym (nom 0).
-g_vm(g_vm_gensym) {
+// string nom; see ini_usym). Any other arg yields an anonymous nom (nom 0).
+g_vm(g_vm_nom) {
  if (Sp[0] == EmptyString) return Sp[0] = EMPTY_SYM, Ip += 1, Continue(); // ""->the empty sym
  Have(2 * Width(struct g_atom));               // room for the wrapper + a fresh intern
  struct g_atom *nom;
@@ -3518,7 +3605,7 @@ static g_vm(g_vm_add_seq) {
 // (a scalar lifts into whatever it joins). Mixing demotes to the lower rank:
 // isym+usym -> usym, sym+str -> str, num+sym -> sym (lifted), num+str -> str. The
 // concat is built as one string in operand order, then returned per the result
-// rank: string as-is / gensym'd to a fresh uninterned sym / interned. An empty
+// rank: string as-is / nom'd to a fresh uninterned sym / interned. An empty
 // result is the g_str_empty / g_sym_empty singleton (the additive identity).
 static g_inline struct g_str *add_name(word x) {        // symbol -> name string, or 0 (anon)
  word nom = word(sym(x)->nom);
@@ -3552,7 +3639,7 @@ static g_vm(g_vm_add_string) {
  add_emit(add_emit(txt(z), a), b);                      // a's bytes then b's, in order
  *++Sp = word(z);
  return rank == 0 ? (Ip++, Continue())                  // string
-      : rank == 1 ? Ap(g_vm_gensym, f)                  // uninterned symbol (fresh)
+      : rank == 1 ? Ap(g_vm_nom, f)                  // uninterned symbol (fresh)
                   : Ap(g_vm_intern, f); }               // interned symbol
 static g_vm(g_vm_0) {                             // unsupported mix (array <-> text)
  return *++Sp = nil, Ip++, Continue(); }
@@ -3616,7 +3703,7 @@ static g_vm(g_vm_mul_rep) {
  for (uintptr_t i = 0; i < n; i++) memcpy(txt(z) + i * sl, txt(src), sl);
  *++Sp = word(z);
  return rank == 0 ? (Ip++, Continue())             // string
-      : rank == 1 ? Ap(g_vm_gensym, f)             // uninterned symbol
+      : rank == 1 ? Ap(g_vm_nom, f)             // uninterned symbol
                   : Ap(g_vm_intern, f); }          // interned symbol
 
 // --- apply lane (the data-value `(f x)` handlers; moved here from data.c) -----
@@ -3640,7 +3727,7 @@ static g_vm(data_string_apply) {
 // (y k): applying a symbol indexes its underlying name string, so (y k) == (nom k).
 // nom encodes the kind: a string is the name (interned), a symbol is the naming
 // symbol of a named-uninterned sym (follow once to its string nom), 0 is an anonymous
-// gensym. With no underlying string we act like 0 (absent name == "" == 0 -> 1).
+// nom. With no underlying string we act like 0 (absent name == "" == 0 -> 1).
 static g_vm(data_sym_apply) {
  word nom = word(((struct g_atom*) Ip)->nom);
  if (nom && cell(nom)->ap == g_vm_sym)              // named-uninterned: follow to the naming symbol
@@ -4074,6 +4161,20 @@ static uintptr_t shash(struct g *f, word x, struct arib *env) {
   struct arib r = { p, p, n, n, env };
   return (mix * (uintptr_t) (n + 7)) ^ (shash(f, body, &r) * mix); }
  return (mix ^ (shash(f, A(x), env) * mix)) ^ (shash(f, B(x), env) * mix); }
+// (\ x x) -- the identity lambda: one binder whose body is that same binder.
+// 1 is the identity numeral ((1 z) = z), so `=` bridges them extensionally:
+// (= 1 (\ x x)) is true (README). All a-variants ((\ y y) …) count; same/idp
+// stays false (distinct objects). Closures / multi-binder lambdas never match.
+static bool id_lam(struct g *c, word v) {
+ if (!lamp(v) || datp(v)) return false;
+ if (!(ptr(v) > ptr(c) && ptr(v) < ptr(c) + c->len)) return false;  // in-pool only: k[-1]/k valid
+ union u *k = cell(v);
+ if (fn_partialp(k)) return false;
+ word s = fn_src(c, k, v);                            // s = (\ b.. body)
+ if (!s || !gz_islam(s)) return false;
+ word ops = B(s);                                     // (binder body ..)
+ return !twop(B(B(ops)))                              // exactly one binder
+     && symp(A(ops)) && A(ops) == A(B(ops)); }        // body IS that binder
 g_noinline bool eqv(struct g *f, word a, word b) {
  word *base = off_pool(f), *top = base + f->len, *w = base;
  struct g *c = g_core_of(f);
@@ -4097,6 +4198,8 @@ g_noinline bool eqv(struct g *f, word a, word b) {
      if (!salpha(f, sa, sb, 0)) return false;             // α-equivalence of source \-exprs
      a = b; continue; }                                   // equal -> drain worklist
     return false; }
+   // 1 (identity numeral) bridges to (\ x x) (identity lambda) extensionally.
+   if ((a == putnum(1) && id_lam(c, b)) || (b == putnum(1) && id_lam(c, a))) { a = b; continue; }
    if (((a | b) & 1) || !datp(a) || !datp(b) || typ(a) != typ(b)) return false;
    switch (typ(a)) {
     default: return false;
@@ -4697,7 +4800,7 @@ g_vm(g_vm_ashape) {
  return Sp[0] = list, Ip++, Continue(); }
 
 // --- falsiness -------------------------------------------------------------
-// Tuple falsiness, in lockstep with g_len. A rank-0 boxed scalar (float/wide-int/complex)
+// Tuple falsiness, in lockstep with g_pin. A rank-0 boxed scalar (float/wide-int/complex)
 // is FALSE iff it sorts <= 0 by the total order (complex: re first, then im) -- so a negative
 // real box and a non-positive complex are false. A rank>=1 array is false iff its L2 norm is
 // zero, i.e. every element has zero MAGNITUDE (sign squares away, so a negative element keeps

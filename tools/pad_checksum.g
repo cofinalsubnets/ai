@@ -65,7 +65,7 @@
    port   (open inpath "r")
    _      (? port 0 (die (scat "cannot open " inpath)))
    s      (slurp port)
-   n      (len s)
+   n      (pin s)
    _      (? (<= n 252) 0 (die "boot2 payload exceeds 252 bytes"))
    crc    (crc32 s n)
    _ (fputs out "// Padded and checksummed version of: ") _ (fputs out inpath) _ (fputc out 10)

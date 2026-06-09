@@ -88,8 +88,8 @@
  (= -3 (amin (arrl o '(3) (L 5 -3 7))))
  (aall (arrl o '(2) '(1 2)))
  (nilp (aall (arrl o '(2) '(1 0))))
- (len (arrl o '(2) '(0 5)))
- (nilp (len (arrl o '(2) '(0 0))))
+ (pin (arrl o '(2) '(0 5)))
+ (nilp (pin (arrl o '(2) '(0 0))))
 
  ; --- arithmetic under GC pressure: bignum products survive collection ---
  (= 0 (oa-churn 40))
@@ -132,21 +132,21 @@
  (= o (atype @((100 2) 1)))                    ; bignum element -> object array
  (aall (= @(1 2 3) (array 3 1 2 3))))
 
-; --- len / truthiness: (nilp x) == (= 0 (len x)) holds across tuple types, via
-; g_len recursing into each element's own magnitude (so an all-zero array is len 0,
+; --- pin / truthiness: (nilp x) == (= 0 (pin x)) holds across tuple types, via
+; g_len recursing into each element's own magnitude (so an all-zero array is pin 0,
 ; not the garbage that a raw word-bits L2 norm would give). A bignum element forces
 ; an o array; a complex element packs into a c array (both keep the invariant).
 (: oa-z2 (array 2 ~(0 0) ~(0 0))               ; two zero complexes -> packed c array
    oa-c2 (array 2 ~(0 0) ~(3 4))               ; |0|²+|3+4i|² = 25 -> ceil 5
-   oa-b2 (array 2 (100 2) 0))                 ; bignum element saturates len, forces o
+   oa-b2 (array 2 (100 2) 0))                 ; bignum element saturates pin, forces o
 (assert
  (= c (atype oa-z2)) (= c (atype oa-c2)) (= o (atype oa-b2))
- (= 0 (len oa-z2)) (nilp oa-z2)                   ; all-zero object array -> falsy, len 0
- (= 5 (len oa-c2)) !!oa-c2                         ; one nonzero element -> truthy, ceil(5)
+ (= 0 (pin oa-z2)) (nilp oa-z2)                   ; all-zero object array -> falsy, pin 0
+ (= 5 (pin oa-c2)) !!oa-c2                         ; one nonzero element -> truthy, ceil(5)
  !!oa-b2                                          ; a bignum element is truthy
- (= 0 (len (arr o '(2 2))))                       ; all-nil object array -> len 0
+ (= 0 (pin (arr o '(2 2))))                       ; all-nil object array -> pin 0
  !!(array 2 'a 'b)                                ; symbol elements -> truthy
- ; the defining invariant (nilp x) == (= 0 (len x)) on each:
- (= (? (nilp oa-z2) 1 0) (? (= 0 (len oa-z2)) 1 0))
- (= (? (nilp oa-c2) 1 0) (? (= 0 (len oa-c2)) 1 0))
- (= (? (nilp oa-b2) 1 0) (? (= 0 (len oa-b2)) 1 0)))
+ ; the defining invariant (nilp x) == (= 0 (pin x)) on each:
+ (= (? (nilp oa-z2) 1 0) (? (= 0 (pin oa-z2)) 1 0))
+ (= (? (nilp oa-c2) 1 0) (? (= 0 (pin oa-c2)) 1 0))
+ (= (? (nilp oa-b2) 1 0) (? (= 0 (pin oa-b2)) 1 0)))

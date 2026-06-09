@@ -11,9 +11,9 @@
   (nilp (same "" 0))                         ; ... nor identical to it
   (= "" "")                                  ; but all empty strings are equal
 
-  ; len: both the empty string and 0 have empty length
-  (= 0 (len ""))
-  (= 0 (len 0))
+  ; pin: both the empty string and 0 have empty length
+  (= 0 (pin ""))
+  (= 0 (pin 0))
 
   ; + / scat: "" is a two-sided identity, and joining empties yields ""
   (= "ab" (+ "" "ab"))   (= "ab" (+ "ab" ""))

@@ -153,7 +153,7 @@
   (= '(+ ((map +) xs) 1)  (infix_rewrite '((map (+) xs) + 1) table))
   ; quoted data is opaque — the inner list is not reshuffled
   (= ''(1 2 3)            (infix_rewrite '('(1 2 3)) table))
-  (= '(len '(1 2 3))      (infix_rewrite '(len '(1 2 3)) table))
+  (= '(pin '(1 2 3))      (infix_rewrite '(pin '(1 2 3)) table))
   ; (prefix X...) escapes back to prefix notation; the tag is stripped
   (= '(L 1 2 3)           (infix_rewrite '((prefix L 1 2 3)) table))
   (= '(+ 1 (L 2 3))       (infix_rewrite '(1 + (prefix L 2 3)) table))
@@ -178,8 +178,8 @@
  (= 5  (infix (+) 2 3))
  (= 25 (: f (* 5) (infix f 4 + 5)))
  (= 10 (: l (L 1 2 3 4) (infix foldl (+) 0 l)))
- (= 3  (infix len '(1 2 3)))
- (= 3  (infix len (prefix L 1 2 3)))
+ (= 3  (infix pin '(1 2 3)))
+ (= 3  (infix pin (prefix L 1 2 3)))
  (= 7  (infix 1 + (infix 2 * 3)))
  (= 7  (infix (infix 2 * 3) + 1)))
 

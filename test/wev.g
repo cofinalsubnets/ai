@@ -20,7 +20,7 @@
  (= 9  (A (X 9 8)))
  (= 8  (B (X 9 8)))
  (= 2  (AB '(1 2 3)))
- (= 4  (len (scat "ab" "cd")))                   ; string built + measured at compile time
+ (= 4  (pin (scat "ab" "cd")))                   ; string built + measured at compile time
 
  ; --- currying: under-application yields a usable closure; prefix+unknown tail ---
  (= 7  ((+ 3) 4))                                ; (+ 3) baked, applied at runtime

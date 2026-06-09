@@ -23,7 +23,7 @@
 ; NUL-terminated ascii at offset o -> string.
 (: (cstr s o) ((: (f i) (? (= 0 (u8 s i)) (ssub s o i) (f (+ i 1)))) o))
 
-(: (prefix? p s) (= p (ssub s 0 (len p)))
+(: (prefix? p s) (= p (ssub s 0 (pin p)))
    (align-up x a) (& (+ x (- a 1)) (^ (- a 1) -1))
    (pow2? n) (&& (< 0 n) (= 0 (& n (- n 1))))
    (bitlen n) ((: (f n k) (? (< 0 n) (f (>> n 1) (+ k 1)) k)) n 0))

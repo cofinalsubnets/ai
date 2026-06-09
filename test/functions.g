@@ -17,7 +17,7 @@
  (= 99 ('abc 2))                              ; ('c)
  (= 1 ('abc 9))                               ; out of range -> act same as 0 ("" k == k**0 == 1)
  (= 1 ('abc 'x))                              ; non-numeric key -> same as 0
- (= 1 ((gensym 0) 5))                         ; anonymous gensym has no name -> act same as 0
+ (= 1 ((nom 0) 5))                         ; anonymous nom has no name -> act same as 0
  (= 8 (3 2))                                  ; (3 2) = 2 ** 3
  (= 13 ((3 (+ 1)) 10)))                       ; non-numeric operand -> (+ 1) composed 3 times on 10
 ; the whole numeric tower is a Church numeral, not just fixnums (data.c data_num_apply

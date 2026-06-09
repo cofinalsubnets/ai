@@ -190,9 +190,10 @@
  (: b (bufnew 1) _ (put 0 257 b) (= 1 (get 0 0 b))) (: b (bufnew 4) _ (bcopy b 0 "ABCD" 0 4) (= 68 (get 0 3 b)))
  !(= (bufnew 2) (bufnew 2)))
 
-; === reader & sigils: ; line comment, #! shebang (NO block comments). ' quote (=1-arg \),
-; ` quasiquote , unquote ,@ splice ; @ array % map # len $ gensym ! nilp ~ complex
-; (~(re im)->(com re im) splice; bare ~x->(clift x) lift/conj) ; . dot (.x->(dot x), see I/O).
+; === reader sigils: ; line comment, #! pinbang (NO block comments). 8 are monadic
+; (sigil/name/->call): # pin (len), ' quote (=1-arg \), ! bang (nilp), . dot, ~ wave
+; (clift), $ nom (gensym), @ tup (array), % map. QUASIQUOTE sigils (NOT monadic operators):
+; ` quasiquote , unquote ,@ splice. ~(re im)->(com re im) splice; bare ~x->(clift x) lift/conj; .x->(dot x), see I/O.
 (assert
  (= '(1 (\ x) 3) `(1 'x 3)) (= '(1 2 3 4) (: xs '(2 3) `(1 ,@xs 4)))
  (= 5 #"hello") (= 42 #42) (symp $x) (= 1 !0) (= 0 !5) !!5
@@ -261,7 +262,7 @@
 ;
 ; gwen/ = .g layers (prelude ev repl cli egg) baked into every frontend. glue: main.c
 ; (host -> out/host/gl); kmain.c + arch/<arch> (freestanding -> out/free: x86_64 aarch64
-; riscv64 loongarch64 playdate rp2040); wasm/. build codegen (gen_data elf2efi vmret) is
+; riscv64 loongarch64 playdate rp2040); wasm/. build codegen (gen_data vmret) is
 ; gwen in tools/; tools/py/ are frozen golden refs (update on output change). CLAUDE.md is
 ; hand-maintained (wrap this file); there is no generator.
 ; STYLE: terse, dense; short names; comments only for non-obvious invariants. C freestanding,

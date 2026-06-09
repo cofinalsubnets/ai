@@ -30,7 +30,7 @@ test_host: host
 	@echo TEST $m
 	@cat $t | $m
 # Validate the gwen tool rewrites against their frozen Python references in
-# tools/py/ (gen_data / elf2efi / vmret). See tools/Makefile + tools/py/README.md.
+# tools/py/ (gen_data / vmret). See tools/Makefile + tools/py/README.md.
 test_tools: host
 	@$(MAKE) -C tools
 all: host kernel playdate wasm rp2040
@@ -260,28 +260,13 @@ $(ko)/$n-$a$(ksuf).elf: $(R)/arch/$a/$a.lds $(k_o)
 	@mkdir -p "$(dir $@)"
 	@$(KLD) $(kldflags) $(k_o) -o $@
 
-# EFI link. x86_64/aarch64: clang drives lld-link via the *-unknown-windows
-# triple. riscv64/loongarch64: link a static ELF with --emit-relocs and wrap it
-# in a PE32+ container via tools/elf2efi.g (run through the host gl, $m).
-kefi_elfmach_riscv64     = elf64lriscv
-kefi_elfmach_loongarch64 = elf64loongarch
-ifneq ($(filter $a,riscv64 loongarch64),)
-$(ko)/$n-$a.efi: $(k_o) $(R)/arch/$a/$a.efi.lds $(R)/tools/elf2efi.$x | $(m)
-	@echo LD	$(@:.efi=.efi.elf)
-	@mkdir -p "$(dir $@)"
-	@$(KLD) -m $(kefi_elfmach_$a) --no-relax -static -nostdlib --gc-sections \
-	  --emit-relocs -T $(R)/arch/$a/$a.efi.lds -e efi_main \
-	  $(k_o) -o $(@:.efi=.efi.elf)
-	@echo EFI	$@
-	@$(m) $(R)/tools/elf2efi.$x $(@:.efi=.efi.elf) $@
-else
+# EFI link: clang drives lld-link via the *-unknown-windows triple.
 $(ko)/$n-$a.efi: $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(KCC) $(kcflags) $(kcflags_$a) $(kcc_if_clang) -nostdlib -fuse-ld=lld \
 	  -Wl,-subsystem:efi_application -Wl,-entry:efi_main \
 	  $(k_o) -o $@
-endif
 
 # The data-sentinel TU bootstraps from the portable header (no $(kdata_h) prereq
 # -- circular). On a clean build data.h doesn't exist yet, so -I$(k_odir) finds

@@ -5,11 +5,11 @@
    p (? (< ms 10) ".00" (< ms 100) ".0" ".")
    (do (putc 10)
 
-     ;(: i (BBB (vminfo 0)) (do (putx (AB i)) (puts " cycles ") (putx (ABB i)) (puts "/") (putx (A (BBB i))) (puts " len/heap max") (putc 10)))
-     (putx (- (test_get 'count) (len f))) (puts " tests pass in ")
+     ;(: i (BBB (vminfo 0)) (do (putx (AB i)) (puts " cycles ") (putx (ABB i)) (puts "/") (putx (A (BBB i))) (puts " pin/heap max") (putc 10)))
+     (putx (- (test_get 'count) (pin f))) (puts " tests pass in ")
      (putx s) (puts p) (puts (putx ms) (puts " seconds") (putc 10))
      (? f (do
-      (putx (len f)) (puts " failed:") (putc 10)
+      (putx (pin f)) (puts " failed:") (putc 10)
       (each f (\ x (do (puts "  ") (putx x) (putc 10))))
       (exit 1)
       ))

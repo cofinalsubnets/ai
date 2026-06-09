@@ -23,13 +23,13 @@
    (hex? c) (? (&& (>= c 48)  (<= c 57))  1
             (? (&& (>= c 97)  (<= c 102)) 1
                (&& (>= c 65)  (<= c 70))))
-   (skip-ws    s i) (? (< i (len s)) (? (ws?  (get 0 i s)) (skip-ws    s (+ i 1)) i) i)
-   (skip-hex   s i) (? (< i (len s)) (? (hex? (get 0 i s)) (skip-hex   s (+ i 1)) i) i)
-   (skip-nonws s i) (? (< i (len s)) (? (ws?  (get 0 i s)) i (skip-nonws s (+ i 1))) i)
+   (skip-ws    s i) (? (< i (pin s)) (? (ws?  (get 0 i s)) (skip-ws    s (+ i 1)) i) i)
+   (skip-hex   s i) (? (< i (pin s)) (? (hex? (get 0 i s)) (skip-hex   s (+ i 1)) i) i)
+   (skip-nonws s i) (? (< i (pin s)) (? (ws?  (get 0 i s)) i (skip-nonws s (+ i 1))) i)
    ; one past the last non-ws char (0 if the line is all whitespace).
-   (trim-end s) ((: (f i e) (? (< i (len s)) (f (+ i 1) (? (ws? (get 0 i s)) e (+ i 1))) e)) 0 0)
-   (prefix? p s) (= p (ssub s 0 (len p)))
-   (dash? a) (&& (< 0 (len a)) (= 45 (get 0 0 a))))
+   (trim-end s) ((: (f i e) (? (< i (pin s)) (f (+ i 1) (? (ws? (get 0 i s)) e (+ i 1))) e)) 0 0)
+   (prefix? p s) (= p (ssub s 0 (pin p)))
+   (dash? a) (&& (< 0 (pin a)) (= 45 (get 0 0 a))))
 
 ; --- line classifiers (the three vmret.py regexes, by hand) -----------
 ; HEADER_RE  ^\s*[0-9a-fA-F]+\s+<(.+)>:\s*$  -> the captured name, else 0.
@@ -55,7 +55,7 @@
       (? (&& (> j i) (= 58 (get 0 j line)))               ; hexrun then ':'
          (: k (skip-ws line (+ j 1))
             (? (> k (+ j 1))                                ; need >=1 ws after ':'
-               (X (ssub line i j) (ssub line k (len line)))
+               (X (ssub line i j) (ssub line k (pin line)))
                0))
          0)))
 
@@ -64,7 +64,7 @@
    (mnemonic text)
    ((: (f i)
        (: ts (skip-ws text i)
-          (? (< ts (len text))
+          (? (< ts (pin text))
              (: te (skip-nonws text ts)
                 w  (ssub text ts te)
                 (? (any (\ p (= p w)) PREFIXES) (f te) w))
@@ -74,54 +74,101 @@
 ; --- per-arch return-mnemonic matchers --------------------------------
 ; x86: ^l?ret[a-z]*$ (ret/retq/lret/...; not iret). arm: ^ret(aa|ab)?$.
 ; riscv64/loongarch64: exactly ret. (iret/eret/sret/mret/ertn never match.)
-(: (lower? s i) (? (< i (len s)) (: c (get 0 i s) (? (&& (>= c 97) (<= c 122)) (lower? s (+ i 1)) 0)) 1)
+(: (lower? s i) (? (< i (pin s)) (: c (get 0 i s) (? (&& (>= c 97) (<= c 122)) (lower? s (+ i 1)) 0)) 1)
    (ret-tail? r) (&& (prefix? "ret" r) (lower? r 3))
-   (retx?  m) (|| (ret-tail? m) (&& (= 108 (get 0 0 m)) (ret-tail? (ssub m 1 (len m)))))
+   (retx?  m) (|| (ret-tail? m) (&& (= 108 (get 0 0 m)) (ret-tail? (ssub m 1 (pin m)))))
    (reta?  m) (|| (= m "ret") (|| (= m "retaa") (= m "retab")))
    (reteq? m) (= m "ret"))
 
 ; --- split a string on '\n' into a list of lines ---------------------
 (: (lines s)
    ((: (f start i)
-       (? (< i (len s))
+       (? (< i (pin s))
           (? (= 10 (get 0 i s)) (X (ssub s start i) (f (+ i 1) (+ i 1))) (f start (+ i 1)))
           (? (< start i) (L (ssub s start i)) 0)))
     0 0))
+
+; --- ELF64 symbol sizes: bound each function to its real extent -------
+; The text scan charges any `ret` in inter-function padding to the nearest
+; preceding <name>: header (e.g. a stray aligned `ret` after a clean tail-jump).
+; Reading each FUNC symbol's st_size from .symtab lets us drop instructions past
+; a function's [start, start+size). ELF64 LE is asserted in the driver below.
+; Addresses can be high-half (a kernel image links at 0xffffffff80000000), which
+; overflows a fixnum -- so u64/BIG/hex->int use `+`/`*` (which promote to bignum),
+; never bitwise `<<`/`|` (which would not), keeping the values exact.
+(: (hex->int s) ((: (f i acc)
+                    (? (< i (pin s))
+                       (: c (get 0 i s)
+                          v (? (&& (>= c 48) (<= c 57))  (- c 48)
+                            (? (&& (>= c 97) (<= c 102)) (- c 87)
+                            (? (&& (>= c 65) (<= c 70))  (- c 55) 0)))
+                          (f (+ i 1) (+ (* acc 16) v)))
+                       acc))
+                 0 0)
+   BIG (* 4294967296 4294967296)                          ; 2^64: above any real address
+   (parse-header-addr line)                               ; the <addr> before <name>:, as an int
+     (: i (skip-ws line 0) j (skip-hex line i)
+        (? (= j i) 0 (hex->int (ssub line i j))))
+   (u8  d i) (get 0 i d)                                  ; little-endian fixed-width readers
+   (u16 d i) (| (u8  d i) (<< (u8  d (+ i 1)) 8))
+   (u32 d i) (| (u16 d i) (<< (u16 d (+ i 2)) 16))
+   (u64 d i) (+ (u32 d i) (* (u32 d (+ i 4)) 4294967296))   ; `+`/`*` so a high-half addr promotes to bignum
+   (find-symtab d base ent n k)                           ; SHT_SYMTAB (2) -> (off . size), else 0
+     (? (< k n)
+        (: sh (+ base (* k ent))
+           (? (= 2 (u32 d (+ sh 4))) (X (u64 d (+ sh 24)) (u64 d (+ sh 32)))
+              (find-symtab d base ent n (+ k 1))))
+        0)
+   (collect-syms d off n k m)                             ; Elf64_Sym (24 B): value -> size, sized FUNCs
+     (? (< k n)
+        (: p (+ off (* k 24)) info (u8 d (+ p 4)) val (u64 d (+ p 8)) sz (u64 d (+ p 16))
+           (collect-syms d off n (+ k 1)
+              (? (&& (= 2 (& info 15)) (< 0 sz)) (put val sz m) m)))
+        m)
+   (symtab-sizes d)                                       ; -> map: fn start address -> byte size
+     (: st (find-symtab d (u64 d 40) (u16 d 58) (u16 d 60) 0)  ; e_shoff / e_shentsize / e_shnum
+        (? st (collect-syms d (A st) (// (B st) 24) 0 %()) %())))
 
 ; --- the scan (vmret.py scan(), grouping by function header) ----------
 ; close the current watched function: flag it iff it collected any rets.
 (: (close name watching rets flagged)
    (? (&& watching (twop rets)) (X (X name (rev rets)) flagged) flagged))
 
-; -> (flagged . total), where flagged = ((name . rets) ...), total = count
-; of prefix* functions seen. prefix + the ret matcher are captured.
-(: (scan-all ls prefix ret?)
-   ((: (loop ls name watching rets flagged total)
+; -> (flagged . total), where flagged = ((name . rets) ...), total = count of
+; prefix* functions seen. prefix, the ret matcher, and a function-start -> size
+; map are captured. lim = end of the current function's symtab extent; a `ret`
+; at or past it is padding (an orphan in the gap before the next symbol), not
+; the function's -- so it does not count. unsized symbols -> lim BIG (old behavior).
+(: (scan-all ls prefix ret? sizes)
+   ((: (loop ls name watching lim rets flagged total)
        (? (twop ls)
           (: line (A ls)
              rest (B ls)
              h    (parse-header line)
              (? h
                 (? (prefix? "." h)                              ; local label: stay inside
-                   (loop rest name watching rets flagged total)
-                   (: fl2 (close name watching rets flagged)    ; real header: close, open new
-                      w2  (prefix? prefix h)
-                      (loop rest h w2 0 fl2 (? w2 (+ total 1) total))))
+                   (loop rest name watching lim rets flagged total)
+                   (: fl2  (close name watching rets flagged)   ; real header: close, open new
+                      w2   (prefix? prefix h)
+                      ha   (parse-header-addr line)
+                      sz   (get 0 ha sizes)                     ; symtab size, 0 if absent
+                      lim2 (? (< 0 sz) (+ ha sz) BIG)           ; extent end, or unbounded
+                      (loop rest h w2 lim2 0 fl2 (? w2 (+ total 1) total))))
                 (: ins (? watching (parse-insn line) 0)         ; instruction: maybe a ret
-                   (? (&& ins (ret? (mnemonic (B ins))))
-                      (loop rest name watching (X (A ins) rets) flagged total)
-                      (loop rest name watching rets flagged total)))))
+                   (? (&& ins (< (hex->int (A ins)) lim) (ret? (mnemonic (B ins))))
+                      (loop rest name watching lim (X (A ins) rets) flagged total)
+                      (loop rest name watching lim rets flagged total)))))
           (X (close name watching rets flagged) total)))
-    ls 0 0 0 0 0))
+    ls 0 0 BIG 0 0 0))
 
 ; --- report helpers --------------------------------------------------
-(: (basename p) ((: (f i last) (? (< i (len p)) (f (+ i 1) (? (= 47 (get 0 i p)) (+ i 1) last)) (ssub p last (len p)))) 0 0)
+(: (basename p) ((: (f i last) (? (< i (pin p)) (f (+ i 1) (? (= 47 (get 0 i p)) (+ i 1) last)) (ssub p last (pin p)))) 0 0)
    (spaces n)    (? (< 0 n) (scat " " (spaces (- n 1))) "")
-   (str< a b)    ((: (f i) (? (>= i (len a)) (< (len a) (len b))
-                            (? (>= i (len b)) 0
+   (str< a b)    ((: (f i) (? (>= i (pin a)) (< (pin a) (pin b))
+                            (? (>= i (pin b)) 0
                                (: ca (get 0 i a) cb (get 0 i b)
                                   (? (< ca cb) 1 (? (> ca cb) 0 (f (+ i 1)))))))) 0)
-   (maxlen fl)   (foldl (\ m e (: l (len (A e)) (? (< m l) l m))) 0 fl)
+   (maxlen fl)   (foldl (\ m e (: l (pin (A e)) (? (< m l) l m))) 0 fl)
    (join-rets rs) (? (twop rs)
                      (? (twop (B rs)) (scat (scat "0x" (A rs)) (scat ", " (join-rets (B rs))))
                                         (scat "0x" (A rs)))
@@ -132,7 +179,7 @@
                      (? (str< (A (A a)) (A (A b)))
                         (X (A a) (emerge (B a) b)) (X (A b) (emerge a (B b))))
                      a) b)
-   (esort l) (? (twop (B l)) (: n (>> (len l) 1) (emerge (esort (take n l)) (esort (drop n l)))) l))
+   (esort l) (? (twop (B l)) (: n (>> (pin l) 1) (emerge (esort (take n l)) (esort (drop n l)))) l))
 
 ; --- argument parsing ------------------------------------------------
 (: (parse-args args path prefix od)
@@ -147,9 +194,6 @@
          (? path (die (scat "unexpected argument: " a))
             (parse-args (B args) a prefix od)))))))
       (L path prefix od)))
-
-; --- read the ELF e_ident + e_machine (first 20 bytes) ---------------
-(: (read-hdr port k acc) (? (< 0 k) (: c (fgetc port) (? (= c -1) (rev acc) (read-hdr port (- k 1) (X c acc)))) (rev acc)))
 
 ; --- try candidate disassemblers in order ----------------------------
 ; (run ...) returns (status . output) when the tool ran, else a fixnum errno
@@ -169,12 +213,13 @@
    base     (basename path)
    port     (open path "r")
    _        (? port 0 (die (scat "cannot open " path)))
-   hdr      (string (read-hdr port 20 0))
+   hdr      (slurp port)                                 ; whole image: e_ident/e_machine + .symtab
    _        (close port)
    _        (? (&& (= 127 (get 0 0 hdr)) (&& (= 69 (get 0 1 hdr)) (&& (= 76 (get 0 2 hdr)) (= 70 (get 0 3 hdr))))) 0
                (die (scat path ": not an ELF file")))
    _        (? (&& (= 2 (get 0 4 hdr)) (= 1 (get 0 5 hdr))) 0
                (die (scat path ": not ELF64 little-endian")))
+   sizes    (symtab-sizes hdr)                           ; function start address -> byte size
    mach     (| (get 0 18 hdr) (<< (get 0 19 hdr) 8))
    x86?     (= mach 62)
    known?   (|| x86? (|| (= mach 183) (|| (= mach 243) (= mach 258))))
@@ -193,7 +238,7 @@
    status   (A (B chosen))
    output   (B (B chosen))
    _        (? (= 0 status) 0 (die (scat (scat (A chosen) " failed: status ") (inspect status))))
-   scanned  (scan-all (lines output) prefix ret?)
+   scanned  (scan-all (lines output) prefix ret? sizes)
    flagged  (A scanned)
    total    (B scanned)
    ; --- the report (byte-for-byte the same shape as vmret.py) ---
@@ -201,7 +246,7 @@
       (: _ (fputs err "vmret: no ") _ (fputs err prefix) _ (fputs err "* functions found in ")
          _ (fputs err base) _ (fputs err " (stripped binary?)\n") (exit 2))
    (? (twop flagged)
-      (: k      (len flagged)
+      (: k      (pin flagged)
          width  (maxlen flagged)
          sorted (esort flagged)
          _ (fputs out base) _ (fputs out ": ") _ (fputn out k 10) _ (fputs out " of ")
@@ -209,7 +254,7 @@
          _ (fputs out "* functions contain a ret (TCO suspects):\n")
          _ (each sorted (\ e
               (: name (A e) rets (B e)
-                 _ (fputs out "  ") _ (fputs out name) _ (fputs out (spaces (- width (len name))))
+                 _ (fputs out "  ") _ (fputs out name) _ (fputs out (spaces (- width (pin name))))
                  _ (fputs out "  ret @ ") _ (fputs out (join-rets rets)) _ (fputc out 10) 0)))
          (exit 1))
       (: _ (fputs out base) _ (fputs out ": all ") _ (fputn out total 10) _ (fputs out " ")
