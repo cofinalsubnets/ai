@@ -119,14 +119,14 @@ struct g {
     g_word eof_seen; } *io; };
   // rng: global RNG state (rank-1 i64 tuple, len 4, xoshiro256++). Lives in &v0..end
   // so gc.c's root loop forwards it.
-  g_word rng; }; };
+  g_word rng;
+  // Handlers installed per instance from the prelude: numap is the fixnum-as-function
+  // handler ((n x) -> (num-ap n x)); scomb/bcomb are the +/* thread combinators. The
+  // *_sym slots hold their dict keys, pre-interned at init, so the apply path can lazily
+  // resolve a slot still 0 (prelude-order / freestanding boot). All in v0..end -> the gc
+  // root loop forwards them, so no hand-rolled gcg() lines and no C global.
+  g_word numap, scomb, bcomb, numap_sym, scomb_sym, bcomb_sym; }; };
  intptr_t end[]; };
-
-// numap: gwen handler for fixnum-as-function application ((n x) -> (num-ap n x)),
-// installed once by the `set-numap` bif from prelude.g. The same handler serves every
-// interpreter, so it is a singleton global rather than a `struct g` field. It points at
-// a heap thread, so gcg() (gc.c) forwards it each collection.
-extern g_word g_numap;
 
 struct g_def { char const *n; intptr_t x; };
 
@@ -269,9 +269,6 @@ enum q g_kind(word);
 // it; the handlers + the table itself live in gwen.c. Row indexed by the full kind
 // (g_typ returns one of the five data kinds), so the first dimension is KN, not G_DATA_N.
 extern g_vm_t *g_apply_mx[KN][KN];
-extern g_word g_numap;                 // gwen num-ap handler (vm.c); the numeral-apply driver below targets it
-extern g_word g_scomb, g_bcomb;        // `+`/`*` thread combinators (S / compose), installed from the prelude
-extern g_word g_numap_sym, g_scomb_sym, g_bcomb_sym; // their dict keys, pre-interned at init -> lazy resolve (§3)
 extern union u numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
 g_vm_t g_vm_ap, g_vm_two, g_vm_tuple, g_vm_sym, g_vm_str, g_vm_big; // sentinels + ap: data.c & inline predicates
 uintptr_t hash(struct g*, word), g_tuple_bytes(struct g_tuple*);
