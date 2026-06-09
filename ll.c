@@ -1,4 +1,13 @@
 #include "ll.h"
+// The build's version string (the git hash), generated into out/lib/ll_version.h by
+// the Makefile and surfaced in the runtime as the `version-number` global (g_ini_0).
+// Optional include so a standalone/unwired compile still builds; falls back to "unknown".
+#if defined(__has_include) && __has_include("ll_version.h")
+#include "ll_version.h"
+#endif
+#ifndef LL_VERSION
+#define LL_VERSION "unknown"
+#endif
 
 // ============================================================================
 // kernel-internal declarations (private; merged from former i.h)
@@ -686,6 +695,11 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
    {"err", (word) &g_stderr}, };
   g = g_defn(g, def0, LEN(def0));
   g = g_defn(g, def1, LEN(def1));
+  // `version-number`: the build's git hash (ll_version.h), surfaced on init so the user
+  // can read the running version. A non-fixnum global, harmlessly skipped by ev.l's pureset.
+  if (g_ok(g = g_strof(g, LL_VERSION))) {
+   struct g_def vd[] = {{"version-number", g_pop1(g)}};
+   g = g_defn(g, vd, LEN(vd)); }
   // Pre-intern the dict keys for the prelude-installed handlers so the apply path can
   // resolve them lazily (resolve_handler) without allocating in a tail-jump handler.
   // Idempotent with the prelude's own bindings; the g->*_sym fields ride the v0..end loop.

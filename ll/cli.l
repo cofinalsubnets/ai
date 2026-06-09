@@ -8,6 +8,6 @@
    (? (& (twop a) (= (A a) "-l"))
       (: _ (load1 (A (B a))) (strip-l (B (B a))))
       a))
-(: argv (strip-l argv))
+(: argv (strip-l (B argv)))   ; drop the program-name head: main.c now passes the whole argv (cmdline keeps it)
 (? (twop argv) (load1 (A argv))
    ((: (g e) (: r (fread in e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))

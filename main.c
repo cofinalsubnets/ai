@@ -342,17 +342,21 @@ int main(int argc, char const **argv) {
   bool replp = !argp && isatty(STDIN_FILENO);
   if (replp) raw_mode();
 #endif
-  char const **av = argp ? argv + 1 : argv;
-  int ac = argp ? argc - 1 : argc;
+  // The WHOLE C argv (incl. argv[0]/program name): cli.l drops the head for its own
+  // use, while `cmdline` keeps the full list, pinned for user visibility.
+  char const **av = argv;
+  int ac = argc;
   for (; *av; g = g_strof(g, *av++));
   for (g = g_push(g, 1, g_nil); ac--; g = gxr(g));
   if (g_ok(g)) {
+    g_word full_argv = g_pop1(g);                // shared by `argv` and `cmdline`
     struct g_def d[] = {{"exit", (g_word) nif_exit},
                         {"open", (g_word) nif_open},
                         {"close", (g_word) nif_close},
                         {"run", (g_word) nif_run},
                         {"getenv", (g_word) nif_getenv},
-                        {"argv", g_pop1(g)}, };
+                        {"argv", full_argv},
+                        {"cmdline", full_argv}, };
     g = g_defn(g, d, LEN(d));
 #ifdef GL_BOOTSTRAP
     // ll0: with args, run the build tool (lcat / gen_data) through the CLI driver.

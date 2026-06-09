@@ -63,6 +63,17 @@ out/lib/tests0.h: $t
 	@echo GEN	$@
 	@cat $t | $(sed_lit) > $@
 
+# ll_version.h: the build's git hash, surfaced in the runtime as the `version-number`
+# global (ll.c g_ini_0). Regenerated every make but only rewritten when the hash changes,
+# so ll.o relinks on a new commit, not on every build. Frontends without it on the include
+# path fall back to "unknown" (ll.c uses __has_include).
+.PHONY: force_version
+force_version: ;
+out/lib/ll_version.h: force_version
+	@mkdir -p out/lib
+	@printf '#define LL_VERSION "%s"\n' "$$(git -C $(R) describe --always --dirty 2>/dev/null || echo unknown)" > $@.tmp
+	@if cmp -s $@.tmp $@ 2>/dev/null; then rm -f $@.tmp; else mv $@.tmp $@; echo GEN $@; fi
+
 # ====================================================================
 # host (POSIX CLI) build -- outputs under out/host. Was host/Makefile.
 # ====================================================================
@@ -129,6 +140,9 @@ $(ho)/%.o: $(R)/%.c $(g_h) $(hdata_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -c $< -o $@
+
+# ll.o carries the version string (ll_version.h); relink it when the hash changes.
+$(ho)/ll.o $(ho)/0/ll.o: out/lib/ll_version.h
 
 # main.c is compiled into the final ll inline (G_EGG_PRE/POST assemble the lib
 # headers); depend on them so it relinks when a lib source changes.
@@ -286,6 +300,9 @@ $(k_odir)/%.o: $(R)/%.c $(k_h) $(kdata_h) out/lib/egg.h out/lib/prelude.h out/li
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
+
+# ll.o carries the version string (ll_version.h); recompile it when the hash changes.
+$(k_odir)/ll.o: out/lib/ll_version.h
 
 $(k_odir)/%.o: $(R)/%.S $(k_h)
 	@echo AS	$@
