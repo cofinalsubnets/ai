@@ -43,8 +43,8 @@
  (= '(1 (2)) ('(1 2) (\ a b (L a b))))        ; f sees car=1, cdr='(2)
  (= '(1 (2 3)) ('(1 2 3) (\ a b (L a b))))    ; longer cdr passed whole
  (= '(1 2) ((X 1 2) (\ a b (L a b))))         ; improper pair: cdr=2 (a fixnum), raw
- (= '(1 2) ('(1 2) +))                        ; arg = a nif: (+ 1 '(2)) = (1 2)
- (= '(1 2 3) ('(1 2 3) +))                    ; (+ 1 '(2 3))
+ (= '(1 2) ('(1 2) (+)))                        ; arg = a nif: (+ 1 '(2)) = (1 2)
+ (= '(1 2 3) ('(1 2 3) (+)))                    ; (+ 1 '(2 3))
  (nilp ('(1) (\ a b b)))                      ; cdr of (1) is nil -> 0
 
  ; --- row KString: applying a string indexes a byte (1 if oob/non-numeric) ---

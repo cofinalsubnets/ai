@@ -29,7 +29,7 @@
  ; --- shadowing: a locally-bound name is never folded as the global ---
  (= 99 (: (X a b) 99 (X 1 2)))             ; let-bound X
  (= 5  (: (A x) 5 (A '(1 2))))               ; let-bound A
- (= 7  (: (f X) (X 3 4) (f +)))            ; PARAM X shadows the global; f + -> (+ 3 4)
+ (= 7  (: (f X) (X 3 4) (f (+))))            ; PARAM X shadows the global; f + -> (+ 3 4)
 
  ; --- nilp-flip: (? (nilp e) a b) == (? e b a); behavior-preserving under BOTH compilers ---
  (= 'z  (: (f x) (? (nilp x) 'z 'nz) (f 0)))        ; falsy e -> consequent

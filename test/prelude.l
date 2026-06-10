@@ -1,6 +1,6 @@
 (: l (L 0 1 2 3 4 5 6 7 8 9)
    (diag f x) (f x x)
-   m (mapf (diag +) l)
+   m (mapf (diag (+)) l)
    n (mapf (* 2) l)
    (even n) (? n (odd (dec n)) 1)
    (odd n) (? n (even (dec n)))

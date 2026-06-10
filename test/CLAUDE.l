@@ -178,8 +178,8 @@
 (assert
  (= 1 (A '(1 2 3))) (= '(2 3) (B '(1 2 3))) (= 3 (AB '(2 3 4))) (= '(1 2) (X 1 (X 2 0)))
  (= 1 (car '(1 2 3))) (= 3 (cadr '(2 3 4)))
- (= '(2 3 4) (mapf inc '(1 2 3))) (= 24 (foldl * 1 '(1 2 3 4))) (= 6 (foldr + 0 '(1 2 3)))
- (= '(1 3) (filter (\ x (mod x 2)) '(1 2 3 4))) (= '(1 2 3) (sort < '(3 1 2)))
+ (= '(2 3 4) (mapf inc '(1 2 3))) (= 24 (foldl (*) 1 '(1 2 3 4))) (= 6 (foldr (+) 0 '(1 2 3)))
+ (= '(1 3) (filter (\ x (mod x 2)) '(1 2 3 4))) (= '(1 2 3) (sort (<) '(3 1 2)))
  (= '(1 2 3 4) (cat '(1 2) '(3 4))) (= '(3 2 1) (rev '(1 2 3))) (= '(1 2) (mapf A (zip '(1 2) '(3 4))))
  (= 20 (AB (assq 2 (list (L 1 10) (L 2 20))))) (= '(1 2) (take 2 '(1 2 3 4))) (= '(3 4) (drop 2 '(1 2 3 4)))
  (= 3 (last '(1 2 3))) (= '(1 2) (init '(1 2 3))) (memq 3 '(1 2 3)) !(memq 9 '(1 2 3))
@@ -218,17 +218,25 @@
  (: b (bufnew 1) _ (pin b 0 257) (= 1 (peek b 0 0))) (: b (bufnew 4) _ (bcopy b 0 "ABCD" 0 4) (= 68 (peek b 3 0)))
  !(= (bufnew 2) (bufnew 2)))
 
-; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). an operator
-; char reads its next N datums and desugars to (name d1 .. dN). the table is
+; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). a PREFIX
+; operator char reads its next N datums and desugars to (name d1 .. dN); the table is
 ; dict['operators] (char -> name | (name . arity), arity 1-7) -- extensible with a plain
 ; pin (see test/operator.l). eight ship at arity 1 (glyph / name): # hash (saturation),
 ; ' quote (= one-operand \), ! bang (negation), . dot (print), $ nom (gensym), @ tup
 ; (array), % map, ` quasiquote. , unquote, ,@ splice, and ~ wave (complex/conjugate)
 ; stay reader digraphs. ~(re im) splices to (com re im); a bare ~x is (clift x).
+; INFIX operators are all-punct symbols in dict['infix] (symbol -> arity): with a left
+; operand available the symbol captures it and collects arity-1 more, nesting RIGHT-
+; associatively; with no left operand it reads as the plain symbol, so (+ 1 2), '+, and
+; (+)-as-a-value still work. + - * / = < <= > >= | & ship dyadic and ? ternary -- the
+; cond form infix, (t ? a b). (1 + 2) reads ((+ 1 2)) and evaluates via (f) == f.
+; see test/infixop.l.
 (assert
  (= '(1 (\ x) 3) `(1 'x 3)) (= '(1 2 3 4) (: xs '(2 3) `(1 ,@xs 4)))
  (= 5 #"hello") (= 42 #42) (symp $x) (= 1 !0) (= 0 !5) !!5
  (= i ~(0 1)) (= ~(2 3) (com 2 3)) (= '~x '(clift x)) (= '(dot x) '.x) (lamp dot)
+ (= 3 (1 + 2)) (= 7 (1 + 2 * 3)) (= 'b (0 ? 'a 'b)) (= 'big ((1 < 2) ? 'big 'small))
+ (= 12 (foldl (+) 0 '(3 4 5)))
  (: t (peek dict 'operators 0) (&& (mapp t) (= 'hash (t ("#" 0))) (= 'map (t ("%" 0))))))
 
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships

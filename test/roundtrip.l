@@ -35,7 +35,7 @@
  (= 100 (peek (rt (map 1 100 2 200)) 1 0))
  (= 200 (peek (rt (map 1 100 2 200)) 2 0))
  ; functions reconstruct a working function
- (= 3 ((rt +) 1 2))                                 ; builtin
+ (= 3 ((rt (+)) 1 2))                                 ; builtin
  (= 5 ((rt (\ x (+ x 1))) 4))                       ; lambda
  (= 7 ((rt (+ 3)) 4))                               ; partial application of a builtin
  (= 3 ((rt ((\ a b (+ a b)) 1)) 2))                 ; partial app of a lambda (no capture)

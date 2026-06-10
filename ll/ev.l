@@ -13,7 +13,7 @@
 ; as a global -- wev's fold reaches it by name -- so this ~126-entry table is NOT baked into
 ; ev's value; `.ev` then prints as just the ana+wev logic, and the table prints under `.wevs`.
 (: wevs (:
-   g_vm_cur  (peekl 0 +)
+   g_vm_cur  (peekl 0 (+))
    g_vm_ret0 (peekl 1 A)
    (cval e) (? (symp e) (X 0 0)               ; (const? . value): 1 head iff a literal
                (atomp e) (X 1 e)
@@ -33,14 +33,17 @@
             (&& (< 1 ar) (= n ar)) (X apx (X 1 x))       ; multi-arg fn -> n-ary apply
             (X apx (X 0 x))))))                          ; generic l2r apply
     (go v as))
-   names '(+ - * / // mod << >> & | ^
-           < <= = >= > idp gcd modpow inc dec abs
-           X A B AA AB BA BB
-           hash lidx assq memq last rev cat
-           fixp symp twop mapp lamp strp nilp flop comp atomp
-           ssub scat string
-           re im conj arg flo com
-           sin cos log pow)
+   ; the infix table symbols are quoted one by one -- bare mid-list they would
+   ; capture their left neighbor at read time.
+   names (cat (L '+ '- '* '/ '& '| '< '<= '= '>= '>)
+          '(// mod << >> ^
+            idp gcd modpow inc dec abs
+            X A B AA AB BA BB
+            hash lidx assq memq last rev cat
+            fixp symp twop mapp lamp strp nilp flop comp atomp
+            ssub scat string
+            re im conj arg flo com
+            sin cos log pow))
    pureset (foldl (\ t s (: v (dict s) (? v (pin t v 1) t))) (mapn 0) names)
    (add t s) (: v (dict s)
     (? (fixp v) t
@@ -56,7 +59,7 @@
  c (sco 0 (list 0) 0)
  x (wev c x)
  (ana c x (k0 c) 0 0)))
-  g_vm_cur (peekl 0 +)
+  g_vm_cur (peekl 0 (+))
   (sco p a i) (pin (pin (pin (mapn 0) 'arg a) 'imp i) 'par p)
   (rootc c) (? (c 'par) (rootc (c 'par)) c)        ; top scope: where wev stashes 'src
   (p2 i x k) (pinl -1 i (pinl -1 x k))

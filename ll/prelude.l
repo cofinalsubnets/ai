@@ -128,7 +128,7 @@
 (: catmap (co (flip foldr 0) (co cat))
    (assq x l) (? l (? (= x (AA l)) (A l) (assq x (B l))))
    (lidx x) ((: (f n l) (? (twop l) (? (= x (A l)) n (f (+ 1 n) (B l))) -1)) 0)
-   memq (co any =)
+   memq (co any (=))
    (zip a b) (? (twop a) (? (twop b) (X (X (A a) (A b)) (zip (B a) (B b)))))
    rev (foldl (flip X) 0)
    (drop n l) (? n (drop (- n 1) (B l)) l)
@@ -247,7 +247,7 @@
 ; awaiting 3 elems) all fall out of ll's auto-currying, like numap's n-ary thread.
 (: (a-coll sh n acc) (? (< n 1) (: d (rev acc) (arrl (a-type d) sh d))
                         (\ x (a-coll sh (- n 1) (X x acc))))
-   (array s) (: sh (a-shape s) (a-coll sh (foldl * 1 sh) 0)))
+   (array s) (: sh (a-shape s) (a-coll sh (foldl (*) 1 sh) 0)))
 
 ; recursive-value boxing for `:` (the letrec* "capture by location" fix).
 ; `boxfix-core` takes a source-order (name . def) pair-list `prs` and the body

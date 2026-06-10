@@ -3,7 +3,7 @@
 ; (a-canonical: outermost binder = d0). Interned names -> the print form round-trips
 ; (see roundtrip.l). a-equivalent lambdas print identically; capture = a leading binder.
 (assert
- (= "\+" (inspect +))
+ (= "\+" (inspect (+)))
  (= "\X" (inspect X))
  (= "(\\ d0 d0)" (inspect (\ x x)))
  (= "(\\ d0 d1 (+ d0 d1))" (inspect (\ a b (+ a b))))

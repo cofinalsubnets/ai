@@ -722,6 +722,23 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
    g = g_push(g, 1, nil);
    if (g_ok(g)) {                                   // permute to (key val map)=(operators table dict)
     g->sp[0] = g->sp[1], g->sp[1] = g->sp[2], g->sp[2] = g->dict;
+    g = g_pop(g_mapput(g), 1); } }
+  // dict['infix]: reader infix, SYMBOL -> arity (2..7). In operand position
+  // with a left operand available the symbol captures it and collects arity-1
+  // more datums, nesting right-associatively; with no left operand it reads
+  // as the plain symbol ((+) passes + as a value, '+ quotes it).
+  { char const *const ops2[] = { "+", "-", "*", "/", "=", "<", "<=", ">", ">=", "|", "&" };
+   g = map_new(g);                                  // sp[0] = the table
+   for (uintptr_t i = 0; i < LEN(ops2) + 1; i++) {
+    g = intern(g_strof(g, i < LEN(ops2) ? ops2[i] : "?"));
+    g = g_push(g, 1, putfix(i < LEN(ops2) ? 2 : 3)); // [arity sym table]
+    if (g_ok(g)) {                                  // swap to (key val map) = (sym arity table)
+     word t = g->sp[0]; g->sp[0] = g->sp[1], g->sp[1] = t;
+     g = g_mapput(g); } }                           // -> sp[0]=table
+   g = intern(g_strof(g, "infix"));                 // [key table]
+   g = g_push(g, 1, nil);
+   if (g_ok(g)) {                                   // permute to (key val map)=(infix table dict)
+    g->sp[0] = g->sp[1], g->sp[1] = g->sp[2], g->sp[2] = g->dict;
     g = g_pop(g_mapput(g), 1); } } }
  return g; }
 
@@ -2937,6 +2954,21 @@ static struct g *push_wrapn(struct g *g, word name, int n) {
 // whose car is a positive count (a list frame's car is nil or a pair).
 static g_inline bool wrap_framep(word f) {
  return symp(f) || (twop(f) && fixp(A(f)) && !nilp(A(f))); }
+// a FILLED N-ary wrap: all operands in, fold deferred so a following infix
+// operator can capture the last operand (right-associativity). count nil
+// distinguishes it from an empty list frame, whose cdr is nil.
+static g_inline bool filled_wrapp(word f) {
+ return twop(f) && nilp(A(f)) && twop(B(f)); }
+// could this symbol name be an infix operator? cheap pre-filter before the
+// dict probe: any alphanumeric byte rules it out.
+static g_inline bool punctsymp(word x) {
+ struct g_str *s = symp(x) ? sym(x)->nom : 0;
+ if (!s || !strp(word(s)) || !s->len) return false;
+ for (uintptr_t i = 0; i < s->len; i++) {
+  char c = s->bytes[i];
+  if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+   return false; }
+ return true; }
 // recognise the splicing reader-macro wraps -- `%` (interned `hasht`) and `@`
 // (interned `tuple`) -- so a list operand splices into the constructor call
 // instead of being wrapped: see the deliver loop in gz_parse.
@@ -2969,6 +3001,12 @@ static struct g *gz_parse(struct g *g, bool multi) {
     g = push_wrap(g, "uq"); continue;
    case ')': case ']': case '}':
     if (nilp(g->sp[0])) return encode(g_core_of(g), g_status_eof);   // stray ) / read1
+    if (filled_wrapp(A(g->sp[0]))) {                   // fold one filled wrap; requeue the closer
+     word F = A(g->sp[0]);
+     g->sp[0] = B(g->sp[0]);                           // pop the wrap (ctx is at sp[0] here)
+     g = g_push(g, 1, A(B(F)));                        // its (name ..) form is the datum
+     g = zungetc(g, c);
+     break; }
     if (wrap_framep(A(g->sp[0]))) return encode(g_core_of(g), g_status_more); // wrap wants operands
     g = g_push(g, 1, AA(g->sp[0]));                    // d = head of the closed frame
     if (g_ok(g)) {
@@ -2977,6 +3015,11 @@ static struct g *gz_parse(struct g *g, bool multi) {
     break;                                             // -> deliver d
    case EOF:
     if (nilp(g->sp[0])) return encode(g_core_of(g), g_status_eof);
+    if (filled_wrapp(A(g->sp[0]))) {                   // fold one filled wrap; EOF recurs
+     word F = A(g->sp[0]);
+     g->sp[0] = B(g->sp[0]);
+     g = g_push(g, 1, A(B(F)));
+     break; }
     if (!(multi && nilp(B(g->sp[0])) && !wrap_framep(A(g->sp[0]))))
      return encode(g_core_of(g), g_status_more);       // unclosed list / pending wrap
     g = g_push(g, 1, AA(g->sp[0]));                    // close the top accumulator -> its head
@@ -2993,13 +3036,67 @@ static struct g *gz_parse(struct g *g, bool multi) {
      intptr_t n = getfix(B(v));
      if (n == 1) { g = gxl(g_push(g, 1, A(v))); continue; }
      if (n >= 2 && n <= 7) { g = push_wrapn(g, A(v), (int) n); continue; } } // junk arity: not an op
-    g = gzread1sym(g, c); break; } }
+    g = gzread1sym(g, c);
+    if (!g_ok(g)) return g;
+    // reader infix: an all-punct symbol from dict['infix] with a left operand
+    // available -- the top frame is a non-empty list frame or a filled wrap.
+    // It captures the operand and pends for arity-1 more (right-associative:
+    // capturing FROM a filled wrap nests the new operator inside it).
+    if (symp(g->sp[0]) && punctsymp(g->sp[0]) && !nilp(g->sp[1])) {
+     word F = A(g->sp[1]);
+     bool fw = filled_wrapp(F);
+     bool lf = !fw && twop(F) && !fixp(A(F));          // list frame with elements (head is a cons)
+     if (fw || lf) {
+      struct g_atom *is = sym_probe(cg, "infix", 5);
+      word tb = is ? g_mapget(cg, nil, word(is), cg->dict) : nil;
+      word iv = mapp(tb) ? g_mapget(cg, nil, g->sp[0], tb) : nil;
+      if (fixp(iv) && getfix(iv) >= 2 && getfix(iv) <= 7) {
+       intptr_t n = getfix(iv);
+       word operand;
+       if (fw) {                                       // pop the wrap's last operand; it pends again
+        word acc = B(F), p = A(acc);
+        while (B(p) != B(acc)) p = B(p);
+        operand = A(B(acc));
+        B(p) = nil, B(acc) = p;
+        A(F) = putfix(1); }
+       else {                                          // pop the list frame's last element
+        word p = A(F);
+        if (p == B(F)) operand = A(p), A(F) = B(F) = nil;
+        else { while (B(p) != B(F)) p = B(p);
+               operand = A(B(F)), B(p) = nil, B(F) = p; } }
+       g = g_push(g, 1, operand);                      // [op sym ctx] -- operand rooted
+       g = gxr(g_push(g, 1, nil));                     // [(op) sym ctx]
+       g = gxr(g);                                     // [(sym op) ctx]
+       g = g_push(g, 1, g_ok(g) ? B(g->sp[0]) : nil);  // [last lst ctx]
+       g = gxr(g);                                     // [acc=(lst . last) ctx]
+       g = gxl(g_push(g, 1, putfix(n - 1)));           // [(n-1 . acc) ctx]
+       g = gxl(g);                                     // ctx' = (W . ctx)
+       continue; } } }
+    break; } }
   if (!g_ok(g)) return g;
   // deliver the datum at sp[0] into the frame stack at sp[1]
   for (bool done = false; g_ok(g) && !done; ) {
    if (nilp(g->sp[1])) {                               // no frame left: the result
     g->sp[1] = g->sp[0], g->sp++;
     return g; }
+   // filled wraps under an incoming (non-infix) datum fold first: each result
+   // is a completed datum delivered inline; the held datum stays at sp[0].
+   while (filled_wrapp(A(g->sp[1]))) {
+    word F = A(g->sp[1]), r = A(B(F));                 // r = the (name op ..) form
+    g->sp[1] = B(g->sp[1]);                            // pop the wrap
+    g = g_push(g, 1, r);                               // [r d ctx] -- r rooted
+    g = gxr(g_push(g, 1, nil));                        // [(r . nil) d ctx]
+    if (!g_ok(g)) return g;
+    word f2 = nilp(g->sp[2]) ? nil : A(g->sp[2]);
+    if (twop(f2) && fixp(A(f2)) && !nilp(A(f2))) {     // pending wrap: collect r
+     word acc = B(f2);
+     B(B(acc)) = g->sp[0], B(acc) = g->sp[0];
+     A(f2) = putfix(getfix(A(f2)) - 1); }              // may fill: the loop re-checks
+    else if (twop(f2)) {                               // list frame: append r
+     if (nilp(A(f2))) A(f2) = B(f2) = g->sp[0];
+     else B(B(f2)) = g->sp[0], B(f2) = g->sp[0]; }
+    else __builtin_trap();                             // unreachable under an N-ary wrap
+    g->sp++; }                                         // pop newcons -> [d ctx]
    if (symp(A(g->sp[1]))) {                            // reader-macro wrap, pop the wrap frame
     if (hashsym(A(g->sp[1])) && (nilp(g->sp[0]) || g->sp[0] == EMPTY_SYM)) { // %() -> (mapn 0)
      g->sp[0] = nil;                                   // d -> (0 . nil) = (0)
@@ -3020,10 +3117,8 @@ static struct g *gz_parse(struct g *g, bool multi) {
     if (g_ok(g)) {
      word f = A(g->sp[1]), acc = B(f);                 // f = (count . (head . tail))
      B(B(acc)) = g->sp[0], B(acc) = g->sp[0];          // append at the tail (head pre-seeded)
-     if (A(f) == putfix(1)) {                          // last operand -> (name d1 .. dN)
-      g->sp[0] = A(acc);                               // the result replaces newcons
-      g->sp[1] = B(g->sp[1]); }                        // pop the wrap; keep delivering
-     else { A(f) = putfix(getfix(A(f)) - 1), g->sp++; done = true; } } }
+     A(f) = putfix(getfix(A(f)) - 1);                  // 0 = FILLED: folds lazily (right-assoc)
+     g->sp++; done = true; } }
    else {                                              // list: append d at the frame's tail
     g = gxr(g_push(g, 1, nil));                        // newcons = (d . nil)
     if (g_ok(g)) {
