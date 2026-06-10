@@ -1,1 +1,1 @@
-au BufRead,BufNewFile *.g set filetype=ll
+au BufRead,BufNewFile *.l,*.ll set filetype=ll

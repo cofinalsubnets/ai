@@ -1,143 +1,145 @@
-" vim syntax for ll lisp (.g)
+" vim syntax for ll lisp (.l)
 " based on lisp.vim by Charles E Campbell <http://www.drchip.org/astronaut/vim/index.html#SYNTAX_LISP>
 if exists("b:current_syntax")
   finish
 endif
 
 " symbol-constituent chars (the reader ends a token only on whitespace and
-" ( ) " ' ` , # ; ). sigils @ % # $ are excluded so they highlight standalone.
-"  33 !  38 &  42 *  43 +  45 -  46 .  47 /  48-57 digits  58 :
+" ( ) " ' ` , # ; ). operators @ # $ are excluded so they highlight standalone;
+" % is a plain symbol now (the infix mod alias).
+"  33 !  37 %  38 &  42 *  43 +  45 -  46 .  47 /  48-57 digits  58 :
 "  60-63 < = > ?  92 \  94 ^  95 _  124 |  126 ~   (@ = alphabetics)
-syn iskeyword @,33,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
+syn iskeyword @,33,37,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
 
 " The three special forms: : (letrec*/seq), ? (cond), \ (lambda/quote)
-syn keyword PForm : ? \\
+syn keyword LlForm : ? \\
 
 " Built-in functions (C nifs) + prelude functions
-syn keyword PFunc X A B AA AB BA BB AAA AAB ABA ABB BAA BAB BBA BBB
-syn keyword PFunc cons car cdr caar cadr cdar cddr caaar caadr cadar caddr cdaar cdadr cddar cdddr
-syn keyword PFunc id co const flip
-syn keyword PFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
-syn keyword PFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge
-syn keyword PFunc + - * / mod ** < <= = >= > != same inc dec abs gcd modpow int
-syn keyword PFunc ~ << >> & \| ^
-syn keyword PFunc sin cos tan atan sqrt exp log atan2 pow C re im conj arg
-syn keyword PFunc nump intp powg num-ap numfn randint
-syn keyword PFunc twop strp symp mapp lamp tupp bigp boxp arrp Cp flop fixp nilp atomp not
-syn keyword PFunc arr arrl array arank alen ashape atype asum aprod amax amin aall aany
-syn keyword PFunc a-rank a-shape a-type a-dim
-syn keyword PFunc string ssub scat intern gensym slurp inspect strin strout outstr
-syn keyword PFunc hashn hashk hash hashd get put bufnew bcopy
-syn keyword PFunc lam peek poke trim seek len
-syn keyword PFunc fgetc fungetc feof fputc fputs fputn fputx fflush fread
-syn keyword PFunc putc puts putn putx getc read in out
-syn keyword PFunc ev call_cc yield spawn wait sleep done? kill key?
-syn keyword PFunc rand randf rand-next randf-next rng-seed rng-get rng-set
-syn keyword PFunc set-numap set-scomb set-bcomb clock vminfo globals macros assert
+syn keyword LlFunc X A B AA AB BA BB AAA AAB ABA ABB BAA BAB BBA BBB
+syn keyword LlFunc cons car cdr caar cadr cdar cddr caaar caadr cadar caddr cdaar cdadr cddar cdddr
+syn keyword LlFunc id co const flip
+syn keyword LlFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
+syn keyword LlFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge
+syn keyword LlFunc + - * / % mod < <= = >= > idp inc dec abs gcd modpow int
+syn keyword LlFunc ~ << >> & \| ^
+syn keyword LlFunc sin cos log pow com re im conj arg clift
+syn keyword LlFunc nump intp powg num-ap numfn randint
+syn keyword LlFunc twop strp symp mapp lamp tupp bigp boxp arrp comp flop fixp nilp atomp
+syn keyword LlFunc arr arrl array arank alen ashape atype asum aprod amax amin aall aany
+syn keyword LlFunc a-rank a-shape a-type a-dim
+syn keyword LlFunc string ssub scat intern nom slurp inspect strin strout outstr
+syn keyword LlFunc hasht hashn hashk hash hashd sat peek pin pull bufnew bcopy
+syn keyword LlFunc lam peekl pinl seekl trim
+syn keyword LlFunc fgetc fungetc feof fputc fputs fputn fputx fflush fread
+syn keyword LlFunc putc puts putn putx getc read in out dot
+syn keyword LlFunc ev call-cc yield spawn wait sleep done? kill key?
+syn keyword LlFunc trap scare? more? eof?
+syn keyword LlFunc rand randf rand-next randf-next rng-seed rng-get rng-set
+syn keyword LlFunc clock vminfo dict macros assert version-number argv cmdline
 
 " Macros (head-symbol rewrites installed with ::)
-syn keyword PMacro :: L list do begin progn let if cond quote qq gsym tuple hasht
-syn keyword PMacro && \|\| :- ?- >>= <=<
+syn keyword LlMacro :: L list do begin progn let if cond quote qq gsym tuple hasht
+syn keyword LlMacro && \|\| :- ?- >>= <=<
 
 " Constants: booleans (1/0), array element-type codes, pi
-syn keyword PConst true false pi
-syn keyword PConst i8 i16 i32 i64 f32 f64
+syn keyword LlConst true false pi
+syn keyword LlConst i8 i16 i32 i64 f32 f64
 
 " Quoted atoms: 'foo   (' is one-operand \ = quote)
-syn match PAtomMark "'"
-syn match PAtom "'[^ \t\n()`',;#\"]\+" contains=PAtomMark
+syn match LlAtomMark "'"
+syn match LlAtom "'[^ \t\n()`',;#\"]\+" contains=LlAtomMark
 
 " Quasiquote marks: `tmpl  ,unquote  ,@unquote-splice
-syn match PQuasi ",@\|[`,]"
+syn match LlQuasi ",@\|[`,]"
 
-" Data sigils: @(…) array  %(…) map  #x len  $x gensym
-syn match PSigil "[@%#$]"
+" Prefix operators: @(…) array  #(…) hash  $x sat  (table: dict['operators])
+syn match LlSigil "[@#$]"
 
 " Numbers (integer / bignum literals, possibly negative)
-syn match PNumber "\<-\?\d\+\>"
+syn match LlNumber "\<-\?\d\+\>"
 
 " Floating point literals: 1.5  -1.5  .5  1.  1e10  1.5e-3  (a point and/or exponent)
-" Defined after PNumber so a float wins over the integer match at a shared start.
-syn match PFloat "\<-\?\d\+\.\d*\([eE][-+]\?\d\+\)\?\>"
-syn match PFloat "\<-\?\.\d\+\([eE][-+]\?\d\+\)\?\>"
-syn match PFloat "\<-\?\d\+[eE][-+]\?\d\+\>"
+" Defined after LlNumber so a float wins over the integer match at a shared start.
+syn match LlFloat "\<-\?\d\+\.\d*\([eE][-+]\?\d\+\)\?\>"
+syn match LlFloat "\<-\?\.\d\+\([eE][-+]\?\d\+\)\?\>"
+syn match LlFloat "\<-\?\d\+[eE][-+]\?\d\+\>"
 
 " Strings
-syn region PString start='"' skip='\\\\\|\\"' end='"'
+syn region LlString start='"' skip='\\\\\|\\"' end='"'
 
 " Comments — ; to end of line, #! shebang; with TODO/FIXME highlighting inside
-syn match PCommentTodo /\<\(TODO\|FIXME\|NOTE\|XXX\|HACK\)\>/ contained
-syn match PComment ";.*$" contains=PCommentTodo
-syn match PComment "^#!.*$" contains=PCommentTodo
+syn match LlCommentTodo /\<\(TODO\|FIXME\|NOTE\|XXX\|HACK\)\>/ contained
+syn match LlComment ";.*$" contains=LlCommentTodo
+syn match LlComment "^#!.*$" contains=LlCommentTodo
 
 " Unmatched close paren is an error
-syn match PParenError ")"
+syn match LlParenError ")"
 
 syn sync lines=100
 
-hi def link PAtomMark       Delimiter
-hi def link PSigil          Delimiter
-hi def link PAtom           Identifier
-hi def link PComment        Comment
-hi def link PCommentTodo    Todo
-hi def link PForm           Statement
-hi def link PFunc           Function
-hi def link PMacro          Operator
-hi def link PConst          Constant
-hi def link PQuasi          Special
-hi def link PNumber         Number
-hi def link PFloat          Float
-hi def link PParenError     Error
-hi def link PString         String
-hi def link PBool           Boolean
+hi def link LlAtomMark       Delimiter
+hi def link LlSigil          Delimiter
+hi def link LlAtom           Identifier
+hi def link LlComment        Comment
+hi def link LlCommentTodo    Todo
+hi def link LlForm           Statement
+hi def link LlFunc           Function
+hi def link LlMacro          Operator
+hi def link LlConst          Constant
+hi def link LlQuasi          Special
+hi def link LlNumber         Number
+hi def link LlFloat          Float
+hi def link LlParenError     Error
+hi def link LlString         String
+hi def link LlBool           Boolean
 
 " Rainbow parentheses — each nesting level gets its own colour.
 " Each region contains the cluster plus the next level; level 9 wraps to 0.
-" Toggle with \r (or :GwRainbow) — controlled by g:gw_rainbow (default: 1).
-syn cluster PListCluster contains=PAtom,PAtomMark,PConst,PComment,PCommentTodo,PFunc,PNumber,PFloat,PSymbol,PForm,PString,PMacro,PQuasi,PSigil
+" Toggle with \r (or :LlRainbow) — controlled by g:ll_rainbow (default: 1).
+syn cluster LlListCluster contains=LlAtom,LlAtomMark,LlConst,LlComment,LlCommentTodo,LlFunc,LlNumber,LlFloat,LlSymbol,LlForm,LlString,LlMacro,LlQuasi,LlSigil
 
-if !exists("g:gw_rainbow")
-  let g:gw_rainbow = 0
+if !exists("g:ll_rainbow")
+  let g:ll_rainbow = 0
 endif
 
-if g:gw_rainbow
-  syn region PList0 matchgroup=PLevel0 start="(" end=")" contains=@PListCluster,PList1
-  syn region PList1 matchgroup=PLevel1 start="(" end=")" contains=@PListCluster,PList2
-  syn region PList2 matchgroup=PLevel2 start="(" end=")" contains=@PListCluster,PList3
-  syn region PList3 matchgroup=PLevel3 start="(" end=")" contains=@PListCluster,PList4
-  syn region PList4 matchgroup=PLevel4 start="(" end=")" contains=@PListCluster,PList5
-  syn region PList5 matchgroup=PLevel5 start="(" end=")" contains=@PListCluster,PList6
-  syn region PList6 matchgroup=PLevel6 start="(" end=")" contains=@PListCluster,PList7
-  syn region PList7 matchgroup=PLevel7 start="(" end=")" contains=@PListCluster,PList8
-  syn region PList8 matchgroup=PLevel8 start="(" end=")" contains=@PListCluster,PList9
-  syn region PList9 matchgroup=PLevel9 start="(" end=")" contains=@PListCluster,PList0
+if g:ll_rainbow
+  syn region LlList0 matchgroup=LlLevel0 start="(" end=")" contains=@LlListCluster,LlList1
+  syn region LlList1 matchgroup=LlLevel1 start="(" end=")" contains=@LlListCluster,LlList2
+  syn region LlList2 matchgroup=LlLevel2 start="(" end=")" contains=@LlListCluster,LlList3
+  syn region LlList3 matchgroup=LlLevel3 start="(" end=")" contains=@LlListCluster,LlList4
+  syn region LlList4 matchgroup=LlLevel4 start="(" end=")" contains=@LlListCluster,LlList5
+  syn region LlList5 matchgroup=LlLevel5 start="(" end=")" contains=@LlListCluster,LlList6
+  syn region LlList6 matchgroup=LlLevel6 start="(" end=")" contains=@LlListCluster,LlList7
+  syn region LlList7 matchgroup=LlLevel7 start="(" end=")" contains=@LlListCluster,LlList8
+  syn region LlList8 matchgroup=LlLevel8 start="(" end=")" contains=@LlListCluster,LlList9
+  syn region LlList9 matchgroup=LlLevel9 start="(" end=")" contains=@LlListCluster,LlList0
 
   if &background ==# "dark"
-    hi def PLevel0 ctermfg=red         guifg=red1
-    hi def PLevel1 ctermfg=yellow      guifg=orange1
-    hi def PLevel2 ctermfg=green       guifg=yellow1
-    hi def PLevel3 ctermfg=cyan        guifg=greenyellow
-    hi def PLevel4 ctermfg=magenta     guifg=green1
-    hi def PLevel5 ctermfg=red         guifg=springgreen1
-    hi def PLevel6 ctermfg=yellow      guifg=cyan1
-    hi def PLevel7 ctermfg=green       guifg=slateblue1
-    hi def PLevel8 ctermfg=cyan        guifg=magenta1
-    hi def PLevel9 ctermfg=magenta     guifg=purple1
+    hi def LlLevel0 ctermfg=red         guifg=red1
+    hi def LlLevel1 ctermfg=yellow      guifg=orange1
+    hi def LlLevel2 ctermfg=green       guifg=yellow1
+    hi def LlLevel3 ctermfg=cyan        guifg=greenyellow
+    hi def LlLevel4 ctermfg=magenta     guifg=green1
+    hi def LlLevel5 ctermfg=red         guifg=springgreen1
+    hi def LlLevel6 ctermfg=yellow      guifg=cyan1
+    hi def LlLevel7 ctermfg=green       guifg=slateblue1
+    hi def LlLevel8 ctermfg=cyan        guifg=magenta1
+    hi def LlLevel9 ctermfg=magenta     guifg=purple1
   else
-    hi def PLevel0 ctermfg=red         guifg=red3
-    hi def PLevel1 ctermfg=darkyellow  guifg=orangered3
-    hi def PLevel2 ctermfg=darkgreen   guifg=orange2
-    hi def PLevel3 ctermfg=blue        guifg=yellow3
-    hi def PLevel4 ctermfg=darkmagenta guifg=olivedrab4
-    hi def PLevel5 ctermfg=red         guifg=green4
-    hi def PLevel6 ctermfg=darkyellow  guifg=paleturquoise3
-    hi def PLevel7 ctermfg=darkgreen   guifg=deepskyblue4
-    hi def PLevel8 ctermfg=blue        guifg=darkslateblue
-    hi def PLevel9 ctermfg=darkmagenta guifg=darkviolet
+    hi def LlLevel0 ctermfg=red         guifg=red3
+    hi def LlLevel1 ctermfg=darkyellow  guifg=orangered3
+    hi def LlLevel2 ctermfg=darkgreen   guifg=orange2
+    hi def LlLevel3 ctermfg=blue        guifg=yellow3
+    hi def LlLevel4 ctermfg=darkmagenta guifg=olivedrab4
+    hi def LlLevel5 ctermfg=red         guifg=green4
+    hi def LlLevel6 ctermfg=darkyellow  guifg=paleturquoise3
+    hi def LlLevel7 ctermfg=darkgreen   guifg=deepskyblue4
+    hi def LlLevel8 ctermfg=blue        guifg=darkslateblue
+    hi def LlLevel9 ctermfg=darkmagenta guifg=darkviolet
   endif
 else
-  syn region PList matchgroup=PParen start="(" end=")" contains=@PListCluster,PList
-  hi def link PParen Delimiter
+  syn region LlList matchgroup=LlParen start="(" end=")" contains=@LlListCluster,LlList
+  hi def link LlParen Delimiter
 endif
 
 let b:current_syntax = "ll"
