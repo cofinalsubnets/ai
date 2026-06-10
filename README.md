@@ -1,11 +1,11 @@
 # ll
 
+`ll` is a fusion of lisp, haskell, apl implemented directly on top of C.
 every `ll` value is a total monadic function `ll -> ll`.
-1 is the identity function, 0 is the constant function of 1,
-numbers act on functions by iteration (church numerals),
-and a list represents an exponential tower.
-- `(0 x) = 1`
-- `(1 x) = (x) = x`
+numbers are finite iterators (church numerals) and lists are exponential towers.
+- `0 x = 1`
+- `1 x = x`
+- `(x) = x`
 - `(f x y) = ((f x) y)`
 - `(2 f x) = (f (f x))`
 - `(2 3 4) = 262144`
@@ -13,48 +13,57 @@ and a list represents an exponential tower.
 - `(log -1) = (* i pi)`
 - `((/ 1 2) -1) = i`
 
-the language is built around three special forms plus reader operators,
-prefix and infix. the special forms are:
+ll has three special forms plus reader operators.
+the forms are:
 - `\` lam (with a single operand, quote)
 - `?` cond
 - `:` letrec*/sequence
 
-a prefix operator char desugars its next datum(s) to a form; the table is
-`dict['operators]`, extensible at runtime. seven ship:
-- `$` sat (saturating size/magnitude -- a count on containers, 0 when empty or <= 0)
-- `#` hash (hash table literal `#(k v ..)`; a scalar boxes: `#x` = `#(() x)`)
-- `'` quote (literally the one-operand lambda)
-- `!` bang (negation; `!!$x` is x's truth bit)
-- `.` dot (printing identity)
-- `@` tup (array constructor)
-- `` ` `` quasiquote
+the prefix reader operators aka sigils are
+- `.` dot (printing identity function, does what you want on strings)
+- `$` sat (aka cash; saturating reduction to fixed width nat, len on collections)
+- `!` nil (negation); `!!$` defines the `?` condition
+- `'` quote (desugars to monadic lambda)
+- `` ` `` quasiquotation with the usual `,` `,@`
 
-infix operators are all-punct symbols in `dict['infix]`, right-associative,
-reading as plain symbols with no left operand -- `(1 + 2)`, `'+`, and `(+)` all work:
+plus the data constructors
+- `#` hash (hash/box literal)
+- `@` at (array literal)
+- `~` plex (complex literal/conjugate)
+
+all-punctuation names act as infix operators with flat right-associative
+precedence; with no left operand they read as plain symbols, so `(1 + 2)`,
+`'+`, and `(+)` all work:
 - `+ - * / = < <= > >= | &` dyadic
 - `?` ternary (the cond form infix: `(t ? a b)`)
 - `%` mod
 - `<-` pin, `->` peek (the collection accessors: `(t <- k v)`, `(t -> k d)`)
 
-`,` unquote, `,@` splice, and `~` wave (complex constructor / conjugate) stay
-reader digraphs. the full spec is [CLAUDE.md](CLAUDE.md) -- the root test file
-CLAUDE.l in a code fence, so the spec stays green.
+pure lisp is a subset of ll: `?` is still the cond form at the head of a
+list, and any lisp-mode program becomes infix-safe by wrapping its bare
+punct symbols in parens (`(+)` is `+` as a value) -- the lisp semantics
+are unchanged.
+
+the full spec
+is [CLAUDE.md](CLAUDE.md) -- the root test file CLAUDE.l in a code fence, so
+the spec stays green.
 
 ## code examples
 
-a few identities (each evaluates to 1; euler's identity is bit-exact read
-through the principal log -- atan2(0,-1) is pi by IEEE fiat -- and sqrt
-takes the principal root, so it is total on negatives)
+selected identities
 
-```
-(1 = (\ x x)) (0 = (\ _ 1))
-(8 = (3 2)) (65536 = (2 2 2 2))
-(-1 = i * i) ((log -1) = i * pi)
-(i = ((/ 1 2) -1)) (5.0 = (abs ~(3 4)))
-(12 = (3 (+ 1) 9)) (2.0 = ((/ 1 2) 4))
-("ababab" = "ab" * 3) ('(1 2 1 2) = '(1 2) * 2)
-(!"" = 0 = $"")
-```
+- `1 = (\ x x)`
+- `0 = (\ _ 1)`
+- `8 = 3 2`
+- `65536 = 2 2 2 2`
+- `-1 = i * i`
+- `log -1 = i * pi`
+- `i = (1 / 2) -1`
+- `5.0 = abs ~(3 4)`
+- `12 = 3 (+ 1) 9`
+- `2.0 = (1 / 2) 4`
+- `"ababab" = "ab" * 3`
+- `'(1 2 1 2) = '(1 2) * 2`
 
 hello world
 

@@ -20,30 +20,31 @@ syn keyword LlFunc cons car cdr caar cadr cdar cddr caaar caadr cadar caddr cdaa
 syn keyword LlFunc id co const flip
 syn keyword LlFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
 syn keyword LlFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge
-syn keyword LlFunc + - * / % mod < <= = >= > idp inc dec abs gcd modpow int
+syn keyword LlFunc + - * / % mod < <= = >= > <- -> idp inc dec abs gcd modpow int
 syn keyword LlFunc ~ << >> & \| ^
-syn keyword LlFunc sin cos log pow com re im conj arg clift
+syn keyword LlFunc sin cos log pow plex re im conj arg clift
 syn keyword LlFunc nump intp powg num-ap numfn randint
-syn keyword LlFunc twop strp symp mapp lamp tupp bigp boxp arrp comp flop fixp nilp atomp
-syn keyword LlFunc arr arrl array arank alen ashape atype asum aprod amax amin aall aany
+syn keyword LlFunc twop strp symp mapp lamp handlep tupp bigp boxp arrp comp flop fixp nilp atomp
+syn keyword LlFunc arr array arank alen ashape atype asum aprod amax amin aall
 syn keyword LlFunc a-rank a-shape a-type a-dim
-syn keyword LlFunc string ssub scat intern nom slurp inspect strin strout outstr
-syn keyword LlFunc hasht hashn hashk hash hashd sat peek pin pull bufnew bcopy
+syn keyword LlFunc string ssub scat intern nom slurp show sip pad page
+syn keyword LlFunc hashn hashk hashd digest sat peek pin pull buf blit
 syn keyword LlFunc lam peekl pinl seekl trim
 syn keyword LlFunc fgetc fungetc feof fputc fputs fputn fputx fflush fread
 syn keyword LlFunc putc puts putn putx getc read in out dot
 syn keyword LlFunc ev call-cc yield spawn wait sleep done? kill key?
 syn keyword LlFunc trap scare? more? eof?
 syn keyword LlFunc rand randf rand-next randf-next rng-seed rng-get rng-set
+syn keyword LlFunc open close run getenv exit
 syn keyword LlFunc clock vminfo dict macros assert version-number argv cmdline
 
 " Macros (head-symbol rewrites installed with ::)
-syn keyword LlMacro :: L list do begin progn let if cond quote qq gsym tuple hasht
+syn keyword LlMacro :: L list do begin progn let if cond quote qq gsym tuple hash
 syn keyword LlMacro && \|\| :- ?- >>= <=<
 
-" Constants: booleans (1/0), array element-type codes, pi
-syn keyword LlConst true false pi
-syn keyword LlConst i8 i16 i32 i64 f32 f64
+" Constants: booleans (1/0), the tier-spine array element-kind codes, e pi i
+syn keyword LlConst true false e pi i
+syn keyword LlConst z r c o
 
 " Quoted atoms: 'foo   (' is one-operand \ = quote)
 syn match LlAtomMark "'"
@@ -78,7 +79,7 @@ syn match LlParenError ")"
 syn sync lines=100
 
 hi def link LlAtomMark       Delimiter
-hi def link LlSigil          Delimiter
+hi def link LlSigil          Special
 hi def link LlAtom           Identifier
 hi def link LlComment        Comment
 hi def link LlCommentTodo    Todo
