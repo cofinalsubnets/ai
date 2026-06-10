@@ -13,7 +13,7 @@
  (= 1 (3 = 3.0)) (= 0 (3 = 4))
  (= 1 (1 < 2)) (= 1 (1 <= 1)) (= 1 (2 > 1)) (= 1 (2 >= 2)) (= 0 (2 < 1))
  (= 15 (8 | 4 | 2 | 1)) (= 0 (5 & 2)) (= 7 (5 | 2))
- (= 1 (5 % 2)) (= 'mod (A (A '(5 % 2))))        ; % is an alias entry: desugars to mod
+ (= 1 (5 % 2)) (= 'mod (cap (cap '(5 % 2))))        ; % is an alias entry: desugars to mod
 
  ; right-associativity; parens override
  (= 7 (1 + 2 * 3))                              ; (+ 1 (* 2 3))
@@ -55,7 +55,7 @@
  (= 7 ((#() <- 'k 7) 'k))                        ; <- returns the collection
  (= 9 (#(1 10) -> 2 9))                          ; -> falls back to the default
  (= 65 (: b (buf 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
- (= 'pin (A (peek (peek dict 'infix 0) '<- 0)))  ; the table entries are (name . arity) aliases
- (= 3 (B (peek (peek dict 'infix 0) '-> 0)))
+ (= 'pin (cap (peek (peek dict 'infix 0) '<- 0)))  ; the table entries are (name . arity) aliases
+ (= 3 (cbp (peek (peek dict 'infix 0) '-> 0)))
  (symp '<-) (= 30 ((->) #(3 30) 3 0))            ; escaped, -> is still peek-as-a-value
  (idp pin (<-)) (idp peek (->)) (= 1 ((%) 5 2)))  ; every alias is a bound global

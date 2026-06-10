@@ -73,14 +73,14 @@
 
 (: (c1895 m n) (+ m (/ (* (+ m n) (+ m (+ n 1))) 2))
    (c1895_inv p) (:
-    (f t n) (? (> (+ t n) p) (X t (- n 1)) (f (+ t n) (+ n 1)))
+    (f t n) (? (> (+ t n) p) (cons t (- n 1)) (f (+ t n) (+ n 1)))
     x (f 0 1)
-    m (- p (A x))
-    n (- (B x) m)
+    m (- p (cap x))
+    n (- (cbp x) m)
     (L m n))
    p (c1895 103 110)
    l (c1895_inv p)
-   (assert (= 103 (A l)) (= 110 (A (B l)))))
+   (assert (= 103 (cap l)) (= 110 (cap (cbp l)))))
 
 ; heron's method for finding square roots (integer Newton -- floor division `//`,
 ; so it converges to the exact integer root and the `=` test terminates)

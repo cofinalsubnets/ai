@@ -4,10 +4,10 @@
 ; strings, symbols and nested arrays -- and is the one tuple type the collector
 ; traces element-by-element. rank-0 is rejected (a boxed scalar is just a value).
 
-(: (oa-list n acc) (? (< n 1) acc (oa-list (- n 1) (X n acc)))   ; build (1 .. n)
+(: (oa-list n acc) (? (< n 1) acc (oa-list (- n 1) (cons n acc)))   ; build (1 .. n)
    (oa-churn n)    (? (< n 1) 0 (: g (oa-list 300) (oa-churn (- n 1)))) ; alloc + discard
-   oa-B     (100 2)                          ; a bignum (past fixnum/box range)
-   oa-vals  (L oa-B (* oa-B oa-B) (+ oa-B 7) "hi" 'sym)
+   oa-big     (100 2)                          ; a bignum (past fixnum/box range)
+   oa-vals  (L oa-big (* oa-big oa-big) (+ oa-big 7) "hi" 'sym)
    oa-a     (arr o '(5) oa-vals)
    oa-z     (arr o '(3) 0)                         ; nil-filled
    oa-nest  (arr o '(2) (L (arr o '(2) '(1 2)) (arr o '(2) '(3 4)))))
@@ -16,15 +16,15 @@
  ; --- construction / accessors ---
  (= 3 o)   (= o (atype oa-a))                    ; type code 3
  (= 1 (arank oa-a))   (= 5 (alen oa-a))
- (= 5 (A (ashape oa-a)))
+ (= 5 (cap (ashape oa-a)))
  (nilp (arr o 0 0))                                ; rank-0 object rejected
  (nilp (arr o 0 '(1)))
  (nilp (arr o '(2 2 2 2 2 2 2 2 2) 0))             ; over-rank rejected
 
  ; --- holds arbitrary values verbatim (no boxing/coercion) ---
- (= oa-B (peek oa-a 0 0))
- (= (* oa-B oa-B) (peek oa-a 1 0))
- (= (+ oa-B 7) (peek oa-a 2 0))
+ (= oa-big (peek oa-a 0 0))
+ (= (* oa-big oa-big) (peek oa-a 1 0))
+ (= (+ oa-big 7) (peek oa-a 2 0))
  (= "hi" (peek oa-a 3 0))
  (= 'sym (peek oa-a 4 0))
  (nilp (peek oa-z 0 0))                           ; (arr o ... 0) fills with nil
@@ -44,8 +44,8 @@
  ; --- GC stress: oa-a stays live (global root) across many collections; the
  ;     bignum element pointers must be forwarded, not dropped or truncated ---
  (= 0 (oa-churn 80))
- (= oa-B (peek oa-a 0 0))
- (= (* oa-B oa-B) (peek oa-a 1 0))
+ (= oa-big (peek oa-a 0 0))
+ (= (* oa-big oa-big) (peek oa-a 1 0))
  (= 'sym (peek oa-a 4 0)))
 
 ; --- elementwise arithmetic: transparent bignums, full broadcasting ----------

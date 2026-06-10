@@ -32,11 +32,11 @@
 
   ; proper lists
   (= "(a b c)"       (show '(a b c)))
-  (= "(1 2 3)"       (show (X 1 (X 2 (X 3 0)))))
-  (= "(\"a\" \"b\")" (show (X "a" (X "b" 0))))
+  (= "(1 2 3)"       (show (cons 1 (cons 2 (cons 3 0)))))
+  (= "(\"a\" \"b\")" (show (cons "a" (cons "b" 0))))
 
   ; nesting
-  (= "(a (b) c)"     (show (X 'a (X (X 'b 0) (X 'c 0)))))
+  (= "(a (b) c)"     (show (cons 'a (cons (cons 'b 0) (cons 'c 0)))))
   (= "((1 2) (3 4))" (show '((1 2) (3 4))))
 
   ; result is always a string
@@ -47,13 +47,13 @@
 
   ; buffer growth: a 200-element list far exceeds the 32-byte initial buf,
   ; forcing several doublings inside to_putc.
-  (: (rng n) (? (= n 0) 0 (X n (rng (- n 1))))
+  (: (rng n) (? (= n 0) 0 (cons n (rng (- n 1))))
      s (show (rng 200))
      ; 200 numbers + 199 separators + 2 parens = at least 400 chars
    (do (strp s) (< 400 (sat s))))
 
   ; GC stress: 500 inspects in a loop. Each call alloc'd a heap port + buf,
   ; provoking many GCs. Final call must still produce the expected output.
-  (: (loop n) (? (= n 0) (show (X 1 (X 2 (X 3 0))))
+  (: (loop n) (? (= n 0) (show (cons 1 (cons 2 (cons 3 0))))
                  (do (show "stress") (loop (- n 1))))
    (= "(1 2 3)" (loop 500))))

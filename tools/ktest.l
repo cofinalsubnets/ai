@@ -12,15 +12,15 @@
    (eol s i)  (? (>= i (sat s)) i (? (= 10 (peek s i 0)) i (eol s (+ 1 i))))
    (lineof s t) (: i (idx s t) (? (< i 0) "" (ssub s (bol s i) (eol s i)))))
 
-(: a    (B argv)
-   iso  (A a)
-   ovmf (A (B a))
+(: a    (cbp argv)
+   iso  (cap a)
+   ovmf (cap (cbp a))
    r    (run (L "timeout" "90" "qemu-system-x86_64" "-m" "256M" "-M" "q35"
                 "-serial" "stdio" "-display" "none" "-no-reboot"
                 "-drive" (scat "if=pflash,unit=0,format=raw,file=" (scat ovmf ",readonly=on"))
                 "-cdrom" iso
                 "-device" "isa-debug-exit,iobase=0xf4,iosize=0x04"))
-   out  (B r)
+   out  (cbp r)
    ok   (&& (has? out "tests pass") (! (has? out "failed:")))
    (? ok (: _ (puts (lineof out "tests pass")) (putc 10))
          (: _ (fputs err "test_kernel: FAILED") _ (fputc err 10)

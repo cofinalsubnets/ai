@@ -19,4 +19,4 @@
    (? v (term_text green_dot)
     (do (term_text red_x) (putc 10)
        (puts "assert failed: ") (putx x) (putc 10) (exit 1))))
- (X 'do (map (\ l (L report (L '\ l) l)) l)))))
+ (cons 'do (map (\ l (L report (L '\ l) l)) l)))))

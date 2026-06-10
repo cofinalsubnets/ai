@@ -8,8 +8,8 @@
    e 2.718281828459045                          ; Euler's number; exp is (\ x (x e))
    true 1 false 0
    (atomp x) (nilp (twop x))
-   AA (co A A) AB (co A B)
-   BA (co B A) BB (co B B))
+   caap (co cap cap) cabp (co cap cbp)
+   cbap (co cbp cap) cbbp (co cbp cbp))
 ; array element-kind codes (enum g_tuple_type), named for the tier spine:
 ; z integers, r reals, c packed complex, o objects -- one word per element.
 (: z 0 r 1 c 2 o 3)
@@ -27,20 +27,14 @@
                                  (? (= 0 (mod k 2)) h2 (mod (* h2 b) m)))))
 ; functional bounded draw: (value . st') with value in [0,n), riding rand-next
 ; (full-width draw) + modulo. The global-stream analogue is the `rand` nif.
-(: (randint st n) (: r (rand-next st) (X (mod (A r) n) (B r))))
-(: AAA (co A AA) AAB (co A AB)
-   ABA (co A BA) ABB (co A BB)
-   BAA (co B AA) BAB (co B AB)
-   BBA (co B BA) BBB (co B BB))
-; cons/car/cdr (+ c[ad]+r) are compatibility aliases; X/A/B + the AB-compound names
-; (AA AB .. BBB above) are the native primitives the prelude/compiler standardize on.
-(: cons X car A cdr B
-   caar AA cadr AB cdar BA cddr BB
-   caaar AAA caadr AAB
-   cadar ABA caddr ABB
-   cdaar BAA cdadr BAB
-   cddar BBA cdddr BBB
-   inc (+ 1) dec (+ -1) (:: a b) (pin macros a b)
+(: (randint st n) (: r (rand-next st) (cons (mod (cap r) n) (cbp r))))
+(: caaap (co cap caap) caabp (co cap cabp)
+   cabap (co cap cbap) cabbp (co cap cbbp)
+   cbaap (co cbp caap) cbabp (co cbp cabp)
+   cbbap (co cbp cbap) cbbbp (co cbp cbbp))
+; X cons; cap/cbp -- contents of the a/b part of the pair -- and the caap..cbbbp
+; compounds above are the primitives; the classic car/cdr aliases are gone.
+(: inc (+ 1) dec (+ -1) (:: a b) (pin macros a b)
    putc (fputc out)
    puts (fputs out)
    putn (fputn out)
@@ -61,11 +55,11 @@
 ; the printer's fn_src (cf. ev.c c1); entry is cell 1, handed out via (seekl 1 th), and
 ; the src rides the thread span so GC traces it. Helpers pass th/f/n explicitly -- a
 ; closure over the forward-bound th miscompiles under the bootstrap c0.
-(: (nfnest f i acc) (? (< i 1) acc (nfnest f (+ -1 i) (X f (X acc 0))))
+(: (nfnest f i acc) (? (< i 1) acc (nfnest f (+ -1 i) (cons f (cons acc 0))))
    (nfq th f i n) (? (< i n) (: _ (pinl (+ 1 (* 2 i)) g_vm_quote th) _ (pinl (+ 2 (* 2 i)) f th) (nfq th f (+ 1 i) n)) th)
    (nfa th i n) (? (< i n) (: _ (pinl (+ (+ 3 (* 2 n)) i) g_vm_ap th) (nfa th (+ 1 i) n)) th)
    (numfn n f) (:                                  ; build (\ x (f (f ... (f x)))), n f's
-     src (X '\ (X 'x (X (nfnest f n 'x) 0)))  ; alloc before lam; printer source
+     src (cons '\ (cons 'x (cons (nfnest f n 'x) 0)))  ; alloc before lam; printer source
      th (lam (+ 5 (* 3 n)))                         ; [src] n*[quote f] [arg n] n*[ap] [ret 1]
      _ (pinl 0 src th) _ (nfq th f 0 n)             ; no allocation past lam: th can't move
      _ (pinl (+ 1 (* 2 n)) g_vm_arg th) _ (pinl (+ 2 (* 2 n)) n th)   ; arg n: x, now under n f's
@@ -106,62 +100,68 @@
 (: (scomb f g a x) (f a (g a x))
    (bcomb f g x) (f (g x))
    _ (pin dict 'scomb scomb) _ (pin dict 'bcomb bcomb))
-(: (map f l) (? (twop l) (X (f (A l)) (map f (B l))))
-   (foldl f z l) (? (twop l) (foldl f (f z (A l)) (B l)) z)
-   (foldr f z l) (? (twop l) (f (A l) (foldr f z (B l))) z))
-(: (foldl1 f l) (foldl f (A l) (B l))
+(: (map f l) (? (twop l) (cons (f (cap l)) (map f (cbp l))))
+   (foldl f z l) (? (twop l) (foldl f (f z (cap l)) (cbp l)) z)
+   (foldr f z l) (? (twop l) (f (cap l) (foldr f z (cbp l))) z))
+(: (foldl1 f l) (foldl f (cap l) (cbp l))
    (foldr1 f l) (foldr f (last l) (init l))
    ap (foldl id)
-   (filter p l) (? (twop l) (: m (filter p (B l)) (? (p (A l)) (X (A l) m) m)))
-   (init l) (? (B l) (X (A l) (init (B l))))
-   (last l) (? (B l) (last (B l)) (A l))
-   (each l f) (? (twop l) (: _ (f (A l)) (each (B l) f)))
-   (ldel x l) (? (twop l) (? (= (A l) x) (B l) (X (A l) (ldel x (B l)))))
-   (all f l) (? (twop l) (? (f (A l)) (all f (B l))) 1)
-   (any f l) (? (twop l) (? (f (A l)) 1 (any f (B l))))
-   (cat a b) (foldr X b a))
-; merge sort on lists: (sort le l) orders l by the strict less-than predicate
-; le (e.g. (sort < xs)). top-down alternating split + merge; O(n log n).
+   (filter p l) (? (twop l) (: m (filter p (cbp l)) (? (p (cap l)) (cons (cap l) m) m)))
+   (init l) (? (cbp l) (cons (cap l) (init (cbp l))))
+   (last l) (? (cbp l) (last (cbp l)) (cap l))
+   (each l f) (? (twop l) (: _ (f (cap l)) (each (cbp l) f)))
+   (ldel x l) (? (twop l) (? (= (cap l) x) (cbp l) (cons (cap l) (ldel x (cbp l)))))
+   (all f l) (? (twop l) (? (f (cap l)) (all f (cbp l))) 1)
+   (any f l) (? (twop l) (? (f (cap l)) 1 (any f (cbp l))))
+   (cat a b) (foldr cons b a))
+; sort: (sort le l) orders l by the strict less-than predicate le. the order
+; predicates take the C lane -- sortl, a stable bottom-up merge in the heap
+; gap, one cmp3 (the total order) per compare, no lisp re-entry; descending
+; is rev -- while an arbitrary predicate keeps the lisp merge sort (msort:
+; top-down alternating split + merge, O(n log n)).
 (: (merge le a b) (? (atomp a) b (atomp b) a
-                     (le (A a) (A b)) (X (A a) (merge le (B a) b))
-                     (X (A b) (merge le a (B b))))
-   (sortsplit l) (? (atomp l) (X l 0) (atomp (B l)) (X l 0)
-                    (: r (sortsplit (BB l)) (X (X (A l) (A r)) (X (AB l) (B r)))))
-   (sort le l) (? (atomp l) l (atomp (B l)) l
-                  (: s (sortsplit l) (merge le (sort le (A s)) (sort le (B s))))))
+                     (le (cap a) (cap b)) (cons (cap a) (merge le (cbp a) b))
+                     (cons (cap b) (merge le a (cbp b))))
+   (sortsplit l) (? (atomp l) (cons l 0) (atomp (cbp l)) (cons l 0)
+                    (: r (sortsplit (cbbp l)) (cons (cons (cap l) (cap r)) (cons (cabp l) (cbp r)))))
+   (msort le l) (? (atomp l) l (atomp (cbp l)) l
+                  (: s (sortsplit l) (merge le (msort le (cap s)) (msort le (cbp s)))))
+   (sort le l) (? (idp le (<)) (sortl l)
+                  (idp le (>)) (rev (sortl l))
+                  (msort le l)))
 (: catmap (co (flip foldr 0) (co cat))
-   (assq x l) (? l (? (= x (AA l)) (A l) (assq x (B l))))
-   (lidx x) ((: (f n l) (? (twop l) (? (= x (A l)) n (f (+ 1 n) (B l))) -1)) 0)
+   (assq x l) (? l (? (= x (caap l)) (cap l) (assq x (cbp l))))
+   (lidx x) ((: (f n l) (? (twop l) (? (= x (cap l)) n (f (+ 1 n) (cbp l))) -1)) 0)
    memq (co any (=))
-   (zip a b) (? (twop a) (? (twop b) (X (X (A a) (A b)) (zip (B a) (B b)))))
-   rev (foldl (flip X) 0)
-   (drop n l) (? n (drop (- n 1) (B l)) l)
-   (take n l) (? n (X (A l) (take (- n 1) (B l))))
-   (part p) (foldr (\ a m (? (p a) (X (X a (A m)) (B m))
-                                        (X (A m) (X a (B m))))) '(0)))
+   (zip a b) (? (twop a) (? (twop b) (cons (cons (cap a) (cap b)) (zip (cbp a) (cbp b)))))
+   rev (foldl (flip cons) 0)
+   (drop n l) (? n (drop (- n 1) (cbp l)) l)
+   (take n l) (? n (cons (cap l) (take (- n 1) (cbp l))))
+   (part p) (foldr (\ a m (? (p a) (cons (cons a (cap m)) (cbp m))
+                                        (cons (cap m) (cons a (cbp m))))) '(0)))
 (: (sip cl)
  (pinl -1 (peekl 0 in) (pinl -1 -4 (pinl -1 -1 (pinl -1 0 (pinl 4 cl (lam 5))))))
  (pad _)
   (pinl -1 (peekl 0 in) (pinl -1 -2 (pinl -1 -1 (pinl -1 0 (pinl -1 "  " (pinl 5 0 (lam 6)))))))
  (page o) (ssub (peekl 4 o) 0 (peekl 5 o))
- (slurp i) (: (rl i) (: c (fgetc i) (? !(= c -1) (X c (rl i)))) (string (rl i)))
+ (slurp i) (: (rl i) (: c (fgetc i) (? !(= c -1) (cons c (rl i)))) (string (rl i)))
  (show x) (: o (pad 0) _ (fputx o x) (page o)))
 ; trap status readers. a global `trap` function is called as (trap s a b):
-; s = the status word, two bits -- scare (1: something went wrong) and more
+; s = the status word, two bits -- sing (1: something went wrong) and more
 ; (2: read control flow, more input wanted). more alone = incomplete; eof =
-; more|scare (the end is the scary case of wanting more). a/b = the condition
+; more|sing (the end is the singing case of wanting more). a/b = the condition
 ; data (the more bit: the port and the read sentinel). the result is delivered
-; per the bits: more -> to the reader's resume; a bare scare -> observed.
-(: (scare? s) (= s 1)
+; per the bits: more -> to the reader's resume; a bare sing -> observed.
+(: (sing? s) (= s 1)
    (more? s) (= s 2)
    (eof? s) (= s 3))
 ; here are some macro definitions
-(: l (foldr (\ a l (X X (X a (X l 0)))) 0) (: _ (:: 'L l) _ (:: 'list l)))
-(:: '&& (\ l (: (and l) (? (B l) (list '? (A l) (and (B l)) 0) (A l)) (? l (and l) 1))))
-(:: '|| (\ l (: (or l) (? l (: y (nom 0) (list ': y (A l) (list '? y y (or (B l))))) 0) (or l))))
-(:: ':- (\ a (X ': (cat (B a) (X (A a) 0)))))
-(:: '?- (\ a (X '? (cat (B a) (X (A a) 0)))))
-(:: '>>= (\ l (X (last l) (init l))))
+(: l (foldr (\ a l (cons cons (cons a (cons l 0)))) 0) (: _ (:: 'L l) _ (:: 'list l)))
+(:: '&& (\ l (: (and l) (? (cbp l) (list '? (cap l) (and (cbp l)) 0) (cap l)) (? l (and l) 1))))
+(:: '|| (\ l (: (or l) (? l (: y (nom 0) (list ': y (cap l) (list '? y y (or (cbp l))))) 0) (or l))))
+(:: ':- (\ a (cons ': (cat (cbp a) (cons (cap a) 0)))))
+(:: '?- (\ a (cons '? (cat (cbp a) (cons (cap a) 0)))))
+(:: '>>= (\ l (cons (last l) (init l))))
 (:: '<=< (\ g (: y (nom 0) (list '\ y (foldr (\ f x (list f x)) y g)))))
 ; the global RNG stream lives on dict ('rng-state) and advances by the pure
 ; rand-next/randf-next -- C holds no state and never draws. rng-get lazily
@@ -173,20 +173,20 @@
    (rng-set st) (? (&& (arrp st) (= 1 (arank st)) (= 4 (alen st)) (= z (atype st)))
                    (: _ (pin dict 'rng-state st) st)
                    0)
-   (rand n) (: r (rand-next (rng-get 0)) _ (pin dict 'rng-state (B r))
-               (? (&& (fixp n) (< 0 n)) (mod (A r) n) (A r)))
-   (randf _) (: r (randf-next (rng-get 0)) _ (pin dict 'rng-state (B r)) (A r)))
+   (rand n) (: r (rand-next (rng-get 0)) _ (pin dict 'rng-state (cbp r))
+               (? (&& (fixp n) (< 0 n)) (mod (cap r) n) (cap r)))
+   (randf _) (: r (randf-next (rng-get 0)) _ (pin dict 'rng-state (cbp r)) (cap r)))
 ; readability / lisp-compat aliases by head-symbol substitution.
 ; do/begin/progn sequence side effects and return the last (identical to the
 ; current `,` macro -> `(: _ a _ b ... last)`); let -> the `:` let form;
 ; if/cond -> the `?` conditional.
-(: seqx (\ l (X ': (foldr (\ l r (X '_ (X l r))) (list (last l)) (init l)))))
+(: seqx (\ l (cons ': (foldr (\ l r (cons '_ (cons l r))) (list (last l)) (init l)))))
 (:: 'do seqx) (:: 'begin seqx) (:: 'progn seqx)
-(:: 'let (\ a (X ': a)))
-(:: 'if (\ a (X '? a)))
-(:: 'cond (\ a (X '? a)))
+(:: 'let (\ a (cons ': a)))
+(:: 'if (\ a (cons '? a)))
+(:: 'cond (\ a (cons '? a)))
 ; `(quote x)` -> `(\ x)`: the CL/Scheme name for the one-arg-lambda quote (`'x` sugar).
-(:: 'quote (\ a (X '\ a)))
+(:: 'quote (\ a (cons '\ a)))
 
 ; quasiquote: `tmpl with ,x (unquote) and ,@xs (unquote-splice). The reader emits
 ; (qq tmpl), (uq x), (uqs xs). qqx/qql walk the template tracking nesting depth d:
@@ -196,17 +196,17 @@
 ; bound to identity so a stray top-level ,x just evaluates its operand.
 (: (qqx t d) (?
     (atomp t)       (list '\ t)                              ; atom: quote it
-    (= (A t) 'uq) (? (= d 1) (AB t)                      ; fire: value as-is
-                       (list 'list ''uq (qqx (AB t) (- d 1)))) ; rebuild literal uq
-    (= (A t) 'qq) (list 'list ''qq (qqx (AB t) (+ d 1))) ; nested qq: walk one in
+    (= (cap t) 'uq) (? (= d 1) (cabp t)                      ; fire: value as-is
+                       (list 'list ''uq (qqx (cabp t) (- d 1)))) ; rebuild literal uq
+    (= (cap t) 'qq) (list 'list ''qq (qqx (cabp t) (+ d 1))) ; nested qq: walk one in
                     (qql t d))                               ; other list
    (qql t d) (?
     (atomp t) (qqx t d)                                      ; nil / improper tail
-    (&& (twop (A t)) (= (AA t) 'uqs))
-     (? (= d 1) (list 'cat (AB (A t)) (qql (B t) d))   ; fire splice
-        (list 'X (list 'list ''uqs (qqx (AB (A t)) (- d 1))) (qql (B t) d)))
-    (list 'X (qqx (A t) d) (qql (B t) d))))           ; ordinary element
-(:: 'qq (\ a (qqx (A a) 1)))
+    (&& (twop (cap t)) (= (caap t) 'uqs))
+     (? (= d 1) (list 'cat (cabp (cap t)) (qql (cbp t) d))   ; fire splice
+        (list 'cons (list 'list ''uqs (qqx (cabp (cap t)) (- d 1))) (qql (cbp t) d)))
+    (list 'cons (qqx (cap t) d) (qql (cbp t) d))))           ; ordinary element
+(:: 'qq (\ a (qqx (cap a) 1)))
 (: uq (\ x x))                                               ; stray ,x evaluates x
 
 ; --- array element-type inference + shape coercion (shared by `tuple` and `array`).
@@ -230,19 +230,19 @@
 ; inferring the element type via a-type (so it carries bignums/symbols in an o
 ; array, not just z/r); `map` builds a map from alternating key/value args.
 (: (ltuple l) (arr (a-type l) (L (foldl (\ n _ (+ 1 n)) 0 l)) l))
-(:: 'tuple (\ a (list 'ltuple (X 'list a))))
+(:: 'tuple (\ a (list 'ltuple (cons 'list a))))
 ; (hash) = empty; (hash x) boxes a scalar -- a fresh mutable hash pinning x
 ; to the () key, so #5 = #(() 5); pairs pin as usual, and an odd trailing
 ; operand lands in the () box slot.
 (: (hashtx a) (? (nilp a) '(hashn 0)
-                 (nilp (B a)) (list 'pin (hashtx 0) '() (A a))
-                 (list 'pin (hashtx (BB a)) (A a) (AB a))))
+                 (nilp (cbp a)) (list 'pin (hashtx 0) '() (cap a))
+                 (list 'pin (hashtx (cbbp a)) (cap a) (cabp a))))
 (:: 'hash (\ a (hashtx a)))
 
 ; (gsym x) quotes its operand, giving (nom 'x) -- a fresh uninterned symbol
 ; named x. its `$` glyph went to sat; gsyms still PRINT as $<name>/$<addr>
 ; (display only, see gzput_sym) and are made by calling gsym or nom directly.
-(:: 'gsym (\ a (list 'nom (list '\ (A a)))))
+(:: 'gsym (\ a (list 'nom (list '\ (cap a)))))
 
 ; (array shape elem…): the ergonomic N-D array constructor. `shape` is either a
 ; dimension *list* (rank-N) or a single number n (a rank-1 vector of length |n|),
@@ -254,7 +254,7 @@
 ; (array 2 'a 'b), (array '(2 2) 1 2 3 4) and a partial like (array 3) (a collector
 ; awaiting 3 elems) all fall out of ll's auto-currying, like numap's n-ary thread.
 (: (a-coll sh n acc) (? (< n 1) (: d (rev acc) (arr (a-type d) sh d))
-                        (\ x (a-coll sh (- n 1) (X x acc))))
+                        (\ x (a-coll sh (- n 1) (cons x acc))))
    (array s) (: sh (a-shape s) (a-coll sh (foldl (*) 1 sh) 0)))
 
 ; recursive-value boxing for `:` (the letrec* "capture by location" fix).
@@ -269,57 +269,57 @@
 ; boxfix-core directly (zero conversion); c0 (ev.c) calls the flat `boxfix`
 ; wrapper below, which is just bpr+flatten around the same core. `lambp`/`dsug`
 ; are globals so `ale` shares them (lambda detection, binding desugaring).
-(: (lambp x) (? (twop x) (&& (= '\ (A x)) (twop (BB x)))) ; \ with >=1 param (one-operand \ is quote)
-   (dsug n d) (? (atomp n) (X n d) (dsug (A n) (X '\ (cat (B n) (list d)))))
-   (lp x) (: a (B x) (? (atomp (B a)) (X 0 (A a)) (X (init a) (last a))))
-   (ln bs) (? (atomp bs) 0 (atomp (B bs)) 0 (X (A (dsug (A bs) 0)) (ln (BB bs))))
+(: (lambp x) (? (twop x) (&& (= '\ (cap x)) (twop (cbbp x)))) ; \ with >=1 param (one-operand \ is quote)
+   (dsug n d) (? (atomp n) (cons n d) (dsug (cap n) (cons '\ (cat (cbp n) (list d)))))
+   (lp x) (: a (cbp x) (? (atomp (cbp a)) (cons 0 (cap a)) (cons (init a) (last a))))
+   (ln bs) (? (atomp bs) 0 (atomp (cbp bs)) 0 (cons (cap (dsug (cap bs) 0)) (ln (cbbp bs))))
    ; w/wl: is symbol v free under a lambda in x / binding-list bs? multi-operand \ and
    ; : shadow; one-operand \ is quote (data, nothing free); macro expansion (so :- ?-
    ; &&/|| are seen as the compiler sees them).
    (w v x bnd u) (?
     (symp x) (&& u (= x v) (nilp (memq v bnd)))
     (atomp x) 0
-    (: h (A x) (?
-      (= h '\) (? (atomp (BB x)) 0 (: r (lp x) (w v (B r) (cat (A r) bnd) 1)))
-      (= h ':) (wl v (B x) (cat (ln (B x)) bnd) u)
-      (: m (? (symp h) (peek macros h 0) 0) (? m (w v (m (B x)) bnd u) (any (\ e (w v e bnd u)) x))))))
+    (: h (cap x) (?
+      (= h '\) (? (atomp (cbbp x)) 0 (: r (lp x) (w v (cbp r) (cat (cap r) bnd) 1)))
+      (= h ':) (wl v (cbp x) (cat (ln (cbp x)) bnd) u)
+      (: m (? (symp h) (peek macros h 0) 0) (? m (w v (m (cbp x)) bnd u) (any (\ e (w v e bnd u)) x))))))
    (wl v bs bnd u) (?
     (atomp bs) 0
-    (atomp (B bs)) (w v (A bs) bnd u)
-    (: nd (dsug (A bs) (AB bs)) (? (w v (B nd) bnd u) 1 (wl v (BB bs) bnd u))))
+    (atomp (cbp bs)) (w v (cap bs) bnd u)
+    (: nd (dsug (cap bs) (cabp bs)) (? (w v (cbp nd) bnd u) 1 (wl v (cbbp bs) bnd u))))
    ; boxset: value bindings whose init closes over the name (or a no-later sibling).
-   (boxset prs) (: nm (map A prs)
-     (filter (\ v (&& (nilp (lambp (B (assq v prs))))
-                      (any (\ p (w v (B p) 0 0)) (take (+ 1 (lidx v nm)) prs)))) nm))
-   (mkcs bx) (map (\ v (X v (nom 0))) bx)
-   (cellbinds cs) (map (\ c (X (B c) (list 'X 0 0))) cs))
+   (boxset prs) (: nm (map cap prs)
+     (filter (\ v (&& (nilp (lambp (cbp (assq v prs))))
+                      (any (\ p (w v (cbp p) 0 0)) (take (+ 1 (lidx v nm)) prs)))) nm))
+   (mkcs bx) (map (\ v (cons v (nom 0))) bx)
+   (cellbinds cs) (map (\ c (cons (cbp c) (list 'cons 0 0))) cs))
 ; boxfix-core (c0): same prep + rewrites refs via sub/subl (c0 has no analysis-time
 ; redirect). Returns (prepped-prs . body') or 0.
 (: (boxfix-core prs body) (:
-   (rmc cs ns) (filter (\ p (nilp (memq (A p) ns))) cs)
+   (rmc cs ns) (filter (\ p (nilp (memq (cap p) ns))) cs)
    (sub cs x) (?
-    (symp x) (: p (assq x cs) (? p (list 'A (B p)) x))
+    (symp x) (: p (assq x cs) (? p (list 'cap (cbp p)) x))
     (atomp x) x
-    (: h (A x) (?
-      (= h '\) (? (atomp (BB x)) x (: r (lp x) (X '\ (cat (A r) (list (sub (rmc cs (A r)) (B r)))))))
-      (= h ':) (X ': (subl (rmc cs (ln (B x))) (B x)))
-      (: m (? (symp h) (peek macros h 0) 0) (? m (sub cs (m (B x))) (map (\ e (sub cs e)) x))))))
+    (: h (cap x) (?
+      (= h '\) (? (atomp (cbbp x)) x (: r (lp x) (cons '\ (cat (cap r) (list (sub (rmc cs (cap r)) (cbp r)))))))
+      (= h ':) (cons ': (subl (rmc cs (ln (cbp x))) (cbp x)))
+      (: m (? (symp h) (peek macros h 0) 0) (? m (sub cs (m (cbp x))) (map (\ e (sub cs e)) x))))))
    (subl cs bs) (?
     (atomp bs) bs
-    (atomp (B bs)) (list (sub cs (A bs)))
-    (: nd (dsug (A bs) (AB bs)) (X (A nd) (X (sub cs (B nd)) (subl cs (BB bs))))))
+    (atomp (cbp bs)) (list (sub cs (cap bs)))
+    (: nd (dsug (cap bs) (cabp bs)) (cons (cap nd) (cons (sub cs (cbp nd)) (subl cs (cbbp bs))))))
    (: bx (boxset prs)
       (? (nilp bx) 0
        (: cs (mkcs bx)
-          (one p) (: d (sub cs (B p)) (? (memq (A p) bx) (X '_ (list 'pinl 1 d (B (assq (A p) cs)))) (X (A p) d)))
-          (X (cat (cellbinds cs) (map one prs)) (sub cs body)))))))
+          (one p) (: d (sub cs (cbp p)) (? (memq (cap p) bx) (cons '_ (list 'pinl 1 d (cbp (assq (cap p) cs)))) (cons (cap p) d)))
+          (cons (cat (cellbinds cs) (map one prs)) (sub cs body)))))))
 ; flat-list adapter for c0 (ev.c): a `:` binding list (n1 d1 .. [body]) -> the
 ; rewritten list, or the input unchanged. even (body-less) lets and lets that
 ; need no boxing pass through verbatim.
 (: (boxfix fs) (:
-   (ev l) (? (atomp l) 1 (atomp (B l)) 0 (ev (BB l)))
-   (bpr fs) (? (atomp (B fs)) (X 0 (A fs))
-               (: r (bpr (BB fs)) (X (X (dsug (A fs) (AB fs)) (A r)) (B r))))
+   (ev l) (? (atomp l) 1 (atomp (cbp l)) 0 (ev (cbbp l)))
+   (bpr fs) (? (atomp (cbp fs)) (cons 0 (cap fs))
+               (: r (bpr (cbbp fs)) (cons (cons (dsug (cap fs) (cabp fs)) (cap r)) (cbp r))))
    (? (ev fs) fs
-    (: pb (bpr fs) r (boxfix-core (A pb) (B pb))
-       (? r (cat (catmap (\ p (list (A p) (B p))) (A r)) (list (B r))) fs)))))
+    (: pb (bpr fs) r (boxfix-core (cap pb) (cbp pb))
+       (? r (cat (catmap (\ p (list (cap p) (cbp p))) (cap r)) (list (cbp r))) fs)))))

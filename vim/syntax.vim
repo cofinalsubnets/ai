@@ -15,12 +15,12 @@ syn iskeyword @,33,37,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
 syn keyword LlForm : ? \\
 
 " Built-in functions (C nifs) + prelude functions
-syn keyword LlFunc X A B AA AB BA BB AAA AAB ABA ABB BAA BAB BBA BBB
-syn keyword LlFunc cons car cdr caar cadr cdar cddr caaar caadr cadar caddr cdaar cdadr cddar cdddr
+syn keyword LlFunc cons cap cbp caap cabp cbap cbbp
+syn keyword LlFunc caaap caabp cabap cabbp cbaap cbabp cbbap cbbbp
 syn keyword LlFunc id co const flip
 syn keyword LlFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
 syn keyword LlFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge
-syn keyword LlFunc + - * / % mod < <= = >= > <- -> idp inc dec abs gcd modpow int
+syn keyword LlFunc + - * / % mod < <= = >= > <- -> idp sortl msort inc dec abs gcd modpow int
 syn keyword LlFunc ~ << >> & \| ^
 syn keyword LlFunc sin cos log pow plex re im conj arg clift
 syn keyword LlFunc nump intp powg num-ap numfn randint
@@ -33,7 +33,7 @@ syn keyword LlFunc lam peekl pinl seekl trim
 syn keyword LlFunc fgetc fungetc feof fputc fputs fputn fputx fflush fread
 syn keyword LlFunc putc puts putn putx getc read in out dot
 syn keyword LlFunc ev call-cc yield spawn wait sleep done? kill key?
-syn keyword LlFunc trap scare? more? eof?
+syn keyword LlFunc trap sing? more? eof?
 syn keyword LlFunc rand randf rand-next randf-next rng-seed rng-get rng-set
 syn keyword LlFunc open close run getenv exit
 syn keyword LlFunc clock vminfo dict macros assert version-number argv cmdline

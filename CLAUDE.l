@@ -14,11 +14,11 @@
 
 ; --- the type lattice --- two axes. the *tier* spine, low to high:
 ;   N naturals (the range of $)  <  Z integers (fixnum -> wide box -> bignum)
-;     <  R reals (float)  <  C complex  <  O objects (string < symbol < pair < map < lambda)
+;     <  R reals (float)  <  C complex  <  O objects (string < symbol < product < map < lambda)
 ; numbers nest as usual (N in Z in R in C). the *rank* axis is scalar (0) vs array (>= 1, one
 ; per tier: arrZ/R/C/O). the total order < flattens this lattice into BANDS: all numbers are
 ; ONE band ordered by value (representations interleave: 1 < 1.5 < 2 whatever the rep), then
-; string < symbol < pair < map < functions, each band ordered within itself (text and pairs
+; string < symbol < product < map < functions, each band ordered within itself (text and products
 ; lexicographically, maps and functions by an alpha-invariant hash). a map has its own rung
 ; just under the functions, though it still acts as a lookup lambda for +/*/apply. the
 ; opaque handles (buf/port -- `handlep`) sit in the function band: truthy when nonempty
@@ -62,7 +62,7 @@
 (assert
  !0 !"" !#() !@0 !() !0.0 !~(0 0)                ; zero / empty -> false
  !-5 !-3.9 !~(-3 4) !~(0 -1)                     ; <= 0 in the total order -> false (complex by re then im)
- !!5 !!"x" !!'a !!A !!i !!~(3 -4) !!@(-3 -4)     ; positive / nonempty / nonzero-norm -> true
+ !!5 !!"x" !!'a !!cap !!i !!~(3 -4) !!@(-3 -4)     ; positive / nonempty / nonzero-norm -> true
  (1 = !!$5) (0 = !!$0) (0 = !!$-3)               ; !!$ is the truth bit (1 true, 0 false)
  (0 = !5) (1 = !0)                               ; ! negates it
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
@@ -71,17 +71,17 @@
 ; first word dispatches. the storage predicates:
 ;   fixp bigp boxp  -- the integer reps (fixnum, bignum, wide-int box)
 ;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `tupp`
-;   strp symp twop mapp lamp  -- string, symbol, pair, map, lambda
+;   strp symp twop mapp lamp  -- string, symbol, product, map, lambda
 ; derived: `nump` (any number: fix/box/big/float/complex/array), `intp` (any integer), `atomp`
-; (anything but a pair). `i` is ~(0 1). opaque handles (buf/port) answer `handlep` -- and
+; (anything but a product). `i` is ~(0 1). opaque handles (buf/port) answer `handlep` -- and
 ; `lamp` too, since they act as functions; a task is referenced by a fixnum id, not a handle
 ; object. `!` (nilp) and `done?` are truth/task tests, not type tests.
 (assert
- (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp A) (mapp #(1 2))
+ (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp cap) (mapp #(1 2))
  (bigp (100 2)) (boxp (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (tupp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
  (handlep (buf 4)) (handlep out) (handlep (sip '(104)))   ; the handle zoo, named
- !(handlep #()) !(handlep A) !(handlep 5) !(handlep "s")  ; maps/functions/data are not handles
+ !(handlep #()) !(handlep cap) !(handlep 5) !(handlep "s")  ; maps/functions/data are not handles
  (lamp (buf 4))                               ; a handle still answers lamp -- it acts as a function
  (fixp (: p (spawn (\ x x) 0) _ (wait p) p))  ; a task id is a number, not a handle
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
@@ -99,14 +99,14 @@
  (-2 = (^ 1 -1)) (15 = 8 | 4 | 2 | 1) (16 = (>> 64 2)) (16 = (<< 2 3)))
 
 ; --- order & equality --- < <= > >= is a *total order over all values*: across kinds by the
-; lattice (number < string < symbol < pair < map < lambda), within a kind by value/
+; lattice (number < string < symbol < product < map < lambda), within a kind by value/
 ; lexicographic order (complex by (re,im); maps and lambdas by an alpha-invariant hash; an
 ; array operand broadcasts to a 0/1 mask). `=` is value equality and bridges the whole
 ; numeric tower; `idp` is identity; `!=` is gone -- write `!(a = b)`.
 (assert
  (3 = 3.0) !(3 = 4) (1 < 1.5) (3.0 >= 3) (idp 'a 'a) !(idp '(1) '(1))
  (1 < "a") ("a" < 'x) ('x < '(0)) !("a" < 1)
- ('(0) < #(1 10)) (#(1 10) < A) !(A < #(1 10)))   ; the map rung: pair < map < lambda
+ ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10)))   ; the map rung: pair < map < lambda
 
 ; --- comparing functions --- `=` on two functions is alpha + structural: their source \-exprs
 ; match up to renaming of bound variables (binders by position, free vars by name) and their
@@ -119,7 +119,7 @@
  ((\ x (+ x 1)) = (\ x (+ x 1))) !(idp (\ x (+ x 1)) (\ x (+ x 1)))  ; equal, yet distinct objects
  !((\ x x) = (\ y z)) !((\ x (+ x 1)) = (\ x (+ x 2)))             ; free /= bound; different body
  (: g (\ a (\ b (+ a b))) (&& ((g 1) = (g 1)) !((g 1) = (g 2))))   ; closures: equal iff captures match
- ((+ 1) = (+ 1)) !((\ x x) < (\ y y)) !((\ x (A x)) = A)           ; partial apps too; eta not bridged
+ ((+ 1) = (+ 1)) !((\ x x) < (\ y y)) !((\ x (cap x)) = cap)           ; partial apps too; eta not bridged
  (1 = (\ x x)) ((\ y y) = 1) !(idp 1 (\ x x))                      ; 1 = identity, either side
  (0 = (\ _ 1)) ((\ q 1) = 0) !(0 = (\ _ 2)) !(0 = (\ _ _)))        ; 0 = const-1 (and only that)
 
@@ -202,15 +202,18 @@
  (@(4 6) = @(8 12) / 2) !(arr z '(3) 0) ("@(10 20 30)" = (show @(10 20 30)))
  (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3) 0))
 
-; --- pairs & lists --- X is cons, A is car, B is cdr; AA AB .. BBB are the compounds.
-; cons/car/cdr/cadr.. are prelude aliases. the higher-order functions live in the prelude.
+; --- products & lists --- cons builds the product (the cartesian kind, classically the
+; pair); cap and cbp take the Contents of the A/B Part of the product (no cap: you have
+; reached the end of the list); caap cabp .. cbbbp are the compounds, read right to left
+; like their classic c[ad]+r ancestors (which are gone, as is the X alias).
+; the higher-order functions live in the prelude.
 (assert
- (1 = (A '(1 2 3))) ('(2 3) = (B '(1 2 3))) (3 = (AB '(2 3 4))) ('(1 2) = (X 1 (X 2 0)))
- (1 = (car '(1 2 3))) (3 = (cadr '(2 3 4)))
+ (1 = (cap '(1 2 3))) ('(2 3) = (cbp '(1 2 3))) (3 = (cabp '(2 3 4))) ('(1 2) = (cons 1 (cons 2 0)))
+ !(cap 0) ('x = (cap 'x)) !(cbp 'x)              ; no cap at the end of the list; an atom is its own cap
  ('(2 3 4) = (map inc '(1 2 3))) (24 = (foldl (*) 1 '(1 2 3 4))) (6 = (foldr (+) 0 '(1 2 3)))
  ('(1 3) = (filter (\ x (x % 2)) '(1 2 3 4))) ('(1 2 3) = (sort (<) '(3 1 2)))
- ('(1 2 3 4) = (cat '(1 2) '(3 4))) ('(3 2 1) = (rev '(1 2 3))) ('(1 2) = (map A (zip '(1 2) '(3 4))))
- (20 = (AB (assq 2 (list (L 1 10) (L 2 20))))) ('(1 2) = (take 2 '(1 2 3 4))) ('(3 4) = (drop 2 '(1 2 3 4)))
+ ('(1 2 3 4) = (cat '(1 2) '(3 4))) ('(3 2 1) = (rev '(1 2 3))) ('(1 2) = (map cap (zip '(1 2) '(3 4))))
+ (20 = (cabp (assq 2 (list (L 1 10) (L 2 20))))) ('(1 2) = (take 2 '(1 2 3 4))) ('(3 4) = (drop 2 '(1 2 3 4)))
  (3 = (last '(1 2 3))) ('(1 2) = (init '(1 2 3))) (memq 3 '(1 2 3)) !(memq 9 '(1 2 3))
  (all (\ x (0 < x)) '(1 2 3)) (any (\ x (2 < x)) '(1 2 3)) (3 = $'(a b c)))
 
@@ -253,21 +256,22 @@
  (: b (buf 1) _ (pin b 0 257) (1 = (peek b 0 0))) (: b (buf 4) _ (blit b 0 "ABCD" 0 4) (68 = (peek b 3 0)))
  !((buf 2) = (buf 2)))
 
-; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). a PREFIX
-; operator char reads its next N datums and desugars to (name d1 .. dN); the table is
-; dict['operators] (char -> name | (name . arity), arity 1-7) -- extensible with a plain
-; pin (see test/operator.l). seven ship at arity 1 (glyph / name): $ sat (saturation), # hash (hash table),
-; ' quote (= one-operand \), ! bang (negation), . dot (print), @ tup
-; (array), ` quasiquote. % is infix mod. , unquote, ,@ splice, and ~ wave (complex/conjugate)
-; stay reader digraphs. ~(re im) splices to (plex re im); a bare ~x is (clift x).
-; INFIX operators are all-punct symbols in dict['infix] (symbol -> arity): with a left
-; operand available the symbol captures it and collects arity-1 more, nesting RIGHT-
-; associatively; with no left operand it reads as the plain symbol, so (+ 1 2), '+, and
-; (+)-as-a-value still work. + - * / = < <= > >= | & ship dyadic and ? ternary -- the
-; cond form infix, (t ? a b). aliases ride (name . arity) entries: % is mod, and the
-; accessors go infix as <- pin and -> peek, collection-first -- (t <- k v) pins (giving
-; back t, so it chains), (t -> k d) peeks. (1 + 2) reads ((+ 1 2)) and evaluates via
-; (f) == f. see test/infixop.l.
+; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). TWO sibling
+; reader tables, split by the CHAR-CLASS law: dict['operators] keys prefix SIGILS by char --
+; token-BREAKING chars that desugar their next N datums to (name d1 .. dN); value name |
+; (name . arity), arity 1-7 -- and dict['infix] keys INFIX by interned all-punct symbol --
+; token-JOINING names (kebab keeps - inside names) whose valence resolves by position: with
+; a left operand the symbol captures it and collects arity-1 more, nesting RIGHT-
+; associatively; with none it reads as the plain symbol, so (+ 1 2), '+, and
+; (+)-as-a-value still work. both tables extend with a plain pin (see test/operator.l,
+; test/infixop.l). seven sigils ship (glyph / name): $ sat (saturation),
+; # hash (hash table), ' quote (= one-operand \), ! bang (negation), . dot (print),
+; @ tup (array), ` quasiquote; , unquote, ,@ splice, and ~ wave (complex/conjugate) stay
+; reader digraphs (~(re im) splices to (plex re im); a bare ~x is (clift x)). infix:
+; + - * / = < <= > >= | & ship dyadic and ? ternary -- the cond form infix, (t ? a b);
+; aliases ride (name . arity) entries: % is mod, and the accessors go infix as <- pin and
+; -> peek, collection-first -- (t <- k v) pins (giving back t, so it chains), (t -> k d)
+; peeks. (1 + 2) reads ((+ 1 2)) and evaluates via (f) == f.
 (assert
  ('(1 (\ x) 3) = `(1 'x 3)) ('(1 2 3 4) = (: xs '(2 3) `(1 ,@xs 4)))
  (5 = $"hello") (42 = $42) (symp (gsym x)) (1 = !0) (0 = !5) !!5
@@ -275,12 +279,14 @@
  (3 = 1 + 2) (7 = 1 + 2 * 3) ('b = 0 ? 'a 'b) ('big = (1 < 2) ? 'big 'small)
  (20 = (#(1 10 2 20) -> 2 0)) (7 = ((#() <- 'k 7) 'k)) (9 = (#() -> 'k 9))
  (12 = (foldl (+) 0 '(3 4 5)))
- (: t (peek dict 'operators 0) (&& (mapp t) ('sat = (t ("$" 0))) ('hash = (t ("#" 0))))))
+ (: t (peek dict 'operators 0) (&& (mapp t) ('sat = (t ("$" 0))) ('hash = (t ("#" 0)))))
+ (: t (peek dict 'infix 0)
+    (&& (mapp t) (2 = (t '+)) (3 = (t '?)) ('mod = (cap (t '%))))))
 
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships
 ; do/let/if/cond/quote, && and || (short-circuiting), L/list, tuple/map/array, the body-first
 ; :- and ?-, and the pipes >>= <=<.
-(:: 'unless (\ a `(? ,(A a) 0 ,(AB a))))
+(:: 'unless (\ a `(? ,(cap a) 0 ,(cabp a))))
 (assert
  ('ok = (unless 0 'ok)) (0 = (unless 1 'ok)) (3 = (&& 1 2 3)) !(&& 1 0 3)
  (2 = (|| 0 2 3)) ('(1 2 3) = (L 1 2 3)) (6 = (do 1 2 6)) (3 = (let a 1 b 2 (a + b)))
@@ -290,16 +296,16 @@
 ; spawn/wait/yield/sleep/done?/kill/key?; the RNG is xoshiro256++: C ships only rng-seed and
 ; the pure rand-next/randf-next over explicit state -- the global rand/randf stream is
 ; prelude lisp over dict['rng-state]. a global `trap` function receives every
-; throw as (trap s a b) -- s = the status word, two bits: scare (1, something wrong) and
-; more (2, read control flow); more alone = incomplete, eof = more|scare. a/b = the
+; throw as (trap s a b) -- s = the status word, two bits: sing (1, something wrong) and
+; more (2, read control flow); more alone = incomplete, eof = more|sing. a/b = the
 ; condition data; the result is delivered per the bits (the more bit: to the reader's
-; resume; a bare scare: observed). scare?/more?/eof? read s. see test/trap.l.
+; resume; a bare sing: observed). sing?/more?/eof? read s. see test/trap.l.
 (assert
  (3 = (ev '(+ 1 2))) (lamp ev) (41 = (call-cc (\ k (k 41)))) (42 = 1 + (call-cc (\ k 41)))
  (42 = (: p (spawn (\ x (do (yield 0) (x + 1))) 41) (wait p))) (0 = (wait 99999)) (done? 99999)
  !(sleep 0) (4 = (alen (rng-seed 1))) ((rand 10) < 10) (flop (randf 0))
- (scare? 1) !(scare? 3) (eof? 3) !(eof? 2) (more? 2) !(more? 3)
- (: st (rng-seed 7) ((A (rand-next st)) = (A (rand-next st)))))
+ (sing? 1) !(sing? 3) (eof? 3) !(eof? 2) (more? 2) !(more? 3)
+ (: st (rng-seed 7) ((cap (rand-next st)) = (cap (rand-next st)))))
 
 ; --- i/o & ports --- `in`/`out` are the default ports; the prelude wraps getc/read and
 ; putc/puts/putn/putx, with per-port fgetc/fputc/.../fread plus open/close/sip/pad/slurp.

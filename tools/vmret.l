@@ -55,7 +55,7 @@
       (? (&& (> j i) (= 58 (peek line j 0)))               ; hexrun then ':'
          (: k (skip-ws line (+ j 1))
             (? (> k (+ j 1))                                ; need >=1 ws after ':'
-               (X (ssub line i j) (ssub line k (sat line)))
+               (cons (ssub line i j) (ssub line k (sat line)))
                0))
          0)))
 
@@ -83,7 +83,7 @@
 (: (lines s)
    ((: (f start i)
        (? (< i (sat s))
-          (? (= 10 (peek s i 0)) (X (ssub s start i) (f (+ i 1) (+ i 1))) (f start (+ i 1)))
+          (? (= 10 (peek s i 0)) (cons (ssub s start i) (f (+ i 1) (+ i 1))) (f start (+ i 1)))
           (? (< start i) (L (ssub s start i)) 0)))
     0 0))
 
@@ -115,7 +115,7 @@
    (find-symtab d base ent n k)                           ; SHT_SYMTAB (2) -> (off . size), else 0
      (? (< k n)
         (: sh (+ base (* k ent))
-           (? (= 2 (u32 d (+ sh 4))) (X (u64 d (+ sh 24)) (u64 d (+ sh 32)))
+           (? (= 2 (u32 d (+ sh 4))) (cons (u64 d (+ sh 24)) (u64 d (+ sh 32)))
               (find-symtab d base ent n (+ k 1))))
         0)
    (collect-syms d off n k m)                             ; Elf64_Sym (24 B): value -> size, sized FUNCs
@@ -126,12 +126,12 @@
         m)
    (symtab-sizes d)                                       ; -> map: fn start address -> byte size
      (: st (find-symtab d (u64 d 40) (u16 d 58) (u16 d 60) 0)  ; e_shoff / e_shentsize / e_shnum
-        (? st (collect-syms d (A st) (// (B st) 24) 0 #()) #())))
+        (? st (collect-syms d (cap st) (// (cbp st) 24) 0 #()) #())))
 
 ; --- the scan (vmret.py scan(), grouping by function header) ----------
 ; close the current watched function: flag it iff it collected any rets.
 (: (close name watching rets flagged)
-   (? (&& watching (twop rets)) (X (X name (rev rets)) flagged) flagged))
+   (? (&& watching (twop rets)) (cons (cons name (rev rets)) flagged) flagged))
 
 ; -> (flagged . total), where flagged = ((name . rets) ...), total = count of
 ; prefix* functions seen. prefix, the ret matcher, and a function-start -> size
@@ -141,8 +141,8 @@
 (: (scan-all ls prefix ret? sizes)
    ((: (loop ls name watching lim rets flagged total)
        (? (twop ls)
-          (: line (A ls)
-             rest (B ls)
+          (: line (cap ls)
+             rest (cbp ls)
              h    (parse-header line)
              (? h
                 (? (prefix? "." h)                              ; local label: stay inside
@@ -154,10 +154,10 @@
                       lim2 (? (< 0 sz) (+ ha sz) BIG)           ; extent end, or unbounded
                       (loop rest h w2 lim2 0 fl2 (? w2 (+ total 1) total))))
                 (: ins (? watching (parse-insn line) 0)         ; instruction: maybe a ret
-                   (? (&& ins (< (hex->int (A ins)) lim) (ret? (mnemonic (B ins))))
-                      (loop rest name watching lim (X (A ins) rets) flagged total)
+                   (? (&& ins (< (hex->int (cap ins)) lim) (ret? (mnemonic (cbp ins))))
+                      (loop rest name watching lim (cons (cap ins) rets) flagged total)
                       (loop rest name watching lim rets flagged total)))))
-          (X (close name watching rets flagged) total)))
+          (cons (close name watching rets flagged) total)))
     ls 0 0 BIG 0 0 0))
 
 ; --- report helpers --------------------------------------------------
@@ -167,31 +167,31 @@
                             (? (>= i (sat b)) 0
                                (: ca (peek a i 0) cb (peek b i 0)
                                   (? (< ca cb) 1 (? (> ca cb) 0 (f (+ i 1)))))))) 0)
-   (maxlen fl)   (foldl (\ m e (: l (sat (A e)) (? (< m l) l m))) 0 fl)
+   (maxlen fl)   (foldl (\ m e (: l (sat (cap e)) (? (< m l) l m))) 0 fl)
    (join-rets rs) (? (twop rs)
-                     (? (twop (B rs)) (scat (scat "0x" (A rs)) (scat ", " (join-rets (B rs))))
-                                        (scat "0x" (A rs)))
+                     (? (twop (cbp rs)) (scat (scat "0x" (cap rs)) (scat ", " (join-rets (cbp rs))))
+                                        (scat "0x" (cap rs)))
                      ""))
 
 ; sort the flagged entries by function name (ascending), matching .py.
 (: (emerge a b) (? (twop a) (? (twop b)
-                     (? (str< (A (A a)) (A (A b)))
-                        (X (A a) (emerge (B a) b)) (X (A b) (emerge a (B b))))
+                     (? (str< (cap (cap a)) (cap (cap b)))
+                        (cons (cap a) (emerge (cbp a) b)) (cons (cap b) (emerge a (cbp b))))
                      a) b)
-   (esort l) (? (twop (B l)) (: n (>> (sat l) 1) (emerge (esort (take n l)) (esort (drop n l)))) l))
+   (esort l) (? (twop (cbp l)) (: n (>> (sat l) 1) (emerge (esort (take n l)) (esort (drop n l)))) l))
 
 ; --- argument parsing ------------------------------------------------
 (: (parse-args args path prefix od)
    (? (twop args)
-      (: a (A args)
+      (: a (cap args)
          (? (= a "--prefix")
-            (? (twop (B args)) (parse-args (B (B args)) path (A (B args)) od) (die "missing argument for --prefix"))
+            (? (twop (cbp args)) (parse-args (cbp (cbp args)) path (cap (cbp args)) od) (die "missing argument for --prefix"))
          (? (= a "--objdump")
-            (? (twop (B args)) (parse-args (B (B args)) path prefix (A (B args))) (die "missing argument for --objdump"))
+            (? (twop (cbp args)) (parse-args (cbp (cbp args)) path prefix (cap (cbp args))) (die "missing argument for --objdump"))
          (? (|| (= a "-h") (= a "--help")) (usage 0)
          (? (dash? a) (die (scat "unknown option: " a))
          (? path (die (scat "unexpected argument: " a))
-            (parse-args (B args) a prefix od)))))))
+            (parse-args (cbp args) a prefix od)))))))
       (L path prefix od)))
 
 ; --- try candidate disassemblers in order ----------------------------
@@ -199,15 +199,15 @@
 ; (spawn failed -> try the next). -> (cand status . output) or 0 if exhausted.
 (: (try-cands cs elf)
    (? (twop cs)
-      (: r (run (L (A cs) "-d" "--no-show-raw-insn" elf))
-         (? (twop r) (X (A cs) r) (try-cands (B cs) elf)))
+      (: r (run (L (cap cs) "-d" "--no-show-raw-insn" elf))
+         (? (twop r) (cons (cap cs) r) (try-cands (cbp cs) elf)))
       0))
 
 ; --- driver ----------------------------------------------------------
-(: parsed   (parse-args (B argv) 0 "g_vm_" 0)
-   path     (A parsed)
-   prefix   (A (B parsed))
-   od       (A (B (B parsed)))
+(: parsed   (parse-args (cbp argv) 0 "g_vm_" 0)
+   path     (cap parsed)
+   prefix   (cap (cbp parsed))
+   od       (cap (cbp (cbp parsed)))
    _        (? path 0 (die "usage: vmret.l ELF [--prefix PREFIX] [--objdump PATH]"))
    base     (basename path)
    port     (open path "r")
@@ -234,12 +234,12 @@
                           (? x86? "objdump" "llvm-objdump") (? x86? "llvm-objdump" "objdump")))
    chosen   (try-cands cands path)
    _        (? chosen 0 (die "no disassembler found (tried llvm-objdump, objdump); pass --objdump"))
-   status   (A (B chosen))
-   output   (B (B chosen))
-   _        (? (= 0 status) 0 (die (scat (scat (A chosen) " failed: status ") (show status))))
+   status   (cap (cbp chosen))
+   output   (cbp (cbp chosen))
+   _        (? (= 0 status) 0 (die (scat (scat (cap chosen) " failed: status ") (show status))))
    scanned  (scan-all (lines output) prefix ret? sizes)
-   flagged  (A scanned)
-   total    (B scanned)
+   flagged  (cap scanned)
+   total    (cbp scanned)
    ; --- the report (byte-for-byte the same shape as vmret.py) ---
    (? (= 0 total)
       (: _ (fputs err "vmret: no ") _ (fputs err prefix) _ (fputs err "* functions found in ")
@@ -252,7 +252,7 @@
          _ (fputn out total 10) _ (fputs out " ") _ (fputs out prefix)
          _ (fputs out "* functions contain a ret (TCO suspects):\n")
          _ (each sorted (\ e
-              (: name (A e) rets (B e)
+              (: name (cap e) rets (cbp e)
                  _ (fputs out "  ") _ (fputs out name) _ (fputs out (spaces (- width (sat name))))
                  _ (fputs out "  ret @ ") _ (fputs out (join-rets rets)) _ (fputc out 10) 0)))
          (exit 1))

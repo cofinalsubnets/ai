@@ -1,23 +1,28 @@
 # ll
 
-`ll` is a fusion of lisp, haskell, apl implemented directly on top of C.
-every `ll` value is a total monadic function `ll -> ll`.
-numbers are finite iterators (church numerals) and lists are exponential towers.
+`ll: ll -> ll = lisp * haskell * apl / C`, iykwim.
+rassoc infix (apl) with a compatible lassoc subset (lisp).
+ranked arrays, broadcasting, complex, macros
+
+every quote below should evaluate to 1. try it in the shell :)
 - `0 x = 1`
 - `1 x = x`
 - `(x) = x`
-- `(f x y) = ((f x) y)`
-- `(2 f x) = (f (f x))`
+- `f x y = (f x) y`
+- `2 f x = f (f x)`
+- `(3 2) = 8`
+- `(2 2 2 2) = 65536`
 - `(2 3 4) = 262144`
-- `(* i i) = -1`
-- `(log -1) = (* i pi)`
-- `((/ 1 2) -1) = i`
+- `-1 = i * i`
+- `(log -1) = i * pi`
+- `i = (1 / 2) -1`
 
-ll has three special forms plus reader operators.
-the forms are:
-- `\` lam (with a single operand, quote)
+
+## language level
+ll has three special forms plus reader operators. the forms are
+- `\` lambda (the ultimate)
 - `?` cond
-- `:` letrec*/sequence
+- `:` let
 
 the prefix reader operators aka sigils are
 - `.` dot (printing identity function, does what you want on strings)
@@ -31,49 +36,30 @@ plus the data constructors
 - `@` at (array literal)
 - `~` plex (complex literal/conjugate)
 
-all-punctuation names act as infix operators with flat right-associative
-precedence; with no left operand they read as plain symbols, so `(1 + 2)`,
-`'+`, and `(+)` all work:
-- `+ - * / = < <= > >= | &` dyadic
+and the infix operators
+- `+ - * / = < <= > >= | &`
 - `?` ternary (the cond form infix: `(t ? a b)`)
 - `%` mod
 - `<-` pin, `->` peek (the collection accessors: `(t <- k v)`, `(t -> k d)`)
 
-pure lisp is a subset of ll: `?` is still the cond form at the head of a
-list, and any lisp-mode program becomes infix-safe by wrapping its bare
-punct symbols in parens (`(+)` is `+` as a value) -- the lisp semantics
-are unchanged.
+pure lisp is the lassoc subset: `?` is still the cond form at the head of a
+list, and bare punct symbols escape in parens -- `(+)` is `+` as a value --
+so these are true too:
+- `12 = (foldl (+) 0 '(3 4 5))`
+- `24 = (foldl (*) 1 '(1 2 3 4))`
+- `'(1 2 3) = (sort (<) '(3 1 2))`
+- `'(2 3 4) = (map (+ 1) '(1 2 3))`
 
 the full spec
 is [CLAUDE.md](CLAUDE.md) -- the root test file CLAUDE.l in a code fence, so
 the spec stays green.
 
-## code examples
 
-selected identities
-
-- `1 = (\ x x)`
-- `0 = (\ _ 1)`
-- `8 = 3 2`
-- `65536 = 2 2 2 2`
-- `-1 = i * i`
-- `log -1 = i * pi`
-- `i = (1 / 2) -1`
-- `5.0 = abs ~(3 4)`
-- `12 = 3 (+ 1) 9`
-- `2.0 = (1 / 2) 4`
-- `"ababab" = "ab" * 3`
-- `'(1 2 1 2) = '(1 2) * 2`
-
-hello world
+### code example
 
 ```
-."hello world\n"
-```
+."hello world\n",
 
-fizzbuzz
-
-```
 (100
  (\ n (: f (? (n % 3) "" "fizz")
          b (? (n % 5) "" "buzz")
@@ -83,8 +69,41 @@ fizzbuzz
  1)
 ```
 
-## build & test
+### build test run
+- `make` build + test
+- `make repl` interactive shell
+- `make test_all` adds the freestanding kernel (qemu) + tool diffs
+- `out/host/ll file.l` run a file
+- `echo .ev | ll` print the compiler
 
-`make` builds the host binary `out/host/ll`. `make test` is the commit gate:
-it runs the test corpus through both `ll` and the self-hosted bootstrap `ll0`.
-`make test_all` adds the freestanding kernel (qemu) and tool diffs.
+that last one is not a joke. `.` prints, `ev` is the self-hosted evaluator,
+and what comes out is the lambda the compiler compiled itself into -- a couple
+kilobytes of the whole back end.
+
+### under the hood
+- one word per value: a fixnum is a tagged odd word, anything else is a heap
+  object whose first word is its handler. the vm is tail-threaded -- handlers
+  jump, never return -- over a two-space copying heap; `make vmret` proves the
+  no-return claim by disassembling the binary.
+- every operation is generic, dispatched on a value's kind through NxN tables
+  (`+` `*` apply); the kind enum is the type lattice, the total order over all
+  values is the enum order, and the lattice is literally the diagonal of the
+  dispatch tables. `sort` is one C comparison per pair -- the total order is
+  the comparator.
+- no interpreter state lives outside the heap: dict (an ordinary ll hash)
+  carries the globals, macros, reader operator tables, the trap handler and
+  the rng; C finds its own hooks by name, allocation-free.
+- the compiler is written in ll. at build time the evaluator sits on the egg
+  (the quoted compiler source) twice -- the C bootstrap compiles the compiler,
+  which recompiles itself -- and the hatchling bakes into the binary; `born-at`
+  records the hatch time. the same image runs on linux, bare metal
+  (x86_64/aarch64 via limine), and wasm.
+- status rides the two pointer tag bits: sing (something is wrong) and more
+  (the reader wants more); eof = more|sing. a global `trap` function receives
+  every throw as `(trap s a b)`.
+- `=` is exact, so e^(i*pi) honestly misses -1 by ~1e-16 -- but the principal
+  log is exact (`(log -1) = i * pi`, since atan2(0,-1) is pi by IEEE fiat),
+  and sqrt factors its angle through sinpi/cospi, so `(1 / 2) -1 = i` on the
+  nose.
+- functions compare by alpha-equivalence of their source, and the numerals
+  bridge: `1 = (\ x x)`, `0 = (\ _ 1)`.

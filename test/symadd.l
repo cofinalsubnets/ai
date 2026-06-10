@@ -39,7 +39,7 @@
  (= 3 (sat (+ '(1 2) @(3 4))))                 ; LIST+ARR -> append (array element)
  (= '(1 2 3 4) (+ '(1 2) '(3 4)))              ; LIST+LIST
  (= '(1 2 "ab") (+ '(1 2) "ab"))               ; LIST+STR -> append (str element)
- (= 'ef (AB (B (+ '(1 2) 'ef))))               ; LIST+ISYM -> append (sym element)
+ (= 'ef (cabp (cbp (+ '(1 2) 'ef))))               ; LIST+ISYM -> append (sym element)
 
  ; === row STR (a = "ab") ===============================================
  (= "abC" (+ "ab" 67))   (strp (+ "ab" 67))    ; STR+NUM -> byte at back

@@ -58,7 +58,7 @@
 ; The SURFACE block below (collect/tcollect + rn with its :-/let/qq handling) stays in
 ; lcat2: it is exactly the un-expanded-source adaptation the compiler no longer needs. ===
 (: (sl-char d) (? (< d 26) (+ 97 d) (+ 65 (- d 26)))   ; shortlex over a-zA-Z (bijective base-52):
-   (sl-digits n acc) (? (< n 1) acc (: m (+ -1 n) (sl-digits (/ m 52) (X (sl-char (mod m 52)) acc))))
+   (sl-digits n acc) (? (< n 1) acc (: m (+ -1 n) (sl-digits (/ m 52) (cons (sl-char (mod m 52)) acc))))
    (shortlex k) (string (sl-digits (+ 1 k) 0))         ; 0->a .. 25->z 26->A .. 51->Z 52->aa
    (freshname? nm) (= 0 (peek cnt nm 0))                ; nm occurs as no source symbol
    (avail? nm u) (&& (freshname? nm) !(memq nm u))     ; ..and not live on this path
@@ -69,61 +69,61 @@
    ; assign fresh names to a scope's co-live bindings (count order). a frozen (tainted)
    ; or can't-shrink binding is kept (mapped to itself, no name spent). -> (env-frame . used').
    (assign syms used) ((: (g ss m u) (? (twop ss)
-         (: s (A ss) nm (pickname u)
+         (: s (cap ss) nm (pickname u)
             (? (&& !(peek taint s 0) (< (sat nm) (sat (string s))))
-               (: i (intern nm) (g (B ss) (X (X s i) m) (X i u)))
-               (g (B ss) (X (X s s) m) u)))
-         (X m u))) (sort cntle syms) 0 used)
-   (mapped s m) (: p (assq s m) (? p (B p) s))
-   (flat lhs) (? (symp lhs) (X lhs 0) (: r (flat (A lhs)) (X (A r) (cat (B r) (B lhs)))))  ; unwind : head-sugar
+               (: i (intern nm) (g (cbp ss) (cons (cons s i) m) (cons i u)))
+               (g (cbp ss) (cons (cons s s) m) u)))
+         (cons m u))) (sort cntle syms) 0 used)
+   (mapped s m) (: p (assq s m) (? p (cbp p) s))
+   (flat lhs) (? (symp lhs) (cons lhs 0) (: r (flat (cap lhs)) (cons (cap r) (cat (cbp r) (cbp lhs)))))  ; unwind : head-sugar
    (lhs-rename lhs bmap am) (? (symp lhs) (mapped lhs (cat am bmap))  ; name via bmap, params via am
-       (twop lhs) (X (lhs-rename (A lhs) bmap am) (lhs-rename (B lhs) bmap am)) lhs)
-   (bodyless? bs) (? (atomp bs) 1 (atomp (B bs)) 0 (bodyless? (BB bs)))
+       (twop lhs) (cons (lhs-rename (cap lhs) bmap am) (lhs-rename (cbp lhs) bmap am)) lhs)
+   (bodyless? bs) (? (atomp bs) 1 (atomp (cbp bs)) 0 (bodyless? (cbbp bs)))
    ; rebuild a : binding list; each binding's sugar params open a fresh sub-scope of its
    ; value (siblings all assign from u1, so their names recycle). recurse via `rec`.
    (rn-binds bs bmap env1 u1 rec) (?
-     (&& (twop bs) (twop (B bs)))
-       (: lhs (A bs) val (AB bs) f (flat lhs) r (assign (B f) u1) am (A r) u2 (B r)
+     (&& (twop bs) (twop (cbp bs)))
+       (: lhs (cap bs) val (cabp bs) f (flat lhs) r (assign (cbp f) u1) am (cap r) u2 (cbp r)
           penv (cat am env1) lhs2 (lhs-rename lhs bmap am) val2 (rec val penv u2 0 rec)
-          (X lhs2 (X val2 (rn-binds (BB bs) bmap env1 u1 rec))))
-     (twop bs) (X (rec (A bs) env1 u1 0 rec) 0)         ; trailing body
+          (cons lhs2 (cons val2 (rn-binds (cbbp bs) bmap env1 u1 rec))))
+     (twop bs) (cons (rec (cap bs) env1 u1 0 rec) 0)         ; trailing body
      0)
    (rn-let bs env used top rec) (: names (ln bs) leak (? top (bodyless? bs) 0)
-       r (? leak (X 0 used) (assign names used)) bmap (A r) u1 (B r) env1 (cat bmap env)
-       (X ': (rn-binds bs bmap env1 u1 rec)))
+       r (? leak (cons 0 used) (assign names used)) bmap (cap r) u1 (cbp r) env1 (cat bmap env)
+       (cons ': (rn-binds bs bmap env1 u1 rec)))
    ; the macroexpanded renamer. top=1 only at a file form; a body-less top-level : leaks
    ; (its names are the global API -> kept). env/used thread scope; a one-operand `\`
    ; (quote) is data and is passed whole.
    (mxrn x env used top rec) (?
      (symp x) (mapped x env)
      (atomp x) x
-     (= '\ (A x)) (? (lambp x)
-        (: lb (lp x) ps (A lb) bd (B lb) r (assign ps used) am (A r) u2 (B r)
+     (= '\ (cap x)) (? (lambp x)
+        (: lb (lp x) ps (cap lb) bd (cbp lb) r (assign ps used) am (cap r) u2 (cbp r)
            env2 (cat am env) ps2 (map (\ p (mapped p am)) ps)
-           (X '\ (cat ps2 (list (rec bd env2 u2 0 rec)))))
+           (cons '\ (cat ps2 (list (rec bd env2 u2 0 rec)))))
         x)
-     (= ': (A x)) (rn-let (B x) env used top rec)
+     (= ': (cap x)) (rn-let (cbp x) env used top rec)
      (map (\ e (rec e env used 0 rec)) x)))
 
 ; === lcat2 SURFACE -- builds the core's inputs (cnt/taint) from un-expanded source, and
 ; adapts the binding/quote macros the compiler would have already expanded away. `rn` is
 ; the recursion the core threads, so nested `:-`/qq are adapted at every level. ===
 (: (collect x) (? (symp x) (pin cnt x (+ 1 (peek cnt x 0)))
-     (twop x) (? (= 'qq (A x)) (: _ (collect (A x)) (tcollect (B x)))   ; qq body -> taint
-                 (: _ (collect (A x)) (collect (B x)))) 0)
+     (twop x) (? (= 'qq (cap x)) (: _ (collect (cap x)) (tcollect (cbp x)))   ; qq body -> taint
+                 (: _ (collect (cap x)) (collect (cbp x)))) 0)
    (tcollect x) (? (symp x) (: _ (pin cnt x (+ 1 (peek cnt x 0))) (pin taint x 1))
-                    (twop x) (: _ (tcollect (A x)) (tcollect (B x))) 0)
+                    (twop x) (: _ (tcollect (cap x)) (tcollect (cbp x))) 0)
    (rn x env used top rec) (? (twop x)
-       (? (= ':- (A x)) (: rl (rn-let (cat (BB x) (list (AB x))) env used top rec)  ; :- = body-first :
-             rb (B rl) (X ':- (X (last rb) (init rb))))                             ; reorder body back
-          (= 'let (A x)) (rn-let (B x) env used top rec)                            ; let = :
-          (= 'qq (A x)) x                                                           ; quasiquote -> whole
+       (? (= ':- (cap x)) (: rl (rn-let (cat (cbbp x) (list (cabp x))) env used top rec)  ; :- = body-first :
+             rb (cbp rl) (cons ':- (cons (last rb) (init rb))))                             ; reorder body back
+          (= 'let (cap x)) (rn-let (cbp x) env used top rec)                            ; let = :
+          (= 'qq (cap x)) x                                                           ; quasiquote -> whole
           (mxrn x env used top rec))
        (mxrn x env used top rec)))
 
 ; --- minify (identical to lcat): drop a space only where the two flanking bytes
 ; re-parse to the same datum count without it; then C-escape the survivors. ---
-(: (s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0)
+(: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peek s i 0) (g (+ 1 i))))) 0)
    (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
                (sip (s2cl s)) (nom 0) 0)
    (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
@@ -131,9 +131,9 @@
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
               (fputc out c)))
 
-(: (readforms p e) (: r (fread p e) (? (= e r) 0 (X r (readforms p e))))
-   (joinforms fs) (? (atomp fs) "" (atomp (B fs)) (show (rn (A fs) 0 0 1 rn))
-       (scat (scat (show (rn (A fs) 0 0 1 rn)) " ") (joinforms (B fs))))
+(: (readforms p e) (: r (fread p e) (? (= e r) 0 (cons r (readforms p e))))
+   (joinforms fs) (? (atomp fs) "" (atomp (cbp fs)) (show (rn (cap fs) 0 0 1 rn))
+       (scat (scat (show (rn (cap fs) 0 0 1 rn)) " ") (joinforms (cbp fs))))
    (emit acc) (: _ (fputc out 34)
        _ ((: (g i pc instr) (? (< i (sat acc))
             (: c (peek acc i 0) (? instr
@@ -144,7 +144,7 @@
                      (: _ (eb c) (g (+ i 1) c 0)))
                   (: _ (eb c) (g (+ i 1) c (= c 34)))))) 0)) 0 0 0)
        (fputc out 34))
-   p (open (A (B argv)) "r")
+   p (open (cap (cbp argv)) "r")
    _ (? p 0 (: _ (fputs err "lcat2: cannot open input") (exit 1)))
    e (nom 0)
    forms (readforms p e)

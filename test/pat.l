@@ -2,23 +2,23 @@
 (: (pat2pred p)
  (? (symp p) (const true)
     (atomp p) (= p)
-    (&& (= '\ (A p)) (atomp (BB p))) (= (AB p)) ; one-operand \ is quote: literal match
-  (: p1 (pat2pred (A p))
-     p2 (pat2pred (B p))
-   (\ x (? (twop x) (? (p1 (A x)) (p2 (B x)))))))
+    (&& (= '\ (cap p)) (atomp (cbbp p))) (= (cabp p)) ; one-operand \ is quote: literal match
+  (: p1 (pat2pred (cap p))
+     p2 (pat2pred (cbp p))
+   (\ x (? (twop x) (? (p1 (cap x)) (p2 (cbp x)))))))
  (pat2x p b) (:
   t (hashn 0)
 
   (ff q p) (?
    (symp p) (pin t p q)
-   (twop p) (: _ (ff (co A q) (A p))
-                (ff (co B q) (B p))))
+   (twop p) (: _ (ff (co cap q) (cap p))
+                (ff (co cbp q) (cbp p))))
   _ (ff id p)
   ks (hashk t)
 
-  lam (X '\ (cat ks (list b)))
+  lam (cons '\ (cat ks (list b)))
   y (nom 0)
-  (ev (list '\ y (X lam (map (\ k (list (peek t k 0) y)) ks)))))
+  (ev (list '\ y (cons lam (map (\ k (list (peek t k 0) y)) ks)))))
 
  (pmatch x1 x2 f) (:
  p (pat2pred x1)

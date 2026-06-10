@@ -117,6 +117,7 @@ g_vm_t g_vm_kcall,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_ssub,
  g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
  g_vm_getc,  g_vm_string, g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_same, g_vm_gt,  g_vm_ge,
+ g_vm_sortl,
  g_vm_put, g_vm_pull, g_vm_hashd,   g_vm_hnew,   g_vm_hashk,  g_vm_hashof,
  g_vm_unc, g_vm_poke2, g_vm_peek2,
  g_vm_seek,  g_vm_trim,   g_vm_lam,   g_vm_add,
@@ -571,7 +572,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_same, "idp", S2(g_vm_same)) \
  _(nif_bsl, "<<", S2(g_vm_bsl)) _(nif_bsr, ">>", S2(g_vm_bsr))\
  _(nif_band, "&", S2(g_vm_band)) _(nif_bor, "|", S2(g_vm_bor)) _(nif_bxor, "^", S2(g_vm_bxor))\
- _(nif_cons, "X", S2(g_vm_cons)) _(nif_car, "A", S1(g_vm_car)) _(nif_cdr, "B", S1(g_vm_cdr)) \
+ _(nif_cons, "cons", S2(g_vm_cons)) _(nif_car, "cap", S1(g_vm_car)) _(nif_cdr, "cbp", S1(g_vm_cdr)) _(nif_sortl, "sortl", S1(g_vm_sortl)) \
  _(nif_ssub, "ssub", S3(g_vm_ssub)) _(nif_scat, "scat", S2(g_vm_scat)) \
  _(nif_fread, "fread", S2(g_vm_fread))\
  _(nif_string, "string", S1(g_vm_string))\
@@ -644,10 +645,10 @@ static g_vm(_g_vm_yield_c) { return Pack(g), g; }
 static union u const yield_c[] = { {_g_vm_yield_c} };
 
 // Default trap continuation. A throw enters it with the thrown status encoded
-// into g (see gtrap2 below). The MORE bit is read control flow, not a scare:
+// into g (see gtrap2 below). The MORE bit is read control flow, not a sing:
 // the thrower left [resume port sentinel] on the stack (the fread protocol),
 // so deliver the port (more: incomplete) or the sentinel (eof) to the resume
-// thread and keep running. A scare re-encodes and yields to C -- the same
+// thread and keep running. A sing re-encodes and yields to C -- the same
 // escape the old trap did. Define a global `trap` function to land throws in
 // ll instead.
 static g_vm(_g_vm_throw_c) {
@@ -757,13 +758,13 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
 struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) {
  uintptr_t const len0 = 1 << 10;
  struct g *g = ma(NULL, 2 * len0 * sizeof(word));
- return g == NULL ? encode(g, g_status_scare) : g_ini_0(g, len0, ma, fr); }
+ return g == NULL ? encode(g, g_status_sing) : g_ini_0(g, len0, ma, fr); }
 
 static void *g_no_malloc(struct g*g, uintptr_t n) { return NULL; }
 static void g_no_free(struct g*g, void *p) { }
 struct g *g_ini_s(void *mem, uintptr_t nbytes) {
  uintptr_t len0 = nbytes / (2 * sizeof(word));
- return len0 <= Width(struct g) ? encode(mem, g_status_scare) :
+ return len0 <= Width(struct g) ? encode(mem, g_status_sing) :
    g_ini_0(mem, len0, g_no_malloc, g_no_free); }
 
 static void *g_libc_malloc(struct g*g, size_t n) { return malloc(n); }
@@ -915,7 +916,7 @@ g_noinline struct g *g_please(struct g *g, uintptr_t req0) {
  else return g->t0 = t2, g; // else right size -> all done
  return // allocate a new pool with target size
   !(h = g->malloc(g, len1 * 2 * sizeof(word))) ? // if malloc fails but pool is big enough
-   encode(g, req <= len0 ? g_status_ok : g_status_scare) : // we can still report success
+   encode(g, req <= len0 ? g_status_ok : g_status_sing) : // we can still report success
   (h = gcg(h, h, len1, g),
    g->free(g, g->pool),
    h->t0 = g_clock(),
@@ -1538,7 +1539,7 @@ g_vm(g_vm_eval) { return Ip++, Pack(g),
  !g_ok(g = c0(g, g_vm_jump)) ? gtrap(g) : (Unpack(g), Continue()); }
 
 g_noinline struct g *g_evals_(struct g*g, char const*s) {
- static char const *t = "((:(e a b)(? b(e(ev'ev(A b))(B b))a)e)0)";
+ static char const *t = "((:(e a b)(? b(e(ev'ev(cap b))(cbp b))a)e)0)";
  struct ti i = {{g_vm_port_io, putfix(-1), putfix(EOF), putfix(false)}, t, 0};
  g = push0(pushq(push0(g_eval(g_reads(g, (void*) &i)))));
  i.t = s, i.i = 0, i.io.ungetc_buf = putfix(EOF), i.io.eof_seen = putfix(false);
@@ -1605,22 +1606,22 @@ union u const numap_drive[] = { {g_vm_ap}, {.ap = numap_swap}, {.ap = g_vm_ret0}
 // the lisp trap calling convention
 // ============================================================================
 // With a global `trap` function installed, a throw becomes the call
-// (trap s a b): s = the status word (prelude readers scare?/more?/eof?),
+// (trap s a b): s = the status word (prelude readers sing?/more?/eof?),
 // a/b = the condition data -- for the more bit the port and the read sentinel,
-// for a scare nil nil (oom is bare; future scares define their shapes). The
+// for a sing nil nil (oom is bare; future sings define their shapes). The
 // frame runs through trap_drive (numap_drive's 3-arg twin) into a per-class
 // epilogue: the more bit delivers the handler's result to the thrower's resume
 // thread (the fread protocol -- the handler chooses what the reader's caller
-// sees); a scare is observed, then takes the default escape to C.
+// sees); a sing is observed, then takes the default escape to C.
 static g_vm(trap_ret_more) {   // [result resume port sentinel ..] -> resume sees result
  Ip = cell(Sp[1]);
  Sp[3] = Sp[0];
  Sp += 3;
  return Continue(); }
-static g_vm(trap_ret_scare) {  // result ignored: scares are not (yet) resumable
- return Pack(g), encode(g, g_status_scare); }
+static g_vm(trap_ret_sing) {  // result ignored: sings are not (yet) resumable
+ return Pack(g), encode(g, g_status_sing); }
 static union u const trap_more_k[] = { {trap_ret_more} };
-static union u const trap_scare_k[] = { {trap_ret_scare} };
+static union u const trap_sing_k[] = { {trap_ret_sing} };
 static union u const trap_drive[] =
  { {g_vm_ap}, {.ap = numap_swap}, {.ap = numap_swap}, {.ap = g_vm_ret0} };
 
@@ -1639,7 +1640,7 @@ struct g *gtrap2(struct g *g, enum g_status s) {
    sp[0] = putfix(s), sp[1] = h;
    sp[2] = rd ? sp[6] : nil;       // read data: [resume port sentinel] under the frame
    sp[3] = rd ? sp[7] : nil;
-   sp[4] = word(rd ? trap_more_k : trap_scare_k);
+   sp[4] = word(rd ? trap_more_k : trap_sing_k);
    c->ip = (union u*) trap_drive;
 #if g_tco
    return c->ip->ap(c, c->ip, c->hp, c->sp);
@@ -2863,7 +2864,7 @@ g_vm(g_vm_fread) {
   struct g *c = g_core_of(g); // reset stack on parse fail
   c->sp = (word*) c + c->len - depth;
   switch (g_code_of(g)) {
-   default: return gtrap(g);                          // scare: condition data per thrower
+   default: return gtrap(g);                          // sing: condition data per thrower
    case g_status_more: case g_status_eof:
     // The more bit routes control through the trap continuation: push fread's
     // resume thread under [port sentinel] and throw -- the trap function (or
@@ -5248,6 +5249,39 @@ static intptr_t cmp3(struct g *g, word a, word b) {
   case KTwo: { intptr_t c = cmp3(g, A(a), A(b)); return c ? c : cmp3(g, B(a), B(b)); }  // car, then cdr
   default: { uintptr_t ha = hash(g, a), hb = hash(g, b);   // lambda/map/port/buf: by repr hash
              return ha < hb ? -1 : ha > hb ? 1 : 0; } } }
+
+// (sortl l): sort a list ascending by the total order (cmp3), STABLE. One
+// reservation up front -- n result pairs (committed) plus 2n scratch words
+// (left in the uncommitted gap, GC-invisible) -- then a bottom-up merge over
+// the scratch lanes and a single spine fill. cmp3 is alloc-free and
+// GC-stable, so nothing moves between the reservation and the fill. The
+// prelude's `sort` dispatches (<)/(>) here (descending = rev) and keeps the
+// lisp merge sort for arbitrary predicates. A non-pair passes through; a
+// 1-element list returns itself (identity preserved, like the lisp sort).
+g_vm(g_vm_sortl) {
+ word l = Sp[0];
+ if (!twop(l) || !twop(B(l))) return Ip++, Continue();
+ uintptr_t n = 0;
+ for (word p = l; twop(p); p = B(p)) n++;
+ uintptr_t req = n * Width(struct g_pair) + 2 * n;
+ Have(req);
+ l = Sp[0];                                        // re-read post-GC
+ struct g_pair *spine = (struct g_pair*) Hp;
+ Hp += n * Width(struct g_pair);                   // commit the spine only
+ word *a = (word*) Hp, *b = a + n;                 // scratch: the uncommitted gap
+ uintptr_t i = 0;
+ for (word p = l; twop(p); p = B(p)) a[i++] = A(p);
+ for (uintptr_t w = 1; w < n; w *= 2) {            // bottom-up stable merge
+  for (uintptr_t lo = 0; lo < n; lo += 2 * w) {
+   uintptr_t m = MIN(lo + w, n), hi = MIN(lo + 2 * w, n), x = lo, y = m, o = lo;
+   while (x < m && y < hi) b[o++] = cmp3(g, a[y], a[x]) < 0 ? a[y++] : a[x++];
+   while (x < m) b[o++] = a[x++];
+   while (y < hi) b[o++] = a[y++]; }
+  word *t = a; a = b; b = t; }
+ for (i = 0; i < n; i++) ini_two(spine + i, a[i], word(spine + i + 1));
+ spine[n - 1].b = nil;
+ return Sp[0] = word(spine), Ip++, Continue(); }
+
 // the `<` / `<=` lane (op is VOP_LT or VOP_LE). An array operand -> elementwise
 // mask (g_vm_vbin); a top-level float/complex pair is IEEE-faithful (NaN ->
 // unordered -> false), so e.g. (<= nan nan) is nil.

@@ -17,9 +17,9 @@
  (= 6  (inc 5))                                  ; inc = (+ 1): a curried pure global folds
 
  ; --- X / A / B fold; element access is correct ---
- (= 9  (A (X 9 8)))
- (= 8  (B (X 9 8)))
- (= 2  (AB '(1 2 3)))
+ (= 9  (cap (cons 9 8)))
+ (= 8  (cbp (cons 9 8)))
+ (= 2  (cabp '(1 2 3)))
  (= 4  (sat (scat "ab" "cd")))                   ; string built + measured at compile time
 
  ; --- currying: under-application yields a usable closure; prefix+unknown tail ---
@@ -27,9 +27,9 @@
  (= 15 (: (g x) (+ 10 x) (g 5)))                 ; (+ 10) folded; x unknown -> residual
 
  ; --- shadowing: a locally-bound name is never folded as the global ---
- (= 99 (: (X a b) 99 (X 1 2)))             ; let-bound X
- (= 5  (: (A x) 5 (A '(1 2))))               ; let-bound A
- (= 7  (: (f X) (X 3 4) (f (+))))            ; PARAM X shadows the global; f + -> (+ 3 4)
+ (= 99 (: (cons a b) 99 (cons 1 2)))             ; let-bound X
+ (= 5  (: (cap x) 5 (cap '(1 2))))               ; let-bound A
+ (= 7  (: (f cons) (cons 3 4) (f (+))))            ; PARAM X shadows the global; f + -> (+ 3 4)
 
  ; --- nilp-flip: (? (nilp e) a b) == (? e b a); behavior-preserving under BOTH compilers ---
  (= 'z  (: (f x) (? (nilp x) 'z 'nz) (f 0)))        ; falsy e -> consequent

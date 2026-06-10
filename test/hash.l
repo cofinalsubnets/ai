@@ -3,7 +3,7 @@
 (assert
  ; the constructor builds a working hash
  (mapp t) (nilp (mapp 5)) (nilp (mapp '(1 2)))   ; mapp: only maps, not fixnums/lists
- (lamp t) (lamp A) (nilp (lamp 5)) (nilp (lamp 0))  ; lamp: any heap object, not a fixnum/nil
+ (lamp t) (lamp cap) (nilp (lamp 5)) (nilp (lamp 0))  ; lamp: any heap object, not a fixnum/nil
  (= 100 (peek t 1 0))
  (= 200 (peek t 2 0))
  (= 300 (peek t 3 0))
@@ -90,8 +90,8 @@
 (assert
  (nilp "") (nilp #()) (nilp (buf 0)) (nilp @0) (nilp 0) (nilp ())  ; empties/zeros are false
  !!"x" !!#(1 2) !!(nom 0)                                        ; present values are true
- !!A !!out !!(\ x x)                                                ; functions/ports too
+ !!cap !!out !!(\ x x)                                                ; functions/ports too
  (same? "") (same? #()) (same? (buf 0)) (same? @0) (same? 0)
- (same? "x") (same? #(1 2)) (same? (nom 0)) (same? A) (same? out)
+ (same? "x") (same? #(1 2)) (same? (nom 0)) (same? cap) (same? out)
  (same? ~(0 0)) (same? ~(0.3 0.4)) (same? @(0 0)) (same? @(0.1 0))
  (same? (100 2)) (same? 'abc) (same? '(1 2))))

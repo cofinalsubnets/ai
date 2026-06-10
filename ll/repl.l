@@ -27,7 +27,7 @@
 ; and the buffer becomes a new entry, so the original survives.
 (: m (nom 0) eofsym (nom 0)
 
-   (revcat a b) (foldl (flip X) b a)
+   (revcat a b) (foldl (flip cons) b a)
 
    ; parse a charlist as ONE expression: the line is implicitly parenthesized,
    ; so `x y z` reads as (x y z) -- a single application -- and infix works at
@@ -35,7 +35,7 @@
    ; (f) == f. returns m if the input ends inside an unfinished form (incl. a
    ; pending infix operand), 0 for a blank line, else a one-form list.
    (parseall cl)
-     (: p (sip (X 40 (cat cl (L 41))))
+     (: p (sip (cons 40 (cat cl (L 41))))
         r (fread p eofsym)
         (? (= r p)      m                  ; ends inside an unfinished form
            (= r eofsym) 0                  ; unreachable: the wrap always closes
@@ -47,20 +47,20 @@
    ; intersperse a list of charlists with newlines, in order
    (joinln ls)
      (? (twop ls)
-        (? (twop (B ls))
-           (cat (A ls) (X 10 (joinln (B ls))))
-           (A ls))
+        (? (twop (cbp ls))
+           (cat (cap ls) (cons 10 (joinln (cbp ls))))
+           (cap ls))
         0)
 
    ; flatten the editor state into one charlist suitable for parseall
    (flatten u l r d)
-     (joinln (revcat u (X (revcat l r) d)))
+     (joinln (revcat u (cons (revcat l r) d)))
 
    ; walk xs forward taking n chars into acc (reversed); when done
    ; call k with (rev (take n xs)) and (drop n xs). stops cleanly at
    ; end-of-xs even if n exceeds the list length.
    (splitat k acc n xs)
-     (? (&& (twop xs) (< 0 n)) (splitat k (X (A xs) acc) (- n 1) (B xs))
+     (? (&& (twop xs) (< 0 n)) (splitat k (cons (cap xs) acc) (- n 1) (cbp xs))
         (k acc xs))
 
    ; map non-printables to space; otherwise pass through
@@ -73,20 +73,20 @@
    ; the next line on. up/down preserve column, clamped to the
    ; destination line's length.
    (edleft k u l r d)
-     (? (twop l) (k u (B l) (X (A l) r) d)
-        (twop u) (k (B u) (rev (A u)) 0 (X (revcat l r) d))
+     (? (twop l) (k u (cbp l) (cons (cap l) r) d)
+        (twop u) (k (cbp u) (rev (cap u)) 0 (cons (revcat l r) d))
         (k u l r d))
    (edright k u l r d)
-     (? (twop r) (k u (X (A r) l) (B r) d)
-        (twop d) (k (X (revcat l r) u) 0 (A d) (B d))
+     (? (twop r) (k u (cons (cap r) l) (cbp r) d)
+        (twop d) (k (cons (revcat l r) u) 0 (cap d) (cbp d))
         (k u l r d))
    (edbsp k u l r d)
-     (? (twop l) (k u (B l) r d)
-        (twop u) (k (B u) (rev (A u)) r d)
+     (? (twop l) (k u (cbp l) r d)
+        (twop u) (k (cbp u) (rev (cap u)) r d)
         (k u l r d))
    (eddel k u l r d)
-     (? (twop r) (k u l (B r) d)
-        (twop d) (k u l (A d) (B d))
+     (? (twop r) (k u l (cbp r) d)
+        (twop d) (k u l (cap d) (cbp d))
         (k u l r d))
    (edhome k u l r d) (k u 0 (revcat l r) d)
    (edend  k u l r d) (k u (revcat r l) 0 d)
@@ -95,29 +95,29 @@
    ; buffer they degenerate to edhome / edend.
    (edtop k u l r d)
      (? (twop u) (: ru (rev u)
-                  (k 0 0 (A ru) (cat (B ru) (X (revcat l r) d))))
+                  (k 0 0 (cap ru) (cat (cbp ru) (cons (revcat l r) d))))
         (k u 0 (revcat l r) d))
    (edbot k u l r d)
      (? (twop d) (: rd (rev d)
-                  (k (cat (B rd) (X (revcat l r) u)) (revcat (A rd) 0) 0 0))
+                  (k (cat (cbp rd) (cons (revcat l r) u)) (revcat (cap rd) 0) 0 0))
         (k u (revcat r l) 0 d))
    (edup k u l r d)
-     (? (twop u) (splitat (\ ll rr (k (B u) ll rr (X (revcat l r) d)))
-                          0 (sat l) (A u))
+     (? (twop u) (splitat (\ ll rr (k (cbp u) ll rr (cons (revcat l r) d)))
+                          0 (sat l) (cap u))
         (k u l r d))
    (eddown k u l r d)
-     (? (twop d) (splitat (\ ll rr (k (X (revcat l r) u) ll rr (B d)))
-                          0 (sat l) (A d))
+     (? (twop d) (splitat (\ ll rr (k (cons (revcat l r) u) ll rr (cbp d)))
+                          0 (sat l) (cap d))
         (k u l r d))
 
    ; --- history zipper ---
 
    ; pack the buffer's four halves into one slot for history storage.
-   (mkframe u l r d) (X u (X l (X r d)))
+   (mkframe u l r d) (cons u (cons l (cons r d)))
 
    ; if cur holds a pristine recall, restore it at its slot in hu;
    ; called before any mutating edit so the original survives.
-   (detach hu cur) (? (twop cur) (X cur hu) hu)
+   (detach hu cur) (? (twop cur) (cons cur hu) hu)
 
    ; predicates over the buffer used by the history navigation rules
    ; below: empty buffers don't get pushed during normal nav, and
@@ -132,20 +132,20 @@
    ; empty line.
    (uphist k u l r d hu hd cur)
      (? (twop hu)
-        (: e (A hu)
-           nhd (? (emptybuf u l r d) hd (X (mkframe u l r d) hd))
-           (k (A e) (A (B e)) (A (B (B e))) (B (B (B e))) (B hu) nhd e))
+        (: e (cap hu)
+           nhd (? (emptybuf u l r d) hd (cons (mkframe u l r d) hd))
+           (k (cap e) (cap (cbp e)) (cap (cbp (cbp e))) (cbp (cbp (cbp e))) (cbp hu) nhd e))
         (&& (twop cur) (parses u l r d))
-        (: nhd (X (mkframe u l r d) hd)
+        (: nhd (cons (mkframe u l r d) hd)
            (k 0 0 0 0 hu nhd 0))
         (k u l r d hu hd cur))
    (downhist k u l r d hu hd cur)
      (? (twop hd)
-        (: e (A hd)
-           nhu (? (emptybuf u l r d) hu (X (mkframe u l r d) hu))
-           (k (A e) (A (B e)) (A (B (B e))) (B (B (B e))) nhu (B hd) e))
+        (: e (cap hd)
+           nhu (? (emptybuf u l r d) hu (cons (mkframe u l r d) hu))
+           (k (cap e) (cap (cbp e)) (cap (cbp (cbp e))) (cbp (cbp (cbp e))) nhu (cbp hd) e))
         (&& (twop cur) (parses u l r d))
-        (: nhu (X (mkframe u l r d) hu)
+        (: nhu (cons (mkframe u l r d) hu)
            (k 0 0 0 0 nhu hd 0))
         (k u l r d hu hd cur))
 
@@ -238,18 +238,18 @@
              (kedit uu ll rr dd) (loop npra uu ll rr dd (detach hu cur) hd 0)
              (khist uu ll rr dd nhu nhd ncur) (loop npra uu ll rr dd nhu nhd ncur)
              (? (= c -7) eofsym
-                (= c 10) (: nu (X (rev l) u)
+                (= c 10) (: nu (cons (rev l) u)
                             (? (&& (nilp r) (nilp d))
                                (: vs (parseall (flatten nu 0 r d))
                                   (? (= vs m)
                                      (loop npra nu 0 r d (detach hu cur) hd 0)
                                      (: _ (putc 10)
                                         nhu (? (nilp vs) (revcat hd (detach hu cur))
-                                               (twop cur) (revcat hd (X cur hu))
-                                               (revcat hd (X (mkframe u l r d) hu)))
-                                        (X vs (X nhu 0)))))
+                                               (twop cur) (revcat hd (cons cur hu))
+                                               (revcat hd (cons (mkframe u l r d) hu)))
+                                        (cons vs (cons nhu 0)))))
                                (loop npra nu 0 r d (detach hu cur) hd 0)))
-                (< 0 c)  (loop npra u (X c l) r d (detach hu cur) hd 0)
+                (< 0 c)  (loop npra u (cons c l) r d (detach hu cur) hd 0)
                 (= c -1) (edleft  kloop u l r d)
                 (= c -2) (edright kloop u l r d)
                 (= c -3) (edbsp   kedit u l r d)
@@ -274,9 +274,9 @@
    ; the trailing newline.
    ;
    ; this poll is the repl's control-flow seam under the trap model: a
-   ; worker that scares is terminated by the default trap and done? flips,
+   ; worker that sings is terminated by the default trap and done? flips,
    ; so the repl survives evaluation errors by construction. a global
-   ; `trap` function gets control at the scare (condition data on struct g)
+   ; `trap` function gets control at the sing (condition data on struct g)
    ; BEFORE the task dies; either way done?/key? is where the repl resumes.
    (do_eval v)
      (: pid (spawn ev v)
@@ -295,8 +295,8 @@
    (repl hu hd)
      (: r (edline hu hd)
         (? (= r eofsym) 0
-           (: vs  (A r)
-              nhu (AB r)
-              nhd (BB r)
+           (: vs  (cap r)
+              nhu (cabp r)
+              nhd (cbbp r)
               _ (each vs (\ v (: _ (do_eval v) (putc 10))))
               (repl nhu nhd)))))

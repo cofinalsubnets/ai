@@ -5,8 +5,8 @@
    (even n) (? n (odd (dec n)) 1)
    (odd n) (? n (even (dec n)))
    eo (part even l)
-   es (A eo)
-   os (B eo)
+   es (cap eo)
+   os (cbp eo)
  (assert
   (= l '(0 1 2 3 4 5 6 7 8 9))
   (= m n)

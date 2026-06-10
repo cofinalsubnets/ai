@@ -2,13 +2,13 @@
 (:
  (dict_has d k) (:
   (loop k ks vs) (? ks
-   (? (= k (A ks)) vs (loop k (B ks) (B vs))))
-  (loop k (A d) (B d)))
- (dict_get d k) (: x (dict_has d k) (? x (A x)))
- (dict_set d k v) (X (X k (A d)) (X v (B d)))
+   (? (= k (cap ks)) vs (loop k (cbp ks) (cbp vs))))
+  (loop k (cap d) (cbp d)))
+ (dict_get d k) (: x (dict_has d k) (? x (cap x)))
+ (dict_set d k v) (cons (cons k (cap d)) (cons v (cbp d)))
  (anon? x) (&& (symp x) (symp (string x)))   ; string of a named sym is its name; of an anon sym, itself
- (var? x) (&& (twop x) (anon? (B x)))
- (var x) (X x (nom 0))
+ (var? x) (&& (twop x) (anon? (cbp x)))
+ (var x) (cons x (nom 0))
  empty_dict '(0)
  has_s dict_has
  ext_s dict_set
@@ -28,7 +28,7 @@
   (? (nilp i) s
    (s (\ _ s)
       (stake i)
-      (\ x s (X x (stake (+ -1 i) s)))))
+      (\ x s (cons x (stake (+ -1 i) s)))))
  (smap f s)
   (s (\ _ s)
      (\ s _ m _ (m (smap f s)))
@@ -37,34 +37,34 @@
   (s (\ _ z)
      (sfold f z)
      (\ x s (f x (sfold f z s))))
- slist (sfold X 0)
+ slist (sfold cons 0)
  (est u v s) (:
   (walk u s) (? (nilp (var? u)) u
               (: t (has_s s u)
-               (? t (walk (A t) s) u)))
+               (? t (walk (cap t) s) u)))
   x (walk u s) y (walk v s)
   (? (= x y) (sun s)
      (var? x) (sun (ext_s s x y))
      (var? y) (sun (ext_s s y x))
      (&& (twop x) (twop y)
-     (et (est (A x) (A y)) (est (B x) (B y)) s))))
+     (et (est (cap x) (cap y)) (est (cbp x) (cbp y)) s))))
  (Run n ks g) (:
   (walk_star u s) (?
-   (var? u) (: t (has_s s u) (? t (walk_star (A t) s) u))
-   (twop u) (X (walk_star (A u) s) (walk_star (B u) s))
+   (var? u) (: t (has_s s u) (? t (walk_star (cap t) s) u))
+   (twop u) (cons (walk_star (cap u) s) (walk_star (cbp u) s))
    u)
   (reify st) (flip catmap ks (\ k
-   (: it (has_s (X (map A (A st)) (B st)) k)
-    (? it (L k (walk_star (A it) st))))))
+   (: it (has_s (cons (map cap (cap st)) (cbp st)) k)
+    (? it (L k (walk_star (cap it) st))))))
   (map reify ((? n (stake n) slist) (g empty_dict)))))
 
-(:: 'zz (\ x (: s (nom 0) n (nom 0) m (nom 0) y (nom 0) x (A x)
+(:: 'zz (\ x (: s (nom 0) n (nom 0) m (nom 0) y (nom 0) x (cap x)
  (L '\ s n m y (L m (L x s))))))
-(:: 'et (\ xs (: x (A xs) xs (B xs)
+(:: 'et (\ xs (: x (cap xs) xs (cbp xs)
  (foldl (\ a b (L (\ a b s (s_star (a s) b)) a b)) x xs))))
-(:: 'vel (\ xs (: x (A xs) xs (B xs)
+(:: 'vel (\ xs (: x (cap xs) xs (cbp xs)
  (foldl (\ a b (L (\ a b s (s_plus (a s) (b s))) a b)) x xs))))
-(:: '\\ (\ a (X (X '\ a) (map (\ a (L var (L '\ a))) (init a)))))
+(:: '\\ (\ a (cons (cons '\ a) (map (\ a (L var (L '\ a))) (init a)))))
 
 (assert
  (unord_eq '(1 2 3) '(2 1 3))

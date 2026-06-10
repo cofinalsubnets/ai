@@ -27,8 +27,8 @@
     (? v v (: v (? (< n 2) 1 (f n 0 0)) _ (pin bells n v) v)))
    (showloop acc n) (? (< n 1) acc (showloop (scat (digit (mod n (sat digits))) acc)(// n (sat digits)) ))
    show (showloop "")
-   (gen i limit) (: b (show (bell i)) (? (<= (sat b) limit) (X b (gen (+ i 1) limit))))
-   (leq a b) (? (twop a) (? (twop b) (? (= (A a) (A b)) (leq (B a) (B b)) 0) 0)
+   (gen i limit) (: b (show (bell i)) (? (<= (sat b) limit) (cons b (gen (+ i 1) limit))))
+   (leq a b) (? (twop a) (? (twop b) (? (= (cap a) (cap b)) (leq (cbp a) (cbp b)) 0) 0)
                          (? (twop b) 0 1))
    out (gen 0 280)
    ; expected: byte-exact stdout of `ruby test/bell.rb` (n defaults to 280),

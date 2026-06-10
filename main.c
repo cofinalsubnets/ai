@@ -307,7 +307,7 @@ static char const tests0[] =
 #include "tests0.h"
  ;
 static char const
- s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0))",
+ s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peek s i 0) (g (+ 1 i))))) 0))",
  runner[] = "(: p (sip (s2cl tests))"
             " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))";
 
@@ -394,5 +394,5 @@ int main(int argc, char const **argv) {
     g = boot(g, argp); }
   switch (g_code_of(g)) {
    default: break;
-   case g_status_scare: fprintf(stderr, "# oom@len=%ld\n", (long) g_core_of(g)->len); break; }
+   case g_status_sing: fprintf(stderr, "# oom@len=%ld\n", (long) g_core_of(g)->len); break; }
   return g_fin(g); }

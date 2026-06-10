@@ -14,31 +14,31 @@
 ; ev's value; `.ev` then prints as just the ana+wev logic, and the table prints under `.wevs`.
 (: wevs (:
    g_vm_cur  (peekl 0 (+))
-   g_vm_ret0 (peekl 1 A)
-   (cval e) (? (symp e) (X 0 0)               ; (const? . value): 1 head iff a literal
-               (atomp e) (X 1 e)
-               (&& (= (A e) '\) (atomp (BB e))) (X 1 (AB e))
-               (X 0 0))
+   g_vm_ret0 (peekl 1 cap)
+   (cval e) (? (symp e) (cons 0 0)               ; (const? . value): 1 head iff a literal
+               (atomp e) (cons 1 e)
+               (&& (= (cap e) '\) (atomp (cbbp e))) (cons 1 (cabp e))
+               (cons 0 0))
    (bake v) (? (fixp v) v (list '\ v))           ; value -> source: fixnum bare else quote
    ; (op . arity) iff v is a nif. `idp` (identity) not `=`: a non-nif global may peek to
    ; a word that looks like a heap pointer, which `=`/eql would deref and crash on.
-   (opof v) (? (idp g_vm_ret0 (peekl 1 v)) (X (peekl 0 v) 1)
-               (&& (idp g_vm_cur (peekl 0 v)) (idp g_vm_ret0 (peekl 3 v))) (X (peekl 2 v) (peekl 1 v))
+   (opof v) (? (idp g_vm_ret0 (peekl 1 v)) (cons (peekl 0 v) 1)
+               (&& (idp g_vm_cur (peekl 0 v)) (idp g_vm_ret0 (peekl 3 v))) (cons (peekl 2 v) (peekl 1 v))
                0)
-   (hgen v op ar pure x) (: as (B x) n (sat as)
+   (hgen v op ar pure x) (: as (cbp x) n (sat as)
     (go hv a) (? (atomp a) (bake hv)             ; all args constant -> fold
-     (: cv (cval (A a))
-      (? (&& pure (A cv)) (go (hv (B cv)) (B a))
-         (? (&& op (= n ar)) (X iop (X op as))           ; matching-arity nif -> inline
-            (&& (< 1 ar) (= n ar)) (X apx (X 1 x))       ; multi-arg fn -> n-ary apply
-            (X apx (X 0 x))))))                          ; generic l2r apply
+     (: cv (cval (cap a))
+      (? (&& pure (cap cv)) (go (hv (cbp cv)) (cbp a))
+         (? (&& op (= n ar)) (cons iop (cons op as))           ; matching-arity nif -> inline
+            (&& (< 1 ar) (= n ar)) (cons apx (cons 1 x))       ; multi-arg fn -> n-ary apply
+            (cons apx (cons 0 x))))))                          ; generic l2r apply
     (go v as))
    ; the infix table symbols are quoted one by one -- bare mid-list they would
    ; capture their left neighbor at read time.
    names (cat (L '+ '- '* '/ '& '| '< '<= '= '>= '>)
           '(// mod << >> ^
             idp gcd modpow inc dec abs
-            X A B AA AB BA BB
+            cons cap cbp caap cabp cbap cbbp
             digest lidx assq memq last rev cat
             fixp symp twop mapp lamp strp nilp flop comp atomp
             ssub scat string
@@ -49,8 +49,8 @@
     (? (fixp v) t
      (: o (opof v) p (pureset v)
       (? (|| o p)
-       (: op (? o (A o) 0)
-          ar (? o (B o) (idp g_vm_cur (peekl 0 v)) (peekl 1 v) 0)   ; nif/multi-arg-fn arity
+       (: op (? o (cap o) 0)
+          ar (? o (cbp o) (idp g_vm_cur (peekl 0 v)) (peekl 1 v) 0)   ; nif/multi-arg-fn arity
           (pin t v (\ x (hgen v op ar p x))))
        t))))
    (foldl add (hashn 0) (hashk dict))))
@@ -110,67 +110,67 @@
   (wev c x) (:
    (wx x bnd) (?
     (atomp x) x
-    (: h (A x) (?
-     (= h '\) (? (atomp (BB x)) x                          ; quote
+    (: h (cap x) (?
+     (= h '\) (? (atomp (cbbp x)) x                          ; quote
                 (: r (lp x)
-                   lam (X '\ (cat (A r) (list (wx (B r) (cat (A r) bnd)))))
-                   _ (push c 'src (X (B lam) x))         ; tagged-body -> surface src for ala
+                   lam (cons '\ (cat (cap r) (list (wx (cbp r) (cat (cap r) bnd)))))
+                   _ (push c 'src (cons (cbp lam) x))         ; tagged-body -> surface src for ala
                    lam))
-     (= h ':) (? (atomp (BB x)) (X ': (list (wx (AB x) bnd)))
-                 (X ': (wxl (boxfix (B x)) bnd)))   ; boxfix = letrec* capture-by-location source rewrite, post-macroexpand
-     (= h '?) (X '? (wxc (B x) bnd))
+     (= h ':) (? (atomp (cbbp x)) (cons ': (list (wx (cabp x) bnd)))
+                 (cons ': (wxl (boxfix (cbp x)) bnd)))   ; boxfix = letrec* capture-by-location source rewrite, post-macroexpand
+     (= h '?) (cons '? (wxc (cbp x) bnd))
      (: m (? (symp h) (macros h) 0)                     ; macro head? expand, then re-walk
-      (? m (wx (m (B x)) bnd)
+      (? m (wx (m (cbp x)) bnd)
          (fold (map (\ e (wx e bnd)) x) bnd))))))
    (wxl bs bnd) (wxb bs (cat (ln bs) bnd))        ; a let's names all shadow throughout
    (wxb bs bnd) (?
     (atomp bs) bs
-    (atomp (B bs)) (list (wx (A bs) bnd))
-    (: nd (dsug (A bs) (AB bs))               ; desugar (f a..) so wx's \ adds params to bnd
-     (X (A nd) (X (wx (B nd) bnd) (wxb (BB bs) bnd)))))
+    (atomp (cbp bs)) (list (wx (cap bs) bnd))
+    (: nd (dsug (cap bs) (cabp bs))               ; desugar (f a..) so wx's \ adds params to bnd
+     (cons (cap nd) (cons (wx (cbp nd) bnd) (wxb (cbbp bs) bnd)))))
    (wxc bs bnd) (?                                ; cond clauses (ant con ant con ... else)
     (atomp bs) (list 0)                           ; clauses ran out: supply the implicit 0 else
-    (atomp (B bs)) (list (wx (A bs) bnd))
+    (atomp (cbp bs)) (list (wx (cap bs) bnd))
     ; peephole: a FINAL (nilp e) test flips its branches, dropping the wrapper --
     ; (.. (nilp e) con else) == (.. e else con), since the cond tests g_false(e), == nilp(e).
-    (&& (twop (BB bs)) (atomp (B (BB bs)))                  ; bs is exactly (ant con else)
-        (twop (A bs)) (= (A (A bs)) 'nilp)
-        (twop (B (A bs))) (atomp (BB (A bs))) (nilp (memq (A (A bs)) bnd)))
-     (X (wx (AB (A bs)) bnd) (X (wx (A (BB bs)) bnd) (list (wx (AB bs) bnd))))
-    (X (wx (A bs) bnd) (X (wx (AB bs) bnd) (wxc (BB bs) bnd))))
+    (&& (twop (cbbp bs)) (atomp (cbp (cbbp bs)))                  ; bs is exactly (ant con else)
+        (twop (cap bs)) (= (cap (cap bs)) 'nilp)
+        (twop (cbp (cap bs))) (atomp (cbbp (cap bs))) (nilp (memq (cap (cap bs)) bnd)))
+     (cons (wx (cabp (cap bs)) bnd) (cons (wx (cap (cbbp bs)) bnd) (list (wx (cabp bs) bnd))))
+    (cons (wx (cap bs) bnd) (cons (wx (cabp bs) bnd) (wxc (cbbp bs) bnd))))
    ; napof: v is a non-nif multi-arg fn whose arity matches the n>1 call args -> n-ary apply.
    ; `idp`-safe peeks (a non-fn value never matches g_vm_cur); mirrors app's old `fa`/`na`.
    (napof v args) (? (fixp v) 0
     (? (idp g_vm_cur (peekl 0 v)) (: ar (peekl 1 v) (&& (< 1 ar) (= (sat args) ar))) 0))
    ; fold: un-shadowed global head -> handler (fold/iop/apx); else mark the call as an apx
    ; node (apx nary head . args) carrying the n-ary-vs-l2r strategy (1 = n-ary, 0 = l2r).
-   (fold x bnd) (: h (A x)
-    (? (atomp (B x)) x                          ; (f) single element -> ana's (atomp b) handles
-       (|| (nilp (symp h)) (memq h bnd)) (X apx (X 0 x))   ; local/computed head
+   (fold x bnd) (: h (cap x)
+    (? (atomp (cbp x)) x                          ; (f) single element -> ana's (atomp b) handles
+       (|| (nilp (symp h)) (memq h bnd)) (cons apx (cons 0 x))   ; local/computed head
        (: v (dict h) hd (wevs v)
         (? hd (hd x)
-           (napof v (B x)) (X apx (X 1 x))
-           (X apx (X 0 x))))))
+           (napof v (cbp x)) (cons apx (cons 1 x))
+           (cons apx (cons 0 x))))))
    (wx x 0))
   (ana c x) (? (symp x)  (ava c x)
                    (atomp x) (kim x)
-                   (: a (A x) b (B x) (?
+                   (: a (cap x) b (cbp x) (?
                     (atomp b) (ana c a)
                     (= a '? ) (aco c b)
-                    (= a '\ ) (? (atomp (B b)) (kim (A b)) (ana c (ala c 0 b)))
-                    (= a ': ) (ale c (A b) (B b))
+                    (= a '\ ) (? (atomp (cbp b)) (kim (cap b)) (ana c (ala c 0 b)))
+                    (= a ': ) (ale c (cap b) (cbp b))
                     (= a iop) (iap c b)
                     (= a apx) (apxh c b)
                     (: m (macros a)
                      (? m (ana c (m b)) (app c a b))))))
-  (push c k x) (: _ (pin c k (X x (c k))) x)
-  (pop c k) (: x (c k) _ (pin c k (B x)) (A x))
-  (iap c b) (: op (A b) as (B b)                       ; (iop op . args) -> inline the vm op
-   (? (atomp (B as)) (co (ana c (A as)) (em1 op))      ; monadic
+  (push c k x) (: _ (pin c k (cons x (c k))) x)
+  (pop c k) (: x (c k) _ (pin c k (cbp x)) (cap x))
+  (iap c b) (: op (cap b) as (cbp b)                       ; (iop op . args) -> inline the vm op
+   (? (atomp (cbp as)) (co (ana c (cap as)) (em1 op))      ; monadic
       (: s (c 'stk) k (apr2l c as) _ (pin c 'stk s) (co k (em1 op))))) ; n-ary, r2l args
   ; apxh: (apx nary head . args) -> apply. nary -> r2l arg eval + a single n-ary apply;
   ; else l2r 1-ary chain. kap detects tail vs non-tail by peeking the continuation.
-  (apxh c b) (: nary (A b) head (AB b) args (BB b)
+  (apxh c b) (: nary (cap b) head (cabp b) args (cbbp b)
               f (ana c head) s (c 'stk) _ (push c 'stk 0)
               g (? nary (co (apr2l c args) (kap (sat args))) (apl2r c args))
               _ (pin c 'stk s)
@@ -179,9 +179,9 @@
                s (c 'stk) _ (push c 'stk 0)
                g (apl2r c b) _ (pin c 'stk s)
              (co f g))
- (apl2r c b) (?- id (twop b) (: f (ana c (A b)) g (apl2r c (B b))
+ (apl2r c b) (?- id (twop b) (: f (ana c (cap b)) g (apl2r c (cbp b))
                     (co f (co (kap 1) g))))
- (apr2l c b) (?- id (twop b) (: g (apr2l c (B b)) f (ana c (A b)) _ (push c 'stk 0) (co g f)))
+ (apr2l c b) (?- id (twop b) (: g (apr2l c (cbp b)) f (ana c (cap b)) _ (push c 'stk 0) (co g f)))
  (kap n k m)
   (: j (k (+ 2 m))
    t (= (peekl 0 j) g_vm_ret)                              ; peek the continuation for ret -> tail
@@ -192,17 +192,17 @@
   (aco c b) (:- (: f (acr b) (\ k n (: k (f (co (push c 'end) k) n) _ (pop c 'end) k)))
    (acx k n) (: ; jump out
     j (k (+ 3 n))
-    a (A (c 'end))
+    a (cap (c 'end))
     i (peekl 0 a)
     (? (| (= g_vm_ret i) (= g_vm_tap i)) (p2 i (peekl 1 a) j)
        (= g_vm_tapn i)                   (p2 i (peekl 1 a) (pinl -1 (peekl 2 a) j))
                                          (p2 g_vm_jump a j)))
    (acr b) (?
     (atomp b)       (kim 0)
-    (atomp (B b)) (co (ana c (A b)) acx)
-    (: f (ana c (A b))
-       g (ana c (AB b))
-       h (acr (BB b))
+    (atomp (cbp b)) (co (ana c (cap b)) acx)
+    (: f (ana c (cap b))
+       g (ana c (cabp b))
+       h (acr (cbbp b))
        (? (= kim (pro f)) (? (peekl 3 f) g h)
         (\ x (f (\ n
          (: k (co (push c 'alt) (h x))
@@ -215,13 +215,13 @@
   (qsite site k n) (: cell (pinl -1 0 (k (+ 2 n)))
                       _ (pinl 2 cell site)
                     (pinl -1 g_vm_quote cell))
-  (lz c lfd scope)(: code (AB lfd)
+  (lz c lfd scope)(: code (cabp lfd)
                    p (? code (em2 g_vm_quote code)
-                        (: site (X lfd 0)
-                           _ (pin scope 'sites (X site (scope 'sites)))
+                        (: site (cons lfd 0)
+                           _ (pin scope 'sites (cons site (scope 'sites)))
                          (qsite site)))
                    _ (push c 'stk 0)
-                   q (apl2r c (BB lfd))
+                   q (apl2r c (cbbp lfd))
                    _ (pop c 'stk)
                  (co p q))
   ; variable expression analyzer
@@ -263,15 +263,15 @@
    ; (frame is [imps args]) so a closure prints as ,((\ y x …) capturedvals) and
    ; round-trips through read+eval.
    os (assq exp ((rootc c) 'src))
-   s (X '\ (cat (d 'imp) (? os (BB os) exp)))
+   s (cons '\ (cat (d 'imp) (? os (cbbp os) exp)))
    _ (pinl -1 s e)                                  ; value[-1] = source \-expr
    _ (trim (seekl -1 e))                             ; tag head spans [src .. body]; value stays e
-   (X e (d 'imp)))
+   (cons e (d 'imp)))
 
   ; let expression analyzer (the most complicated one)
   (ale c a b) (?
    (atomp b) (ana c a)
-   (:- (l1 0 a (A b) (B b))
+   (:- (l1 0 a (cap b) (cbp b))
     q (sco c (c 'arg) (c 'imp))
     (set_cdr p x) (: _ (pinl 2 x p) x) ; :[ weh
 
@@ -279,68 +279,68 @@
    ; happened in wev (boxfix), so l2 compiles the bindings directly.
    (l1 prs n d rest) (:
      nd (dsug n d)
-    (? (atomp rest)       (l2 (rev (X nd prs)) (A nd)   1)
-       (atomp (B rest)) (l2 (rev (X nd prs)) (A rest) 0)
-                          (l1 (X nd prs) (A rest) (AB rest) (BB rest))))
+    (? (atomp rest)       (l2 (rev (cons nd prs)) (cap nd)   1)
+       (atomp (cbp rest)) (l2 (rev (cons nd prs)) (cap rest) 0)
+                          (l1 (cons nd prs) (cap rest) (cabp rest) (cbbp rest))))
 
    (l2 prs body even) (:- (cl 0 l l l)
     s (c 'stk)
     _ (push c 'stk 0)
     (jj a ps) (?
      (atomp ps) a
-     (nilp (lambp (BA ps)))
+     (nilp (lambp (cbap ps)))
       (:
-      _ (push c 'stk (AA ps))
-      (jj a (B ps)))
-     (: k (AA ps)
-        v (ala q 0 (BBA ps))
-        a (X (X k v) a)
+      _ (push c 'stk (caap ps))
+      (jj a (cbp ps)))
+     (: k (caap ps)
+        v (ala q 0 (cbbap ps))
+        a (cons (cons k v) a)
       _ (push c 'stk k)
-      (jj a (B ps))))
+      (jj a (cbp ps))))
     l (jj 0 prs)
     _ (pin c 'stk s)
     (cl n l k1 k2) (?
-     (&& k1 k2 !(= k1 k2) (memq (AA k1) (BBA k2)))
-      (>>= n (BBA k1) (: (kk n v)
-       (? (nilp v) (cl n l k1 (B k2))
-        (: var (A v)
-           vars (BBA k2)
+     (&& k1 k2 !(= k1 k2) (memq (caap k1) (cbbap k2)))
+      (>>= n (cbbap k1) (: (kk n v)
+       (? (nilp v) (cl n l k1 (cbp k2))
+        (: var (cap v)
+           vars (cbbap k2)
            n (? (memq var vars) n
-              (: _ (set_cdr (BA k2) (X var vars))
+              (: _ (set_cdr (cbap k2) (cons var vars))
                (+ 1 n)))
-           (kk n (B v))))))
-     k2 (cl n l k1 (B k2))
-     k1 (cl n l (B k1) l)
+           (kk n (cbp v))))))
+     k2 (cl n l k1 (cbp k2))
+     k1 (cl n l (cbp k1) l)
      n (cl 0 l l l)
      (l3 prs body even
-      (: j (map A l)
-         (q x) (X (A x) (X (AB x) (foldl (flip ldel) (BB x) j)))
+      (: j (map cap l)
+         (q x) (cons (cap x) (cons (cabp x) (foldl (flip ldel) (cbbp x) j)))
        (map q l)))))
 
    (l3 prs body even lams) (:
     (ll nds) (? (nilp nds) id
-     (: nd (A nds) n (A nd) d (B nd)
-        d (?- d (lambp d) (: qa (assq (A nd) lams)
-                             x (ala q (BB qa) (B d))
+     (: nd (cap nds) n (cap nd) d (cbp nd)
+        d (?- d (lambp d) (: qa (assq (cap nd) lams)
+                             x (ala q (cbbp qa) (cbp d))
                            (set_cdr qa x)))
         f (ana c d)
         g (?- id (&& even (nilp (c 'par))) (em2 g_vm_defglob n))
         _ (push c 'stk n)
-        h (ll (B nds))
+        h (ll (cbp nds))
         (\ x (f (g (h x))))))
     _ (pin q 'lam lams)
     s (c 'stk)
     _ (push c 'stk 0)
     ; clear stale first-build closures so a ref hit during the rebuild defers to a
     ; backpatch site; the import sets (BB) are kept.
-    _ (each lams (\ e (pinl 1 0 (B e))))
+    _ (each lams (\ e (pinl 1 0 (cbp e))))
     g (ll prs)
     ; closures final -> backpatch each recorded recursive-fn ref with its thread.
-    _ (each (q 'sites) (\ s (pinl 0 (AB (A s)) (B s))))
+    _ (each (q 'sites) (\ s (pinl 0 (cabp (cap s)) (cbp s))))
     _ (pin q 'sites 0)
     _ (pin c 'stk s)
     ; body-lambda analyzed AFTER inits (it takes bindings as args; never makes sites)
-    f (ana c (X '\ (cat (rev (map A prs)) (list body))))
+    f (ana c (cons '\ (cat (rev (map cap prs)) (list body))))
     h (kap (sat prs))
     _ (pin c 'stk s)
     (\ x (f (g (h x))))))))

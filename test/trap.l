@@ -1,17 +1,17 @@
 ; the lisp trap calling convention. a global `trap` function receives
-; (trap s a b): s = the status word -- two bits, scare (1: something went
+; (trap s a b): s = the status word -- two bits, sing (1: something went
 ; wrong) and more (2: read control flow); more alone = incomplete, eof =
-; more|scare. a/b = the condition data: for the more bit the port and the
+; more|sing. a/b = the condition data: for the more bit the port and the
 ; read sentinel. the result is delivered per the bits: more -> to the
 ; reader's resume (the fread protocol: the handler chooses what the reader's
-; caller sees); a bare scare is observed, then the default escape proceeds
-; (oom is the only C scare today and is terminal, so that lane is exercised
+; caller sees); a bare sing is observed, then the default escape proceeds
+; (oom is the only C sing today and is terminal, so that lane is exercised
 ; manually, not here). entries are live immediately (datum-at-a-time read
 ; loop); the handler is UNINSTALLED at the end of this file.
 (: trap-log (hashn 0))
 
 ; status readers
-(assert (scare? 1) !(scare? 3) !(scare? 2)
+(assert (sing? 1) !(sing? 3) !(sing? 2)
         (more? 2) !(more? 3) !(more? 1)
         (eof? 3) !(eof? 2) !(eof? 1))
 

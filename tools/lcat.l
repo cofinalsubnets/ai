@@ -8,7 +8,7 @@
 ; (e.g. `o(` reads the same as `o (`, but `-5` and `- 5` do not). Spaces inside a
 ; string literal are data and never touched. Surviving bytes are then C-escaped.
 
-(: (s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0)  ; string -> charlist
+(: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peek s i 0) (g (+ 1 i))))) 0)  ; string -> charlist
    ; count complete datums readable from s (stop on the eof sentinel or an
    ; incomplete form, which fread signals by returning the port itself).
    (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
@@ -20,7 +20,7 @@
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
               (fputc out c)))
 
-(: p (open (A (B argv)) "r")
+(: p (open (cap (cbp argv)) "r")
    _ (? p 0 (: _ (fputs err "lcat: cannot open input") (exit 1)))
    ; gather every canonical form into one space-joined string
    acc ((: (g acc e p first)

@@ -13,7 +13,7 @@
                  _ (fputc out (+ 48 (mod (// c 8) 8)))
                  (fputc out (+ 48 (mod c 8))))
               (fputc out c))
-   p (open (A (B argv)) "r")
+   p (open (cap (cbp argv)) "r")
    _ (? p 0 (: _ (fputs err "lcatv: cannot open input") (exit 1)))
    s (slurp p)
    _ (fputc out 34)
