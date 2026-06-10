@@ -1,25 +1,38 @@
 # love
 
-`love: love -> love = lisp * haskell * apl / C`, iykwim.
-rassoc infix (apl) with a compatible lassoc subset (lisp).
-ranked arrays, broadcasting, complex, macros
+broadcasting live from the GTX tower
 
-every quote below should evaluate to 1. try it in the shell :)
+## **love never fails**
+
+every love expression has a value up to oom or looping.
+stackless operation, all recursion on the heap, no overflow.
+every quote below evals to 1. try them in the repl :)
+
 - `0 x = 1`
 - `1 x = x`
 - `(x) = x`
 - `f x y = (f x) y`
 - `2 f x = f (f x)`
-- `(3 2) = 8`
-- `(2 2 2 2) = 65536`
-- `(2 3 4) = 262144`
+- `65536 = (2 2 2 2)`
 - `-1 = i * i`
 - `(log -1) = i * pi`
 - `i = (1 / 2) -1`
 
 
-## language level
-love has three special forms plus reader operators. the forms are
+## language
+
+rassoc infix with applicative lassoc subset, functions curried.
+basically, `love: love -> love = lisp * haskell * apl / c`
+
+- every value is a monadic total function
+- all operations made as generic as possible
+- numeric tower with shaped array broadcasting
+- lambdas, macros, closures, multitasking
+- freestanding bare metal kernel build
+- public domain portable C with zero dependencies
+- claude can write love like a champ no cap
+
+love has three special forms plus "operators". the forms are
 - `\` lambda (the ultimate)
 - `?` cond
 - `:` let
@@ -55,8 +68,9 @@ is [CLAUDE.md](CLAUDE.md) -- the root test file CLAUDE.l in a code fence, so
 the spec stays green.
 
 
-### code example
+### example program
 
+;;; is the comma on the first line valid yet?
 ```
 ."hello world\n",
 

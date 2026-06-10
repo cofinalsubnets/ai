@@ -10,8 +10,8 @@
 
 (: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peep s i 0) (g (+ 1 i))))) 0)  ; string -> charlist
    ; count complete datums readable from s (stop on the eof sentinel or an
-   ; incomplete form, which fread signals by returning the port itself).
-   (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
+   ; incomplete form, which read signals by returning the port itself).
+   (nforms s) ((: (g p e n) (: r (read p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
                (sip (s2cl s)) (nom 0) 0)
    ; bytes a then b: is the space between them redundant? (same datum count joined vs spaced)
    (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
@@ -24,9 +24,9 @@
    _ (? p 0 (: _ (fputs err "lcat: cannot open input") (exit 1)))
    ; gather every canonical form into one space-joined string
    acc ((: (g acc e p first)
-          (: r (fread p e)
+          (: r (read p e)
              (? (= e r) acc
-                (g (? first (show r) (scat (scat acc " ") (show r))) e p 0))))
+                (g (? first (show r) (+ (+ acc " ") (show r))) e p 0))))
         "" (nom 0) p 1)
    _ (fputc out 34)                                      ; opening "
    ; walk acc: drop redundant spaces (outside string literals), C-escape the rest.

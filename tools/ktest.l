@@ -17,7 +17,7 @@
    ovmf (cap (cbp a))
    r    (run (L "timeout" "90" "qemu-system-x86_64" "-m" "256M" "-M" "q35"
                 "-serial" "stdio" "-display" "none" "-no-reboot"
-                "-drive" (scat "if=pflash,unit=0,format=raw,file=" (scat ovmf ",readonly=on"))
+                "-drive" (+ "if=pflash,unit=0,format=raw,file=" (+ ovmf ",readonly=on"))
                 "-cdrom" iso
                 "-device" "isa-debug-exit,iobase=0xf4,iosize=0x04"))
    out  (cbp r)

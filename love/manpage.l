@@ -1,23 +1,23 @@
 ; generates a manual page
 (: 
  (putln s) (: _ (puts s) (putc 10))
- concat (foldl "" scat)
+ concat (foldl "" (+))
  sec "1"
  nom "love"
  upnom "GL"
- section (scat ".SH ")
+ section (+ ".SH ")
  (\f i s) (concat (L "\\f[" i "]" s "\\f[R]"))
  \fB (\f "B")
  \fI (\f "I")
  lines (L
    (concat (L ".TH \"" upnom "\" \"" sec "\" \"\" \"Version " version "\" \"" upnom "\""))
    (section "NAME")
-   (scat (\fB nom) " \\- list expression interpreter")
+   (+ (\fB nom) " \\- list expression interpreter")
    (section "SYNOPSIS")
    ".PP"
    (concat (L (\fB nom) " [" (\fB "-h") "] [" (\fB "-v") "] [" (\fB "-r") "] [" (\fI "file") (\fI "\\&...") "]"))
    (section "DESCRIPTION")
-   (scat nom " is a minimal scheme-like lisp dialect with simple syntax and evaluation rules.")
+   (+ nom " is a minimal scheme-like lisp dialect with simple syntax and evaluation rules.")
    (section "COMMAND LINE OPTIONS")
    ".TP"
    ".B \\-h"

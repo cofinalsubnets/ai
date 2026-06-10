@@ -309,7 +309,7 @@ static char const tests0[] =
 static char const
  s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peep s i 0) (g (+ 1 i))))) 0))",
  runner[] = "(: p (sip (s2cl tests))"
-            " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))";
+            " ((: (g e) (: r (read p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))";
 
 // With args, run the build tool (lcat / gen_data) through the CLI driver.
 // With no args, self-test: eval prelude+repl and run the baked corpus via c0,
@@ -356,7 +356,7 @@ static char const cli[] =
 #include "cli.h"
  ;
 static char const
- rel[] = "(:(g e)(: r(read e)(?(= e r)0(: _(ev'ev r)(g e))))(g(nom 0)))";
+ rel[] = "(:(g e)(: r(read in e)(?(= e r)0(: _(ev'ev r)(g e))))(g(nom 0)))";
 
 static struct g *boot(struct g *g, bool argp) {
   bool replp = !argp && isatty(STDIN_FILENO);

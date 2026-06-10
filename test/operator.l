@@ -17,7 +17,7 @@
  (= '((1 2) 3) ^ ^ 1 2 3)                       ; operands are full datums: ops nest
  (= '(5 (1 2)) (L 5 ^ 1 2))                     ; works inside lists
  (= '("a" 7) ^ "a" $"seven!!"))                 ; wrapped operands compose
-(: p (sip '(94 32 49)) (assert (= p (fread p 99))))  ; "^ 1": pending operand -> incomplete
+(: p (sip '(94 32 49)) (assert (= p (read p 99))))  ; "^ 1": pending operand -> incomplete
 
 ; triadic, then (name . 1) pair form
 (pin op-tbl ("^" 0) (cons 'L 3))

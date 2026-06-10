@@ -41,9 +41,9 @@
  (alt a b y n) (a y (b y n))
  (rep a y n s) ((opt (cats a (rep a))) y n s)
  (assert
-  (= "xx" (scat "xx" ""))
-  (= "xx" (scat "x" "x"))
-  (= "xx" (scat "" "xx"))
+  (= "xx" (+ "xx" ""))
+  (= "xx" (+ "x" "x"))
+  (= "xx" (+ "" "xx"))
   (= 4 (sat "slen"))
   (= "bidden" (slice "forbidden planet" 3 9))
   (= "all of it" (slice "all of it" -9 100))

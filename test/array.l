@@ -54,7 +54,7 @@
  (= r (atype (/ (arr z '(2) '(7 11)) 2)))                     ; `/` promotes (7/2 inexact) -> r
  (aall (= (arr r '(2) '(3.5 5.5)) (/ (arr z '(2) '(7 11)) 2)))
  (aall (= (arr z '(2) '(4 6)) (/ (arr z '(2) '(8 12)) 2)))   ; `/` stays z when every element divides evenly
- (aall (= (arr z '(2) '(1 1)) (mod (arr z '(2) '(7 11)) 2)))
+ (aall (= (arr z '(2) '(1 1)) (% (arr z '(2) '(7 11)) 2)))
  (aall (= (arr z '(3) '(2 4 6)) (+ 1 (arr z '(3) '(1 3 5)))))  ; scalar on the left
 
  ; --- array (op) array, same shape ---

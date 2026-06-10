@@ -25,7 +25,7 @@
     (f n k x) (? (>= k n) x (f n (+ k 1) (+ x (* (choose (- n 1) k) (bell k)))))
     v (bells n)
     (? v v (: v (? (< n 2) 1 (f n 0 0)) _ (pin bells n v) v)))
-   (showloop acc n) (? (< n 1) acc (showloop (scat (digit (mod n (sat digits))) acc)(// n (sat digits)) ))
+   (showloop acc n) (? (< n 1) acc (showloop (+ (digit (% n (sat digits))) acc)(// n (sat digits)) ))
    show (showloop "")
    (gen i limit) (: b (show (bell i)) (? (<= (sat b) limit) (cons b (gen (+ i 1) limit))))
    (leq a b) (? (twop a) (? (twop b) (? (= (cap a) (cap b)) (leq (cbp a) (cbp b)) 0) 0)

@@ -115,9 +115,9 @@ g_vm_t g_vm_kcall,
  // the arithmetic lane the scalar arith slow paths divert into.
  g_vm_cplx, g_vm_Cp, g_vm_re, g_vm_im, g_vm_conj, g_vm_abs, g_vm_carg,
  g_vm_bxor,  g_vm_bsr,    g_vm_bsl,    g_vm_slice,
- g_vm_scat,   g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
+ g_vm_cons,   g_vm_car,  g_vm_cdr,    g_vm_puts,
  g_vm_getc,  g_vm_string, g_vm_lt,     g_vm_le,   g_vm_eq,     g_vm_same, g_vm_gt,  g_vm_ge,
- g_vm_sort,
+ g_vm_sort,  g_vm_tally,
  g_vm_put, g_vm_pull, g_vm_table,   g_vm_keys,  g_vm_dig,
  g_vm_unc, g_vm_poke, g_vm_peek,
  g_vm_seek,  g_vm_trim,   g_vm_lamb,   g_vm_add,
@@ -131,7 +131,7 @@ g_vm_t g_vm_kcall,
  g_vm_callk, g_vm_sing, g_vm_yield_sw, g_vm_yield_nif, g_vm_task_exit, g_vm_spawn, g_vm_wait,
  g_vm_sleep, g_vm_donep, g_vm_kill, g_vm_key,
  g_vm_fgetc, g_vm_fungetc, g_vm_feof, g_vm_fputc, g_vm_fputs, g_vm_fflush,
- g_vm_fputn, g_vm_fread, g_vm_dot,
+ g_vm_fputn, g_vm_read, g_vm_dot,
  // Step 5a -- typed multi-rank arrays (kernel/arr.c). g_vm_vbin is the shared
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  g_vm_arr, g_vm_arank, g_vm_alen, g_vm_ashape, g_vm_atype,
@@ -313,12 +313,16 @@ static g_inline intptr_t pin_sym(word x) {
     : strp(word(s->nom)) ? (intptr_t) len(s->nom)
     : ((struct g_atom*) s->nom)->nom ? (intptr_t) len(((struct g_atom*) s->nom)->nom) : 0;
   return nl ? nl : 1; }                                // present symbol -> truthy
+static intptr_t g_mag(word);                         // fwd: the pair lane recurses on elements
 static g_inline bool g_nilp(word x) {
   if (x == nil || x == EmptyString) return true;
   if (fixp(x)) return getfix(x) < 0;                 // 0 is nil (caught above); negatives false
   if (mapp(x)) return map_len(x) == 0;
   if (bigp(x)) return ((struct g_big*) x)->slen < 0; // a negative bignum is false
   if (symp(x)) return pin_sym(x) == 0;               // empty/anonymous symbol name -> nil (pin lockstep)
+  if (twop(x)) {                                     // a product of nothings is nothing
+    do { if (g_mag(A(x))) return false; x = B(x); } while (twop(x));
+    return true; }                                   // (like an array of zero norm; mag lockstep)
   return tupp(x) && g_all_zero(tuple(x)); }          // boxed scalar <=0 / array norm 0
 
 // Truncation toward zero / float remainder. Pure, freestanding-safe (no libm):
@@ -566,15 +570,15 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
 #define nifs(_) \
  _(nif_clock, "clock", s1(g_vm_clock)) _(nif_gauge, "gauge", s1(g_vm_gauge))\
  _(nif_add, "+", s2(g_vm_add)) _(nif_sub, "-", s2(g_vm_sub)) _(nif_mul, "*", s2(g_vm_mul))\
- _(nif_quot, "/", s2(g_vm_quot)) _(nif_fquot, "//", s2(g_vm_fquot)) _(nif_rem, "mod", s2(g_vm_rem)) \
+ _(nif_quot, "/", s2(g_vm_quot)) _(nif_fquot, "//", s2(g_vm_fquot)) _(nif_rem, "%", s2(g_vm_rem)) \
  _(nif_lt, "<", s2(g_vm_lt))  _(nif_le, "<=", s2(g_vm_le)) _(nif_eq, "=", s2(g_vm_eq))\
  _(nif_ge, ">=", s2(g_vm_ge))  _(nif_gt, ">", s2(g_vm_gt)) \
  _(nif_same, "idp", s2(g_vm_same)) \
  _(nif_bsl, "<<", s2(g_vm_bsl)) _(nif_bsr, ">>", s2(g_vm_bsr))\
  _(nif_band, "&", s2(g_vm_band)) _(nif_bor, "|", s2(g_vm_bor)) _(nif_bxor, "^", s2(g_vm_bxor))\
- _(nif_cons, "cons", s2(g_vm_cons)) _(nif_car, "cap", s1(g_vm_car)) _(nif_cdr, "cbp", s1(g_vm_cdr)) _(nif_sort, "sort", s1(g_vm_sort)) \
- _(nif_slice, "slice", s3(g_vm_slice)) _(nif_scat, "scat", s2(g_vm_scat)) \
- _(nif_fread, "fread", s2(g_vm_fread))\
+ _(nif_cons, "cons", s2(g_vm_cons)) _(nif_car, "cap", s1(g_vm_car)) _(nif_cdr, "cbp", s1(g_vm_cdr)) _(nif_sort, "sort", s1(g_vm_sort)) _(nif_tally, "tally", s1(g_vm_tally)) \
+ _(nif_slice, "slice", s3(g_vm_slice)) \
+ _(nif_read, "read", s2(g_vm_read))\
  _(nif_string, "string", s1(g_vm_string))\
  _(nif_intern, "intern", s1(g_vm_intern)) _(nif_nom, "nom", s1(g_vm_nom))\
  _(nif_lamb, "lamb", s1(g_vm_lamb))\
@@ -728,7 +732,7 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   // with a left operand available the symbol captures it and collects arity-1
   // more datums, nesting right-associatively; with no left operand it reads
   // as the plain symbol ((+) passes + as a value, '+ quotes it).
-  { char const *const ops2[] = { "+", "-", "*", "/", "=", "<", "<=", ">", ">=", "|", "&" };
+  { char const *const ops2[] = { "+", "-", "*", "/", "%", "=", "<", "<=", ">", ">=", "|", "&" };
    g = map_new(g);                                  // sp[0] = the table
    for (uintptr_t i = 0; i < countof(ops2) + 1; i++) {
     g = intern(g_strof(g, i < countof(ops2) ? ops2[i] : "?"));
@@ -736,10 +740,6 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
     if (g_ok(g)) {                                  // swap to (key val map) = (sym arity table)
      word t = g->sp[0]; g->sp[0] = g->sp[1], g->sp[1] = t;
      g = g_mapput(g); } }                           // -> sp[0]=table
-   g = intern(g_strof(g, "mod"));                   // % aliases: entry (mod . 2)
-   g = gxr(g_push(g, 1, putfix(2)));                // [(mod . 2) table]
-   g = intern(g_strof(g, "%"));                     // [% (mod.2) table]
-   g = g_mapput(g);                                 // -> [table]
    g = intern(g_strof(g, "pin"));                   // <- aliases pin: (t <- k v)
    g = gxr(g_push(g, 1, putfix(3)));
    g = intern(g_strof(g, "<-"));
@@ -2113,7 +2113,9 @@ static intptr_t g_mag(word x) {
   switch (typ(x)) {
     default: return 1;                                          // unknown present data kind -> truthy
     case KString: return len(x);                                 // string: byte count
-    case KTwo: { intptr_t l = 0; word p = x; do l++, p = B(p); while (twop(p)); return l; }  // list
+    case KTwo: { intptr_t l = 0; word p = x;                     // list: count the elements that are
+      do l += g_mag(A(p)) ? 1 : 0, p = B(p); while (twop(p));    // themselves something -- a product of
+      return l; }                                                // nothings is nothing (nilp lockstep)
     case KBig: return fix_max;                                  // |bignum| > fix_max: saturate
     case KSym: return pin_sym(x);                                // symbol: name length (0 if anonymous/empty)
     case KTuple: { struct g_tuple *v = tuple(x);                 // boxed scalar or rank-n array
@@ -2869,7 +2871,7 @@ g_vm(g_vm_real) {
  Sp[0] = word(r);
  return Ip++, Continue(); }
 
-g_vm(g_vm_fread) {
+g_vm(g_vm_read) {
  Ip++;
  if (!iop(Sp[0])) return Sp++, Continue();
  struct g_io *i = (struct g_io*) Sp[0];
@@ -3551,25 +3553,6 @@ g_vm(g_vm_slice) {
    Sp[2] = (word) t; } }
  return Ip += 1, Sp += 2, Continue(); }
 
-g_vm(g_vm_scat) {
- intptr_t a = Sp[0], b = Sp[1];
- if (!strp(a)) Sp += 1;
- else if (!strp(b)) Sp[1] = a, Sp += 1;
- else if (a == EmptyString && b == EmptyString) *++Sp = EmptyString;  // both empty -> singleton
- else {
-  struct g_str *x = str(a), *y = str(b), *z;
-  uintptr_t
-   len = len(x) + len(y),
-   req = str_type_width + b2w(len);
-  Have(req);
-  x = str(Sp[0]), y = str(Sp[1]);               // re-read post-Have
-  z = (struct g_str*) Hp;
-  Hp += req;
-  ini_str(z, len);
-  memcpy(txt(z), txt(x), len(x));
-  memcpy(txt(z) + len(x), txt(y), len(y));
-  *++Sp = word(z); }
- return Ip++, Continue(); }
 
 // A buf has no function meaning, so applying it behaves as 0 (yields 1, the const-1
 // identity numeral) -- like every structureless value. Its address is still the
@@ -5270,6 +5253,16 @@ static intptr_t cmp3(struct g *g, word a, word b) {
 // prelude's `sort` dispatches (<)/(>) here (descending = rev) and keeps the
 // lisp merge sort for arbitrary predicates. A non-pair passes through; a
 // 1-element list returns itself (identity preserved, like the lisp sort).
+// (tally l): the spine length of a list -- the number of pairs, blind to the
+// elements (unlike $, which counts only the sat ones: a product of nothings
+// is nothing, but it still has a length). the compiler's frame arithmetic
+// runs on tally; the egg pulls it at birth with the other internals.
+g_vm(g_vm_tally) {
+ word l = Sp[0]; intptr_t n = 0;
+ while (twop(l)) n++, l = B(l);
+ Sp[0] = putfix(n);
+ return Ip++, Continue(); }
+
 g_vm(g_vm_sort) {
  word l = Sp[0];
  if (!twop(l) || !twop(B(l))) return Ip++, Continue();

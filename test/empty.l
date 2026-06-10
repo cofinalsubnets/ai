@@ -1,4 +1,4 @@
-; "" is a distinct empty-string object -- the identity element for + (and scat)
+; "" is a distinct empty-string object -- the identity element for +
 ; over strings. It is falsy (an empty container), but NOT the number 0: 0 (nil) is
 ; still tolerated as an "empty" argument by the lenient string ops, and "" prints
 ; and compares as a string, yet the two are distinguishable objects.
@@ -15,14 +15,14 @@
   (= 0 (sat ""))
   (= 0 (sat 0))
 
-  ; + / scat: "" is a two-sided identity, and joining empties yields ""
+  ; +: "" is a two-sided identity, and joining empties yields ""
   (= "ab" (+ "" "ab"))   (= "ab" (+ "ab" ""))
-  (= "ab" (scat "ab" ""))   (= "ab" (scat "" "ab"))
-  (= "" (scat "" ""))                        ; empty join -> the empty string
-  (strp (scat "" ""))                        ; ... still a string, not 0
-  ; 0 is still accepted as an empty operand by scat (non-strings are dropped)
-  (= "ab" (scat "ab" 0))   (= "ab" (scat 0 "ab"))
-  (= 0 (scat 0 0))
+  (= "ab" (+ "ab" ""))   (= "ab" (+ "" "ab"))
+  (= "" (+ "" ""))                        ; empty join -> the empty string
+  (strp (+ "" ""))                        ; ... still a string, not 0
+  ; scat is gone; + takes the byte law instead: 0 is byte 0, not an empty operand
+  (= 3 (sat (+ "ab" 0)))  (= 0 ((+ "ab" 0) 2))
+  (= 0 (+ 0 0))
 
   ; slice: an empty slice collapses to 0 (no string object is built)
   (= 0 (slice "abc" 1 1))

@@ -13,7 +13,7 @@
  (= 1 (3 = 3.0)) (= 0 (3 = 4))
  (= 1 (1 < 2)) (= 1 (1 <= 1)) (= 1 (2 > 1)) (= 1 (2 >= 2)) (= 0 (2 < 1))
  (= 15 (8 | 4 | 2 | 1)) (= 0 (5 & 2)) (= 7 (5 | 2))
- (= 1 (5 % 2)) (= 'mod (cap (cap '(5 % 2))))        ; % is an alias entry: desugars to mod
+ (= 1 (5 % 2)) (= '% (cap (cap '(5 % 2))))          ; % is a plain dyadic infix (mod is gone)
 
  ; right-associativity; parens override
  (= 7 (1 + 2 * 3))                              ; (+ 1 (* 2 3))
@@ -39,7 +39,7 @@
  (= 4 ($"ab" + 2)))
 
 ; incomplete: "(1 +" pends -> the port comes back
-(: p (sip '(40 49 32 43)) (assert (= p (fread p 99))))
+(: p (sip '(40 49 32 43)) (assert (= p (read p 99))))
 
 ; extensible with a plain pin; cleaned up after
 (: ** pow)

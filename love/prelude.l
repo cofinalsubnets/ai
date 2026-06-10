@@ -7,6 +7,7 @@
 (: pi 3.141592653589793
    e 2.718281828459045                          ; Euler's number; exp is (\ x (x e))
    true 1 false 0
+   non nilp                                     ; the normal name; !$x reads "non sat x"
    (atomp x) (nilp (twop x))
    caap (co cap cap) cabp (co cap cbp)
    cbap (co cbp cap) cbbp (co cbp cbp))
@@ -22,12 +23,12 @@
 (: (clift x) (plex (re x) (- 0 (im x))))
 ; integer power (b ** k) is just numeral application: (k b) == b**k. The squaring
 ; algorithm lives in `ipow`, local to the num-ap block below, so there is no `**`.
-(: (gcd a b) (? (= b 0) (? (< a 0) (- 0 a) a) (gcd b (mod a b)))
-   (modpow b k m) (? (< k 1) 1 (: h (modpow b (// k 2) m) h2 (mod (* h h) m)
-                                 (? (= 0 (mod k 2)) h2 (mod (* h2 b) m)))))
+(: (gcd a b) (? (= b 0) (? (< a 0) (- 0 a) a) (gcd b (% a b)))
+   (modpow b k m) (? (< k 1) 1 (: h (modpow b (// k 2) m) h2 (% (* h h) m)
+                                 (? (= 0 (% k 2)) h2 (% (* h2 b) m)))))
 ; functional bounded draw: (value . st') with value in [0,n), riding rand-next
 ; (full-width draw) + modulo. The global-stream analogue is the `rand` nif.
-(: (randint st n) (: r (rand-next st) (cons (mod (cap r) n) (cbp r))))
+(: (randint st n) (: r (rand-next st) (cons (% (cap r) n) (cbp r))))
 (: caaap (co cap caap) caabp (co cap cabp)
    cabap (co cap cbap) cabbp (co cap cbbp)
    cbaap (co cbp caap) cbabp (co cbp cabp)
@@ -39,12 +40,11 @@
    puts (fputs out)
    putn (fputn out)
    putx (fputx out)
-   (getc _) (fgetc in)
-   read (fread in))
-; the infix aliases are plain globals too, so escaping works like (+)/'+ --
-; ((->) t k d) peeps, ((%) 5 2) is mod. (punct names can't sit in `:` binding
-; position -- they'd capture the `:` -- so pin dict directly.)
-(: _ (pin dict '<- pin) _ (pin dict '-> peep) (pin dict '% mod))
+   (getc _) (fgetc in))
+; the accessor aliases are plain globals too, so escaping works like (+)/'+ --
+; ((->) t k d) peeps. (punct names can't sit in `:` binding position -- they'd
+; capture the `:` -- so pin dict directly.)
+(: _ (pin dict '<- pin) (pin dict '-> peep))
 ; fixnum-as-function application, pinned on dict for the VM's apply path: applying a
 ; fixnum n to x is Church-numeral application -- numeric x exponentiates (x ** n), a
 ; function x composes ($ n) times. n<1 -> 1 (itself the identity numeral: (1 x) == x
@@ -70,7 +70,7 @@
    (intp n) (| (fixp n) (| (boxp n) (bigp n)))       ; integer-valued numeral (exact power exponent / composition count)
    ; b ** k by exact squaring (O(log k)); k>=0. The lone home of integer power --
    ; (k b) numeral application routes here, so `**` is unneeded.
-   (ipow b k) (? (< k 1) 1 (: h (ipow b (// k 2)) h2 (* h h) (? (= 0 (mod k 2)) h2 (* h2 b))))
+   (ipow b k) (? (< k 1) 1 (: h (ipow b (// k 2)) h2 (* h h) (? (= 0 (% k 2)) h2 (* h2 b))))
    ; x ** n across the whole tower. array exponent -> elementwise pow (broadcasts
    ; via the vmap2 engine, float result); integer exponent -> exact squaring, with
    ; a NEGATIVE integer giving the reciprocal power (so (-1 x) == (/ 1 x) and
@@ -170,7 +170,7 @@
                    (: _ (pin dict 'rng-state st) st)
                    0)
    (rand n) (: r (rand-next (rng-get 0)) _ (pin dict 'rng-state (cbp r))
-               (? (&& (fixp n) (< 0 n)) (mod (cap r) n) (cap r)))
+               (? (&& (fixp n) (< 0 n)) (% (cap r) n) (cap r)))
    (randf _) (: r (randf-next (rng-get 0)) _ (pin dict 'rng-state (cbp r)) (cap r)))
 ; readability / lisp-compat aliases by head-symbol substitution.
 ; do/begin/progn sequence side effects and return the last (identical to the
@@ -218,7 +218,7 @@
 (: (a-rank x) (? (flop x) 1 (| (fixp x) (boxp x)) 0 (comp x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
    (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) z (= k 1) r (= k 2) c o))
-   (a-dim d) (sat d)
+   (a-dim d) (? (twop d) (tally d) (sat d))
    (a-shape s) (? (twop s) (map a-dim s) (L (a-dim s))))
 
 ; tuple/hash value constructors (also the read-back targets of the `@(…)` / `#(…)`
@@ -230,8 +230,8 @@
 ; (hash) = empty; (hash x) boxes a scalar -- a fresh mutable hash pinning x
 ; to the () key, so #5 = #(() 5); pairs pin as usual, and an odd trailing
 ; operand lands in the () box slot.
-(: (hashtx a) (? (nilp a) '(table 0)
-                 (nilp (cbp a)) (list 'pin (hashtx 0) '() (cap a))
+(: (hashtx a) (? (atomp a) '(table 0)
+                 (atomp (cbp a)) (list 'pin (hashtx 0) '() (cap a))
                  (list 'pin (hashtx (cbbp a)) (cap a) (cabp a))))
 (:: 'hash (\ a (hashtx a)))
 

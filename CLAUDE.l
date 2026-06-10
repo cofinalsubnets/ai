@@ -71,16 +71,23 @@
 (: (twice f x) (f (f x)) (assert (12 = (twice inc 10))))
 
 ; --- true and false --- false is *nothing*: a scalar that sorts <= 0 in the total order, an
-; empty container, or an array of zero norm. everything positive/nonempty is true. there is no
-; "truthy"/"falsy" -- true and false are the bits 1 and 0 of the `!!$` projection. `$` (sat) measures
-; a value (its size/magnitude, 0 when empty or <= 0); `!` is the falsity oracle, with the
-; invariant !x == (0 = $x). so `!!$x` is x's truth bit and `!` negates it.
+; empty container, an array of zero norm -- or a PRODUCT OF NOTHINGS, which is nothing too:
+; on a list, $ counts the elements that are themselves something (by magnitude, like the
+; array norm, so '(-5) stays true like @(-5)), recursively, so a list of ()s or 0s collapses.
+; maps stay key-counted: presence is information there, and #0 must stay truthy. everything
+; positive/nonempty is true. there is no "truthy"/"falsy" -- true and false are the bits 1
+; and 0 of the `!!$` projection. `$` (sat) measures a value (its size/magnitude, 0 when
+; empty or <= 0); `!` is the falsity oracle (the nif `nilp`, the classical name; `non` is
+; its normal alias, so !$x reads "non sat x"), with the invariant !x == (0 = $x).
 (assert
  !0 !"" !#() !@0 !() !0.0 !~(0 0)                ; zero / empty -> false
  !-5 !-3.9 !~(-3 4) !~(0 -1)                     ; <= 0 in the total order -> false (complex by re then im)
  !!5 !!"x" !!'a !!cap !!i !!~(3 -4) !!@(-3 -4)     ; positive / nonempty / nonzero-norm -> true
+ !'(() ()) !'(0 0) !'((0) (())) (0 = $'(() () ()))  ; a product of nothings is nothing, recursively
+ (2 = $'(1 () 2)) !!'(0 1) !!'(-5)               ; $ counts the sat elements; magnitude like arrays
+ (1 = $#0) !!#0                                  ; ... but a box stays truthy: maps count keys
  (1 = !!$5) (0 = !!$0) (0 = !!$-3)               ; !!$ is the truth bit (1 true, 0 false)
- (0 = !5) (1 = !0)                               ; ! negates it
+ (0 = !5) (1 = !0) (idp non nilp) (1 = (non 0))  ; ! negates it; non is nilp
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
 
 ; --- types & predicates --- a fixnum is a tagged word; everything else is a heap object whose
@@ -103,10 +110,11 @@
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
  (5.0 = (abs ~(3 4))) (~(2.0 3.0) = 2 + 3 * i))  ; mixed arithmetic widens to the higher tier
 
-; --- arithmetic --- + - * / // mod (infix %). fixnum fast path; a float makes it float; integer
+; --- arithmetic --- + - * / // % (infix, like the rest). fixnum fast path; a float makes it
+; float; integer
 ; overflow grows fixnum -> wide box -> bignum; a non-number gives nil. `/` is *true* division --
 ; an inexact integer quotient promotes to float ((/ 1 2) is 0.5) but an exact one stays integer
-; ((/ 4 2) is 2); /0 gives IEEE inf/nan. `//` truncates toward zero (the partner of `mod`).
+; ((/ 4 2) is 2); /0 gives IEEE inf/nan. `//` truncates toward zero (the partner of `%`).
 ; bitwise << >> & | ^ on integers (complement is (^ x -1)).
 (assert
  (3 = 1 + 2) (2.5 = 5 / 2) (2 = (// 5 2)) (0.5 = 1 / 2) (1 = 5 % 2) (3.5 = 1 + 2.5)
@@ -240,12 +248,13 @@
 ; a string indexes its bytes ("abc" 0 -> 97). $ (sat) is a *saturating* size:
 ; a container's count, a symbol's name length, a number's ceil-magnitude clamped to >= 0
 ; ($-3.9 = 0), or an array's ceil L2 norm -- so $ and abs diverge ((abs -5) = 5 but $-5 = 0).
-; slice takes a half-open slice; scat concatenates ("" is the identity); string coerces; \n escapes.
+; slice takes a half-open slice; + concatenates ("" is the identity; scat is gone); string
+; coerces; \n escapes.
 (assert
  (symp ()) !(() = 0) (idp () (intern "")) (idp () '()) (0 = $()) !() !!$'x
  ('x = () + 'x) ("()" = (show ()))
  (97 = ("abc" 0)) (3 = $"abc") (4 = $3.9) (0 = $-3.9) (5 = $@(3 4)) (5 = (abs -5))
- ("bidden" = (slice "forbidden planet" 3 9)) ("abcd" = (scat "ab" "cd")) (1 = ("hi" 9))
+ ("bidden" = (slice "forbidden planet" 3 9)) ("abcd" = (+ "ab" "cd")) (1 = ("hi" 9))
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))
  ("\"a\\nb\"" = (show "a\nb")) ("$x" = (show (nom "x"))))
 
@@ -286,7 +295,7 @@
 ; @ tup (array), ` quasiquote; , unquote, ,@ splice, and ~ wave (complex/conjugate) stay
 ; reader digraphs (~(re im) splices to (plex re im); a bare ~x is (clift x)). infix:
 ; + - * / = < <= > >= | & ship dyadic and ? ternary -- the cond form infix, (t ? a b);
-; aliases ride (name . arity) entries: % is mod, and the accessors go infix as <- pin and
+; aliases ride (name . arity) entries: the accessors go infix as <- pin and
 ; -> peep, collection-first -- (t <- k v) pins (giving back t, so it chains), (t -> k d)
 ; peeps. (1 + 2) reads ((+ 1 2)) and evaluates via (f) == f.
 (assert
@@ -298,7 +307,7 @@
  (12 = (foldl (+) 0 '(3 4 5)))
  (: t operators (&& (mapp t) ('sat = (t ("$" 0))) ('hash = (t ("#" 0)))))
  (: t infix
-    (&& (mapp t) (2 = (t '+)) (3 = (t '?)) ('mod = (cap (t '%))))))
+    (&& (mapp t) (2 = (t '+)) (3 = (t '?)) (2 = (t '%)))))
 
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships
 ; do/let/if/cond/quote, && and || (short-circuiting), L/list, tuple/map/array, the body-first
@@ -326,16 +335,17 @@
  (sing? 1) !(sing? 3) (eof? 3) !(eof? 2) (more? 2) !(more? 3) (lamp sing)
  (: st (rng-seed 7) ((cap (rand-next st)) = (cap (rand-next st)))))
 
-; --- i/o & ports --- `in`/`out` are the default ports; the prelude wraps getc/read and
-; putc/puts/putn/putx, with per-port fgetc/fputc/.../fread plus open/close/sip/pad/slurp.
-; fread reads one datum per call; its end conditions route through the trap continuation via
+; --- i/o & ports --- `in`/`out` are the default ports; the prelude wraps getc and
+; putc/puts/putn/putx, with per-port fgetc/fputc/.../read plus open/close/sip/pad/slurp.
+; `read` (the renamed fread) is port-first -- (read in x) -- and reads one datum per
+; call; its end conditions route through the trap continuation via
 ; the status more bit, and the default trap delivers a sentinel at EOF, the port back when
 ; incomplete (a global `trap` function takes over that dispatch). `dot` (the `.` operator)
 ; prints x to `out` -- raw bytes for a string, else the show form -- and returns
 ; x, so .x taps a value mid-expression.
 (assert
  (strp (show out)) ("hi" = (slurp (sip '(104 105)))) (: o (pad 0) _ (fputx o 42) ("42" = (page o)))
- (1 = (fread (sip '(49)) 99)) ('eof = (fread (sip 0) 'eof)) (: p (sip '(40)) (p = (fread p 99))))
+ (1 = (read (sip '(49)) 99)) ('eof = (read (sip 0) 'eof)) (: p (sip '(40)) (p = (read p 99))))
 
 ; --- bootstrapping --- the C core is minimal; the key semantics are l closures installed
 ; from the prelude and shared by both compilers:
@@ -351,7 +361,10 @@
 ; the hatchling installs as `ev`, baked into the image at C compile time, no allocation;
 ; `born` records the hatch time (unbound pre-egg: love0's first corpus pass runs PRE-egg,
 ; and an absent global reads as nil). before it is born the egg PULLS every runtime-
-; internal name: the raw cell nifs (peek poke seek; lamb stays), the compiler's machinery
+; internal name: the raw cell nifs (peek poke seek lamb -- (lamb 2 3) is a segfault, big
+; scare; lamb is still there for real, it's ultimate), tally (the spine length of a list,
+; blind to its elements -- the compiler's frame arithmetic runs on it; $ counts only the
+; sat elements, so post-birth code wanting a structural length folds), the compiler's machinery
 ; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
 ; lives on inside the compiler's closures), the repl sentinels, every hot g_vm_* pointer,
 ; and finally `dict` itself. compiled references were folded, so only the names die.
@@ -360,7 +373,7 @@
 (assert (lamp ev) (? born (fixp born) 1)
         (? born !macros 1) (? born !poke 1)     ; post-birth the names are gone
         (? born !boxfix 1) (? born !g_vm_ret 1) ; (pre-egg they still exist,
-        (? born !dict 1))                       ;  hence the born guards)
+        (? born !lamb 1) (? born !dict 1))      ;  hence the born guards)
 
 ; --- under the hood --- a generic op dispatches on a value's kind (an enum whose order is the
 ; lattice above). a dyadic op is an NxN table indexed by the two kinds; a monadic op is its

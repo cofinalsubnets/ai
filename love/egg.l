@@ -13,7 +13,7 @@
  ; the sweep runs through the FRESH ev -- c0 is done by now, and
  ; late-binding through dict['ev] is the egg's own idiom.
  _ ((peep dict 'ev 0)
-    '(: _ (each '(peek poke seek macros
+    '(: _ (each '(peek poke seek lamb tally macros
                   boxfix boxfix-core boxset cellbinds dsug lambp lp ln w wl mkcs
                   hashtx qql qqx wevs apx iop do_eval
                   numfn nfa nfq nfnest powg ipow

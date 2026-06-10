@@ -78,7 +78,7 @@
 
  ; --- % is undefined on complex; sin stays real-domain (-> nil); sqrt is ((/ 1 2) x)
  ;     and now works on a complex (via pow); plex rejects a complex part ---
- (nilp (mod i 2))
+ (nilp (% i 2))
  (nilp (sin i))   (close 0.7071067811865476 (re ((/ 1 2) i)))   (nilp (plex 1 i))
  ; pow IS defined on complex: w^z = exp(z Log w). i^2 = -1, i^i = e^(-pi/2) (real)
  (close -1 (re (pow i 2)))   (close 0 (im (pow i 2)))
@@ -147,7 +147,7 @@
  (= 1 (peep (= ca-v ca-v) 0 0))
  (= 0 (peep (= ca-v (arr c '(2) (L ~(9 9) ~(3 4)))) 0 0))
  (aall (= ca-v ca-v))
- (nilp (< ca-v ca-v))   (nilp (> ca-v ca-v))   (nilp (mod ca-v ca-v))
+ (nilp (< ca-v ca-v))   (nilp (> ca-v ca-v))   (nilp (% ca-v ca-v))
 
  ; --- reductions: complex sum / product; max/min unordered -> nil ---
  (= ~(4 6) (asum ca-v))                         ; (1+2i)+(3+4i)

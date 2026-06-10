@@ -58,7 +58,7 @@
 ; The SURFACE block below (collect/tcollect + rn with its :-/let/qq handling) stays in
 ; lcat2: it is exactly the un-expanded-source adaptation the compiler no longer needs. ===
 (: (sl-char d) (? (< d 26) (+ 97 d) (+ 65 (- d 26)))   ; shortlex over a-zA-Z (bijective base-52):
-   (sl-digits n acc) (? (< n 1) acc (: m (+ -1 n) (sl-digits (/ m 52) (cons (sl-char (mod m 52)) acc))))
+   (sl-digits n acc) (? (< n 1) acc (: m (+ -1 n) (sl-digits (/ m 52) (cons (sl-char (% m 52)) acc))))
    (shortlex k) (string (sl-digits (+ 1 k) 0))         ; 0->a .. 25->z 26->A .. 51->Z 52->aa
    (freshname? nm) (= 0 (peep cnt nm 0))                ; nm occurs as no source symbol
    (avail? nm u) (&& (freshname? nm) !(memq nm u))     ; ..and not live on this path
@@ -124,16 +124,16 @@
 ; --- minify (identical to lcat): drop a space only where the two flanking bytes
 ; re-parse to the same datum count without it; then C-escape the survivors. ---
 (: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peep s i 0) (g (+ 1 i))))) 0)
-   (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
+   (nforms s) ((: (g p e n) (: r (read p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
                (sip (s2cl s)) (nom 0) 0)
    (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
    (eb c) (? (= c 10) (fputs out "\\n")
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
               (fputc out c)))
 
-(: (readforms p e) (: r (fread p e) (? (= e r) 0 (cons r (readforms p e))))
+(: (readforms p e) (: r (read p e) (? (= e r) 0 (cons r (readforms p e))))
    (joinforms fs) (? (atomp fs) "" (atomp (cbp fs)) (show (rn (cap fs) 0 0 1 rn))
-       (scat (scat (show (rn (cap fs) 0 0 1 rn)) " ") (joinforms (cbp fs))))
+       (+ (+ (show (rn (cap fs) 0 0 1 rn)) " ") (joinforms (cbp fs))))
    (emit acc) (: _ (fputc out 34)
        _ ((: (g i pc instr) (? (< i (sat acc))
             (: c (peep acc i 0) (? instr

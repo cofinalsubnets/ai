@@ -16,7 +16,7 @@
  (= 0.5 (/ 1 2))
  (= 2 (// 5 2))                     ; `//` truncating integer division
  (= -2 (// -5 2))                   ; truncates toward zero (not floor -3)
- (= 1 (mod 5 2))
+ (= 1 (% 5 2))
 
  ; --- mixed fixp + flop promotes ---
  (= 3.5 (+ 1 2.5))
@@ -58,13 +58,13 @@
  !(= (/ 0 0) (/ 0 0))
 
  ; --- rem via fmod, works on floats and mixed ---
- (= 1.0 (mod 7.0 2.0))
- (= 1 (mod 7 2))
- (= 0.0 (mod 7.5 2.5))
- (= -1.0 (mod -7.0 2.0))
+ (= 1.0 (% 7.0 2.0))
+ (= 1 (% 7 2))
+ (= 0.0 (% 7.5 2.5))
+ (= -1.0 (% -7.0 2.0))
  ; % by zero is NaN (via fmod's identity), expressed as a real
- (flop (mod 7 0))
- (flop (mod 7.0 0.0))
+ (flop (% 7 0))
+ (flop (% 7.0 0.0))
 
  ; --- + is generic: string/list concat, order-preserving; - stays numeric (nil) ---
  (= "xB" (+ "x" 66))                ; str + num -> one byte at back (the byte law)

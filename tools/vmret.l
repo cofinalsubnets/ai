@@ -162,15 +162,15 @@
 
 ; --- report helpers --------------------------------------------------
 (: (basename p) ((: (f i last) (? (< i (sat p)) (f (+ i 1) (? (= 47 (peep p i 0)) (+ i 1) last)) (slice p last (sat p)))) 0 0)
-   (spaces n)    (? (< 0 n) (scat " " (spaces (- n 1))) "")
+   (spaces n)    (? (< 0 n) (+ " " (spaces (- n 1))) "")
    (str< a b)    ((: (f i) (? (>= i (sat a)) (< (sat a) (sat b))
                             (? (>= i (sat b)) 0
                                (: ca (peep a i 0) cb (peep b i 0)
                                   (? (< ca cb) 1 (? (> ca cb) 0 (f (+ i 1)))))))) 0)
    (maxlen fl)   (foldl (\ m e (: l (sat (cap e)) (? (< m l) l m))) 0 fl)
    (join-rets rs) (? (twop rs)
-                     (? (twop (cbp rs)) (scat (scat "0x" (cap rs)) (scat ", " (join-rets (cbp rs))))
-                                        (scat "0x" (cap rs)))
+                     (? (twop (cbp rs)) (+ (+ "0x" (cap rs)) (+ ", " (join-rets (cbp rs))))
+                                        (+ "0x" (cap rs)))
                      ""))
 
 ; sort the flagged entries by function name (ascending), matching .py.
@@ -189,8 +189,8 @@
          (? (= a "--objdump")
             (? (twop (cbp args)) (parse-args (cbp (cbp args)) path prefix (cap (cbp args))) (die "missing argument for --objdump"))
          (? (|| (= a "-h") (= a "--help")) (usage 0)
-         (? (dash? a) (die (scat "unknown option: " a))
-         (? path (die (scat "unexpected argument: " a))
+         (? (dash? a) (die (+ "unknown option: " a))
+         (? path (die (+ "unexpected argument: " a))
             (parse-args (cbp args) a prefix od)))))))
       (L path prefix od)))
 
@@ -211,13 +211,13 @@
    _        (? path 0 (die "usage: vmret.l ELF [--prefix PREFIX] [--objdump PATH]"))
    base     (basename path)
    port     (open path "r")
-   _        (? port 0 (die (scat "cannot open " path)))
+   _        (? port 0 (die (+ "cannot open " path)))
    hdr      (slurp port)                                 ; whole image: e_ident/e_machine + .symtab
    _        (close port)
    _        (? (&& (= 127 (peep hdr 0 0)) (&& (= 69 (peep hdr 1 0)) (&& (= 76 (peep hdr 2 0)) (= 70 (peep hdr 3 0))))) 0
-               (die (scat path ": not an ELF file")))
+               (die (+ path ": not an ELF file")))
    _        (? (&& (= 2 (peep hdr 4 0)) (= 1 (peep hdr 5 0))) 0
-               (die (scat path ": not ELF64 little-endian")))
+               (die (+ path ": not ELF64 little-endian")))
    sizes    (symtab-sizes hdr)                           ; function start address -> byte size
    mach     (| (peep hdr 18 0) (<< (peep hdr 19 0) 8))
    x86?     (= mach 62)
@@ -236,7 +236,7 @@
    _        (? chosen 0 (die "no disassembler found (tried llvm-objdump, objdump); pass --objdump"))
    status   (cap (cbp chosen))
    output   (cbp (cbp chosen))
-   _        (? (= 0 status) 0 (die (scat (scat (cap chosen) " failed: status ") (show status))))
+   _        (? (= 0 status) 0 (die (+ (+ (cap chosen) " failed: status ") (show status))))
    scanned  (scan-all (lines output) prefix ret? sizes)
    flagged  (cap scanned)
    total    (cbp scanned)

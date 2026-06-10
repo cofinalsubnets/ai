@@ -67,18 +67,18 @@
  (fz-ok 300 9 fz-num (\ a (= a (* a 1))))
  ; divmod identity: a = (a//b)*b + a%b, and the remainder is smaller in magnitude
  (fz-ok 400 10 (fz-pair2 fz-num fz-num-nz)
-   (\ v (= (cap v) (+ (* (// (cap v) (cabp v)) (cabp v)) (mod (cap v) (cabp v))))))
+   (\ v (= (cap v) (+ (* (// (cap v) (cabp v)) (cabp v)) (% (cap v) (cabp v))))))
  ; remainder sign follows the dividend (truncated division)
  (fz-ok 400 11 (fz-pair2 fz-fix fz-fix-nz)
-   (\ v (: r (mod (cap v) (cabp v)) (|| (= r 0) (= (< r 0) (< (cap v) 0))))))
+   (\ v (: r (% (cap v) (cabp v)) (|| (= r 0) (= (< r 0) (< (cap v) 0))))))
  ; exact-power recurrence and the float-free modpow against ** then %
  (fz-ok 300 12 (fz-pair2 (fz-int -6 7) (fz-nat 14))
    (\ v (= ((+ 1 (cabp v)) (cap v)) (* (cap v) ((cabp v) (cap v))))))
  (fz-ok 250 13 (fz-trip (fz-nat 30) (fz-nat 14) (fz-int 2 500))
-   (\ v (= (modpow (cap v) (cabp v) (cabbp v)) (mod ((cabp v) (cap v)) (cabbp v)))))
+   (\ v (= (modpow (cap v) (cabp v) (cabbp v)) (% ((cabp v) (cap v)) (cabbp v)))))
  ; gcd divides both arguments
  (fz-ok 300 14 (fz-pair2 fz-fix-nz fz-fix-nz)
-   (\ v (: g (gcd (cap v) (cabp v)) (&& (= 0 (mod (cap v) g)) (= 0 (mod (cabp v) g)))))))
+   (\ v (: g (gcd (cap v) (cabp v)) (&& (= 0 (% (cap v) g)) (= 0 (% (cabp v) g)))))))
 
 ; ---- number-as-function application (Church numerals), deliberately bounded ----
 ; applying a fixnum n is Church-numeral application: a numeric operand m gives
@@ -105,20 +105,21 @@
    (\ v (= (sat (cat (cap v) (cabp v))) (+ (sat (cap v)) (sat (cabp v))))))   ; cat length
  (fz-ok 300 24 (fz-pair2 fz-l fz-l)
    (\ v (= (rev (cat (cap v) (cabp v))) (cat (rev (cabp v)) (rev (cap v))))))  ; rev of cat
- (fz-ok 300 25 fz-l (\ l (= (sat (map (+ 1) l)) (sat l))))             ; map preserves length
+ ; map preserves spine length ($ now counts sat elements, so count the spine explicitly)
+ (fz-ok 300 25 fz-l (\ l (: (ln x) (foldl (\ n _ (+ 1 n)) 0 x) (= (ln (map (+ 1) l)) (ln l)))))
  ; take n ++ drop n = identity, for n drawn within [0, pin]
  (fz-ok 300 26 (fz-bind fz-l (\ l (fz-map (\ n (L l n)) (fz-int 0 (+ 1 (sat l))))))
    (\ v (= (cap v) (cat (take (cabp v) (cap v)) (drop (cabp v) (cap v))))))
  ; filter keeps only matching elements and never grows the list
  (fz-ok 300 27 fz-l
-   (\ l (: p (\ x (= 0 (mod x 2))) (&& (all p (filter p l)) (<= (sat (filter p l)) (sat l))))))
+   (\ l (: p (\ x (= 0 (% x 2))) (&& (all p (filter p l)) (<= (sat (filter p l)) (sat l))))))
  ; an element consed on is found by memq
  (fz-ok 300 28 (fz-pair2 fz-elem fz-l) (\ v (memq (cap v) (cons (cap v) (cabp v))))))
 
 ; ---- print -> read round trip on random s-expressions ----
 ; reuses the io.c reader: serialize via show, re-read the bytes, expect equality.
 (: (fz-s2cl s) ((: (g i) (? (< i (sat s)) (cons (peep s i 0) (g (+ 1 i))))) 0)
-   (fz-rd x) (fread (sip (fz-s2cl (show x))) (nom 0))
+   (fz-rd x) (read (sip (fz-s2cl (show x))) (nom 0))
    fz-syms '(a b c d foo bar baz qux)
    fz-leaf (fz-oneof (L (fz-elt fz-syms) (fz-int -500 500)))
    (fz-sexp d) (? (< d 1) fz-leaf
@@ -142,16 +143,16 @@
  (fz-ok 250 42 fz-arrpair
    (\ v (= (asum (+ (cap v) (cabp v))) (+ (asum (cap v)) (asum (cabp v)))))))
 
-; ---- string operations: scat / slice / string / get / print->read ----
+; ---- string operations: + / slice / string / get / print->read ----
 ; fz-str draws a random byte string (length 0..mx, any byte 0..255 -- show's
 ; \xHH escaping round-trips them all). slice returns nil for an empty slice
-; (i==j), which scat and pin treat as "" but `=` does not, so any comparison
-; that can land on an empty slice routes through fz-norm (scat x "" coerces a
+; (i==j), which + and the old scat treat as "" but `=` does not, so any comparison
+; that can land on an empty slice routes through fz-norm (+ x "" coerces a
 ; nil/string to a string). fz-s2cl / fz-rd are the helpers from the round-trip
 ; section above (string->charlist, print->read).
 (: fz-byte (fz-int 0 256)                                  ; any byte 0..255
    (fz-cl->str cl) (? (twop cl) (string cl) "")            ; charlist -> string ("" for nil)
-   (fz-norm x) (scat x "")                                 ; nil|string -> string
+   (fz-norm x) (? x x "")                                  ; nil|string -> string
    (fz-str mx) (fz-map fz-cl->str (fz-list mx fz-byte))    ; string, pin 0..mx
    fz-s    (fz-str 12)
    fz-s2   (fz-pair2 fz-s fz-s)
@@ -163,27 +164,27 @@
    fz-s-ij (fz-bind fz-s (\ s (fz-bind (fz-int 0 (+ 1 (sat s)))
               (\ i (fz-map (\ j (L s i j)) (fz-int i (+ 1 (sat s)))))))))
 (assert
- ; scat: length adds, is associative, and "" is a two-sided identity
- (fz-ok 300 50 fz-s2 (\ v (= (sat (scat (cap v) (cabp v))) (+ (sat (cap v)) (sat (cabp v))))))
- (fz-ok 250 51 fz-s3 (\ v (= (scat (scat (cap v) (cabp v)) (cabbp v))
-                             (scat (cap v) (scat (cabp v) (cabbp v))))))
- (fz-ok 300 52 fz-s (\ s (= s (scat "" s))))
- (fz-ok 300 53 fz-s (\ s (= s (scat s ""))))
+ ; +: length adds, is associative, and "" is a two-sided identity
+ (fz-ok 300 50 fz-s2 (\ v (= (sat (+ (cap v) (cabp v))) (+ (sat (cap v)) (sat (cabp v))))))
+ (fz-ok 250 51 fz-s3 (\ v (= (+ (+ (cap v) (cabp v)) (cabbp v))
+                             (+ (cap v) (+ (cabp v) (cabbp v))))))
+ (fz-ok 300 52 fz-s (\ s (= s (+ "" s))))
+ (fz-ok 300 53 fz-s (\ s (= s (+ s ""))))
  ; slice: any split reconcatenates to the original; the full slice is the string
- (fz-ok 300 54 fz-s-i (\ v (= (cap v) (fz-norm (scat (slice (cap v) 0 (cbp v))
-                                            (slice (cap v) (cbp v) (sat (cap v))))))))
+ (fz-ok 300 54 fz-s-i (\ v (= (cap v) (fz-norm (+ (fz-norm (slice (cap v) 0 (cbp v)))
+                                            (fz-norm (slice (cap v) (cbp v) (sat (cap v)))))))))
  (fz-ok 300 55 fz-s (\ s (= s (fz-norm (slice s 0 (sat s))))))
  ; the slice length is j-i, and out-of-range indices clamp to [0, pin]
  (fz-ok 300 56 fz-s-ij (\ v (= (- (cabbp v) (cabp v)) (sat (slice (cap v) (cabp v) (cabbp v))))))
  (fz-ok 300 57 fz-s (\ s (= (fz-norm (slice s 0 (sat s))) (fz-norm (slice s -9 (+ 99 (sat s)))))))
  ; slice recovers the two operands of a scat
- (fz-ok 250 58 fz-s2 (\ v (= (cap v) (fz-norm (slice (scat (cap v) (cabp v)) 0 (sat (cap v)))))))
- (fz-ok 250 59 fz-s2 (\ v (= (cabp v) (fz-norm (slice (scat (cap v) (cabp v))
+ (fz-ok 250 58 fz-s2 (\ v (= (cap v) (fz-norm (slice (+ (cap v) (cabp v)) 0 (sat (cap v)))))))
+ (fz-ok 250 59 fz-s2 (\ v (= (cabp v) (fz-norm (slice (+ (cap v) (cabp v))
                               (sat (cap v)) (+ (sat (cap v)) (sat (cabp v))))))))
  ; string is identity on strings; charlist->string round-trips by bytes and length
  (fz-ok 300 60 fz-s (\ s (= s (string s))))
  (fz-ok 250 61 fz-cl1 (\ cl (= cl (fz-s2cl (string cl)))))
- (fz-ok 250 62 fz-cl1 (\ cl (= (sat cl) (sat (string cl)))))
+ (fz-ok 250 62 fz-cl1 (\ cl (: (ln x) (foldl (\ n _ (+ 1 n)) 0 x) (= (ln cl) (sat (string cl))))))
  ; get yields the default outside [0, pin)
  (fz-ok 300 63 fz-s (\ s (&& (= 'oob (peep s (sat s) 'oob)) (= 'oob (peep s -1 'oob)))))
  ; print -> read round trip over arbitrary byte strings

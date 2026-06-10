@@ -6,7 +6,7 @@ endif
 
 " symbol-constituent chars (the reader ends a token only on whitespace and
 " ( ) " ' ` , # ; ). operators @ # $ are excluded so they highlight standalone;
-" % is a plain symbol now (the infix mod alias).
+" % is a plain dyadic infix now (mod is gone).
 "  33 !  37 %  38 &  42 *  43 +  45 -  46 .  47 /  48-57 digits  58 :
 "  60-63 < = > ?  92 \  94 ^  95 _  124 |  126 ~   (@ = alphabetics)
 syn iskeyword @,33,37,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
@@ -20,17 +20,17 @@ syn keyword LoveFunc caaap caabp cabap cabbp cbaap cbabp cbbap cbbbp
 syn keyword LoveFunc id co const flip
 syn keyword LoveFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
 syn keyword LoveFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge msort
-syn keyword LoveFunc + - * / % mod < <= = >= > <- -> idp inc dec abs gcd modpow int
+syn keyword LoveFunc + - * / % < <= = >= > <- -> idp inc dec abs gcd modpow int
 syn keyword LoveFunc ~ << >> & \| ^
 syn keyword LoveFunc sin cos log pow plex re im conj arg clift
 syn keyword LoveFunc nump intp powg num-ap numfn randint
 syn keyword LoveFunc twop strp symp mapp lamp handlep tupp bigp boxp arrp comp flop fixp nilp atomp
 syn keyword LoveFunc arr array arank alen ashape atype asum aprod amax amin aall
 syn keyword LoveFunc a-rank a-shape a-type a-dim
-syn keyword LoveFunc string slice scat intern nom slurp show sip pad page
-syn keyword LoveFunc table keys dig sat peep pin pull buf blit
+syn keyword LoveFunc string slice intern nom slurp show sip pad page
+syn keyword LoveFunc table keys dig sat non peep pin pull buf blit
 syn keyword LoveFunc lamb peek poke seek trim
-syn keyword LoveFunc fgetc fungetc feof fputc fputs fputn fputx fflush fread
+syn keyword LoveFunc fgetc fungetc feof fputc fputs fputn fputx fflush read
 syn keyword LoveFunc putc puts putn putx getc read in out dot
 syn keyword LoveFunc ev call-cc yield spawn wait sleep done? kill key?
 syn keyword LoveFunc trap sing sing? more? eof?

@@ -3,7 +3,7 @@
 ; (l.h enum q): KFix | KTuple(rank-0 box: float/complex/wide-int) | KBig |
 ; KArrZ KArrR KArrC KArrO (the array tower) | KString KSym | KTwo(pair) | KLam.
 ; A monadic op is that matrix's diagonal. Three matrices are explicit tables in
-; l.c -- g_add_mx (+), g_mul_mx (*), g_apply_mx (apply); the rest (- / mod
+; l.c -- g_add_mx (+), g_mul_mx (*), g_apply_mx (apply); the rest (- / %
 ; < <= = >= >) are lane aps that refine the same lattice internally. This
 ; file pins EVERY cell with an assertion, so the coverage is auditable in one
 ; place -- and so a dispatch regression (e.g. a data-sentinel stride desync that
@@ -179,7 +179,7 @@
  (= 10 ((* mx-map (\ x (- x 1))) 2)))         ; a map composes too: m(2-1) = m 1 = 10
 
 ; ============================================================================
-; the other dyadic generic ops (lane aps, not explicit tables): -, /, mod,
+; the other dyadic generic ops (lane aps, not explicit tables): -, /, %,
 ; comparisons, =. Same lattice; these had no consolidated matrix test.
 ; ============================================================================
 (assert
@@ -198,10 +198,10 @@
  (nilp (/ "a" 2))                             ; non-numeric -> nil
 
  ; --- modulo `mod` (fmod on floats); UNDEFINED on complex (-> nil) ---
- (= 1 (mod 5 2))   (= 1.0 (mod 7.0 2.0))
- (= 2 (mod (100 2) 7))                     ; bignum mod fixnum
- (nilp (mod ~(1 2) 2))                       ; complex -> nil
- (nilp (mod "a" 2))                           ; non-numeric -> nil
+ (= 1 (% 5 2))   (= 1.0 (% 7.0 2.0))
+ (= 2 (% (100 2) 7))                     ; bignum mod fixnum
+ (nilp (% ~(1 2) 2))                       ; complex -> nil
+ (nilp (% "a" 2))                           ; non-numeric -> nil
 
  ; === ordered comparison (< <= > >=): a TOTAL ORDER over all values. Cross-kind =
  ; the enum q type lattice (the order the matrix DIAGONAL encodes), fixnum/number

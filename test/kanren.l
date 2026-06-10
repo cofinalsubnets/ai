@@ -4,7 +4,7 @@
   (loop k ks vs) (? ks
    (? (= k (cap ks)) vs (loop k (cbp ks) (cbp vs))))
   (loop k (cap d) (cbp d)))
- (dict_get d k) (: x (dict_has d k) (? x (cap x)))
+ (dict_get d k) (: x (dict_has d k) (? (twop x) (cap x)))
  (dict_set d k v) (cons (cons k (cap d)) (cons v (cbp d)))
  (anon? x) (&& (symp x) (symp (string x)))   ; string of a named sym is its name; of an anon sym, itself
  (var? x) (&& (twop x) (anon? (cbp x)))
@@ -41,7 +41,7 @@
  (est u v s) (:
   (walk u s) (? (nilp (var? u)) u
               (: t (has_s s u)
-               (? t (walk (cap t) s) u)))
+               (? (twop t) (walk (cap t) s) u)))
   x (walk u s) y (walk v s)
   (? (= x y) (sun s)
      (var? x) (sun (ext_s s x y))
@@ -50,12 +50,12 @@
      (et (est (cap x) (cap y)) (est (cbp x) (cbp y)) s))))
  (Run n ks g) (:
   (walk_star u s) (?
-   (var? u) (: t (has_s s u) (? t (walk_star (cap t) s) u))
+   (var? u) (: t (has_s s u) (? (twop t) (walk_star (cap t) s) u))
    (twop u) (cons (walk_star (cap u) s) (walk_star (cbp u) s))
    u)
   (reify st) (flip catmap ks (\ k
    (: it (has_s (cons (map cap (cap st)) (cbp st)) k)
-    (? it (L k (walk_star (cap it) st))))))
+    (? (twop it) (L k (walk_star (cap it) st))))))
   (map reify ((? n (stake n) slist) (g empty_dict)))))
 
 (:: 'zz (\ x (: s (nom 0) n (nom 0) m (nom 0) y (nom 0) x (cap x)

@@ -46,69 +46,69 @@
   ; Each call allocates a fresh port object.
   (: p (sip 0) q (sip 0) !(= p q))
 
-  ; --- fread: one datum per call from a port. ---
-  ; fread returns datum on success, the caller-supplied sentinel `e` on
+  ; --- read: one datum per call from a port. ---
+  ; read returns datum on success, the caller-supplied sentinel `e` on
   ; clean EOF, and the port itself on g_status_more (input ends inside an
   ; unfinished form). The port and `e` are distinct, so the caller can
   ; tell them apart by equality.
   ;
   ; Empty input: immediately hits EOF, returns the sentinel.
-  (= 99 (fread (sip 0) 99))
+  (= 99 (read (sip 0) 99))
   ; Caller chooses any sentinel value.
-  (= 'eof (fread (sip 0) 'eof))
+  (= 'eof (read (sip 0) 'eof))
 
   ; Single datum: number, symbol, list, quoted form, string literal.
-  (= 1 (fread (sip '(49)) 99))                          ; "1"
-  (= 'a (fread (sip '(97)) 99))                         ; "a"
-  (: r (fread (sip '(40 49 32 50 41)) 99)               ; "(1 2)"
+  (= 1 (read (sip '(49)) 99))                          ; "1"
+  (= 'a (read (sip '(97)) 99))                         ; "a"
+  (: r (read (sip '(40 49 32 50 41)) 99)               ; "(1 2)"
      (do (twop r) (= 1 (cap r)) (= 2 (cabp r))))
-  (: r (fread (sip '(39 49)) 99)                        ; "'1" -> (` 1)
+  (: r (read (sip '(39 49)) 99)                        ; "'1" -> (` 1)
      (do (twop r) (= 1 (cabp r))))
   ; "hi" -- string literal round-trip through the ci port.
-  (= (string (cons 104 (cons 105 0))) (fread (sip '(34 104 105 34)) 99))
+  (= (string (cons 104 (cons 105 0))) (read (sip '(34 104 105 34)) 99))
 
   ; Sequential reads: pull each datum in source order; final read returns e.
   (: p (sip '(49 32 50 32 51))                          ; "1 2 3"
-     (do (= 1 (fread p 99))
-        (= 2 (fread p 99))
-        (= 3 (fread p 99))
-        (= 99 (fread p 99))))
+     (do (= 1 (read p 99))
+        (= 2 (read p 99))
+        (= 3 (read p 99))
+        (= 99 (read p 99))))
 
   ; Whitespace and ;-comments are skipped between datums.
-  (= 1 (fread (sip '(32 32 49 32 32)) 99))              ; "  1  "
-  (= 2 (fread (sip '(59 32 99 109 116 10 50)) 99))      ; "; cmt\n2"
+  (= 1 (read (sip '(32 32 49 32 32)) 99))              ; "  1  "
+  (= 2 (read (sip '(59 32 99 109 116 10 50)) 99))      ; "; cmt\n2"
 
   ; A bare close-paren at top level is treated as clean end-of-input.
-  (= 99 (fread (sip '(41)) 99))                          ; ")"
+  (= 99 (read (sip '(41)) 99))                          ; ")"
 
-  ; --- g_status_more cases: fread returns the port itself, distinct from e ---
+  ; --- g_status_more cases: read returns the port itself, distinct from e ---
   ; Unclosed list.
-  (: p (sip '(40)) r (fread p 99) (do (= r p) !(= r 99)))
+  (: p (sip '(40)) r (read p 99) (do (= r p) !(= r 99)))
   ; Unterminated string.
-  (: p (sip '(34 97)) (= p (fread p 99)))                ; "\"a"
+  (: p (sip '(34 97)) (= p (read p 99)))                ; "\"a"
   ; Dangling quote.
-  (: p (sip '(39)) (= p (fread p 99)))                   ; "'"
+  (: p (sip '(39)) (= p (read p 99)))                   ; "'"
 
   ; After a g_status_more, the port's source is exhausted; the next read
   ; sees top-level EOF and returns the sentinel.
-  (: p (sip '(40)) _ (fread p 99) (= 99 (fread p 99)))
+  (: p (sip '(40)) _ (read p 99) (= 99 (read p 99)))
 
   ; Caller may pass the port itself as the EOF sentinel to collapse
   ; EOF and more into one "no datum" case.
-  (: p (sip 0)     (= p (fread p p)))                    ; clean EOF
-  (: p (sip '(40)) (= p (fread p p)))                    ; more
+  (: p (sip 0)     (= p (read p p)))                    ; clean EOF
+  (: p (sip '(40)) (= p (read p p)))                    ; more
 
   ; The port stays usable across complete forms in mixed sequences.
   (: p (sip '(40 41 32 49))                              ; "() 1"
-     (do (= 0 (fread p 99))                                 ; () -> nil
-        (= 1 (fread p 99))
-        (= 99 (fread p 99))))
+     (do (= 0 (read p 99))                                 ; () -> nil
+        (= 1 (read p 99))
+        (= 99 (read p 99))))
 
   ; Misuse: non-port first argument leaves the sentinel in place.
-  (= 99 (fread 42 99))
-  (= 'x (fread 'notaport 'x))
+  (= 99 (read 42 99))
+  (= 'x (read 'notaport 'x))
 
-  ; `read` in the prelude is defined as (fread in) -- a curried fread
+  ; `read` in the prelude is defined as (read in) -- a curried read
   ; bound to the stdin port. Verify the binding is a function (callable
   ; closure), not the raw port or sentinel value.
   !(= read in))

@@ -59,9 +59,9 @@
 ; --- parse one ELF object (64-bit LE) and emit -----------------------
 (: (gen path p)
    (: s (slurp (open path "r"))
-      _ (? s 0 (die (scat "cannot read " path)))
+      _ (? s 0 (die (+ "cannot read " path)))
       _ (? (& (= 127 (u8 s 0)) (& (= 69 (u8 s 1)) (& (= 76 (u8 s 2)) (= 70 (u8 s 3)))))
-           0 (die (scat path " is not an ELF object")))
+           0 (die (+ path " is not an ELF object")))
       ; ELF32 and ELF64 differ only in field widths/offsets; sh_name stays a
       ; u32 in both. rdw reads an address/size word of the file's class.
       is64     (= 2 (u8 s 4))
@@ -95,7 +95,7 @@
       unit  (align-up size align)
       ; the (? ...) is the BODY of this binding block, so it runs when gen is
       ; called with n/okeq/unit in scope -- not at definition time.
-      (? (= n 0)     (die (scat (scat "found no " prefix) "* sections"))
+      (? (= n 0)     (die (+ (+ "found no " prefix) "* sections"))
          !(= n N)    (die "wrong number of sentinel sections (does enum q in i.h match?)")
          !okeq       (die "sentinel sections have unequal sizes -- they no longer tile evenly")
          (emit p unit (pow2? unit) (- (bitlen unit) 1)))))
