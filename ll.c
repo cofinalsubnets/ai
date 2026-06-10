@@ -709,13 +709,6 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   if (g_ok(g = g_strof(g, LL_VERSION))) {
    struct g_def vd[] = {{"version-number", g_pop1(g)}};
    g = g_defn(g, vd, LEN(vd)); }
-  // Pre-intern the dict keys for the hot C->lisp hooks so resolve_handler and
-  // the reader can look them up without allocating. Idempotent with the
-  // prelude's bindings. (The cold trap key is probed by name: sym_probe.)
-  if (g_ok(g = intern(g_strof(g, "num-ap")))) g->numap_sym = pop1(g);
-  if (g_ok(g = intern(g_strof(g, "scomb"))))  g->scomb_sym = pop1(g);
-  if (g_ok(g = intern(g_strof(g, "bcomb"))))  g->bcomb_sym = pop1(g);
-  if (g_ok(g = intern(g_strof(g, "operators")))) g->operators_sym = pop1(g);
   // dict['operators]: the reader's operator table, char -> name | (name . arity).
   // Seeded with the 8 builtin sigil operators at arity 1; `~` and `,` stay
   // hardcoded digraphs. Lisp extends it with a plain pin (arity 1..7).
@@ -1533,12 +1526,32 @@ g_noinline struct g *g_evals_(struct g*g, char const*s) {
 // ============================================================================
 // vm
 // ============================================================================
+// Probe the symbol tree for a C-string name, materializing the lookup with a
+// phantom g_str on the C stack -- same content hash, same walk as
+// intern_checked, but never interning or allocating. A miss means the name was
+// never read, so no global by that name was ever defined.
+uintptr_t hash(struct g*, intptr_t);
+static struct g_atom *sym_probe(struct g *g, char const *nm, uintptr_t n) {
+ union { struct g_str s; char span[sizeof(struct g_str) + 8]; } b;
+ b.s.ap = g_vm_str, b.s.len = n;
+ memcpy(b.s.bytes, nm, n);
+ uintptr_t h = rot(hash(g, word(&b.s)));
+ for (struct g_atom *z = g->symbols; z;) {
+  struct g_str *a = z->nom;
+  intptr_t i = z->code < h ? -1 : z->code > h ? 1 : 0;
+  if (i == 0) i = len(a) - n;
+  if (i == 0) i = memcmp(txt(a), b.s.bytes, n);
+  if (i == 0) return z;
+  z = i < 0 ? z->l : z->r; }
+ return 0; }
+
 // Resolve a C->lisp handler from dict (where the prelude pins it -- dict is
-// GC-traced and egg-baked, so it survives into the runtime image). Trap loud if
-// undefined: a prelude-ordering contract violation. g_mapget is a read, so no
-// Have is needed in the tail-jump callers.
-static g_inline g_word resolve_handler(struct g *g, g_word nom) {
- g_word cur = g_mapget(g, nil, nom, g->dict);
+// GC-traced and egg-baked, so it survives into the runtime image), materializing
+// the key by name. Trap loud if undefined: a prelude-ordering contract
+// violation. Probe + mapget are reads, so no Have in the tail-jump callers.
+static g_inline g_word resolve_handler(struct g *g, char const *nm, uintptr_t n) {
+ struct g_atom *y = sym_probe(g, nm, n);
+ g_word cur = y ? g_mapget(g, nil, word(y), g->dict) : nil;
  if (!lamp(cur)) __builtin_trap();
  return cur; }
 
@@ -1590,25 +1603,6 @@ static union u const trap_scare_k[] = { {trap_ret_scare} };
 static union u const trap_drive[] =
  { {g_vm_ap}, {.ap = numap_swap}, {.ap = numap_swap}, {.ap = g_vm_ret0} };
 
-// Probe the symbol tree for a C-string name, materializing the lookup with a
-// phantom g_str on the C stack -- same content hash, same walk as
-// intern_checked, but never interning or allocating. A miss means the name was
-// never read, so no global by that name was ever defined.
-uintptr_t hash(struct g*, intptr_t);
-static struct g_atom *sym_probe(struct g *g, char const *nm, uintptr_t n) {
- union { struct g_str s; char span[sizeof(struct g_str) + 8]; } b;
- b.s.ap = g_vm_str, b.s.len = n;
- memcpy(b.s.bytes, nm, n);
- uintptr_t h = rot(hash(g, word(&b.s)));
- for (struct g_atom *z = g->symbols; z;) {
-  struct g_str *a = z->nom;
-  intptr_t i = z->code < h ? -1 : z->code > h ? 1 : 0;
-  if (i == 0) i = len(a) - n;
-  if (i == 0) i = memcmp(txt(a), b.s.bytes, n);
-  if (i == 0) return z;
-  z = i < 0 ? z->l : z->r; }
- return 0; }
-
 // Throw status s to the trap continuation. With a global `trap` function and 5
 // words of stack headroom (the throw path never allocates), build the
 // (trap s a b) frame and run it; else the C default throw_c, which resumes the
@@ -1653,13 +1647,13 @@ struct g *gtrap(struct g *g) { return gtrap2(g_core_of(g), g_code_of(g)); }
  return Unpack(g), Ap(self, g); }
 static g_vm(g_vm_numap) {
  NumapHave(g_vm_numap);
- word h = resolve_handler(g, g->numap_sym);
+ word h = resolve_handler(g, "num-ap", 6);
  word n = Sp[1], x = Sp[0], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static g_vm(g_vm_numtap) {
  NumapHave(g_vm_numtap);
- word h = resolve_handler(g, g->numap_sym);
+ word h = resolve_handler(g, "num-ap", 6);
  word fs = getfix(Ip[1].x), n = Sp[1], x = Sp[0], *dst = &Sp[fs + 2] - 3, ret = Sp[fs + 2];
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
@@ -1671,13 +1665,13 @@ static g_vm(g_vm_numtap) {
 // opcode (a re-runnable instruction), so a plain Have is safe; operands re-read after.
 static g_vm(g_vm_addl) {
  Have(2);
- word h = resolve_handler(g, g->scomb_sym);
+ word h = resolve_handler(g, "scomb", 5);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static g_vm(g_vm_mull) {
  Have(2);
- word h = resolve_handler(g, g->bcomb_sym);
+ word h = resolve_handler(g, "bcomb", 5);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
@@ -2999,7 +2993,8 @@ static struct g *gz_parse(struct g *g, bool multi) {
    case '"': g = gzread1str(g); break;
    default: {                                          // operator table, else a symbol/number token
     struct g *cg = g_core_of(g);
-    word t = cg->operators_sym ? g_mapget(cg, nil, cg->operators_sym, cg->dict) : nil;
+    struct g_atom *os = sym_probe(cg, "operators", 9);
+    word t = os ? g_mapget(cg, nil, word(os), cg->dict) : nil;
     word v = mapp(t) ? g_mapget(cg, nil, putfix(c), t) : nil;
     if (symp(v) && v != EMPTY_SYM) { g = gxl(g_push(g, 1, v)); continue; }   // name -> arity-1 wrap
     if (twop(v) && symp(A(v)) && A(v) != EMPTY_SYM && fixp(B(v))) {          // (name . arity)
@@ -3883,7 +3878,7 @@ static g_vm(data_sym_apply) {
 // which picks exponentiate / compose / self by operand+operator kind.
 static g_vm(data_num_apply) {
  Have(2);
- word h = resolve_handler(g, g->numap_sym);
+ word h = resolve_handler(g, "num-ap", 6);
  word n = word(Ip), x = Sp[0], ret = Sp[1], *dst = Sp - 2;
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }

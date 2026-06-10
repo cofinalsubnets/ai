@@ -124,13 +124,12 @@ struct g {
   // rng: global RNG state (rank-1 i64 tuple, len 4, xoshiro256++). Lives in &v0..end
   // so gc.c's root loop forwards it.
   g_word rng;
-  // Pre-interned dict keys for the hot/warm C->lisp hooks: num-ap, scomb,
-  // bcomb (per-apply) and the reader's operator table (per-token). The values
-  // live on dict (GC-traced, egg-baked; no cache slots), resolved per use;
-  // keys interned at init so lookups never allocate. In v0..end so the gc root
-  // loop forwards them. The cold trap key has no slot: gtrap2 probes the
-  // symbol tree by name (sym_probe).
-  g_word numap_sym, scomb_sym, bcomb_sym, operators_sym; }; };
+  // The C->lisp hooks (num-ap, scomb, bcomb, trap, operators) live on dict
+  // (GC-traced, egg-baked): no slots, no key caches -- C materializes the
+  // keys by name per use (sym_probe walks the intern tree allocation-free;
+  // hot numeric code is compiled by the lisp compiler, which holds the
+  // symbols directly, so the C dispatch only catches stragglers).
+  }; };
  intptr_t end[]; };
 
 struct g_def { char const *n; intptr_t x; };
