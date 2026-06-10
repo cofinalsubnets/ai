@@ -11,6 +11,7 @@ and a list represents an exponential tower.
 - `(2 3 4) = 262144`
 - `(* i i) = -1`
 - `(log -1) = (* i pi)`
+- `((/ 1 2) -1) = i`
 
 the language is built around three special forms plus reader operators,
 prefix and infix. the special forms are:
@@ -41,13 +42,14 @@ CLAUDE.l in a code fence, so the spec stays green.
 ## code examples
 
 a few identities (each evaluates to 1; euler's identity is bit-exact read
-through the principal log -- atan2(0,-1) is pi by IEEE fiat)
+through the principal log -- atan2(0,-1) is pi by IEEE fiat -- and sqrt
+takes the principal root, so it is total on negatives)
 
 ```
 (1 = (\ x x)) (0 = (\ _ 1))
 (8 = (3 2)) (65536 = (2 2 2 2))
 (-1 = i * i) ((log -1) = i * pi)
-(5.0 = (abs ~(3 4)))
+(i = ((/ 1 2) -1)) (5.0 = (abs ~(3 4)))
 (12 = (3 (+ 1) 9)) (2.0 = ((/ 1 2) 4))
 ("ababab" = "ab" * 3) ('(1 2 1 2) = '(1 2) * 2)
 (!"" = 0 = $"")

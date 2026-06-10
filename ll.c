@@ -5778,8 +5778,34 @@ static g_noinline void cplx_pow_fill(struct g_tuple *v, word wbase, word zexp) {
          e = g_exp(pr);
  cplx_put(v, e * g_cos(pi), e * g_sin(pi)); }
 
-// (pow b e) = b ** e. Complex base or exponent -> the complex lane above; otherwise
-// the real/array lanes (g_vm_math2 -> real pow, or vmap2 elementwise over arrays).
+// sin/cos of pi*x for finite non-integer x (the caller's flo_fracp guarantee,
+// so the int cast is safe). The angle is reduced BEFORE multiplying by pi, so
+// it never rounds through the float pi and a half-integer x lands exactly on
+// the axis: sinpi(1/2) = 1, cospi(1/2) = 0 -- what makes ((/ 1 2) -1) = i
+// bit-exact (the inputs are exact; pi*x in floats is where the error lives).
+static g_flo_t g_sinpi(g_flo_t x) {
+ intptr_t n = (intptr_t) x; g_flo_t r = x - (g_flo_t) n;
+ if (r < 0) r += 1, n--;                              // x = n + r, r in (0,1)
+ g_flo_t s = r == (g_flo_t) 0.5 ? 1
+   : g_sin((g_flo_t) 3.141592653589793 * (r < (g_flo_t) 0.5 ? r : 1 - r));
+ return n & 1 ? -s : s; }
+static g_flo_t g_cospi(g_flo_t x) {
+ intptr_t n = (intptr_t) x; g_flo_t r = x - (g_flo_t) n;
+ if (r < 0) r += 1, n--;
+ g_flo_t c = r == (g_flo_t) 0.5 ? 0
+   : r < (g_flo_t) 0.5 ? g_cos((g_flo_t) 3.141592653589793 * r)
+   : -g_cos((g_flo_t) 3.141592653589793 * (1 - r));
+ return n & 1 ? -c : c; }
+// finite non-integer? everything at/past 2^mantissa is an integer; nan/inf out.
+static g_inline bool flo_fracp(g_flo_t x) {
+ g_flo_t lim = (g_flo_t) (1ull << (Bits == 64 ? 53 : 24));
+ return x > -lim && x < lim && (g_flo_t) (intptr_t) x != x; }
+
+// (pow b e) = b ** e. Complex base or exponent -> the complex lane above; a finite
+// negative real base to a non-integer power widens to its principal root
+// |b|^e * (cospi(e), sinpi(e)) instead of nan -- pow climbs tiers like log, and
+// ((/ 1 2) -1) = i exactly. An infinite/integer-power/array case keeps the IEEE
+// real lanes (g_vm_math2 -> real pow, or vmap2 elementwise over arrays).
 g_vm(g_vm_pow) {
  word a = Sp[0], b = Sp[1];
  if (Cp(a) || Cp(b)) {
@@ -5791,6 +5817,15 @@ g_vm(g_vm_pow) {
   Hp += CPLX_REQ;
   cplx_pow_fill(v, a, b);
   return *++Sp = word(v), Ip++, Continue(); }
+ if (ISNUM(a) && ISNUM(b)) {
+  g_flo_t ad = TOFLO(a), bd = TOFLO(b);
+  if (ad < 0 && !__builtin_isinf(ad) && flo_fracp(bd)) {
+   g_flo_t m = g_pow(-ad, bd), re = m * g_cospi(bd), im = m * g_sinpi(bd);
+   Have(CPLX_REQ);
+   struct g_tuple *v = ini_scalar((struct g_tuple*) Hp, g_C);
+   Hp += CPLX_REQ;
+   cplx_put(v, re, im);
+   return *++Sp = word(v), Ip++, Continue(); } }
  return Ap(g_vm_math2, g, g_pow); }
 
 // (C re im): build a complex from two real numbers. Non-numeric arg -> nil.
