@@ -193,7 +193,7 @@
      ; unclosed list yields m -- we can detect via twop being false
      !(twop (parseall '(40 49)))
 
-     ; --- floats: parse and round-trip via the ll reader ---
+     ; --- floats: parse and round-trip via the l reader ---
      ; "1.5" parses to ((1.5)); the value is an actual flo, not a symbol
      (= 1.5 (cap (cap (parseall '(49 46 53)))))
      ; "1e3" parses as float, not symbol

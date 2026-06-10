@@ -1,9 +1,9 @@
 ; === the generic-op DISPATCH MATRICES, walked cell by cell ====================
-; ll's generic dyadic ops are NxN ap matrices indexed by the kind lattice
-; (ll.h enum q): KFix | KTuple(rank-0 box: float/complex/wide-int) | KBig |
+; l's generic dyadic ops are NxN ap matrices indexed by the kind lattice
+; (l.h enum q): KFix | KTuple(rank-0 box: float/complex/wide-int) | KBig |
 ; KArrZ KArrR KArrC KArrO (the array tower) | KString KSym | KTwo(pair) | KLam.
 ; A monadic op is that matrix's diagonal. Three matrices are explicit tables in
-; ll.c -- g_add_mx (+), g_mul_mx (*), g_apply_mx (apply); the rest (- / mod
+; l.c -- g_add_mx (+), g_mul_mx (*), g_apply_mx (apply); the rest (- / mod
 ; < <= = >= >) are lane aps that refine the same lattice internally. This
 ; file pins EVERY cell with an assertion, so the coverage is auditable in one
 ; place -- and so a dispatch regression (e.g. a data-sentinel stride desync that

@@ -15,7 +15,7 @@ struct k_frame {
 
 // panic-path console output. cb_putc stamps a char into the framebuffer
 // ring buffer (kcb); serial_putc mirrors it to COM1; fbdraw renders kcb
-// to the framebuffer. kputc/kputs/kputn take no ll state, so they run
+// to the framebuffer. kputc/kputs/kputn take no l state, so they run
 // from a fault handler with no live `struct g` -- the old gput* path
 // dereferenced its (null here) f argument before reaching the console.
 struct cb;
@@ -77,7 +77,7 @@ void k_exception(struct k_frame *fr) {
 // uart_isr (x86_64.asm) funnels it here, and k_uart drains every ready
 // byte into the same input queue kb_int feeds. bytes pass through
 // verbatim -- a serial terminal already sends CR for Enter, DEL for
-// Backspace, and ESC-prefixed arrow sequences, all of which the ll
+// Backspace, and ESC-prefixed arrow sequences, all of which the l
 // line editor decodes directly.
 #define COM1 0x3f8
 

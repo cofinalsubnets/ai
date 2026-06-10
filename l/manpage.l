@@ -3,7 +3,7 @@
  (putln s) (: _ (puts s) (putc 10))
  concat (foldl "" scat)
  sec "1"
- nom "ll"
+ nom "l"
  upnom "GL"
  section (scat ".SH ")
  (\f i s) (concat (L "\\f[" i "]" s "\\f[R]"))

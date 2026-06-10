@@ -7,7 +7,7 @@
 ; bignum tower (* / %); the last lines are 280-digit base-36 numbers.
 ;
 ; Faithful port, with one forced deviation: Ruby's `memo` closes the cache
-; hash over a *returned* closure. A ll closure that closes over a variable
+; hash over a *returned* closure. A l closure that closes over a variable
 ; currently miscomputes when called re-entrantly (a self-call), e.g.
 ;     (: (mk z) (\ n (? (< n 1) 1 (* n (self (- n 1))))) self (mk 0))
 ;     (self 1)   ; => 0, should be 1

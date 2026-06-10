@@ -30,10 +30,10 @@
   ; The payload is (show (clock 0)) so the bytes vary every run --
   ; a literal string would let a stale file from a previous run pass.
   (: txt (show (clock 0))
-     wp (open "/tmp/ll-io-test" "w")
+     wp (open "/tmp/l-io-test" "w")
      _ (fputs wp txt)
      _ (close wp)
-     rp (open "/tmp/ll-io-test" "r")
+     rp (open "/tmp/l-io-test" "r")
      (slurp acc) (: c (fgetc rp) (? (= c -1) (rev acc) (slurp (cons c acc))))
      rd (string (slurp 0))
      _ (close rp)

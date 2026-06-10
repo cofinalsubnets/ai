@@ -1,7 +1,7 @@
-#!/usr/bin/env ll
+#!/usr/bin/env l
 ; vmret.l -- flag g_vm_* VM-instruction aps that contain a `ret`.
 ;
-; Port of tools/vmret.py (see it for the full rationale). The ll VM is
+; Port of tools/vmret.py (see it for the full rationale). The l VM is
 ; threaded: every g_vm_* opcode ap should tail-jump to the next, never
 ; emit an ordinary `ret`. This tool disassembles an ELF (shelling out to
 ; objdump / llvm-objdump via the `run` nif) and reports every g_vm_* function
@@ -9,7 +9,7 @@
 ; positives. It is cross-arch: it reads e_machine and picks a per-arch return
 ; mnemonic, preferring multi-target llvm-objdump for non-x86 images.
 ;
-; Usage: ll vmret.l ELF [--prefix PREFIX] [--objdump PATH]
+; Usage: l vmret.l ELF [--prefix PREFIX] [--objdump PATH]
 ; Exit:  0 = all clean, 1 = suspects found, 2 = usage/tool error.
 ;
 ; This needs the host-only `run`/`getenv` nifs (subprocess + environment).

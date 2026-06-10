@@ -1,4 +1,4 @@
-; lcat2: lcat + variable-name minification. Like lcat, it serializes a ll
+; lcat2: lcat + variable-name minification. Like lcat, it serializes a l
 ; source file to a C string literal (re-print each top-level form via show,
 ; space-join, drop spaces the reader doesn't need, C-escape). lcat2 ALSO renames
 ; local variables to short fresh names before re-printing, shrinking the literal.

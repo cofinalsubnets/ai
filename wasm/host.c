@@ -1,12 +1,12 @@
-// emscripten host shim for ll lisp.
+// emscripten host shim for l lisp.
 //
-// ll's frontend contract (see g/g.h): the host must define g_clock, the
+// l's frontend contract (see g/g.h): the host must define g_clock, the
 // g_stdin/g_stdout ports, and the g_fd_port_vt vtable that backs any port
 // with fd >= 0. Here stdout's putc appends to a JS-visible byte buffer that
 // the page drains via gwen_out_ptr/len/reset; stdin always reads EOF (the
 // REPL feeds source through gwen_eval, not the stdin port). boot.l is
 // embedded and evaluated once by gwen_init.
-#include "ll.h"
+#include "l.h"
 #include <emscripten.h>
 #include <time.h>
 

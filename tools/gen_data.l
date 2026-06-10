@@ -1,4 +1,4 @@
-#!/usr/bin/env ll
+#!/usr/bin/env l
 ; gen_data.l -- bake the data-sentinel stride into a generated data.h.
 ;
 ; Port of tools/gen_data.py (see it for the full rationale). Reflects on an
@@ -6,7 +6,7 @@
 ; gwen_data.* input sections, and emits a data.h that hard-codes it so
 ; g_typ()'s two link-time divides fold away (a shift when the stride is 2^k).
 ;
-; Usage: ll gen_data.l <data.o> [-o data.h]   (writes stdout if no -o)
+; Usage: l gen_data.l <data.o> [-o data.h]   (writes stdout if no -o)
 ;
 ; Fixnum-only: every field of a real data.o (sizes, aligns, offsets) fits the
 ; 62-bit fixnum range, so the wide-int box is never exercised here.
@@ -29,7 +29,7 @@
    (bitlen n) ((: (f n k) (? (< 0 n) (f (>> n 1) (+ k 1)) k)) n 0))
 
 (: prefix "gwen_data."   ; input subsections gwen_data.00 .. .04
-   N 5)                     ; enum q data kinds: tuple/big/two/string/sym -- must match ll.h
+   N 5)                     ; enum q data kinds: tuple/big/two/string/sym -- must match l.h
 
 ; --- emit the generated header to port p ----------------------------
 (: (emit p unit po2 shift)

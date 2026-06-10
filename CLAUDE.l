@@ -1,17 +1,38 @@
-; ll -- a small lisp where every value is a monadic, auto-curried function.
-; a portable C runtime (ll.c + ll.h) plus a self-hosting compiler written in ll
-; (the ll/{prelude,ev,repl}.l layers). source is .l; the host binary is `ll`. see README.md.
-; this file is the spec *and* a real test -- CLAUDE.md is just it wrapped in a code fence, so
-; i rewrite here and re-wrap by hand. keep it green; when in doubt, this is the truth.
+; l -- a small lisp where every value is a monadic, auto-curried function.
+; a portable C runtime (l.c + l.h) plus a self-hosting compiler written in l
+; (the l/{prelude,ev,repl}.l layers). source is .l; the host binary is `l`. see README.md.
+;
+; this file is three things at once: the SPEC, a real TEST in the corpus, and my own
+; working notes -- CLAUDE.md (my context file) is exactly this file in a code fence,
+; re-wrapped on every edit. keep it green; when in doubt, this file is the truth, and
+; the way to settle any doubt is to PROBE THE BINARY -- never trust a prior over a
+; one-line experiment. every semantic claim below is assert-backed on every target.
+
+; --- how to work here (read this first) ---
+; * `make test` is the gate: host + the self-hosted bootstrap l0, BOTH required to print
+;   the zz-fin "tests pass" summary (l0 exactly twice -- a silent reader stop exits 0
+;   without reaching zz-fin, so exit code alone proves nothing). `make test_all` adds the
+;   qemu kernel + tool diffs; `make valg` for memory. one file at a time: `out/host/l
+;   test/x.l` -- but the corpus runs CONCATENATED in one global scope, so keep helpers
+;   local (give `:` a body) and remember single-file runs lack the assert harness.
+; * footgun: edit l.h => `make clean` or l0 hangs; stash out/dl first (clean nukes the
+;   ovmf/limine downloads).
+; * C files EMBED lisp the .l sweeps cannot see: l.c (g_evals_'s driver string), main.c
+;   (s2cl + runner), kmain.c (the K_TEST runner), wasm/. grep them on every rename.
+; * a bare all-punct symbol mid-list captures its left operand at read time -- escape it
+;   in parens ((+) is + as a value); quoted lists need each operator quoted alone.
+; * a corpus test that spawns must (wait p) its task: an orphan stalls the kernel runner.
+; * the repl reads each LINE as one expression (1 = 1 answers 1); files read forms.
+; * python \b-sweeps treat - as a boundary: kebab names with capital segments mangle.
 
 ; --- the shape of it --- one cell is one word: a fixnum is a tagged odd word, anything else
 ; is a heap object whose first word is its hot -- a live external reference, the wire out of
 ; the heap to the ap that runs it. the VM is tail-threaded (aps tail-jump, never return --
-; `make vmret` checks it) over a two-space copying heap. every
-; operation is *fully generic* -- it dispatches on a value's *kind*, and the kinds form a
-; lattice (next) that is literally the diagonal of the dispatch tables. the C core is tiny;
-; most of the language is ll closures installed reflectively from the prelude, then baked
-; into a heap image (the *egg*) at compile time. the gritty details sit at the bottom.
+; `make vmret` checks it) over a two-space copying heap. every operation is *fully generic* --
+; it dispatches on a value's *kind*, and the kinds form a lattice that is literally the
+; diagonal of the dispatch tables. the C core is tiny; most of the language is l closures
+; installed reflectively from the prelude, then baked into a heap image (the *egg*) at
+; compile time. the gritty details sit at the bottom.
 
 ; --- the type lattice --- two axes. the *tier* spine, low to high:
 ;   N naturals (the range of $)  <  Z integers (fixnum -> wide box -> bignum)
@@ -37,12 +58,6 @@
  (12 = (3 (+ 1) 9)) ('(2 3 4) = (map (+ 1) '(1 2 3)))  ; (n f) composes f ($ n) times; currying *is* partial application
  (10 = (-3 (+ 1) 10)) (13 = (2.5 (+ 1) 10))      ; the count SATURATES, true to !!$: (-3 f) = (0 f) = 1; a float ceils
  (0.5 = (-1 2)) (3.0 = ((/ 1 2) 9)))             ; ... but exponents don't: (-1 x) = 1/x; (1/2 x) = sqrt x
-
-; --- build & test --- `make test` is the default task and the commit gate: it builds
-; out/host/ll and runs test/*.l through both `ll` and the self-hosted `ll0`. `make repl` for a
-; prompt; `make test_all` adds the kernel and tool diffs; `make catav` before committing. one
-; file at a time: `out/host/ll CLAUDE.l`. tests concatenate into one global scope, so keep
-; helpers local (give `:` a body). footgun: edit ll.h and you must `make clean` or ll0 hangs.
 
 ; --- three special forms --- `:` is letrec*/sequence, `?` is cond, `\` is lambda (and, with a
 ; single operand, quote). everything else is a function call.
@@ -319,7 +334,7 @@
  (strp (show out)) ("hi" = (slurp (sip '(104 105)))) (: o (pad 0) _ (fputx o 42) ("42" = (page o)))
  (1 = (fread (sip '(49)) 99)) ('eof = (fread (sip 0) 'eof)) (: p (sip '(40)) (p = (fread p 99))))
 
-; --- bootstrapping --- the C core is minimal; the key semantics are ll closures installed
+; --- bootstrapping --- the C core is minimal; the key semantics are l closures installed
 ; from the prelude and shared by both compilers:
 ;   numap -- fixnum/number application (x**n, or compose ($ n) times), an n-fold thread.
 ;   scomb/bcomb -- `+` and `*` of functions are church add and compose, so numerals agree.
@@ -328,10 +343,10 @@
 ;   wev -- the source->source pre-pass before analysis: expand macros, apply boxfix, fold pure
 ;     globals, mark apply strategy, and flip (? !e a b) to (? e b a).
 ;   maps -- #(..)/map expand to nested pins; a map is a lookup function.
-; the *egg* (ll/egg.l): the evaluator SITS on the egg (the quoted prelude+ev corpus) twice --
+; the *egg* (l/egg.l): the evaluator SITS on the egg (the quoted prelude+ev corpus) twice --
 ; compile the compiler with the C bootstrap, recompile the whole corpus through itself -- and
 ; the hatchling installs as `ev`, baked into the image at C compile time, no allocation;
-; born-at records the hatch time. (its pin defaults 0 deliberately: ll0's first corpus
+; born-at records the hatch time. (its pin defaults 0 deliberately: l0's first corpus
 ; pass runs PRE-egg, where born-at does not exist yet.)
 (assert (lamp ev) (fixp (peek dict 'born-at 0)))
 
@@ -340,9 +355,9 @@
 ; diagonal; the three core tables are + , * , and apply. a both-fixnum fast path skips the
 ; table; otherwise one indexed jump picks a lane that widens only as far as the operands need
 ; (array, complex, bignum, float, ...). the VM is tail-threaded over a two-space copying
-; collector; out-of-pool constants are immortal. the ll/ layer (prelude ev repl cli egg) bakes
-; into every frontend: the host (out/host/ll), the freestanding kernel (x86_64/aarch64),
-; and wasm. build codegen lives in ll under tools/; the C is
+; collector; out-of-pool constants are immortal. the l/ layer (prelude ev repl cli egg) bakes
+; into every frontend: the host (out/host/l), the freestanding kernel (x86_64/aarch64),
+; and wasm. build codegen lives in l under tools/; the C is
 ; freestanding, -Wall -Wextra -Werror.
 
 ; --- odds & ends --- show renders a value as its reparsable printed form; (clock t) is

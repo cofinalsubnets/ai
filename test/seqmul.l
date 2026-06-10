@@ -1,4 +1,4 @@
-; `*` extended as the multiplicative analog of `+` (ll.c g_mul_mx), dispatched
+; `*` extended as the multiplicative analog of `+` (l.c g_mul_mx), dispatched
 ; through the same kind matrix. `*` is "repeated `+`": a sequence (string/symbol/
 ; list) times a scalar count n is n copies joined, just as (* 2 3) = 2+2+2. The
 ; count SATURATES (($ c) -- the count law, shared with numeral-apply and array

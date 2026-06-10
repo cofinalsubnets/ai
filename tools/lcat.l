@@ -1,5 +1,5 @@
-; lcat: serialize a ll source file to a C string literal for #include (the lcat
-; lib headers the final ll is assembled from). Each top-level form is re-printed
+; lcat: serialize a l source file to a C string literal for #include (the lcat
+; lib headers the final l is assembled from). Each top-level form is re-printed
 ; via show (canonical), the forms are joined into one string, and that string is
 ; MINIFIED -- a space is dropped wherever removing it does not change how the reader
 ; tokenizes. The boundary test is empirical, not a hardcoded delimiter set: the two

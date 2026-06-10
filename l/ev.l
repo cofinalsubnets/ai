@@ -318,7 +318,7 @@
        (map q l)))))
 
    (l3 prs body even lams) (:
-    (ll nds) (? (nilp nds) id
+    (lnk nds) (? (nilp nds) id
      (: nd (cap nds) n (cap nd) d (cbp nd)
         d (?- d (lambp d) (: qa (assq (cap nd) lams)
                              x (ala q (cbbp qa) (cbp d))
@@ -326,7 +326,7 @@
         f (ana c d)
         g (?- id (&& even (nilp (c 'par))) (em2 g_vm_defglob n))
         _ (push c 'stk n)
-        h (ll (cbp nds))
+        h (lnk (cbp nds))
         (\ x (f (g (h x))))))
     _ (pin q 'lam lams)
     s (c 'stk)
@@ -334,7 +334,7 @@
     ; clear stale first-build closures so a ref hit during the rebuild defers to a
     ; backpatch site; the import sets (BB) are kept.
     _ (each lams (\ e (pinl 1 0 (cbp e))))
-    g (ll prs)
+    g (lnk prs)
     ; closures final -> backpatch each recorded recursive-fn ref with its thread.
     _ (each (q 'sites) (\ s (pinl 0 (cabp (cap s)) (cbp s))))
     _ (pin q 'sites 0)

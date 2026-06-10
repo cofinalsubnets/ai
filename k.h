@@ -2,7 +2,7 @@
 // Combines the former free/k.h (kernel logging) and free/k_boot.h (the boot
 // hand-off struct).
 #pragma once
-#include "ll.h"
+#include "l.h"
 
 void
  k_logf(char const*, ...),

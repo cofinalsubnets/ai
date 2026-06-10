@@ -1,4 +1,4 @@
-; prelude.l -- ll prelude: data + function + macro definitions.
+; prelude.l -- l prelude: data + function + macro definitions.
 (: id 1
    (co f g x) (f (g x))
    (const x _) x
@@ -252,7 +252,7 @@
 ; ordinary trailing arguments (not a list): since the shape fixes the count,
 ; `array` curries them one at a time and builds once it has them all -- so
 ; (array 2 'a 'b), (array '(2 2) 1 2 3 4) and a partial like (array 3) (a collector
-; awaiting 3 elems) all fall out of ll's auto-currying, like numap's n-ary thread.
+; awaiting 3 elems) all fall out of l's auto-currying, like numap's n-ary thread.
 (: (a-coll sh n acc) (? (< n 1) (: d (rev acc) (arr (a-type d) sh d))
                         (\ x (a-coll sh (- n 1) (cons x acc))))
    (array s) (: sh (a-shape s) (a-coll sh (foldl (*) 1 sh) 0)))

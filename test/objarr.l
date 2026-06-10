@@ -1,4 +1,4 @@
-; object arrays (type code `o` = g_O): rank-N containers of live ll *values*.
+; object arrays (type code `o` = g_O): rank-N containers of live l *values*.
 ; the numeric tuple types (z..r) fold to a flat word/float payload the GC moves
 ; by memcpy; an o-array instead holds tagged words, so it can carry bignums,
 ; strings, symbols and nested arrays -- and is the one tuple type the collector

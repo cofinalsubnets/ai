@@ -1,5 +1,5 @@
 ; `+` extended over symbols, name-compatible with strings, dispatched through the
-; explicit type-by-type matrix (ll.c g_add_mx). The text tower is
+; explicit type-by-type matrix (l.c g_add_mx). The text tower is
 ;   STRING (rank 0) < UNINTERNED-SYM (1) < INTERNED-SYM (2),
 ; a number contributes one byte and lifts to its partner's type, and mixing two
 ; text values demotes to the LOWER rank. A symbol's bytes are its name; an

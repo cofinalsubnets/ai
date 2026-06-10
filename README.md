@@ -1,6 +1,6 @@
-# ll
+# l
 
-`ll: ll -> ll = lisp * haskell * apl / C`, iykwim.
+`l: l -> l = lisp * haskell * apl / C`, iykwim.
 rassoc infix (apl) with a compatible lassoc subset (lisp).
 ranked arrays, broadcasting, complex, macros
 
@@ -19,7 +19,7 @@ every quote below should evaluate to 1. try it in the shell :)
 
 
 ## language level
-ll has three special forms plus reader operators. the forms are
+l has three special forms plus reader operators. the forms are
 - `\` lambda (the ultimate)
 - `?` cond
 - `:` let
@@ -73,8 +73,8 @@ the spec stays green.
 - `make` build + test
 - `make repl` interactive shell
 - `make test_all` adds the freestanding kernel (qemu) + tool diffs
-- `out/host/ll file.l` run a file
-- `echo .ev | ll` print the compiler
+- `out/host/l file.l` run a file
+- `echo .ev | l` print the compiler
 
 that last one is not a joke. `.` prints, `ev` is the self-hosted evaluator,
 and what comes out is the lambda the compiler compiled itself into -- a couple
@@ -91,10 +91,10 @@ kilobytes of the whole back end.
   values is the enum order, and the lattice is literally the diagonal of the
   dispatch tables. `sort` is one C comparison per pair -- the total order is
   the comparator.
-- no interpreter state lives outside the heap: dict (an ordinary ll hash)
+- no interpreter state lives outside the heap: dict (an ordinary l hash)
   carries the globals, macros, reader operator tables, the trap function and
   the rng; C finds its own hooks by name, allocation-free.
-- the compiler is written in ll. at build time the evaluator sits on the egg
+- the compiler is written in l. at build time the evaluator sits on the egg
   (the quoted compiler source) twice -- the C bootstrap compiles the compiler,
   which recompiles itself -- and the hatchling bakes into the binary; `born-at`
   records the hatch time. the same image runs on linux, bare metal

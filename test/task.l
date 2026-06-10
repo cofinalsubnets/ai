@@ -2,7 +2,7 @@
 ; (spawn fn x)  -> pid (positive integer); starts a new task running (fn x).
 ;                  the main task has reserved pid 0.
 ; (yield 0)     -> nil; cooperatively suspends so other ready tasks can run.
-;                  (yield) is just `yield` since (x)=x in ll — call with an arg.
+;                  (yield) is just `yield` since (x)=x in l — call with an arg.
 ; (wait pid)    -> if pid is unknown / non-numeric / refers to the caller, 0.
 ;                  if the task is dormant (its fn has returned), collect it
 ;                  from the ring and return its return value.

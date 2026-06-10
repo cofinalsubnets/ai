@@ -1,4 +1,4 @@
-#include "ll.h"
+#include "l.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,11 +91,11 @@ struct g_io g_stderr = { g_vm_port_io, putfix(STDERR_FILENO), putfix(EOF), putfi
 // Override the weak g.c default with the real POSIX close. Called by the
 // finalizer that g_io_alloc registers, so it runs when a heap port becomes
 // unreachable. Static stdin/stdout don't go through this path -- they live
-// outside the ll heap and the GC never visits them.
+// outside the l heap and the GC never visits them.
 void g_fd_close(int fd) { close(fd); }
 
 // (open path mode) — open a file with mode "r"/"w"/"a"; returns a heap port
-// (closed on GC) or nil on error or misuse. mode is a ll string; only the
+// (closed on GC) or nil on error or misuse. mode is a l string; only the
 // first byte is consulted.
 //   r = read-only
 //   w = write-only, truncate-or-create
@@ -156,8 +156,8 @@ static g_vm(g_vm_close) {
 
 // --- subprocess (run) + environment (getenv) ---------------------------
 // Both are host-only nifs (POSIX fork/exec/wait, getenv), like open/close.
-// No malloc: argv is marshalled into the uncommitted ll heap gap and the
-// child's stdout is captured into a growing ll string (the reader's
+// No malloc: argv is marshalled into the uncommitted l heap gap and the
+// child's stdout is captured into a growing l string (the reader's
 // str0 + grow + len-fixup pattern). See core/io.c gzread1str / grbufg.
 
 // Local copy of core/io.c's grbufg (static there): grow the string on sp[0]
@@ -185,7 +185,7 @@ g_noinline static struct g *host_run(struct g *g, g_word argv) {
 
  // Reserve gap for cav (argc+1 pointers, word-aligned) + the byte blob.
  // Written into the uncommitted region at Hp -- invisible to GC, holds no
- // ll pointers, consumed before any further allocation. Never bump Hp.
+ // l pointers, consumed before any further allocation. Never bump Hp.
  if (!g_ok(g = g_have(g, (uintptr_t) argc + 1 + b2w(total)))) return g;
  argv = g->sp[0];          // g_have may have GC'd; argv (the only root, at sp[0])
                            // is forwarded there -- the C local is now stale.
@@ -227,7 +227,7 @@ g_noinline static struct g *host_run(struct g *g, g_word argv) {
   int st; while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
   return g_push(g, 1, putfix(childerr)); }
 
- // drain stdout into a growing ll string (bulk reads; stderr inherited).
+ // drain stdout into a growing l string (bulk reads; stderr inherited).
  uintptr_t n = 0, lim = 1u << 16;
  g = str0(g, lim);                                        // capture -> sp[0]
  while (g_ok(g)) {
@@ -291,10 +291,10 @@ static union u const
 // region: the baked lisp text plus a `boot` entry that main tail-calls after
 // the universal setup (argv pins + the host nif defs above).
 #ifdef GL_BOOTSTRAP
-// ll0: the CLI driver is the sed-wrapped raw text (it can't lcat its own arg
+// l0: the CLI driver is the sed-wrapped raw text (it can't lcat its own arg
 // ap). Self-test: the whole test corpus, baked in (sed-wrapped), run
 // twice -- once compiled by the C bootstrap compiler (c0), once by the
-// self-hosted ev installed from ev.l -- so one ll0 invocation exercises both
+// self-hosted ev installed from ev.l -- so one l0 invocation exercises both
 // compilers (and -Dg_tco=0 makes it the trampoline path). s2cldef installs
 // s2cl (string -> charlist); runner reads the baked corpus (the global
 // `tests`) through a sip port and evals each form via `(ev 'ev r)` -- the
@@ -334,7 +334,7 @@ static struct g *boot(struct g *g, bool argp) {
   return g_evals_(g, runner); }                      // pass 2: corpus via the self-hosted ev
 
 #else
-// the full ll: raw terminal mode for the interactive REPL (ll0 never needs
+// the full l: raw terminal mode for the interactive REPL (l0 never needs
 // it -- a build tool / self-test is non-interactive); the CLI driver is the
 // canonicalized lcat header; `rel` is the non-tty stdin runner.
 static struct termios saved_termios;

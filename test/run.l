@@ -11,7 +11,7 @@
 ; captured. (getenv name) -> string, or nil when unset.
 ;
 ; These children are chosen so none reads stdin: under the test harness the
-; child inherits ll's stdin (the test-corpus pipe), and a reader would eat it.
+; child inherits l's stdin (the test-corpus pipe), and a reader would eat it.
 
 (assert
   ; --- ran successfully: a pair, exit 0, and (here) no output ---

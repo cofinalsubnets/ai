@@ -1,4 +1,4 @@
-; test/closure.l -- recursive bindings in `:` (ll's letrec*).
+; test/closure.l -- recursive bindings in `:` (l's letrec*).
 ;
 ; `:` is a sequential, letrec*-like scope: a binding may refer to earlier
 ; bindings and to itself. Recursive *functions* (a `\` literal or the
@@ -7,7 +7,7 @@
 ;
 ; Recursive *VALUES* are the hard case: a binding whose eagerly-evaluated init
 ; is (or builds) a closure capturing the very name being defined, or a
-; forward/mutual sibling. ll closures capture free vars BY VALUE at creation,
+; forward/mutual sibling. l closures capture free vars BY VALUE at creation,
 ; so such a closure used to snapshot the name while it was still unassigned (0)
 ; and the self-call would dispatch on 0. ev.l's `boxfix` pass now fixes this:
 ; it indirects exactly those names through a heap cell -- letrec*'s "capture by

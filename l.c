@@ -1,12 +1,12 @@
-#include "ll.h"
-// The build's version string (the git hash), generated into out/lib/ll_version.h by
+#include "l.h"
+// The build's version string (the git hash), generated into out/lib/l_version.h by
 // the Makefile and surfaced in the runtime as the `version-number` global (g_ini_0).
 // Optional include so a standalone/unwired compile still builds; falls back to "unknown".
-#if defined(__has_include) && __has_include("ll_version.h")
-#include "ll_version.h"
+#if defined(__has_include) && __has_include("l_version.h")
+#include "l_version.h"
 #endif
-#ifndef LL_VERSION
-#define LL_VERSION "unknown"
+#ifndef L_VERSION
+#define L_VERSION "unknown"
 #endif
 
 // ============================================================================
@@ -51,7 +51,7 @@ _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size"
 _Static_assert(-1 >> 1 == -1, "sign extended shift");
 // nilp: structural test for the nil word (the only false scalar). Distinct from
 // g_nilp below (the language falsy predicate, which also counts an all-zero tuple);
-// the ll `nilp` nif maps to g_nilp, not this macro.
+// the l `nilp` nif maps to g_nilp, not this macro.
 #define nilp(_) (word(_)==nil)
 #define AB(o) A(B(o))
 #define AA(o) A(A(o))
@@ -88,7 +88,7 @@ _Static_assert(-1 >> 1 == -1, "sign extended shift");
 // Z < R < C so `>= g_R` is the float-domain test and C is the widest *numeric* tier.
 // arr rejects ty == C, so C never appears as a rank>=1 array element -- complex
 // only ever shows up as a rank-0 scalar (Cp), handled by explicit cplx branches.
-// O (object) is the odd tier out: its slots hold live ll words (any value --
+// O (object) is the odd tier out: its slots hold live l words (any value --
 // fixnum, bignum, box, complex, string, pair...), so it is the ONE tuple type the
 // copying GC must trace element-by-element (evac_tuple). It sits outside the numeric
 // order; the typed fast lanes gate on `type <= g_C`, the arith lane on `type == g_O`
@@ -184,7 +184,7 @@ static g_inline bool bufp(word _) { return lamp(_) && cell(_)->ap == g_vm_buf; }
 // it points at -- open-addressed, linear-probed, cap a power of two. Growth
 // allocates a new backing and swaps header[1]; the header never moves, so an
 // aliased reference (ev's scopes) sees later inserts. Both are plain threads:
-// len/cap are fixnums and keys/vals ll words, so evac_thd traces them with no
+// len/cap are fixnums and keys/vals l words, so evac_thd traces them with no
 // bespoke GC, like g_buf. Empty slots hold MAP_GAP, a unique word-aligned
 // out-of-pool address gcp leaves untouched, never a legal key and never read as
 // a terminator. (m k) looks k up (nil if absent) through g_vm_map_lookup.
@@ -203,7 +203,7 @@ static g_inline struct g_str *buf_str(word x) { return ((struct g_buf*) x)->str;
 // the byte ops read from a string or a buf; both resolve to a g_str of bytes.
 static g_inline struct g_str *bytes_of(word x) { return bufp(x) ? buf_str(x) : str(x); }
 // Arbitrary-precision integer (Step 6). Own data-sentinel kind KBig: a flat,
-// GC-trivial object (raw limbs, no embedded ll pointers) the copying GC moves
+// GC-trivial object (raw limbs, no embedded l pointers) the copying GC moves
 // by memcpy. A generic thread scan can't hold inline limb words (a limb that's
 // even-and-in-pool would be spuriously forwarded, one matching G_THD_TAG would
 // truncate the object), so a flat bignum needs its own copy/evac rule -- like
@@ -277,7 +277,7 @@ static g_inline void tuple_put_int(struct g_tuple *v, uintptr_t i, intptr_t x) {
 static g_inline void tuple_put_flo(struct g_tuple *v, uintptr_t i, g_flo_t x) {
  void *p = tuple_data(v);
  if (v->type == g_R) ((g_flo_t*) p)[i] = x; else ((intptr_t*) p)[i] = (intptr_t) x; }
-// Read/write element i of a g_O array as a raw tagged ll word (the GC traces
+// Read/write element i of a g_O array as a raw tagged l word (the GC traces
 // these; see evac_tuple). No conversion -- the slot IS a value.
 static g_inline word tuple_get_obj(struct g_tuple *v, uintptr_t i) {
  return ((word*) tuple_data(v))[i]; }
@@ -438,7 +438,7 @@ static g_inline bool eql(struct g *g, word a, word b) { return a == b || eqv(g, 
 // Threads -- and every other variable-length heap object the GC copies by
 // scanning (continuations, task nodes, env scopes, ports) -- end with a single
 // tag word: the object's own head pointer with bit 1 set (G_THD_TAG), saving a
-// word over a separate NULL marker + head. Small ints are odd and ll heap
+// word over a separate NULL marker + head. Small ints are odd and l heap
 // pointers are word-aligned, so the only other word that can carry (x & 3) == 2
 // is an embedded *external* pointer (host data/function) that happens to land
 // on a 2-byte boundary. So the terminator test is not just the tag bits: the
@@ -489,7 +489,7 @@ static g_inline struct g_str *ini_str(struct g_str *s, uintptr_t len) {
 // for `+` on symbols (empty name -> contributes no bytes) and the canonical value of
 // any empty-named symbol concat. Predicates read `ap`, so these behave as a normal
 // text/sym value; the FAM `bytes[]` is simply absent (len 0).
-// External linkage (declared in ll.h with the EmptyString/EMPTY_SYM macros) so the
+// External linkage (declared in l.h with the EmptyString/EMPTY_SYM macros) so the
 // frontends can return them too (e.g. host_run's empty-output capture).
 const struct g_str g_str_empty = { .ap = g_vm_str, .len = 0 };
 const struct g_atom g_sym_empty = { .ap = g_vm_sym, .code = 0, .nom = 0, .l = 0, .r = 0 };
@@ -644,13 +644,13 @@ nifs(native_implemented_function);
 static g_vm(_g_vm_yield_c) { return Pack(g), g; }
 static union u const yield_c[] = { {_g_vm_yield_c} };
 
-// g_vm_trap: the default trap ap, a first-class vm ap (declared in ll.h with
+// g_vm_trap: the default trap ap, a first-class vm ap (declared in l.h with
 // ret0/cur/port_io). A throw enters it with the thrown status encoded into g
 // (see gtrap2 below). The MORE bit is read control flow, not a sing: the
 // thrower left [resume port sentinel] on the stack (the fread protocol), so
 // deliver the port (more: incomplete) or the sentinel (eof) to the resume
 // thread and keep running. A sing re-encodes and yields to C. Define a global
-// `trap` function to land throws in ll instead.
+// `trap` function to land throws in l instead.
 g_vm(g_vm_trap) {
  enum g_status s = g_code_of(g);
  g = g_core_of(g);
@@ -663,7 +663,7 @@ g_vm(g_vm_trap) {
 static union u const throw_c[] = { {g_vm_trap} };
 
 // gtrap2/gtrap are defined after numap_drive (the trap call frame runs
-// through its 3-arg twin); declared in ll.h.
+// through its 3-arg twin); declared in l.h.
 
 static struct g_def const def1[] = { nifs(niff) insts(i_entry)};
 
@@ -703,9 +703,9 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   g = g_push(g, 3, EMPTY_SYM, EMPTY_SYM, g->dict);
   g = g_mapput(g);
   g = g_pop(g, 1);
-  // `version-number`: the build's git hash (ll_version.h), surfaced on init so the user
+  // `version-number`: the build's git hash (l_version.h), surfaced on init so the user
   // can read the running version. A non-fixnum global, harmlessly skipped by ev.l's pureset.
-  if (g_ok(g = g_strof(g, LL_VERSION))) {
+  if (g_ok(g = g_strof(g, L_VERSION))) {
    struct g_def vd[] = {{"version-number", g_pop1(g)}};
    g = g_defn(g, vd, LEN(vd)); }
   // dict['operators]: the reader's operator table, char -> name | (name . arity).
@@ -940,7 +940,7 @@ static g_inline word copy_str(struct g*g, struct g_str *src, word const *const p
  src->ap = memcpy(dst, src, bytes);
  return word(dst); }
 
-// Bignums are flat (raw limbs, no embedded ll pointers), so they copy by a
+// Bignums are flat (raw limbs, no embedded l pointers), so they copy by a
 // single memcpy and evac by advancing past their bytes -- exactly like strings.
 static g_inline word copy_big(struct g*g, struct g_big *src, word const *const p0, word const*const t0) {
  uintptr_t bytes = g_big_bytes(src);
@@ -1403,7 +1403,7 @@ static g_inline struct g *ana_d(struct g *g, struct env **b, word exp) {
  struct g_r *mm = g_core_of(g)->root;
  MM(g, &exp);
  // recursive-value boxing: c0 is the bootstrap compiler, so it delegates the
- // letrec*-value rewrite to the ll `boxfix` prepass (prelude.l) -- evaluated
+ // letrec*-value rewrite to the l `boxfix` prepass (prelude.l) -- evaluated
  // like a macro -- once that global exists (i.e. for everything after its own
  // definition partway through the prelude). It boxes a value binding whose init
  // closes over the name being defined into a heap cell. The runtime compiler
@@ -1450,7 +1450,7 @@ static g_inline struct g *ana_d(struct g *g, struct env **b, word exp) {
   exp = BB(exp); }
  (*b)->stack = os; // restore: emission below rebuilds the real frame
 
- intptr_t ll = llen(nom);
+ intptr_t l = llen(nom);
  bool oddp = twop(exp),
       globp = !oddp && nilp((*b)->args); // we check this again later to make global bindings at top level
  if (!oddp) { // if there's no body then evaluate the name of the last definition
@@ -1514,7 +1514,7 @@ static g_inline struct g *ana_d(struct g *g, struct env **b, word exp) {
  return
   (*b)->stack = e,
   incl(*b, 2),
-  g = g_push(g, 2, c1_apn, putfix(ll)),
+  g = g_push(g, 2, c1_apn, putfix(l)),
   forget(); }
 
 static word ldels(struct g *g, word lam, word l) {
@@ -1586,7 +1586,7 @@ static g_inline g_word resolve_hot(struct g *g, char const *nm, uintptr_t n) {
 // -- itself the new function -- and leave it as the result, resuming at Ip+1.
 
 // Fixnum-as-function application. A fixnum operator n applied to x is dispatched
-// to the ll ap at dict['num-ap] as (num-ap n x): numeric x -> x**n, a
+// to the l ap at dict['num-ap] as (num-ap n x): numeric x -> x**n, a
 // function x -> x iterated n times (Church numerals).
 //
 // The driver mirrors the pair driver: with the stack laid out [n, num-ap, x, ret]
@@ -2837,8 +2837,8 @@ static g_noinline double strtod_wrap(struct g*g, word x) {
  double r = strtod(b, &e);
  return e != b && *e == 0 ? (g_flo_t) r : (g_flo_t) NAN; }
 
-// (flo s) — parse a ll string as a decimal float. Returns a rank-0
-// f64 box if the entire string parses, else nil. Used by the ll-side
+// (flo s) — parse a l string as a decimal float. Returns a rank-0
+// f64 box if the entire string parses, else nil. Used by the l-side
 // reader in repl.l to match the C reader's strtol → strtod → intern
 // cascade on float-shaped tokens.
 g_vm(g_vm_flo) {
@@ -2933,13 +2933,13 @@ static struct g* g_z_getc(struct g*g) {
 
 // --- one non-recursive reader for both g_read1 (multi=0) and g_reads (multi=1) ---
 // `ctx` (kept at sp[0]) is an explicit stack of frames, top = car, so the nesting
-// that used to recurse in C now lives on the ll heap (and rides GC). A frame is
+// that used to recurse in C now lives on the l heap (and rides GC). A frame is
 // either a *list accumulator* — a pair (head . tail) holding the elements read so
 // far in source order, ((nil . nil) when empty), built in place by appending at
 // `tail` so no reverse pass is needed — or a *reader-macro* — the wrap symbol \ qq
 // uq uqs, recognised by symp. A finished datum is `delivered` to the top frame:
 // appended to a list, or wrapped and re-delivered; with no frame left it is the
-// result. Everything lives on the ll stack so GC relocates it across the allocs
+// result. Everything lives on the l stack so GC relocates it across the allocs
 // that reading does.
 
 static g_inline struct g *push_frame(struct g *g) {     // push an empty (head . tail) accumulator
@@ -3248,7 +3248,7 @@ g_vm(g_vm_key) {
 // map (lookup-lambda backed by an open-addressed thread; see mapp comment)
 // ============================================================================
 // backing is internal -- only ever reached from a header[1], never applied as a
-// ll value; its ap behaves-as-1 like g_vm_buf should it ever be (it won't).
+// l value; its ap behaves-as-1 like g_vm_buf should it ever be (it won't).
 static g_vm(g_vm_map_data) {
  return Ip = cell(*++Sp), *Sp = putfix(1), Continue(); }
 
@@ -3358,7 +3358,7 @@ op11(g_vm_lamp, lamp(Sp[0]) ? putfix(1) : nil)
 // a constant function); handlep is the refinement that names the zoo.
 op11(g_vm_handlep, (bufp(Sp[0]) || iop(Sp[0])) ? putfix(1) : nil)
 
-// (hash x) -- the general hashing method exposed to ll as a fixnum.
+// (hash x) -- the general hashing method exposed to l as a fixnum.
 op11(g_vm_hashof, putfix(hash(g, Sp[0])))
 
 g_vm(g_vm_get) {                                // (peek coll key default): collection-first
@@ -3882,7 +3882,7 @@ static g_vm(g_vm_add_string) {
 static g_vm(g_vm_0) {                             // unsupported mix (array <-> text)
  return *++Sp = nil, Ip++, Continue(); }
 
-// The fundamental value kind for generic-op dispatch (enum q in ll.h): a fixnum is
+// The fundamental value kind for generic-op dispatch (enum q in l.h): a fixnum is
 // the odd tag (KFix), a non-data heap pointer is a thread/function (KLam), else g_typ
 // gives the data kind. The one refinement: a rank>=1 tuple (array) expands by element
 // tier to KArrZ..KArrO so the array tower dispatches inline with the scalar tower it
@@ -3977,7 +3977,7 @@ static g_vm(data_sym_apply) {
 // g_vm_numap). Fixnums reach num-ap via the odd-tag check in g_vm_ap; the rest of the
 // tower (floats, boxes, complex, arrays -- all g_vm_tuple -- and bignums) are heap
 // pointers, so they arrive at their data sentinel. We lay the same [n, num-ap, x, ret]
-// frame and run numap_drive, handing the boxed operator n to the ll num-ap ap,
+// frame and run numap_drive, handing the boxed operator n to the l num-ap ap,
 // which picks exponentiate / compose / self by operand+operator kind.
 static g_vm(data_num_apply) {
  Have(2);
@@ -4004,7 +4004,7 @@ static g_vm(data_pair_apply) {
 
 // === the three generic-op dispatch matrices, adjacent ======================
 // All indexed by g_kind (g_apply_mx's row by g_typ, the data-kind subrange). The kind
-// order (ll.h) makes each lane a contiguous block: [KFix..KArrO] arithmetic (the
+// order (l.h) makes each lane a contiguous block: [KFix..KArrO] arithmetic (the
 // scalar tower fix/tuple/big then the parallel array tower arrZ/arrR/arrC/arrO), then
 // [KString..KTwo] sequence, then KMap, then KLam. Lanes:
 //   *n   = numeric tower & arrays (arithmetic / broadcast) -- the lane ap still
@@ -4205,7 +4205,7 @@ size_t const g_T[] = {
  [g_Z] = Bytes,
  [g_R] = Bytes,
  [g_C] = 2 * Bytes,      // complex scalar: (re, im)
- [g_O] = Bytes, };       // object: one tagged ll word per element
+ [g_O] = Bytes, };       // object: one tagged l word per element
 
 uintptr_t g_tuple_bytes(struct g_tuple *v) {
  return sizeof(struct g_tuple) + v->rank * sizeof(word) + g_T[v->type] * tuple_nelem(v); }
@@ -4503,7 +4503,7 @@ g_vm(g_vm_same) {
 // bignum (it demotes to nil), so every bignum has |slen| >= 1 limbs.
 //
 // All multi-limb work lives in g_noinline magnitude helpers operating on raw
-// uint32_t arrays (no ll pointers, no allocation), so the VM-facing entry
+// uint32_t arrays (no l pointers, no allocation), so the VM-facing entry
 // points keep their tail calls and the GC never sees a half-built object. The
 // arithmetic uses 32-bit limbs with a uint64_t accumulator on every target:
 // limb products fit a uint64_t and Knuth divmod's 2-limb/1-limb step needs no
@@ -4805,7 +4805,7 @@ struct g *g_big_quot_true(struct g *g) {
 // we drive it as a self-looping VM instruction: the partial product lives in a
 // buf (flat bytes, GC-relocates safely), and each dispatch folds ~BMUL_CHUNK
 // limb-mults of rows, then re-dispatches with a YieldCheck. The work state rides
-// the ll stack [i, r, ret_ip, a, b] -- a yield saves/restores it, so the
+// the l stack [i, r, ret_ip, a, b] -- a yield saves/restores it, so the
 // product resumes exactly where it paused. Ip parks on bmul_loop while looping;
 // on completion it jumps back to ret_ip (the instruction after `*`).
 // Operands a,b are kept as heap bignums so the loop reads stable limb pointers
@@ -5199,7 +5199,7 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
 
 // === ordered comparison: a total order over lisp values ======================
 // `< <= > >=` extend across EVERY kind, not just numbers. The CROSS-kind order is
-// the enum q type lattice (ll.h) -- fixnum/number LOW, lambda HIGH, the very
+// the enum q type lattice (l.h) -- fixnum/number LOW, lambda HIGH, the very
 // order the generic-op matrix diagonals encode: number < string < symbol < pair <
 // map < lambda. (Arrays are the exception: an array operand compares ELEMENTWISE -> a
 // 0/1 mask via g_vm_vbin, never the scalar order.) WITHIN a kind:
