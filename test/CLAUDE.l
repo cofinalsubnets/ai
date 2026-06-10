@@ -260,7 +260,7 @@
 ; the *egg* (ll/egg.l): compile the compiler with the C bootstrap, recompile the whole
 ; prelude+ev corpus through itself, and install it as `ev` -- baked into the image at C compile
 ; time, no allocation.
-(assert (lamp ev) (fixp (peek globals 'boot-ticks 0)))
+(assert (lamp ev) (fixp (peek dict 'boot-ticks 0)))
 
 ; --- under the hood --- a generic op dispatches on a value's kind (an enum whose order is the
 ; lattice above). a dyadic op is an NxN table indexed by the two kinds; a monadic op is its

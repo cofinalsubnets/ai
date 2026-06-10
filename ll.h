@@ -101,7 +101,6 @@ struct g {
  union { uintptr_t t0; g_word *cp; };
  void *(*malloc)(struct g*, size_t),
       (*free)(struct g*, void*);
- union u *trap; // trap continuation: a thread thrown to on error (default throw_c, installed by g_ini_0)
  uintptr_t b;
  uintptr_t n_gc, max_len, max_heap; // gc instrumentation (cycles, peak pool len, peak live heap; words)
  union {
@@ -119,12 +118,11 @@ struct g {
   // rng: global RNG state (rank-1 i64 tuple, len 4, xoshiro256++). Lives in &v0..end
   // so gc.c's root loop forwards it.
   g_word rng;
-  // Handlers installed per instance from the prelude: numap is the fixnum-as-function
-  // handler ((n x) -> (num-ap n x)); scomb/bcomb are the +/* thread combinators. The
-  // *_sym slots hold their dict keys, pre-interned at init, so the apply path can lazily
-  // resolve a slot still 0 (prelude-order / freestanding boot). All in v0..end -> the gc
-  // root loop forwards them, so no hand-rolled gcg() lines and no C global.
-  g_word numap, scomb, bcomb, numap_sym, scomb_sym, bcomb_sym; }; };
+  // Pre-interned dict keys for the C->lisp hooks (num-ap, scomb, bcomb, trap).
+  // The handlers live on dict (GC-traced, egg-baked; no cache slots), resolved
+  // per use; keys interned at init so lookups never allocate. In v0..end so the
+  // gc root loop forwards them.
+  g_word numap_sym, scomb_sym, bcomb_sym, trap_sym; }; };
  intptr_t end[]; };
 
 struct g_def { char const *n; intptr_t x; };
@@ -282,21 +280,9 @@ static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b)
  return w->ap = g_vm_two, w->a = a, w->b = b, w; }
 static g_inline struct g *encode(struct g*g, enum g_status s) { return
   (struct g*) ((uintptr_t) g | s); }
-// Throw status s: transfer control to the continuation installed at g->trap,
-// carrying s encoded into the g handed to it. The default (throw_c, set in
-// g_ini_0) immediately yields that back to the C driver -- same escape the old
-// trap did; installing a ll thread at g->trap would instead land throws in ll.
-static g_inline struct g *gtrap2(struct g*g, enum g_status s) {
- struct g *c = g_core_of(g);
- c->ip = c->trap;                               // resume at the trap continuation
-#if g_tco
- return c->trap->ap(encode(c, s), c->trap, c->hp, c->sp);
-#else
- return c->trap->ap(encode(c, s));
-#endif
-}
-// Throw on an already-tagged g: re-throw its own status to g->trap.
-static g_inline struct g *gtrap(struct g*g) { return gtrap2(g_core_of(g), g_code_of(g)); }
+// Throw: to the global `trap` function when installed, else throw_c (ll.c).
+// gtrap re-throws an already-tagged g's own status.
+struct g *gtrap2(struct g*, enum g_status), *gtrap(struct g*);
 static g_inline struct g *g_have(struct g *g, uintptr_t n) {
  return !g_ok(g) || avail(g) >= n ? g : g_please(g, n); }
 

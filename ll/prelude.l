@@ -3,7 +3,7 @@
    (co f g x) (f (g x))
    (const x _) x
    (flip f x y) (f y x))
-(: macros (peek globals 0 0))
+(: macros (peek dict 0 0))
 (: pi 3.141592653589793
    e 2.718281828459045                          ; Euler's number; exp is (\ x (x e))
    true 1 false 0
@@ -48,7 +48,7 @@
    putx (fputx out)
    (getc _) (fgetc in)
    read (fread in))
-; fixnum-as-function application, installed into the VM via set-numap: applying a
+; fixnum-as-function application, pinned on dict for the VM's apply path: applying a
 ; fixnum n to x is Church-numeral application -- numeric x exponentiates (x ** n), a
 ; function x composes n times. n<1 -> 1 (itself the identity numeral: (1 x) == x
 ; for every x, see below); n=1 -> x directly. numfn assembles the n-fold thread
@@ -90,7 +90,7 @@
    ; numeral, == const 1); k=1 -> identity.
    (num-ap n x) (? (nump x) (powg x n)
                    (: k (int (abs n)) (? (< k 1) 1 (= k 1) x (numfn k x))))
-   _ (set-numap num-ap))
+   _ (pin dict 'num-ap num-ap))
 ; thread (function) combinators for + and *, installed like num-ap. a thread operand
 ; takes precedence over every other type, so +/* of a function build a function. these
 ; are the README's Church numeral arithmetic, so +/* on numerals agree with the numbers:
@@ -101,7 +101,7 @@
 ; with addition rather than the S combinator's (f x (g x)).
 (: (scomb f g a x) (f a (g a x))
    (bcomb f g x) (f (g x))
-   _ (set-scomb scomb) _ (set-bcomb bcomb))
+   _ (pin dict 'scomb scomb) _ (pin dict 'bcomb bcomb))
 (: (mapf f l) (? (twop l) (X (f (A l)) (mapf f (B l))))
    (foldl f z l) (? (twop l) (foldl f (f z (A l)) (B l)) z)
    (foldr f z l) (? (twop l) (f (A l) (foldr f z (B l))) z))

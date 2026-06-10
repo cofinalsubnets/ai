@@ -376,9 +376,6 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 void g_rng_seed(struct g_tuple*, uint64_t);   // shape an i64 state tuple + seed it (SplitMix64)
 g_vm_t g_vm_rng_seed, g_vm_rng_get, g_vm_rng_set,
        g_vm_rand, g_vm_randf, g_vm_rand_next, g_vm_randf_next;
-g_vm_t g_vm_set_numap,   // installs g->numap (the ll fixnum-as-function handler), see vm.c
-       g_vm_set_scomb, g_vm_set_bcomb;   // install the `+`/`*` thread combinators (S / compose)
-
 int memcmp(void const*, void const*, size_t);
 void *malloc(size_t), free(void*),
  *memcpy(void*restrict, void const*restrict, size_t),
@@ -617,9 +614,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_dot, "dot", S1(g_vm_dot))\
  _(nif_rng_seed, "rng-seed", S1(g_vm_rng_seed)) _(nif_rng_get, "rng-get", S1(g_vm_rng_get)) _(nif_rng_set, "rng-set", S1(g_vm_rng_set))\
  _(nif_rand, "rand", S1(g_vm_rand)) _(nif_randf, "randf", S1(g_vm_randf))\
- _(nif_rand_next, "rand-next", S1(g_vm_rand_next)) _(nif_randf_next, "randf-next", S1(g_vm_randf_next))\
- _(nif_set_numap, "set-numap", S1(g_vm_set_numap))\
- _(nif_set_scomb, "set-scomb", S1(g_vm_set_scomb)) _(nif_set_bcomb, "set-bcomb", S1(g_vm_set_bcomb))
+ _(nif_rand_next, "rand-next", S1(g_vm_rand_next)) _(nif_randf_next, "randf-next", S1(g_vm_randf_next))
 #define native_implemented_function(n, _, d) static union u const n[] = d;
 #define insts(_) _(g_vm_unc) _(g_vm_freev) _(g_vm_ret) _(g_vm_ap) _(g_vm_tap) _(g_vm_apn) _(g_vm_tapn)\
   _(g_vm_jump) _(g_vm_cond) _(g_vm_arg) _(g_vm_quote) _(g_vm_defglob)\
@@ -650,15 +645,35 @@ nifs(native_implemented_function);
 static g_vm(_g_vm_yield_c) { return Pack(g), g; }
 static union u const yield_c[] = { {_g_vm_yield_c} };
 
-// Default trap continuation installed at g->trap. A throw enters it with the
-// thrown status encoded into g (see gtrap2 in i.h); it re-encodes that status
-// and yields to C -- the same escape the old trap did. Swap g->trap for a ll
-// thread to land throws in ll instead.
+// Default trap continuation. A throw enters it with the thrown status encoded
+// into g (see gtrap2 below); it re-encodes that status and yields to C -- the
+// same escape the old trap did. Define a global `trap` function to land throws
+// in ll instead.
 static g_vm(_g_vm_throw_c) {
  enum g_status s = g_code_of(g);
  g = g_core_of(g);
  return Pack(g), encode(g, s); }
 static union u const throw_c[] = { {_g_vm_throw_c} };
+
+// Throw status s to the trap continuation: the global `trap` function when
+// installed (entered raw -- status in the tag bits, no args -- so it must check
+// before doing anything unsafe), else throw_c. Pre-dict throws (g_ini_0) always
+// take the default. g_mapget is a read: no allocation, safe at oom.
+struct g *gtrap2(struct g *g, enum g_status s) {
+ struct g *c = g_core_of(g);
+ union u *t = (union u*) throw_c;
+ if (c->dict && c->trap_sym) {
+  word h = g_mapget(c, nil, c->trap_sym, c->dict);
+  if (lamp(h)) t = cell(h); }
+ c->ip = t;
+#if g_tco
+ return t->ap(encode(c, s), t, c->hp, c->sp);
+#else
+ return t->ap(encode(c, s));
+#endif
+}
+// Throw on an already-tagged g: re-throw its own status.
+struct g *gtrap(struct g *g) { return gtrap2(g_core_of(g), g_code_of(g)); }
 
 static struct g_def const def1[] = { nifs(niff) insts(i_entry)};
 
@@ -672,7 +687,6 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
  memset(g, 0, sizeof(struct g));
  g->len = len0, g->pool = (void*) g, g->malloc = ma, g->free = fr;
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = g_clock();
- g->trap = (union u*) throw_c;
  // dict + macro maps (lookup-lambdas) then the main task thread.
  if (g_ok(g = map_new(g)) && g_ok(g = map_new(g)) && g_ok(g = g_have(g, 6))) {
   union u *M = bump(g, 6);            // sp[0]=macro, sp[1]=dict (no GC since g_have)
@@ -689,7 +703,7 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   g->dict = g->sp[0];                  // henceforth GC-forwarded via the v0..end loop
   g = g_pop(g, 1);
   struct g_def def0[] = {
-   {"globals", g->dict},
+   {"dict", g->dict},
    {"in", (word) &g_stdin},
    {"out", (word) &g_stdout},
    {"err", (word) &g_stderr}, };
@@ -700,12 +714,12 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   if (g_ok(g = g_strof(g, LL_VERSION))) {
    struct g_def vd[] = {{"version-number", g_pop1(g)}};
    g = g_defn(g, vd, LEN(vd)); }
-  // Pre-intern the dict keys for the prelude-installed handlers so the apply path can
-  // resolve them lazily (resolve_handler) without allocating in a tail-jump handler.
-  // Idempotent with the prelude's own bindings; the g->*_sym fields ride the v0..end loop.
+  // Pre-intern the dict keys for the C->lisp hooks so resolve_handler/gtrap2
+  // can look them up without allocating. Idempotent with the prelude's bindings.
   if (g_ok(g = intern(g_strof(g, "num-ap")))) g->numap_sym = pop1(g);
   if (g_ok(g = intern(g_strof(g, "scomb"))))  g->scomb_sym = pop1(g);
   if (g_ok(g = intern(g_strof(g, "bcomb"))))  g->bcomb_sym = pop1(g);
+  if (g_ok(g = intern(g_strof(g, "trap"))))   g->trap_sym = pop1(g);
   // Eager-seed the global RNG stream so g->rng is always a valid state tuple (ll0
   // bootstrap included). The seed mixes the clock with the rotated pool address.
   if (g_ok(g = g_have(g, RNG_VEC_REQ))) {
@@ -839,7 +853,7 @@ static g_noinline struct g *gcg(struct g*h, struct g *p1, uintptr_t len1, struct
  h->ip = cell(gcp(h, word(h->ip), p0, t0));
  h->tasks = cell(gcp(h, word(h->tasks), p0, t0));
  h->symbols = 0;
- for (word i = 0; i < h->end - &h->v0; i++) (&h->v0)[i] = gcp(h, (&h->v0)[i], p0, t0);               // core live variables (incl. numap/scomb/bcomb + their syms)
+ for (word i = 0; i < h->end - &h->v0; i++) (&h->v0)[i] = gcp(h, (&h->v0)[i], p0, t0);               // core live variables (incl. the pre-interned *_sym dict keys)
  for (word n = 0; n < sh; n++) h->sp[n] = gcp(h, sp0[n], p0, t0);                     // stack
  for (struct g_r *s = h->root; s; s = s->n) *s->x = gcp(h, *s->x, p0, t0); // C live variables
  while (h->cp < h->hp) (datp(h->cp) ? evac_data : evac_thd)(h, p0, t0);              // cheney algorithm
@@ -1507,50 +1521,26 @@ g_noinline struct g *g_evals_(struct g*g, char const*s) {
 // ============================================================================
 // vm
 // ============================================================================
-// (set-numap fn): install the ll handler for fixnum-as-function application into the
-// the global dict under numap_sym. The dict is GC-traced and egg-baked, so the handler
-// survives into the runtime image (the g->numap field is NOT baked and reads 0 there);
-// resolve_handler then finds it via the dict. Mirrors g_vm_defglob's k/v/dict + g_mapput.
-g_vm(g_vm_set_numap) {
- Have(3); Sp -= 3;
- word v = Sp[3];
- return Sp[0] = g->numap_sym, Sp[1] = v, Sp[2] = g->dict, Pack(g),
-  !g_ok(g = g_mapput(g)) ? gtrap(g) : (Unpack(g), Sp += 1, Ip += 1, Continue()); }
-
-// A valid handler is a non-null even word (a heap closure); an unset 0, nil
-// (=putfix(0)=1, odd), and any fixnum are not. If `cur` isn't valid, resolve `nom`
-// from the global dict and return it (the caller caches into the g-> slot); trap loud
-// if it is genuinely undefined -- a prelude-ordering contract violation -- rather than
-// emit a fault. g_mapget is a read, so no Have is needed in the tail-jump callers.
-static g_inline g_word resolve_handler(struct g *g, g_word cur, g_word nom) {
- if (cur && lamp(cur)) return cur;
- cur = g_mapget(g, nil, nom, g->dict);
+// Resolve a C->lisp handler from dict (where the prelude pins it -- dict is
+// GC-traced and egg-baked, so it survives into the runtime image). Trap loud if
+// undefined: a prelude-ordering contract violation. g_mapget is a read, so no
+// Have is needed in the tail-jump callers.
+static g_inline g_word resolve_handler(struct g *g, g_word nom) {
+ g_word cur = g_mapget(g, nil, nom, g->dict);
  if (!lamp(cur)) __builtin_trap();
  return cur; }
 
-// Thread (function) combinators for `+` and `*`, installed from the prelude like
-// num-ap. A thread operand takes precedence over every other type, so `+`/`*` of a
-// function build a new function -- the README's Church arithmetic, so on Church
-// numerals they agree with the numbers: `+` is Church add ((+ g g) a x = g a (g a x)),
-// `*` is composition ((* g g) x = g (g x)) = Church mul (mul a b g = a (b g)). g->scomb
-// holds the 4-arg add lambda, g->bcomb the 3-arg compose lambda; the C handlers reuse
-// numap_drive to compute the partial (scomb g g) / (bcomb g g) -- itself the new
-// function -- and leave it as the result, resuming at Ip+1.
-g_vm(g_vm_set_scomb) {
- Have(3); Sp -= 3;
- word v = Sp[3];
- return Sp[0] = g->scomb_sym, Sp[1] = v, Sp[2] = g->dict, Pack(g),
-  !g_ok(g = g_mapput(g)) ? gtrap(g) : (Unpack(g), Sp += 1, Ip += 1, Continue()); }
-g_vm(g_vm_set_bcomb) {
- Have(3); Sp -= 3;
- word v = Sp[3];
- return Sp[0] = g->bcomb_sym, Sp[1] = v, Sp[2] = g->dict, Pack(g),
-  !g_ok(g = g_mapput(g)) ? gtrap(g) : (Unpack(g), Sp += 1, Ip += 1, Continue()); }
+// Thread (function) combinators for `+` and `*`, pinned on dict by the prelude
+// like num-ap. A thread operand takes precedence over every other type, so
+// `+`/`*` of a function build a new function -- the README's Church arithmetic,
+// agreeing with numerals: `+` is Church add ((+ g g) a x = g a (g a x)), `*` is
+// composition. scomb is the 4-arg add lambda, bcomb the 3-arg compose; the C
+// handlers reuse numap_drive to compute the partial (scomb g g) / (bcomb g g)
+// -- itself the new function -- and leave it as the result, resuming at Ip+1.
 
 // Fixnum-as-function application. A fixnum operator n applied to x is dispatched
-// to the ll handler in g->numap as (num-ap n x): numeric x -> x**n, a function
-// x -> x iterated n times (Church numerals). g->numap is resolved lazily on first use
-// (resolve_handler) if the prelude hasn't installed it yet -- no install-order assumption.
+// to the ll handler at dict['num-ap] as (num-ap n x): numeric x -> x**n, a
+// function x -> x iterated n times (Church numerals).
 //
 // The driver mirrors the pair driver: with the stack laid out [n, num-ap, x, ret]
 // it applies num-ap to n (a partial), swaps so that partial becomes the operator,
@@ -1575,33 +1565,33 @@ union u const numap_drive[] = { {g_vm_ap}, {.ap = numap_swap}, {.ap = g_vm_ret0}
  return Unpack(g), Ap(self, g); }
 static g_vm(g_vm_numap) {
  NumapHave(g_vm_numap);
- g->numap = resolve_handler(g, g->numap, g->numap_sym);
+ word h = resolve_handler(g, g->numap_sym);
  word n = Sp[1], x = Sp[0], *dst = Sp - 2, ret = word(Ip + 1);
- dst[0] = n, dst[1] = g->numap, dst[2] = x, dst[3] = ret;
+ dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static g_vm(g_vm_numtap) {
  NumapHave(g_vm_numtap);
- g->numap = resolve_handler(g, g->numap, g->numap_sym);
+ word h = resolve_handler(g, g->numap_sym);
  word fs = getfix(Ip[1].x), n = Sp[1], x = Sp[0], *dst = &Sp[fs + 2] - 3, ret = Sp[fs + 2];
- dst[0] = n, dst[1] = g->numap, dst[2] = x, dst[3] = ret;
+ dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 
-// `+`/`*` over a lambda operand: build the combinator partial (g->scomb/g->bcomb g g)
+// `+`/`*` over a lambda operand: build the combinator partial (scomb/bcomb g g)
 // and leave it as the result. Mirrors g_vm_numap's frame -- [g, comb, g, ret=Ip+1]
 // run through numap_drive -- but the combinator (4-arg add / 3-arg compose) applied
 // to 2 args yields a closure (the new function) instead of a value. Ip is at the +/*
 // opcode (a re-runnable instruction), so a plain Have is safe; operands re-read after.
 static g_vm(g_vm_addl) {
  Have(2);
- g->scomb = resolve_handler(g, g->scomb, g->scomb_sym);
+ word h = resolve_handler(g, g->scomb_sym);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
- dst[0] = fa, dst[1] = g->scomb, dst[2] = ga, dst[3] = ret;
+ dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static g_vm(g_vm_mull) {
  Have(2);
- g->bcomb = resolve_handler(g, g->bcomb, g->bcomb_sym);
+ word h = resolve_handler(g, g->bcomb_sym);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
- dst[0] = fa, dst[1] = g->bcomb, dst[2] = ga, dst[3] = ret;
+ dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 
 // apply function to one argument
@@ -3770,9 +3760,9 @@ static g_vm(data_sym_apply) {
 // which picks exponentiate / compose / self by operand+operator kind.
 static g_vm(data_num_apply) {
  Have(2);
- g->numap = resolve_handler(g, g->numap, g->numap_sym);
+ word h = resolve_handler(g, g->numap_sym);
  word n = word(Ip), x = Sp[0], ret = Sp[1], *dst = Sp - 2;
- dst[0] = n, dst[1] = g->numap, dst[2] = x, dst[3] = ret;
+ dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 
 // ((a . b) g) == (g a b): a pair is its own Church eliminator (cons = \a b g.g a b).

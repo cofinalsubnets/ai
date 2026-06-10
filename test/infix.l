@@ -101,11 +101,11 @@
 
 ; ----- deffix and (infix ...) macros -----
 ; Gwen's analyzer bakes known globals into compiled code as literals
-; (see avb in boot.l), so the macros read op_fixity via (get 0 ... globals)
+; (see avb in boot.l), so the macros read op_fixity via (peek dict ...)
 ; to force a dynamic lookup each invocation rather than capturing 0 once.
 (:: 'deffix (\ args
- (: _ (pin globals 'op_fixity (X args (peek globals 'op_fixity 0))) 0)))
-(:: 'infix (\ body (infix_rewrite body (peek globals 'op_fixity 0))))
+ (: _ (pin dict 'op_fixity (X args (peek dict 'op_fixity 0))) 0)))
+(:: 'infix (\ body (infix_rewrite body (peek dict 'op_fixity 0))))
 
 ; ----- default canonical fixities -----
 ; Order doesn't matter — deffix prepends; lookup resolves by (sym, kind).

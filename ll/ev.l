@@ -41,8 +41,8 @@
            ssub scat string
            re im conj arg flo com
            sin cos log pow)
-   pureset (foldl (\ t s (: v (globals s) (? v (pin t v 1) t))) (mapn 0) names)
-   (add t s) (: v (globals s)
+   pureset (foldl (\ t s (: v (dict s) (? v (pin t v 1) t))) (mapn 0) names)
+   (add t s) (: v (dict s)
     (? (fixp v) t
      (: o (opof v) p (pureset v)
       (? (|| o p)
@@ -50,7 +50,7 @@
           ar (? o (B o) (idp g_vm_cur (peekl 0 v)) (peekl 1 v) 0)   ; nif/multi-arg-fn arity
           (pin t v (\ x (hgen v op ar p x))))
        t))))
-   (foldl add (mapn 0) (mapk globals))))
+   (foldl add (mapn 0) (mapk dict))))
 
 (:- (\ x (:
  c (sco 0 (list 0) 0)
@@ -144,7 +144,7 @@
    (fold x bnd) (: h (A x)
     (? (atomp (B x)) x                          ; (f) single element -> ana's (atomp b) handles
        (|| (nilp (symp h)) (memq h bnd)) (X apx (X 0 x))   ; local/computed head
-       (: v (globals h) hd (wevs v)
+       (: v (dict h) hd (wevs v)
         (? hd (hd x)
            (napof v (B x)) (X apx (X 1 x))
            (X apx (X 0 x))))))
@@ -234,7 +234,7 @@
 
   (avb c d x)
    (? (nilp d) ; outside all lexical scopes?
-       (: y (peek globals x Z) ; check global scope
+       (: y (peek dict x Z) ; check global scope
         (? !(= y Z) (kim y) ; if it's there use that
          (: _ (? (c 'par) (push c 'imp x))
           (em2 g_vm_freev x))))
