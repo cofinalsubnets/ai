@@ -17,8 +17,8 @@
  (= 3 o)   (= o (atype oa-a))                    ; type code 3
  (= 1 (arank oa-a))   (= 5 (alen oa-a))
  (= 5 (A (ashape oa-a)))
- (nilp (arr o '()))                              ; rank-0 object rejected
- (nilp (arrl o '() '(1)))
+ (nilp (arr o 0))                                ; rank-0 object rejected
+ (nilp (arrl o 0 '(1)))
  (nilp (arr o '(2 2 2 2 2 2 2 2 2)))             ; over-rank rejected
 
  ; --- holds arbitrary values verbatim (no boxing/coercion) ---

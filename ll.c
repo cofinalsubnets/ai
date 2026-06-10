@@ -709,6 +709,10 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
    {"err", (word) &g_stderr}, };
   g = g_defn(g, def0, LEN(def0));
   g = g_defn(g, def1, LEN(def1));
+  // () (the empty symbol) is self-evaluating: dict[()] = ().
+  g = g_push(g, 3, EMPTY_SYM, EMPTY_SYM, g->dict);
+  g = g_mapput(g);
+  g = g_pop(g, 1);
   // `version-number`: the build's git hash (ll_version.h), surfaced on init so the user
   // can read the running version. A non-fixnum global, harmlessly skipped by ev.l's pureset.
   if (g_ok(g = g_strof(g, LL_VERSION))) {
@@ -2364,11 +2368,13 @@ static g_inline struct g*gzput_str(struct g*g, word _) {
 
 // A symbol's nom encodes its kind: 0 = anonymous nom, a string = interned, a
 // symbol = named-uninterned (the naming symbol, whose own nom is the name string).
-// Interned syms print bare; gensyms get the `$` sigil (the `$` reader macro wraps
-// its operand with nom): a named-uninterned nom as `$<name>` (re-reads to a
-// fresh nom of the same name), an anonymous one as `$<addr>` (unique, doesn't
-// round-trip to identity -- the addr just makes the printout distinguishable).
+// Interned syms print bare; the empty symbol as `()` (round-trips); gensyms get
+// the `$` sigil (the `$` reader macro wraps its operand with nom): a
+// named-uninterned nom as `$<name>` (re-reads to a fresh nom of the same name),
+// an anonymous one as `$<addr>` (unique, doesn't round-trip to identity -- the
+// addr just makes the printout distinguishable).
 static g_inline struct g*gzput_sym(struct g*g, word _) {
+ if (_ == EMPTY_SYM) return gzprintf(g, "()");
  if (g_ok(g = g_push(g, 1, _))) {
   word nom = word(sym(g->sp[0])->nom);
   if (!nom) g = gzprintf(g, "$%z", g->sp[0]);              // anonymous nom -> $<addr>
@@ -2886,7 +2892,9 @@ static struct g *gz_parse(struct g *g, bool multi) {
     if (nilp(g->sp[0])) return encode(g_core_of(g), g_status_eof);   // stray ) / read1
     if (symp(A(g->sp[0]))) return encode(g_core_of(g), g_status_more); // wrap wants an operand
     g = g_push(g, 1, AA(g->sp[0]));                    // d = head of the closed frame
-    if (g_ok(g)) g->sp[1] = B(g->sp[1]);               // pop the closed frame
+    if (g_ok(g)) {
+     if (nilp(g->sp[0])) g->sp[0] = EMPTY_SYM;         // () -- the empty symbol, not 0
+     g->sp[1] = B(g->sp[1]); }                         // pop the closed frame
     break;                                             // -> deliver d
    case EOF:
     if (nilp(g->sp[0])) return encode(g_core_of(g), g_status_eof);
@@ -2904,11 +2912,14 @@ static struct g *gz_parse(struct g *g, bool multi) {
     g->sp[1] = g->sp[0], g->sp++;
     return g; }
    if (symp(A(g->sp[1]))) {                            // reader-macro wrap, pop the wrap frame
-    if (hashsym(A(g->sp[1])) && nilp(g->sp[0])) {      // %() -> (hashn 0): a fresh empty hash
-     g = gxr(g_push(g, 1, nil));                       // d (=nil=0) -> (0 . nil) = (0)
+    if (hashsym(A(g->sp[1])) && (nilp(g->sp[0]) || g->sp[0] == EMPTY_SYM)) { // %() -> (mapn 0)
+     g->sp[0] = nil;                                   // d -> (0 . nil) = (0)
+     g = gxr(g_push(g, 1, nil));
      g = gxl(intern(g_strof(g, "mapn")));              // (mapn . (0)) = (mapn 0)
      if (g_ok(g)) g->sp[1] = B(g->sp[1]); }            // pop wrap
-    else if (splicesym(A(g->sp[1])) && (twop(g->sp[0]) || nilp(g->sp[0]))) {
+    else if (splicesym(A(g->sp[1])) &&
+             (twop(g->sp[0]) || nilp(g->sp[0]) || g->sp[0] == EMPTY_SYM)) {
+     if (g->sp[0] == EMPTY_SYM) g->sp[0] = nil;        // @() -> (tuple), ~() -> (com)
      g = gxl(g_push(g, 1, A(g->sp[1])));               // %(k v …)/@(e …)/@() : splice -> (sym . d)
      if (g_ok(g)) g->sp[1] = B(g->sp[1]); }
     else {                                             // 'x `x ,x  #x %atom/@atom -> (wrapsym d)
@@ -3631,6 +3642,7 @@ static g_inline struct g_str *add_name(word x) {        // symbol -> name string
  return nom && strp(nom) ? str(nom) : 0; }
 static g_inline int stringrank(word x) {                  // STR 0 / USYM 1 / ISYM|NUM 2
  if (strp(x)) return 0;
+ if (x == EMPTY_SYM) return 2;                           // canonical (intern ""): the + identity
  if (symp(x)) { word n = word(sym(x)->nom); return n && strp(n) ? 2 : 1; }
  return 2; }
 static g_inline uintptr_t stringlen(word x) {             // bytes x contributes to a concat

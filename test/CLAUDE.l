@@ -183,11 +183,15 @@
  (all (\ x (< 0 x)) '(1 2 3)) (any (\ x (< 2 x)) '(1 2 3)) (= 3 #'(a b c)))
 
 ; --- strings & symbols --- a symbol is interned ('x), named-uninterned ($x = (nom 'x)), or
-; anonymous ((nom 0)). a string indexes its bytes ("abc" 0 -> 97). # is a *saturating* size:
+; anonymous ((nom 0)). `()` is THE empty symbol -- one canonical value, (intern ""), the
+; `+`-identity on symbols, self-evaluating, false by !!# -- but a symbol, NOT the number 0.
+; a string indexes its bytes ("abc" 0 -> 97). # is a *saturating* size:
 ; a container's count, a symbol's name length, a number's ceil-magnitude clamped to >= 0
 ; (#-3.9 = 0), or an array's ceil L2 norm -- so # and abs diverge ((abs -5) = 5 but #-5 = 0).
 ; ssub takes a half-open slice; scat concatenates ("" is the identity); string coerces; \n escapes.
 (assert
+ (symp ()) !(= () 0) (idp () (intern "")) (idp () '()) (= 0 #()) !() !!#'x
+ (= 'x (+ () 'x)) (= "()" (inspect ()))
  (= 97 ("abc" 0)) (= 3 #"abc") (= 4 #3.9) (= 0 #-3.9) (= 5 #@(3 4)) (= 5 (abs -5))
  (= "bidden" (ssub "forbidden planet" 3 9)) (= "abcd" (scat "ab" "cd")) (= 1 ("hi" 9))
  (= 'asdf (intern "asdf")) !(= (nom 0) (nom 0)) (= "asdf" (string 'asdf))

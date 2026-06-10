@@ -1,4 +1,4 @@
-(: fin (nom ())
-   (li k x) (? (= fin x) (k ()) (li (\ z (k (X x z)))))
+(: fin (nom 0)
+   (li k x) (? (= fin x) (k 0) (li (\ z (k (X x z)))))
    lis (li id)
    (assert (= '(1 2 3 4 5) (lis 1 2 3 4 5 fin))))

@@ -13,13 +13,13 @@
 (assert
  ; --- constructor + accessors ---
  (= 2 (arank (arr i64 '(2 3))))
- (= 0 (arank (arr i64 '())))          ; empty shape -> rank-0 scalar
+ (= 0 (arank (arr i64 0)))            ; empty shape (nil) -> rank-0 scalar
  (= 6 (alen (arr i64 '(2 3))))
- (= 1 (alen (arr f64 '())))           ; rank-0 has one element
+ (= 1 (alen (arr f64 0)))             ; rank-0 has one element
  (= i64 (atype (arr i64 '(2 3))))
  (= f32 (atype (arr f32 '(4))))
  (= '(2 3) (ashape (arr i64 '(2 3))))
- (= 0 (ashape (arr i64 '())))         ; rank-0 shape is the empty list (nil)
+ (= 0 (ashape (arr i64 0)))           ; rank-0 shape is the empty list (nil)
  (nilp (arank 5))                     ; non-tuple -> nil
  (nilp (atype "x"))
 
@@ -40,7 +40,7 @@
  (= -1 (peek (arr i64 '(2 2)) '(0) -1))                ; too-few indices -> default
 
  ; --- rank-0 deref: empty/nil key yields the lone scalar ---
- (= 2.5 (peek 2.5 '() -9))
+ (= 2.5 (peek 2.5 0 -9))
 
  ; --- float element read boxes an f64 ---
  (= 1.5 (peek (arrl f64 '(2) '(1.5 2.5)) 0 -1))

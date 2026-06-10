@@ -72,6 +72,7 @@
  (sa-i (+ 65 'b))                              ; num  + isym  = isym (lift)
  (sa-u (+ 65 sa-U))                            ; num  + usym  = usym (lift)
  (strp (+ 65 "b"))                             ; num  + str   = str
- ; anonymous symbol behaves like "" (contributes no bytes); name preserved
- (= "ef" (string (+ sa-z 'ef)))               ; empty-sym + isym -> usym named "ef"
- (sa-u (+ sa-z 'ef)))                          ; ... demoted to uninterned
+ ; the empty symbol () = (intern "") is canonical, not anonymous: the two-sided
+ ; + identity, partner unchanged (a real anonymous nom still demotes, rows above)
+ (= 'ef (+ sa-z 'ef))   (sa-i (+ sa-z 'ef))    ; () + isym -> the isym itself
+ (= 'ef (+ 'ef sa-z))   (sa-i (+ 'ef sa-z)))   ; isym + () -> the isym itself
