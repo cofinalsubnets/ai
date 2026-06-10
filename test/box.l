@@ -1,5 +1,5 @@
 ; wide-integer box (Phase 2): integer ops past the 62-bit fixnum tag promote
-; to a boxed i64 instead of a float, and demote back to a fixnum once the
+; to a boxed z instead of a float, and demote back to a fixnum once the
 ; value fits the tag again. 2^61 (2305843009213693952) is the largest power of
 ; two still a fixnum; 2^62 is the smallest power of two that must be boxed.
 ;
@@ -39,7 +39,7 @@
  (= 205 (& (>> (| (<< 171 56) (<< 205 48)) 48) 255))  ; byte 6 of 0xABCD... = 0xCD
  (= 171 (& (>> (| (<< 171 56) (<< 205 48)) 56) 255))  ; byte 7 = 0xAB
 
- ; --- multiply stays exact within i64, then divides back down ---
+ ; --- multiply stays exact within z, then divides back down ---
  (= 2200000000 (/ (* 2200000000 2200000000) 2200000000))
  (= 0 (mod (* 2 2305843009213693952) 2))
  (= 1 (mod (+ 1 (* 2 2305843009213693952)) 2))
@@ -53,11 +53,11 @@
  (< 1e18 (<< 1 62))                                ; float < box
  (< (<< 1 62) 1e19)                                ; box < float
 
- ; --- 2^63 = i64 INT_MIN: still a (negative) box, compares and prints right ---
+ ; --- 2^63 = z INT_MIN: still a (negative) box, compares and prints right ---
  !(fixp (<< 1 63))
  (< (<< 1 63) (- 0 (<< 1 62)))         ; INT_MIN < -2^62
 
  ; --- a box prints as a plain decimal integer (same as a fixnum) ---
- (= "4611686018427387904" (inspect (<< 1 62)))
- (= "-4611686018427387905" (inspect (^ (<< 1 62) -1)))
- (= "-9223372036854775808" (inspect (<< 1 63))))
+ (= "4611686018427387904" (show (<< 1 62)))
+ (= "-4611686018427387905" (show (^ (<< 1 62) -1)))
+ (= "-9223372036854775808" (show (<< 1 63))))

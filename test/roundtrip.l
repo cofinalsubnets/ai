@@ -1,7 +1,7 @@
 ; Closed-loop round trip: feed the printer's OUTPUT back through the reader (and
 ; evaluator), rather than checking print-string and read-literal separately.
-;   rd: value -> inspect (print) -> read         (datum round-trip)
-;   rt: value -> inspect (print) -> read -> eval  (value round-trip)
+;   rd: value -> show (print) -> read         (datum round-trip)
+;   rt: value -> show (print) -> read -> eval  (value round-trip)
 ; Datums (symbols, lists, atoms) print as their literal form, so they re-READ
 ; equal but would re-EVAL as code -- those use rd. Self-evaluating atoms and the
 ; `,`-prefixed value forms (tuple/arr/hash/functions, read back via uq=identity)
@@ -9,9 +9,9 @@
 ; reconstruct the value under eval -- those use rt.
 ; s2cl turns a string into a charlist of byte codes (get is generic over strings).
 (: (s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0)
-   (rdr s) (fread (strin (s2cl s)) (nom 0))
-   (rd x) (rdr (inspect x))
-   (rt x) (ev (rdr (inspect x))))
+   (rdr s) (fread (sip (s2cl s)) (nom 0))
+   (rd x) (rdr (show x))
+   (rt x) (ev (rdr (show x))))
 (assert
  ; --- datum round-trip (print -> read): the printed form re-reads equal ---
  (= 42 (rd 42))
@@ -26,14 +26,14 @@
  (= "hi\n" (rt "hi\n"))
  ; ,-prefixed constructor forms reconstruct an equal value
  (aall (= (tuple 1 2 3) (rt (tuple 1 2 3))))
- (aall (= (arrl i8 '(2 2) '(1 2 3 4)) (rt (arrl i8 '(2 2) '(1 2 3 4)))))
- (aall (= (arrl f64 '(2) '(1.5 2.5)) (rt (arrl f64 '(2) '(1.5 2.5)))))
+ (aall (= (arrl z '(2 2) '(1 2 3 4)) (rt (arrl z '(2 2) '(1 2 3 4)))))
+ (aall (= (arrl r '(2) '(1.5 2.5)) (rt (arrl r '(2) '(1.5 2.5)))))
  (= ~(2 -3) (rt ~(2 -3)))
  ; complex arrays round-trip: rank-1 via @((C…)…)->tuple, rank>=2 via (array…) (ca-* from complex.l)
  (aall (= ca-v (rt ca-v)))
  (aall (= ca-m (rt ca-m)))
- (= 100 (peek (rt (hasht 1 100 2 200)) 1 0))
- (= 200 (peek (rt (hasht 1 100 2 200)) 2 0))
+ (= 100 (peek (rt (hash 1 100 2 200)) 1 0))
+ (= 200 (peek (rt (hash 1 100 2 200)) 2 0))
  ; functions reconstruct a working function
  (= 3 ((rt (+)) 1 2))                                 ; builtin
  (= 5 ((rt (\ x (+ x 1))) 4))                       ; lambda
@@ -43,5 +43,5 @@
  ; leading param, so re-applying the reconstructed base to it rebinds correctly.
  (= 9 (: y 5 ((rt (\ x (+ x y))) 4)))               ; (rt closure) is base needing x; apply 4
  (= 30 (: a 10 b 20 ((rt (\ z (+ z (+ a b)))) 0)))  ; two captured vars
- ; the lambda's source survives the loop (idempotent inspect)
- (= (inspect (\ a b (+ a b))) (inspect (rt (\ a b (+ a b))))))
+ ; the lambda's source survives the loop (idempotent show)
+ (= (show (\ a b (+ a b))) (show (rt (\ a b (+ a b))))))

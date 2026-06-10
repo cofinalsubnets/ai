@@ -542,9 +542,9 @@ void kmain(void) {
 #include "repl.h"
 #ifdef K_TEST
  // test build: read each form out of the baked `tests` string (string -> charlist
- // -> strin port -> fread) and eval it via the self-hosted ev -- the same shape as
+ // -> sip port -> fread) and eval it via the self-hosted ev -- the same shape as
  // the host's stdin runner. zz-fin.l prints the summary and (exit 1)s on failure.
- "(: p (strin ((: (g i) (? (< i (sat tests)) (X (peek tests i 0) (g (+ 1 i))))) 0))"
+ "(: p (sip ((: (g i) (? (< i (sat tests)) (X (peek tests i 0) (g (+ 1 i))))) 0))"
  " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))"
 #else
  "(repl 0 0)"

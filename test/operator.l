@@ -4,7 +4,7 @@
 ; runner reads one datum at a time, so a pin in one form governs the next form.
 (: op-tbl (peek dict 'operators 0))             ; leak to global scope for this file
 (assert (mapp op-tbl)
- (= 'hasht (op-tbl ("#" 0))) (= 'tuple (op-tbl ("@" 0))) (= 'sat (op-tbl ("$" 0)))
+ (= 'hash (op-tbl ("#" 0))) (= 'tuple (op-tbl ("@" 0))) (= 'sat (op-tbl ("$" 0)))
  (= 'nilp (op-tbl ("!" 0))) (= 'dot (op-tbl ("." 0)))
  (= 'qq (op-tbl ("`" 0))) (= (A ''x) (op-tbl ("'" 0))))
 
@@ -17,7 +17,7 @@
  (= '((1 2) 3) ^ ^ 1 2 3)                       ; operands are full datums: ops nest
  (= '(5 (1 2)) (L 5 ^ 1 2))                     ; works inside lists
  (= '("a" 7) ^ "a" $"seven!!"))                 ; wrapped operands compose
-(: p (strin '(94 32 49)) (assert (= p (fread p 99))))  ; "^ 1": pending operand -> incomplete
+(: p (sip '(94 32 49)) (assert (= p (fread p 99))))  ; "^ 1": pending operand -> incomplete
 
 ; triadic, then (name . 1) pair form
 (pin op-tbl ("^" 0) (X 'L 3))

@@ -9,7 +9,7 @@
 ; list-combinator identities, the print->read round trip, and array broadcasting.
 ;
 ; fz-find returns (X 1 0) on success or (X 0 counterexample) on failure;
-; to debug a red property interactively, eval (inspect (B (fz-find n seed g p)))
+; to debug a red property interactively, eval (show (B (fz-find n seed g p)))
 ; to see the offending input.
 (:
  ; --- generator monad: pure / map / bind over the functional RNG ---
@@ -116,9 +116,9 @@
  (fz-ok 300 28 (fz-pair2 fz-elem fz-l) (\ v (memq (A v) (X (A v) (AB v))))))
 
 ; ---- print -> read round trip on random s-expressions ----
-; reuses the io.c reader: serialize via inspect, re-read the bytes, expect equality.
+; reuses the io.c reader: serialize via show, re-read the bytes, expect equality.
 (: (fz-s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0)
-   (fz-rd x) (fread (strin (fz-s2cl (inspect x))) (nom 0))
+   (fz-rd x) (fread (sip (fz-s2cl (show x))) (nom 0))
    fz-syms '(a b c d foo bar baz qux)
    fz-leaf (fz-oneof (L (fz-elt fz-syms) (fz-int -500 500)))
    (fz-sexp d) (? (< d 1) fz-leaf
@@ -130,11 +130,11 @@
  (fz-ok 200 31 (fz-sexp 3) (\ x (= x (fz-rd x))))        ; nested structure round-trips
  (fz-ok 150 32 (fz-sexp 4) (\ x (= x (fz-rd x)))))
 
-; ---- array broadcasting / reduction laws (i64 elementwise) ----
-; fz-arrpair draws two i64 vectors of the same random length so elementwise ops line up.
+; ---- array broadcasting / reduction laws (z elementwise) ----
+; fz-arrpair draws two z vectors of the same random length so elementwise ops line up.
 (: fz-arrpair (fz-bind (fz-int 1 6) (\ n (\ st
     (: a ((fz-rep n fz-elem) st) b ((fz-rep n fz-elem) (B a))
-       (X (L (arrl i64 (L n) (A a)) (arrl i64 (L n) (A b))) (B b)))))))
+       (X (L (arrl z (L n) (A a)) (arrl z (L n) (A b))) (B b)))))))
 (assert
  (fz-ok 250 40 fz-arrpair (\ v (aall (= (+ (A v) (AB v)) (+ (AB v) (A v))))))  ; + commutes
  (fz-ok 250 41 fz-arrpair (\ v (aall (= (* (A v) (AB v)) (* (AB v) (A v))))))  ; * commutes
@@ -143,7 +143,7 @@
    (\ v (= (asum (+ (A v) (AB v))) (+ (asum (A v)) (asum (AB v)))))))
 
 ; ---- string operations: scat / ssub / string / get / print->read ----
-; fz-str draws a random byte string (length 0..mx, any byte 0..255 -- inspect's
+; fz-str draws a random byte string (length 0..mx, any byte 0..255 -- show's
 ; \xHH escaping round-trips them all). ssub returns nil for an empty slice
 ; (i==j), which scat and pin treat as "" but `=` does not, so any comparison
 ; that can land on an empty slice routes through fz-norm (scat x "" coerces a

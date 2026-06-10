@@ -10,10 +10,9 @@
    (atomp x) (nilp (twop x))
    AA (co A A) AB (co A B)
    BA (co B A) BB (co B B))
-; array element-kind codes for `arr` (enum g_tuple_type): one word per element, so
-; every integer width aliases Z=0 and every float width aliases R=1 (C=2 is the
-; rank-0 complex scalar, not a constructible array element).
-(: i8 0 i16 0 i32 0 i64 0 f32 1 f64 1 z 0 r 1 c 2 o 3)
+; array element-kind codes (enum g_tuple_type), named for the tier spine:
+; z integers, r reals, c packed complex, o objects -- one word per element.
+(: z 0 r 1 c 2 o 3)
 ; the imaginary unit: complex values are written e.g. (+ 2 (* 3 i))
 (: i ~(0 1))
 ; the monadic ~ sigil (~x, i.e. ~ not followed by `(`): lift a real to ~(r 0),
@@ -140,13 +139,13 @@
    (take n l) (? n (X (A l) (take (- n 1) (B l))))
    (part p) (foldr (\ a m (? (p a) (X (X a (A m)) (B m))
                                         (X (A m) (X a (B m))))) '(0)))
-(: (strin cl)
+(: (sip cl)
  (pinl -1 (peekl 0 in) (pinl -1 -4 (pinl -1 -1 (pinl -1 0 (pinl 4 cl (lam 5))))))
- (strout _)
+ (pad _)
   (pinl -1 (peekl 0 in) (pinl -1 -2 (pinl -1 -1 (pinl -1 0 (pinl -1 "  " (pinl 5 0 (lam 6)))))))
- (outstr o) (ssub (peekl 4 o) 0 (peekl 5 o))
+ (page o) (ssub (peekl 4 o) 0 (peekl 5 o))
  (slurp i) (: (rl i) (: c (fgetc i) (? !(= c -1) (X c (rl i)))) (string (rl i)))
- (inspect x) (: o (strout 0) _ (fputx o x) (outstr o)))
+ (show x) (: o (pad 0) _ (fputx o x) (page o)))
 ; trap status readers. a global `trap` function is called as (trap s a b):
 ; s = the status word, two bits -- scare (1: something went wrong) and more
 ; (2: read control flow, more input wanted). more alone = incomplete; eof =
@@ -211,8 +210,8 @@
 (: uq (\ x x))                                               ; stray ,x evaluates x
 
 ; --- array element-type inference + shape coercion (shared by `tuple` and `array`).
-; a-type: the element type code, the highest of {i64=0 < f64=1 < c=2 < o=3} present
-; in a list of values -- a box still fits i64; a complex value lifts to a packed
+; a-type: the element type code, the highest of {z=0 < r=1 < c=2 < o=3} present
+; in a list of values -- a box still fits z; a complex value lifts to a packed
 ; (re,im) `c` array; only a value past the real numeric tower (bignum, symbol,
 ; string, nested array, …) lifts the whole array to an object (o) array.
 ; a-dim/a-shape: a shape dimension may be any numeric -- a float, complex, or even
@@ -222,23 +221,23 @@
 ; means rank-1 length 3, (array ~(3 4) …) length 5).
 (: (a-rank x) (? (flop x) 1 (| (fixp x) (boxp x)) 0 (comp x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
-   (a-type d) (: r (foldl a-emax 0 d) (? (= r 0) i64 (= r 1) f64 (= r 2) c o))
+   (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) z (= k 1) r (= k 2) c o))
    (a-dim d) (sat d)
    (a-shape s) (? (twop s) (map a-dim s) (L (a-dim s))))
 
 ; tuple/hash value constructors (also the read-back targets of the `@(…)` / `#(…)`
 ; printer-sugar forms). `tuple` builds a rank-1 array from its element args,
 ; inferring the element type via a-type (so it carries bignums/symbols in an o
-; array, not just i64/f64); `map` builds a map from alternating key/value args.
+; array, not just z/r); `map` builds a map from alternating key/value args.
 (: (ltuple l) (arrl (a-type l) (L (foldl (\ n _ (+ 1 n)) 0 l)) l))
 (:: 'tuple (\ a (list 'ltuple (X 'list a))))
-; (hasht) = empty; (hasht x) boxes a scalar -- a fresh mutable hash pinning x
+; (hash) = empty; (hash x) boxes a scalar -- a fresh mutable hash pinning x
 ; to the () key, so #5 = #(() 5); pairs pin as usual, and an odd trailing
 ; operand lands in the () box slot.
 (: (hashtx a) (? (nilp a) '(hashn 0)
                  (nilp (B a)) (list 'pin (hashtx 0) '() (A a))
                  (list 'pin (hashtx (BB a)) (A a) (AB a))))
-(:: 'hasht (\ a (hashtx a)))
+(:: 'hash (\ a (hashtx a)))
 
 ; (gsym x) quotes its operand, giving (nom 'x) -- a fresh uninterned symbol
 ; named x. its `$` glyph went to sat; gsyms still PRINT as $<name>/$<addr>

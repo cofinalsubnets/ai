@@ -18,15 +18,15 @@
 ; a counting handler that reproduces the default protocol
 (: (trap s p e) (: _ (pin trap-log s (+ 1 (peek trap-log s 0)))
                    (? (more? s) p (eof? s) e 0)))
-(assert (= 'eof (fread (strin 0) 'eof)))             ; eof through the lisp trap
-(: q (strin '(40)) (assert (= q (fread q 99))))      ; more through the lisp trap
+(assert (= 'eof (fread (sip 0) 'eof)))             ; eof through the lisp trap
+(: q (sip '(40)) (assert (= q (fread q 99))))      ; more through the lisp trap
 (assert (= 1 (peek trap-log 3 0)) (= 1 (peek trap-log 2 0)))
 
 ; the handler owns the protocol: deliver a constant instead
 (: (trap s p e) 'gotcha)
-(assert (= 'gotcha (fread (strin 0) 'x)) (= 'gotcha (fread (strin '(40)) 'x)))
+(assert (= 'gotcha (fread (sip 0) 'x)) (= 'gotcha (fread (sip '(40)) 'x)))
 
 ; uninstall; the raw default is back
 (pull dict 'trap 0)
-(assert !(peek dict 'trap 0) (= 'eof (fread (strin 0) 'eof))
-        (: p (strin '(40)) (= p (fread p 99))))
+(assert !(peek dict 'trap 0) (= 'eof (fread (sip 0) 'eof))
+        (: p (sip '(40)) (= p (fread p 99))))

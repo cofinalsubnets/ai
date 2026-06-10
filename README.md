@@ -22,7 +22,7 @@ prefix and infix. the special forms are:
 a prefix operator char desugars its next datum(s) to a form; the table is
 `dict['operators]`, extensible at runtime. seven ship:
 - `$` sat (saturating size/magnitude -- a count on containers, 0 when empty or <= 0)
-- `#` hasht (hash table literal `#(k v ..)`; a scalar boxes: `#x` = `#(() x)`)
+- `#` hash (hash table literal `#(k v ..)`; a scalar boxes: `#x` = `#(() x)`)
 - `'` quote (literally the one-operand lambda)
 - `!` bang (negation; `!!$x` is x's truth bit)
 - `.` dot (printing identity)

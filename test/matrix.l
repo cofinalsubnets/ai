@@ -77,7 +77,7 @@
  (= 7 (((+) 3) 4))                            ; KLam: a nif / partial application
  (= 10 (mx-map 1))   (= 20 (mx-map 2))        ; KLam: a map looks its key up
  (nilp (mx-map 9))                            ; ...missing key -> nil
- (= 1 ((bufnew 4) 'x)))                       ; opaque handle (buf) behaves as 0
+ (= 1 ((buf 4) 'x)))                       ; opaque handle (buf) behaves as 0
 
 ; ============================================================================
 ; `+` matrix (g_add_mx): the FINE within-category cells symadd.l folds together
@@ -89,7 +89,7 @@
  (= 7 (+ 5 2))                                ; fix + fix (overflow-free fast path)
  (= 7.5 (+ 5 2.5))   (= 7.5 (+ 2.5 5))        ; fix + float (both orders)
  (= 5.0 (+ 2.5 2.5))                          ; float + float
- (= (63 2) (+ (<< 1 62) (<< 1 62)))        ; box + box -> 2^63 overflows i64 -> bignum
+ (= (63 2) (+ (<< 1 62) (<< 1 62)))        ; box + box -> 2^63 overflows z -> bignum
  (bigp (+ (<< 1 62) (<< 1 62)))
  (boxp (+ (<< 1 62) 1))                        ; box + fix stays a box (still > fixnum range)
  (= (+ (<< 1 62) 1) (+ 1 (<< 1 62)))          ; ...and commutes
@@ -104,7 +104,7 @@
 
  ; --- array tower: each tier with a matching array and with a scalar broadcast ---
  (aall (= @(11 22) (+ @(10 20) @(1 2))))      ; Z + Z
- (= f64 (atype (+ @(10 20) @(1.5 2.5))))      ; Z + R -> widens to R
+ (= r (atype (+ @(10 20) @(1.5 2.5))))      ; Z + R -> widens to R
  (aall (= @(11.5 22.5) (+ @(10 20) @(1.5 2.5))))
  (aall (= @(3.0 5.0) (+ @(1.5 2.5) @(1.5 2.5)))) ; R + R
  (= ~(2 4) (peek (+ mx-ac mx-ac) 0 0))        ; C + C (packed complex)
@@ -156,7 +156,7 @@
  (aall (= @(20 60) (* @(10 30) 2)))           ; Z array * scalar
  (= ~(2 4) (peek (* ~(2 0) mx-ac) 0 0))      ; complex scalar * C array
  (= o (atype (* mx-ao mx-ao)))                ; O * O exact
- (= (80 2)                                 ; 2^40 * 2^40, exact (an i64 array would wrap)
+ (= (80 2)                                 ; 2^40 * 2^40, exact (an z array would wrap)
     (peek (* (arrl o '(2) (L (40 2) (40 2))) (arrl o '(2) (L (40 2) (40 2)))) 0 0))
 
  ; --- mul_rep: a sequence times a scalar count (int(abs c)) -> n copies joined ---
@@ -235,7 +235,7 @@
  (<= 3 3)   (>= 3 3)   !(< 3 3)   !(> 3 3)   (> 5 3)   (>= 5 3)
  (<= "ab" "ab")   (> 'b 'a)   (>= '(1) '(1))
  ; --- array operand: comparison is ELEMENTWISE (a 0/1 mask), not the scalar order ---
- (aall (< @(1 2) 10))   (= i8 (atype (< @(1 2) 10)))   ; the mask is an i8 array
+ (aall (< @(1 2) 10))   (= z (atype (< @(1 2) 10)))   ; the mask is an z array
  (= 1 (peek (< @(1 5) @(3 2)) 0 0))   (= 0 (peek (< @(1 5) @(3 2)) 1 0))
  (aall (<= @(1 2) @(1 2)))   (aall (>= @(2 2) @(1 2)))
  (nilp (< @(1 2) "x"))                                 ; array vs non-number -> nil

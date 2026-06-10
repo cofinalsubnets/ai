@@ -39,7 +39,7 @@
           '(// mod << >> ^
             idp gcd modpow inc dec abs
             X A B AA AB BA BB
-            hash lidx assq memq last rev cat
+            digest lidx assq memq last rev cat
             fixp symp twop mapp lamp strp nilp flop comp atomp
             ssub scat string
             re im conj arg flo com

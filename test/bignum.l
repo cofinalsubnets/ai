@@ -83,10 +83,10 @@
  (fixp (* B100 0))
 
  ; --- printer round-trip (base 10, with sign) ---
- (= "1267650600228229401496703205376" (inspect B100))
- (= "-1267650600228229401496703205376" (inspect (- 0 B100)))
- (= "9223372036854775808" (inspect (bpow2 63)))
- (= "15511210043330985984000000" (inspect F25))
+ (= "1267650600228229401496703205376" (show B100))
+ (= "-1267650600228229401496703205376" (show (- 0 B100)))
+ (= "9223372036854775808" (show (bpow2 63)))
+ (= "15511210043330985984000000" (show F25))
 
  ; --- bignums as hash keys (eqv over slen+limbs) ---
  (= 'hit (peek (pin (pin (hashn 0) F25 'fk) B100 'hit) B100 'miss))
@@ -114,10 +114,10 @@
  ; --- int array vs bignum scalar: ordered by the bignum's true magnitude/sign,
  ;     NOT its low bits. 2^100's low word is 0, so a low-bits comparison would
  ;     wrongly treat B100 as 0 -- these assertions pin the magnitude-exact path. ---
- (aall (< (arrl i64 '(3) '(1 2 3)) B100))          ; every int < 2^100
- (aall (<= (arrl i64 '(3) '(1 2 3)) B100))
- (nilp (aall (> (arrl i64 '(3) '(1 2 3)) B100)))   ; nothing exceeds 2^100
- (nilp (aall (>= (arrl i64 '(3) '(1 2 3)) B100)))
- (aall (> (arrl i64 '(3) '(1 2 3)) (- 0 B100)))    ; every int > -2^100
- (aall (< (- 0 B100) (arrl i64 '(3) '(1 2 3))))    ; bignum on the left, too
- (nilp (aall (= (arrl i64 '(2) '(0 0)) B100))))    ; 0 != 2^100 (low word is 0!)
+ (aall (< (arrl z '(3) '(1 2 3)) B100))          ; every int < 2^100
+ (aall (<= (arrl z '(3) '(1 2 3)) B100))
+ (nilp (aall (> (arrl z '(3) '(1 2 3)) B100)))   ; nothing exceeds 2^100
+ (nilp (aall (>= (arrl z '(3) '(1 2 3)) B100)))
+ (aall (> (arrl z '(3) '(1 2 3)) (- 0 B100)))    ; every int > -2^100
+ (aall (< (- 0 B100) (arrl z '(3) '(1 2 3))))    ; bignum on the left, too
+ (nilp (aall (= (arrl z '(2) '(0 0)) B100))))    ; 0 != 2^100 (low word is 0!)

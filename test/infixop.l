@@ -39,7 +39,7 @@
  (= 4 ($"ab" + 2)))
 
 ; incomplete: "(1 +" pends -> the port comes back
-(: p (strin '(40 49 32 43)) (assert (= p (fread p 99))))
+(: p (sip '(40 49 32 43)) (assert (= p (fread p 99))))
 
 ; extensible with a plain pin; cleaned up after
 (: ** pow)
@@ -54,7 +54,7 @@
  (= 20 (: t #(1 10) _ (t <- 2 20) (t -> 2 0)))   ; pin then peek, infix
  (= 7 ((#() <- 'k 7) 'k))                        ; <- returns the collection
  (= 9 (#(1 10) -> 2 9))                          ; -> falls back to the default
- (= 65 (: b (bufnew 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
+ (= 65 (: b (buf 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
  (= 'pin (A (peek (peek dict 'infix 0) '<- 0)))  ; the table entries are (name . arity) aliases
  (= 3 (B (peek (peek dict 'infix 0) '-> 0)))
  (symp '<-) (= 30 ((->) #(3 30) 3 0))            ; escaped, -> is still peek-as-a-value

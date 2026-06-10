@@ -179,7 +179,7 @@
  ; chunking, the worker held the CPU for the whole product and the ticker (capped
  ; so it can't wrap the 1-byte buf) never ran -- post-chunking it runs many times.
  (: big (200000 2)
-    ticks (bufnew 1)
+    ticks (buf 1)
     w (spawn (\ _ (* big big)) 0)
     t (spawn (\ _ (: (go _) (? (done? w) 0
                                (: c (peek ticks 0 0)

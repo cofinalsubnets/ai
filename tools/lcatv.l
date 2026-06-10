@@ -1,8 +1,8 @@
 ; lcatv: bake a source file to a C string literal VERBATIM -- byte-for-byte, no
-; form parsing, no inspect-reprint, no minification. lcat/lcat2 re-print each form
-; through inspect; that round-trip subtly diverges for the test corpus when it is
-; read back incrementally through a strin port (the reader loops instead of hitting
-; EOF), so the baked kernel test corpus (out/lib/ktests.h, read via strin at boot)
+; form parsing, no show-reprint, no minification. lcat/lcat2 re-print each form
+; through show; that round-trip subtly diverges for the test corpus when it is
+; read back incrementally through a sip port (the reader loops instead of hitting
+; EOF), so the baked kernel test corpus (out/lib/ktests.h, read via sip at boot)
 ; must be verbatim. Non-printable / high bytes -> \ooo octal so clang accepts the
 ; literal (-Winvalid-source-encoding rejects a raw byte like the たらい symbol in
 ; functions.l); C decodes the escape back to the original byte. argv = (this file).

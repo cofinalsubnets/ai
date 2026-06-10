@@ -79,7 +79,7 @@
  (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp A) (mapp #(1 2))
  (bigp (100 2)) (boxp (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (tupp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
- (lamp (bufnew 4))                               ; an opaque handle answers lamp -- the predicate gap
+ (lamp (buf 4))                               ; an opaque handle answers lamp -- the predicate gap
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
  (5.0 = (abs ~(3 4))) (~(2.0 3.0) = 2 + 3 * i))  ; mixed arithmetic widens to the higher tier
 
@@ -168,29 +168,29 @@
 (assert
  ((* i i) = -1) (~(2 0) = 2) (~(-5 10) = ~(1 2) * ~(3 4)) (comp ~5) !(comp 5)
  (~(0 0) = ~0) ((conj ~(2 3)) = ~~(2 3)) ((conj ~(2 3)) = ~(2 -3))
- (2.0 = (re ~(2 3))) (i < 1) !(1 < i) ("~(0.0 1.0)" = (inspect i))
+ (2.0 = (re ~(2 3))) (i < 1) !(1 < i) ("~(0.0 1.0)" = (show i))
  (0.0 = (peek (arg ~(1 @(1 0))) 1 0)))           ; arg broadcasts -- (arg ~(1 x)) = atan, elementwise
 ; a rank-N complex array packs (re,im) into a `c`-typed array: peek yields a ~(..) box,
 ; + - * / broadcast numpy-style, `=` gives a mask, and asum/aprod fold complex.
 (assert
  (: v (array 2 ~(1 2) ~(3 4)) (&& (c = (atype v)) (~(1 2) = (peek v 0 0)) (~(4 6) = (asum v))
     (~(2 4) = (peek (v + v) 0 0)) (~(2 4) = (peek (~(2 0) * v) 0 0)) !(v < v)
-    ("@(~(1.0 2.0) ~(3.0 4.0))" = (inspect v)))))
+    ("@(~(1.0 2.0) ~(3.0 4.0))" = (show v)))))
 
 ; --- arrays --- (arr type shape) zeros; (arrl type shape vals) fills; (array shape elem..)
 ; infers the type and curries; @(..) is a rank-1 literal. arank/alen/ashape/atype; peek
 ; (out of bounds -> the default). + - * // < = broadcast numpy-style to the widest type
-; (compare -> an i8 mask); `/` promotes the whole result to f64 the moment any element divides
+; (compare -> an z mask); `/` promotes the whole result to r the moment any element divides
 ; inexactly. reduce with asum aprod amax amin aall (a conjunction; "any nonzero" is just `$`).
 ; a zero-norm array is false. sin/cos/log/pow and the derived forms map elementwise.
 (assert
- (6 = (alen (arr i64 '(2 3)))) (2 = (arank (arr i64 '(2 3)))) ('(2 3) = (ashape (arr i64 '(2 3))))
- (i64 = (atype (arr i64 '(2 3)))) (20 = (peek @(10 20 30) 1 -1)) (-1 = (peek @(10 20 30) 9 -1))
- (3 = (peek (arrl i64 '(2 2) '(1 2 3 4)) '(1 0) -1)) (@(11 22 33) = @(1 2 3) + @(10 20 30))
- (@(2 4 6) = @(1 2 3) * 2) (f64 = (atype ((arr i32 '(2)) + 1.5))) (i8 = (atype ((arr i64 '(3)) < 1)))
+ (6 = (alen (arr z '(2 3)))) (2 = (arank (arr z '(2 3)))) ('(2 3) = (ashape (arr z '(2 3))))
+ (z = (atype (arr z '(2 3)))) (20 = (peek @(10 20 30) 1 -1)) (-1 = (peek @(10 20 30) 9 -1))
+ (3 = (peek (arrl z '(2 2) '(1 2 3 4)) '(1 0) -1)) (@(11 22 33) = @(1 2 3) + @(10 20 30))
+ (@(2 4 6) = @(1 2 3) * 2) (r = (atype ((arr z '(2)) + 1.5))) (z = (atype ((arr z '(3)) < 1)))
  (60 = (asum @(10 20 30))) (30 = (amax @(10 30 20))) (5 = (asum 5)) (aall (1 < 2))
  (aall (@(2.0 3.0) = ((/ 1 2) @(4.0 9.0)))) (@(3.5 5.5) = @(7 11) / 2) (@(3 5) = (// @(7 11) 2))
- (@(4 6) = @(8 12) / 2) !(arr i64 '(3)) ("@(10 20 30)" = (inspect @(10 20 30)))
+ (@(4 6) = @(8 12) / 2) !(arr z '(3)) ("@(10 20 30)" = (show @(10 20 30)))
  (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3)))
 
 ; --- pairs & lists --- X is cons, A is car, B is cdr; AA AB .. BBB are the compounds.
@@ -214,40 +214,40 @@
 ; ssub takes a half-open slice; scat concatenates ("" is the identity); string coerces; \n escapes.
 (assert
  (symp ()) !(() = 0) (idp () (intern "")) (idp () '()) (0 = $()) !() !!$'x
- ('x = () + 'x) ("()" = (inspect ()))
+ ('x = () + 'x) ("()" = (show ()))
  (97 = ("abc" 0)) (3 = $"abc") (4 = $3.9) (0 = $-3.9) (5 = $@(3 4)) (5 = (abs -5))
  ("bidden" = (ssub "forbidden planet" 3 9)) ("abcd" = (scat "ab" "cd")) (1 = ("hi" 9))
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))
- ("\"a\\nb\"" = (inspect "a\nb")) ("$x" = (inspect (nom "x"))))
+ ("\"a\\nb\"" = (show "a\nb")) ("$x" = (show (nom "x"))))
 
-; --- hashes --- #(k v ..) or (hasht ..) build; #() or (hashn 0) is empty -- ONLY #(); mutable.
+; --- hashes --- #(k v ..) or (hash ..) build; #() is the empty hash -- ONLY #(); mutable.
 ; # on a scalar BOXES it: #x = #(() x), a fresh mutable hash pinning x to the () key (a 1-entry
 ; box, truthy -- the dead () = 0 identity used to conflate #0 with empty). the accessors are
 ; collection-first: (peek coll k default) reads, (pin coll k v) sets, (pull coll k default) removes-
 ; and-returns. peek and pull share the default-if-absent fallback; only pull mutates a key away.
 ; also hashd, hashk (the keys), $ is the key count. (t k) == (peek t k 0) -- a map is a lookup
-; function. (hash k) hashes a key. a hash is MUTABLE, so `=` on hashes is identity (like
-; buffers); infix, the accessors are (t <- k v) and (t -> k d).
+; function. (digest k) digests any key to a fixnum. a hash is MUTABLE, so `=` on hashes is
+; identity (like buffers); infix, the accessors are (t <- k v) and (t -> k d).
 (assert
  (: b #0 (&& (mapp b) (1 = $b) (0 = (peek b () 9)) (: _ (pin b () 7) (7 = (b ())))))
  (: t #(1 10 2 20) (&& (20 = (peek t 2 0)) (20 = (t 2)) (99 = (peek t 9 99))))
  (50 = (peek (pin #() 5 50) 5 0)) (: t #(1 10 2 20) _ (hashd 0 t 1) (1 = $t))
  (: t #(1 10 2 20) v (pull t 2 0) (&& (20 = v) (1 = $t) (99 = (peek t 2 99)) (-1 = (pull t 9 -1))))  ; pull: value or default, removes the key
- (2 = $(hashk #(1 10 2 20))) ((hash 'k) = (hash 'k)) (mapp #()) !(mapp 5)
+ (2 = $(hashk #(1 10 2 20))) ((digest 'k) = (digest 'k)) (mapp #()) !(mapp 5)
  !(#(1 10) = #(1 10)) (: t #(1 10) (t = t))      ; mutable -> identity =
  (40 = (: t #(1 10) _ (t <- 4 40) (t -> 4 0))))  ; the infix accessors
 
-; --- buffers --- (bufnew n) gives n mutable zeroed bytes; $/peek/pin a byte (0..255); bcopy;
+; --- buffers --- (buf n) gives n mutable zeroed bytes; $/peek/pin a byte (0..255); blit;
 ; identity equality.
 (assert
- (: b (bufnew 3) _ (pin b 0 65) (65 = (peek b 0 0))) (4 = $(bufnew 4))
- (: b (bufnew 1) _ (pin b 0 257) (1 = (peek b 0 0))) (: b (bufnew 4) _ (bcopy b 0 "ABCD" 0 4) (68 = (peek b 3 0)))
- !((bufnew 2) = (bufnew 2)))
+ (: b (buf 3) _ (pin b 0 65) (65 = (peek b 0 0))) (4 = $(buf 4))
+ (: b (buf 1) _ (pin b 0 257) (1 = (peek b 0 0))) (: b (buf 4) _ (blit b 0 "ABCD" 0 4) (68 = (peek b 3 0)))
+ !((buf 2) = (buf 2)))
 
 ; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). a PREFIX
 ; operator char reads its next N datums and desugars to (name d1 .. dN); the table is
 ; dict['operators] (char -> name | (name . arity), arity 1-7) -- extensible with a plain
-; pin (see test/operator.l). seven ship at arity 1 (glyph / name): $ sat (saturation), # hasht (hash table),
+; pin (see test/operator.l). seven ship at arity 1 (glyph / name): $ sat (saturation), # hash (hash table),
 ; ' quote (= one-operand \), ! bang (negation), . dot (print), @ tup
 ; (array), ` quasiquote. % is infix mod. , unquote, ,@ splice, and ~ wave (complex/conjugate)
 ; stay reader digraphs. ~(re im) splices to (com re im); a bare ~x is (clift x).
@@ -266,7 +266,7 @@
  (3 = 1 + 2) (7 = 1 + 2 * 3) ('b = 0 ? 'a 'b) ('big = (1 < 2) ? 'big 'small)
  (20 = (#(1 10 2 20) -> 2 0)) (7 = ((#() <- 'k 7) 'k)) (9 = (#() -> 'k 9))
  (12 = (foldl (+) 0 '(3 4 5)))
- (: t (peek dict 'operators 0) (&& (mapp t) ('sat = (t ("$" 0))) ('hasht = (t ("#" 0))))))
+ (: t (peek dict 'operators 0) (&& (mapp t) ('sat = (t ("$" 0))) ('hash = (t ("#" 0))))))
 
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships
 ; do/let/if/cond/quote, && and || (short-circuiting), L/list, tuple/map/array, the body-first
@@ -293,15 +293,15 @@
  (: st (rng-seed 7) ((A (rand-next st)) = (A (rand-next st)))))
 
 ; --- i/o & ports --- `in`/`out` are the default ports; the prelude wraps getc/read and
-; putc/puts/putn/putx, with per-port fgetc/fputc/.../fread plus open/close/strin/strout/slurp.
+; putc/puts/putn/putx, with per-port fgetc/fputc/.../fread plus open/close/sip/pad/slurp.
 ; fread reads one datum per call; its end conditions route through the trap continuation via
 ; the status more bit, and the default trap delivers a sentinel at EOF, the port back when
 ; incomplete (a global `trap` function takes over that dispatch). `dot` (the `.` operator)
-; prints x to `out` -- raw bytes for a string, else the inspect form -- and returns
+; prints x to `out` -- raw bytes for a string, else the show form -- and returns
 ; x, so .x taps a value mid-expression.
 (assert
- (strp (inspect out)) ("hi" = (slurp (strin '(104 105)))) (: o (strout 0) _ (fputx o 42) ("42" = (outstr o)))
- (1 = (fread (strin '(49)) 99)) ('eof = (fread (strin 0) 'eof)) (: p (strin '(40)) (p = (fread p 99))))
+ (strp (show out)) ("hi" = (slurp (sip '(104 105)))) (: o (pad 0) _ (fputx o 42) ("42" = (page o)))
+ (1 = (fread (sip '(49)) 99)) ('eof = (fread (sip 0) 'eof)) (: p (sip '(40)) (p = (fread p 99))))
 
 ; --- bootstrapping --- the C core is minimal; the key semantics are ll closures installed
 ; from the prelude and shared by both compilers:
@@ -327,7 +327,7 @@
 ; and wasm. build codegen lives in ll under tools/; the C is
 ; freestanding, -Wall -Wextra -Werror.
 
-; --- odds & ends --- inspect renders a value as its reparsable printed form; (clock t) is
+; --- odds & ends --- show renders a value as its reparsable printed form; (clock t) is
 ; milliseconds since t and (vminfo 0) reports a VM stat. an opaque handle acts as a constant
 ; function -- applying it ignores the argument.
-(assert (strp (inspect @(1 2 3))) (fixp (clock 0)) (1 = ((bufnew 4) 'x)))
+(assert (strp (show @(1 2 3))) (fixp (clock 0)) (1 = ((buf 4) 'x)))

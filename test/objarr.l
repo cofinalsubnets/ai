@@ -1,5 +1,5 @@
 ; object arrays (type code `o` = g_O): rank-N containers of live ll *values*.
-; the numeric tuple types (i8..f64) fold to a flat word/float payload the GC moves
+; the numeric tuple types (z..r) fold to a flat word/float payload the GC moves
 ; by memcpy; an o-array instead holds tagged words, so it can carry bignums,
 ; strings, symbols and nested arrays -- and is the one tuple type the collector
 ; traces element-by-element. rank-0 is rejected (a boxed scalar is just a value).
@@ -38,7 +38,7 @@
 
  ; --- print round-trip: an object array prints as a bare (arrl o …) call whose
  ;     shape/vals are quoted, so it re-evaluates to an equal array ---
- (= "(arrl o '(3) '(10 20 30))" (inspect (arrl o '(3) '(10 20 30))))
+ (= "(arrl o '(3) '(10 20 30))" (show (arrl o '(3) '(10 20 30))))
 
  ; --- GC stress: oa-a stays live (global root) across many collections; the
  ;     bignum element pointers must be forwarded, not dropped or truncated ---
@@ -49,13 +49,13 @@
 
 ; --- elementwise arithmetic: transparent bignums, full broadcasting ----------
 ; the whole point of g_O: ops route through the promoting scalar dispatch, so a
-; bignum array adds/multiplies EXACTLY where an i64 array would wrap.
+; bignum array adds/multiplies EXACTLY where an z array would wrap.
 (: oa-x   (arrl o '(3) (L (100 2) 2 3))
    oa-y   (arrl o '(3) (L 1 (100 2) 4))
    oa-sum (+ oa-x oa-y)
    oa-prd (* oa-x oa-y)
-   oa-w   (40 2)                              ; 2^40 fits i64; 2^40 * 2^40 = 2^80 overflows it
-   oa-zar (arrl i64 '(2) (L oa-w oa-w))          ; typed int array -> wraps
+   oa-w   (40 2)                              ; 2^40 fits z; 2^40 * 2^40 = 2^80 overflows it
+   oa-zar (arrl z '(2) (L oa-w oa-w))          ; typed int array -> wraps
    oa-oar (arrl o   '(2) (L oa-w oa-w)))         ; object array   -> exact
 
 (assert
@@ -66,7 +66,7 @@
  (= (* 2 (100 2)) (peek oa-prd 1 0))
  (= 12 (peek oa-prd 2 0))
 
- ; transparency vs the typed lane: 2^40*2^40 = 2^80; i64 wraps to 0, o stays exact
+ ; transparency vs the typed lane: 2^40*2^40 = 2^80; z wraps to 0, o stays exact
  (= (80 2) (peek (* oa-oar oa-oar) 0 0))
  (nilp (= (80 2) (peek (* oa-zar oa-zar) 0 0)))
 
@@ -96,7 +96,7 @@
  (= (* 2 (80 2)) (asum (* oa-oar oa-oar))))    ; [2^80 2^80] summed = 2^81
 
 ; --- the `array` constructor: ergonomic front-end over arr/arrl --------------
-; no type code (inferred as the highest of i64<f64<o present), shape may be a
+; no type code (inferred as the highest of z<r<o present), shape may be a
 ; number (rank-1 of length |n|) or a list, and the elements are trailing args
 ; (the shape fixes the count, so it curries them one at a time). bignum/complex/
 ; non-number data lifts the whole array to o automatically -> exact, never lossy.
@@ -104,26 +104,26 @@
    oa-bn (array 2 (100 2) 5)                  ; bignum -> o, stored exactly
    oa-m  (array (L 2 2) 1 2 3 4))                ; rank-2 from a shape list
 (assert
- ; type inference: pure ints -> i64, any float -> f64, anything past the real
+ ; type inference: pure ints -> z, any float -> r, anything past the real
  ; 64-bit tower (bignum/symbol/...) -> o
- (= i64 (atype (array 3 1 2 3)))
- (= f64 (atype (array 3 1 2.0 3)))
+ (= z (atype (array 3 1 2 3)))
+ (= r (atype (array 3 1 2.0 3)))
  (= o   (atype oa-q))
  (= o   (atype oa-bn))
  ; numeric shape -> rank-1 vector of length ($ n); a non-positive shape is empty
  (= 1 (arank (array 4 1 2 3 4)))
- (= 0 (alen (array -3))) (= "@0" (inspect (array -3)))
+ (= 0 (alen (array -3))) (= "@0" (show (array -3)))
  ; shape list -> rank-N
  (= 2 (arank oa-m))   (= 4 (peek oa-m (L 1 1) 0))
  ; elements stored verbatim, in order
  (= 'world (peek oa-q 1 0))
- (= (100 2) (peek oa-bn 0 0))                  ; full bignum, not truncated to i64
+ (= (100 2) (peek oa-bn 0 0))                  ; full bignum, not truncated to z
  ; currying: a partial collector is a function; completing it builds the array
- (= "(arrl o '(2) '(a b))" (inspect ((array 2) 'a 'b)))
+ (= "(arrl o '(2) '(a b))" (show ((array 2) 'a 'b)))
  ; (array 0) -> empty rank-1 array, no elements to collect
- (= "@0" (inspect (array 0)))
+ (= "@0" (show (array 0)))
  ; round-trips: numeric array result prints as the terse @(…) sugar
- (= "@(1 2 3)" (inspect (array 3 1 2 3)))
+ (= "@(1 2 3)" (show (array 3 1 2 3)))
  ; saturating shape coercion: a float / complex / vector dimension -> ($ d)
  (= 3 (alen (array 2.9 7 8 9)))                   ; ($ 2.9) = 3 : rank-1 length 3
  (= 5 (alen (array ~(3 4) 0 0 0 0 0)))           ; ($ ~(3 4)) = 5

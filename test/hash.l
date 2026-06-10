@@ -1,5 +1,5 @@
-; hasht constructor (nested `put`) + #(…) printer/reader form
-(: t (hasht 1 100 2 200 3 300))
+; hash constructor (nested `put`) + #(…) printer/reader form
+(: t (hash 1 100 2 200 3 300))
 (assert
  ; the constructor builds a working hash
  (mapp t) (nilp (mapp 5)) (nilp (mapp '(1 2)))   ; mapp: only maps, not fixnums/lists
@@ -10,16 +10,16 @@
  (= 0 (peek t 9 0))                              ; missing key -> default
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (hashk t)))      ; three entries
  ; empty + single-entry printer forms are deterministic (no bucket-order dependence)
- (= "#()" (inspect (hashn 0)))
- (= "#(1 100)" (inspect (hasht 1 100)))
- (= "#(1 \"hi\")" (inspect (hasht 1 "hi")))
- (strp (inspect t))                             ; multi-entry: just exercise the path
- ; (sat x) exposes the runtime hashing method: a fixnum, equal for eql keys
- (fixp (hash 'k))
- (= (hash 'k) (hash 'k))
- (= (hash '(1 2)) (hash '(1 2))))
+ (= "#()" (show (hashn 0)))
+ (= "#(1 100)" (show (hash 1 100)))
+ (= "#(1 \"hi\")" (show (hash 1 "hi")))
+ (strp (show t))                             ; multi-entry: just exercise the path
+ ; (digest x) exposes the runtime hashing method: a fixnum, equal for eql keys
+ (fixp (digest 'k))
+ (= (digest 'k) (digest 'k))
+ (= (digest '(1 2)) (digest '(1 2))))
 
-; #(…) reader macro: splices a list operand into (hasht …), wraps an atom as (hasht x),
+; #(…) reader macro: splices a list operand into (hash …), wraps an atom as (hash x),
 ; and #() builds a fresh empty hash. Hashes print as #(…), round-tripping via #.
 (: ht #(1 100 2 200 3 300))
 (assert
@@ -30,8 +30,8 @@
  !#()                                           ; ... and ONLY #() is empty
  (= 50 (peek (pin #() 5 50) 5 0))                ; the empty hash is mutable
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (hashk #(1 10 2 20 3 30))))   ; splice builds all entries
- (= "#()" (inspect #()))
- (= "#(1 \"hi\")" (inspect #(1 "hi"))))
+ (= "#()" (show #()))
+ (= "#(1 \"hi\")" (show #(1 "hi"))))
 
 ; # on a SCALAR boxes it: #x = #(() x), a fresh mutable hash pinning x to the
 ; () key -- so #0 is a 1-entry box, NOT the empty hash (the dead () = 0
@@ -42,8 +42,8 @@
  (= 0 (peek bx () 9))                           ; the boxed value sits at ()
  (= 9 (: _ (pin bx () 9) (peek bx () 0)))       ; ... and is mutable in place
  (= 5 (peek #5 () 0)) (= "s" (peek #"s" () 0))  ; any scalar boxes
- (= 'a (peek (hasht 'a) () 0))                  ; (NB #'a SPLICES -- a quote form is a pair)
- (= "#(() 5)" (inspect #5))                     ; a box prints as #(() v), reads back
+ (= 'a (peek (hash 'a) () 0))                  ; (NB #'a SPLICES -- a quote form is a pair)
+ (= "#(() 5)" (show #5))                     ; a box prints as #(() v), reads back
  (= 7 (peek #(1 2 7) () 0))                     ; an odd trailing operand lands in the box slot
  (= 2 (peek #(1 2 7) 1 0)))
 
@@ -53,7 +53,7 @@
  (= 5 $"hello")                                  ; #string -> byte length
  (= 42 $42)                                      ; #positive number -> ceil magnitude
  (= 0 $-7)                                        ; #negative number -> 0 (<= 0 is falsy)
- (= 2 $(hasht 1 10 2 20))                        ; #map-expr -> key count
+ (= 2 $(hash 1 10 2 20))                        ; #map-expr -> key count
  (= 8 $@(3 4 5)))                                ; #array -> ceil(L2 norm) = ceil(sqrt 50)
 
 ; pin/# is a SATURATING NON-NEGATIVE size: a non-positive scalar clamps to 0 (so it is
@@ -71,13 +71,13 @@
  (= 1 (sat i))                                  ; i = ~(0 1): re=0, im>0 sorts above 0 -> ceil 1
  (= 5 (sat @(3 4)))                             ; array -> ceil(L2 norm): the 3-4-5 triangle
  (= 5 (sat @(-3 -4)))                           ; array norm is sign-independent -> negatives stay truthy
- (= 0 (sat (arr i64 '(2 3))))                   ; all-zero array -> norm 0
+ (= 0 (sat (arr z '(2 3))))                   ; all-zero array -> norm 0
  (= 1 (sat @(0.3 0.4)))                         ; ceil makes any nonzero magnitude -> >=1
  (= 1 (sat ~(0.001 0)))                        ; re>0 -> ceil(0.001) = 1; pin=0 iff sorts <= 0
  (= 1 (sat (nom 'x))) (= 1 (sat (nom 0)))          ; symbol name length; anon nom present -> floored to 1 (truthy)
  (= 0 (sat (nom "")))                        ; THE empty symbol (nom "") -> 0 (falsy, prints as ())
- (= 2 (sat (hasht 1 10 2 20)))                  ; table -> key count
- (= 2 (int (abs (hasht 1 10 2 20))))            ; abs of a table is its key count too
+ (= 2 (sat (hash 1 10 2 20)))                  ; table -> key count
+ (= 2 (int (abs (hash 1 10 2 20))))            ; abs of a table is its key count too
  (= (sat (100 2)) (sat (200 2)))          ; any positive bignum saturates to FIX_MAX
  (= 0 (sat (- 0 (100 2)))) (nilp (- 0 (100 2)))  ; negative bignum -> 0, falsy
  (= 0 (sat (- 0 (62 2))))                 ; negative wide-int box -> 0
@@ -88,10 +88,10 @@
 ; ports, symbols, anonymous gensyms, bignums) is truthy with pin >= 1.
 (: same? (\ x (= (? (nilp x) 1 0) (? (= 0 (sat x)) 1 0)))
 (assert
- (nilp "") (nilp #()) (nilp (bufnew 0)) (nilp @0) (nilp 0) (nilp ())  ; empties/zeros are false
+ (nilp "") (nilp #()) (nilp (buf 0)) (nilp @0) (nilp 0) (nilp ())  ; empties/zeros are false
  !!"x" !!#(1 2) !!(nom 0)                                        ; present values are true
  !!A !!out !!(\ x x)                                                ; functions/ports too
- (same? "") (same? #()) (same? (bufnew 0)) (same? @0) (same? 0)
+ (same? "") (same? #()) (same? (buf 0)) (same? @0) (same? 0)
  (same? "x") (same? #(1 2)) (same? (nom 0)) (same? A) (same? out)
  (same? ~(0 0)) (same? ~(0.3 0.4)) (same? @(0 0)) (same? @(0.1 0))
  (same? (100 2)) (same? 'abc) (same? '(1 2))))

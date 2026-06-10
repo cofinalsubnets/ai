@@ -15,10 +15,10 @@
 
 (assert
  ; --- printer: ~(re im) form, reads back by re-evaluation (splices into com) ---
- (= "~(0.0 1.0)" (inspect i))
- (= "~(2.0 3.0)" (inspect ~(2 3)))
- (= "~(2.0 -3.0)" (inspect ~(2 -3)))
- (= "~(-1.0 -2.0)" (inspect ~(-1 -2)))
+ (= "~(0.0 1.0)" (show i))
+ (= "~(2.0 3.0)" (show ~(2 3)))
+ (= "~(2.0 -3.0)" (show ~(2 -3)))
+ (= "~(-1.0 -2.0)" (show ~(-1 -2)))
 
  ; --- the defining identity, and that `=` bridges complex to a real ---
  (= (* i i) -1)                           ; i^2 = -1+0i, equal to the real -1
@@ -105,7 +105,7 @@
 
 ; --- step 7b: full-rank complex arrays (packed (re,im) g_C tuples) -----------
 ; a complex value packs two floats per element into a `c` array (type code c = 2,
-; the tier between f64 and o). arr/arrl/array/@ all build them (a-type infers c);
+; the tier between r and o). arr/arrl/array/@ all build them (a-type infers c);
 ; `get` returns a ~(re im) box; + - * / broadcast in the complex domain; `=` ->
 ; a 0/1 mask, the orderings -> nil; asum/aprod fold complex; aall/aany lift the
 ; 0+0i-is-falsy rule. (body-less `:` -> ca-* leak to global, reused in roundtrip.l)
@@ -140,7 +140,7 @@
  (= ~(0 1) (peek (* i ca-r) 0 0))                ; i*(1+0i) = i
 
  ; --- real array meets complex: the real promotes to (v, 0) ---
- (= ~(11 2) (peek (+ @(10 20) ca-v) 0 0))        ; i64 @(10 20) lifts to (10,0)/(20,0)
+ (= ~(11 2) (peek (+ @(10 20) ca-v) 0 0))        ; z @(10 20) lifts to (10,0)/(20,0)
  (= ~(23 4) (peek (+ ca-v @(10 20)) 1 0))
 
  ; --- `=` over complex arrays -> a 0/1 mask; orderings/% -> nil ---
@@ -172,5 +172,5 @@
  (= (? (nilp ca-z) 1 0) (? (= 0 (sat ca-z)) 1 0))
 
  ; --- printer: rank-1 terse @((C…)…); rank>=2 (array '(…) (C…)…) ---
- (= "@(~(1.0 2.0) ~(3.0 4.0))" (inspect ca-v))
- (= "(array '(2 2) ~(1.0 0.0) ~(0.0 1.0) ~(2.0 0.0) ~(0.0 2.0))" (inspect ca-m)))
+ (= "@(~(1.0 2.0) ~(3.0 4.0))" (show ca-v))
+ (= "(array '(2 2) ~(1.0 0.0) ~(0.0 1.0) ~(2.0 0.0) ~(0.0 2.0))" (show ca-m)))

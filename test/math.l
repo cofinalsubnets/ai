@@ -70,19 +70,19 @@
     (flop (pow 1267650600228229401496703205376 2))
     (< 1e300 (pow 2 100000000000000000000))                        ; huge bignum exp -> inf
 
-    ; --- pow / atan2 elementwise over arrays (numpy broadcast); result is f64 ---
-    (= f64 (atype (pow (arrl i32 '(2) '(2 3)) 2)))                  ; always a float array
-    (aall (= (pow (arrl f64 '(3) '(1 2 3)) 2) (arrl f64 '(3) '(1 4 9))))  ; array ^ scalar
-    (aall (= (pow 2 (arrl f64 '(3) '(1 2 3))) (arrl f64 '(3) '(2 4 8))))  ; scalar ^ array
-    (aall (= (pow (arrl f64 '(3) '(1 2 3)) (arrl f64 '(3) '(2 2 2)))      ; array ^ array
-             (arrl f64 '(3) '(1 4 9))))
-    (close 1.570796326794897 (peek (arg ~((arrl f64 '(2) '(1 0)) (arrl f64 '(2) '(1 1)))) 1 0))
-    (nilp (pow (arrl f64 '(2) '(1 2)) "x"))                         ; array vs non-number -> nil
+    ; --- pow / atan2 elementwise over arrays (numpy broadcast); result is r ---
+    (= r (atype (pow (arrl z '(2) '(2 3)) 2)))                  ; always a float array
+    (aall (= (pow (arrl r '(3) '(1 2 3)) 2) (arrl r '(3) '(1 4 9))))  ; array ^ scalar
+    (aall (= (pow 2 (arrl r '(3) '(1 2 3))) (arrl r '(3) '(2 4 8))))  ; scalar ^ array
+    (aall (= (pow (arrl r '(3) '(1 2 3)) (arrl r '(3) '(2 2 2)))      ; array ^ array
+             (arrl r '(3) '(1 4 9))))
+    (close 1.570796326794897 (peek (arg ~((arrl r '(2) '(1 0)) (arrl r '(2) '(1 1)))) 1 0))
+    (nilp (pow (arrl r '(2) '(1 2)) "x"))                         ; array vs non-number -> nil
 
     ; --- bignum meets array (arithmetic): the array wins, the bignum demotes to
     ;     the array's element form -- full magnitude in a float array, low bits in
     ;     an int array (modular, so it wraps: 2^64 + 5 contributes 5). Comparison
     ;     against a bignum stays magnitude-exact -- see test/bignum.l ---
-    (aall (= (+ (arrl i64 '(2) '(1 2)) 18446744073709551621)        ; 2^64 + 5 -> low word 5
-             (arrl i64 '(2) '(6 7))))
-    (< 1e19 (peek (+ (arrl f64 '(2) '(0 0)) 18446744073709551616) 0 0))))  ; 2^64 full magnitude
+    (aall (= (+ (arrl z '(2) '(1 2)) 18446744073709551621)        ; 2^64 + 5 -> low word 5
+             (arrl z '(2) '(6 7))))
+    (< 1e19 (peek (+ (arrl r '(2) '(0 0)) 18446744073709551616) 0 0))))  ; 2^64 full magnitude

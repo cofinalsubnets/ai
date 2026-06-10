@@ -1,6 +1,6 @@
 ; lcat: serialize a ll source file to a C string literal for #include (the lcat
 ; lib headers the final ll is assembled from). Each top-level form is re-printed
-; via inspect (canonical), the forms are joined into one string, and that string is
+; via show (canonical), the forms are joined into one string, and that string is
 ; MINIFIED -- a space is dropped wherever removing it does not change how the reader
 ; tokenizes. The boundary test is empirical, not a hardcoded delimiter set: the two
 ; bytes flanking the space are concatenated with and without it and re-parsed; if
@@ -12,7 +12,7 @@
    ; count complete datums readable from s (stop on the eof sentinel or an
    ; incomplete form, which fread signals by returning the port itself).
    (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
-               (strin (s2cl s)) (nom 0) 0)
+               (sip (s2cl s)) (nom 0) 0)
    ; bytes a then b: is the space between them redundant? (same datum count joined vs spaced)
    (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
    ; emit one byte to out, C-escaped for the string literal.
@@ -26,7 +26,7 @@
    acc ((: (g acc e p first)
           (: r (fread p e)
              (? (= e r) acc
-                (g (? first (inspect r) (scat (scat acc " ") (inspect r))) e p 0))))
+                (g (? first (show r) (scat (scat acc " ") (show r))) e p 0))))
         "" (nom 0) p 1)
    _ (fputc out 34)                                      ; opening "
    ; walk acc: drop redundant spaces (outside string literals), C-escape the rest.

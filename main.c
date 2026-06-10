@@ -323,7 +323,7 @@ static char const cli[] =
 // compiled by the C bootstrap compiler (c0), once by the self-hosted ev installed
 // from ev.l -- so one ll0 invocation exercises both compilers (and -Dg_tco=0 makes
 // it the trampoline path). s2cldef installs s2cl (string -> charlist); runner reads
-// the baked corpus (the global `tests`) through a strin port and evals each form via
+// the baked corpus (the global `tests`) through a sip port and evals each form via
 // `(ev 'ev r)` -- the `'ev` indirection late-binds to whatever `ev` is now, so the
 // same source drives the c0 pass and (after the egg) the self-hosted pass.
 static char const tests0[] =
@@ -331,7 +331,7 @@ static char const tests0[] =
  ;
 static char const
  s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0))",
- runner[] = "(: p (strin (s2cl tests))"
+ runner[] = "(: p (sip (s2cl tests))"
             " ((: (g e) (: r (fread p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))";
 #endif
 

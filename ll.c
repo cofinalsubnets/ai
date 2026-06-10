@@ -580,8 +580,8 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_peek, "peekl", S2(g_vm_peek2)) _(nif_poke, "pinl", S3(g_vm_poke2)) _(nif_trim, "trim", S1(g_vm_trim))\
  _(nif_seek, "seekl", S2(g_vm_seek)) _(nif_pin, "sat", S1(g_vm_pin)) _(nif_get, "peek", S3(g_vm_get))\
  _(nif_put, "pin", S3(g_vm_put)) _(nif_pull, "pull", S3(g_vm_pull)) _(nif_hnew, "hashn", S1(g_vm_hnew)) _(nif_hashk, "hashk", S1(g_vm_hashk))\
- _(nif_hash, "hash", S1(g_vm_hashof))\
- _(nif_bufnew, "bufnew", S1(g_vm_bufnew)) _(nif_bcopy, "bcopy", S5(g_vm_bcopy))\
+ _(nif_hash, "digest", S1(g_vm_hashof))\
+ _(nif_bufnew, "buf", S1(g_vm_bufnew)) _(nif_bcopy, "blit", S5(g_vm_bcopy))\
  _(nif_hashd, "hashd", S3(g_vm_hashd)) _(nif_twop, "twop", S1(g_vm_twop)) _(nif_strp, "strp", S1(g_vm_strp))\
  _(nif_flo, "flo", S1(g_vm_flo)) _(nif_flop, "flop", S1(g_vm_flop))\
  _(nif_sin, "sin", S1(g_vm_sin)) _(nif_cos, "cos", S1(g_vm_cos))\
@@ -711,7 +711,7 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   // Seeded with the 7 builtin sigil operators at arity 1; `~` and `,` stay
   // hardcoded digraphs. Lisp extends it with a plain pin (arity 1..7).
   { struct { char c; char const *n; } const ops[] = {
-     {'\'', "\\"}, {'`', "qq"}, {'#', "hasht"},
+     {'\'', "\\"}, {'`', "qq"}, {'#', "hash"},
      {'@', "tuple"}, {'$', "sat"}, {'!', "nilp"}, {'.', "dot"} };
    g = map_new(g);                                  // sp[0] = the table
    for (uintptr_t i = 0; i < LEN(ops); i++) {
@@ -2379,14 +2379,15 @@ static struct g *gzput_carr_elem(struct g *g, uintptr_t i) {
  g = g_dtoa2(g, im); return gzputc(g, ')'); }
 
 // element-kind code -> a prelude symbol bound to it, so the printed `arrl` form
-// round-trips: Z prints as the `i64` alias, R as `f64`. `c` only labels the
-// 32-bit RNG state tuple (never a constructible array -- arrl rejects ty > R).
+// round-trips: the names follow the tier spine -- Z prints as `z`, R as `r`. `c`
+// only labels the 32-bit RNG state tuple (never a constructible array -- arrl
+// rejects ty > R).
 static char const *const g_vt_names[] = {
- [g_Z] = "i64", [g_R] = "f64", [g_C] = "c", [g_O] = "o" };
+ [g_Z] = "z", [g_R] = "r", [g_C] = "c", [g_O] = "o" };
 
 // Print a rank>=1 array (g->sp[0]) as a constructor expression that reads back to
-// the same array. A rank-1 i64/f64 array uses the terse `@(a b …)` sugar (the `@`
-// reader macro splices into `(tuple a b …)`, which infers i64/f64 from its args);
+// the same array. A rank-1 z/r array uses the terse `@(a b …)` sugar (the `@`
+// reader macro splices into `(tuple a b …)`, which infers z/r from its args);
 // anything else (rank>=2, or an object array whose elements are arbitrary, quoted
 // values) uses `(arrl <type> '(shape) '(vals))`, a bare constructor call that pins
 // the exact element type and shape. The array may move on a GC during printing, so
@@ -2927,7 +2928,7 @@ static struct g* g_z_getc(struct g*g) {
   default: return g;
   case '\n': case '\r': continue;
   case 0: case ' ': case '\t': case '\f': continue;
-  case '#':                                          // #! is a line comment; bare # is significant (the hasht macro)
+  case '#':                                          // #! is a line comment; bare # is significant (the hash macro)
    if (!g_ok(g = zgetc(g))) return g;
    if (g->b != '!') {                                // not a shebang: push back, return #
     if ((int) g->b != EOF && !g_ok(g = zungetc(g, g->b))) return g;
@@ -2981,7 +2982,7 @@ static g_inline bool punctsymp(word x) {
   if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
    return false; }
  return true; }
-// recognise the splicing reader-macro wraps -- `%` (interned `hasht`) and `@`
+// recognise the splicing reader-macro wraps -- `#` (interned `hash`) and `@`
 // (interned `tuple`) -- so a list operand splices into the constructor call
 // instead of being wrapped: see the deliver loop in gz_parse.
 static g_inline bool symeq(word x, char const *nm, uintptr_t n) {
@@ -2989,7 +2990,7 @@ static g_inline bool symeq(word x, char const *nm, uintptr_t n) {
  if (!s || !strp(word(s)) || s->len != n) return false;
  for (uintptr_t i = 0; i < n; i++) if (s->bytes[i] != nm[i]) return false;
  return true; }
-static g_inline bool hashsym(word x) { return symeq(x, "hasht", 5); }
+static g_inline bool hashsym(word x) { return symeq(x, "hash", 4); }
 static g_inline bool splicesym(word x) { return hashsym(x) || symeq(x, "tuple", 5) || symeq(x, "com", 3); }
 
 static struct g *gz_parse(struct g *g, bool multi) {
@@ -3571,7 +3572,7 @@ g_vm(g_vm_scat) {
 g_vm(g_vm_buf) {
  return Ip = cell(*++Sp), *Sp = putfix(1), Continue(); }
 
-// (bufnew n) — allocate a zeroed n-byte mutable buf. n<=0 / non-numeric -> the empty
+// (buf n) — allocate a zeroed n-byte mutable buf. n<=0 / non-numeric -> the empty
 // string singleton EmptyString, so NO empty buf object ever exists (an un-writable 0-byte
 // buf IS ""); this lets g_nilp drop its buf branch (every real buf has len>=1, truthy).
 // Two heap objects under one Have (so no GC sees a half-built buf): the backing g_str
@@ -4935,7 +4936,7 @@ struct g *g_big_dec(struct g *g) {
  return g; }
 
 // --- (arr type shape-list): zero-filled array ------------------------------
-// `type` is a fixnum element-type code (i64/f64/c/o, named in the prelude); `shape`
+// `type` is a fixnum element-type code (z/r/c/o, named in the prelude); `shape`
 // is a list of non-negative fixnum dimensions (empty -> a rank-0 scalar box). A
 // `c` array packs two floats (re,im) per element; zero-fill is 0+0i. Bad type /
 // negative dim / over-rank -> nil.

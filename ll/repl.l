@@ -2,7 +2,7 @@
 ; boot.l by the interactive frontends (host and kernel).
 ;
 ; parsing is delegated to the C reader: the editor's flattened charlist is
-; implicitly parenthesized and read as ONE expression via (strin ..) + fread
+; implicitly parenthesized and read as ONE expression via (sip ..) + fread
 ; -- a line `x y z` is the application (x y z), and reader infix works at
 ; the prompt. fread's more-bit conditions route through the trap
 ; continuation, whose default delivers the port itself on more (input ends
@@ -35,7 +35,7 @@
    ; (f) == f. returns m if the input ends inside an unfinished form (incl. a
    ; pending infix operand), 0 for a blank line, else a one-form list.
    (parseall cl)
-     (: p (strin (X 40 (cat cl (L 41))))
+     (: p (sip (X 40 (cat cl (L 41))))
         r (fread p eofsym)
         (? (= r p)      m                  ; ends inside an unfinished form
            (= r eofsym) 0                  ; unreachable: the wrap always closes
