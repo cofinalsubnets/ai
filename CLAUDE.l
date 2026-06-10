@@ -5,8 +5,9 @@
 ; i rewrite here and re-wrap by hand. keep it green; when in doubt, this is the truth.
 
 ; --- the shape of it --- one cell is one word: a fixnum is a tagged odd word, anything else
-; is a heap object whose first word is its handler. the VM is tail-threaded (handlers
-; tail-jump, never return -- `make vmret` checks it) over a two-space copying heap. every
+; is a heap object whose first word is its hot -- a live external reference, the wire out of
+; the heap to the code that runs it. the VM is tail-threaded (hots tail-jump, never return --
+; `make vmret` checks it) over a two-space copying heap. every
 ; operation is *fully generic* -- it dispatches on a value's *kind*, and the kinds form a
 ; lattice (next) that is literally the diagonal of the dispatch tables. the C core is tiny;
 ; most of the language is ll closures installed reflectively from the prelude, then baked

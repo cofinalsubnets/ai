@@ -82,8 +82,9 @@ kilobytes of the whole back end.
 
 ### under the hood
 - one word per value: a fixnum is a tagged odd word, anything else is a heap
-  object whose first word is its handler. the vm is tail-threaded -- handlers
-  jump, never return -- over a two-space copying heap; `make vmret` proves the
+  object whose first word is its hot -- a live external reference, the wire out
+  of the heap to the code that runs it. the vm is tail-threaded -- hots jump,
+  never return -- over a two-space copying heap; `make vmret` proves the
   no-return claim by disassembling the binary.
 - every operation is generic, dispatched on a value's kind through NxN tables
   (`+` `*` apply); the kind enum is the type lattice, the total order over all
@@ -91,7 +92,7 @@ kilobytes of the whole back end.
   dispatch tables. `sort` is one C comparison per pair -- the total order is
   the comparator.
 - no interpreter state lives outside the heap: dict (an ordinary ll hash)
-  carries the globals, macros, reader operator tables, the trap handler and
+  carries the globals, macros, reader operator tables, the trap function and
   the rng; C finds its own hooks by name, allocation-free.
 - the compiler is written in ll. at build time the evaluator sits on the egg
   (the quoted compiler source) twice -- the C bootstrap compiles the compiler,
