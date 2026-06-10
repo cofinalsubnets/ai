@@ -101,13 +101,16 @@
 ; match up to renaming of bound variables (binders by position, free vars by name) and their
 ; captured values match pairwise. `<` agrees (the hash is alpha-invariant); `idp` stays
 ; identity. eta ((\ x (f x)) = f) and beta are *not* bridged -- a closure versus its operator is
-; a representation-crossing edge that stays false.
+; a representation-crossing edge that stays false. two exceptions cross into the numerals:
+; 1 = (\ x x) (the identity) and 0 = (\ _ 1) (const-1), each up to alpha.
 (assert
  (= (\ x x) (\ y y)) (= (\ a b (+ a b)) (\ x y (+ x y)))           ; alpha: bound vars by position
  (= (\ x (+ x 1)) (\ x (+ x 1))) !(idp (\ x (+ x 1)) (\ x (+ x 1)))  ; equal, yet distinct objects
  !(= (\ x x) (\ y z)) !(= (\ x (+ x 1)) (\ x (+ x 2)))             ; free /= bound; different body
  (: g (\ a (\ b (+ a b))) (&& (= (g 1) (g 1)) !(= (g 1) (g 2))))   ; closures: equal iff captures match
- (= (+ 1) (+ 1)) !(< (\ x x) (\ y y)) !(= (\ x (A x)) A))          ; partial apps too; eta not bridged
+ (= (+ 1) (+ 1)) !(< (\ x x) (\ y y)) !(= (\ x (A x)) A)           ; partial apps too; eta not bridged
+ (= 1 (\ x x)) (= (\ y y) 1) !(idp 1 (\ x x))                      ; 1 = identity, either side
+ (= 0 (\ _ 1)) (= (\ q 1) 0) !(= 0 (\ _ 2)) !(= 0 (\ _ _)))        ; 0 = const-1 (and only that)
 
 ; --- + and * are generic --- `+` adds numbers, concatenates strings/symbols (a number is one
 ; byte), and appends lists; `-` is numeric only. `*` is repeated `+`: a sequence times a count

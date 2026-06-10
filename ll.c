@@ -4189,20 +4189,25 @@ static uintptr_t shash(struct g *g, word x, struct arib *env) {
   struct arib r = { p, p, n, n, env };
   return (mix * (uintptr_t) (n + 7)) ^ (shash(g, body, &r) * mix); }
  return (mix ^ (shash(g, A(x), env) * mix)) ^ (shash(g, B(x), env) * mix); }
-// (\ x x) -- the identity lambda: one binder whose body is that same binder.
-// 1 is the identity numeral ((1 z) = z), so `=` bridges them extensionally:
-// (= 1 (\ x x)) is true (README). All a-variants ((\ y y) …) count; same/idp
-// stays false (distinct objects). Closures / multi-binder lambdas never match.
-static bool id_lam(struct g *c, word v) {
- if (!lamp(v) || datp(v)) return false;
- if (!(ptr(v) > ptr(c) && ptr(v) < ptr(c) + c->len)) return false;  // in-pool only: k[-1]/k valid
+// The numeral<->lambda `=` bridges: 1 is the identity numeral ((1 z) = z) and
+// 0 is const-1 ((0 z) = 1), so a one-binder lambda whose body is that binder
+// equals 1, and one whose body is the literal 1 equals 0. All a-variants count;
+// idp stays false (distinct objects). Closures / multi-binder never match.
+static word lam_src1(struct g *c, word v) {           // 1-binder lambda -> (binder body), else 0
+ if (!lamp(v) || datp(v)) return 0;
+ if (!(ptr(v) > ptr(c) && ptr(v) < ptr(c) + c->len)) return 0;  // in-pool only: k[-1]/k valid
  union u *k = cell(v);
- if (fn_partialp(k)) return false;
+ if (fn_partialp(k)) return 0;
  word s = fn_src(c, k, v);                            // s = (\ b.. body)
- if (!s || !gz_islam(s)) return false;
+ if (!s || !gz_islam(s)) return 0;
  word ops = B(s);                                     // (binder body ..)
- return !twop(B(B(ops)))                              // exactly one binder
-     && symp(A(ops)) && A(ops) == A(B(ops)); }        // body IS that binder
+ return !twop(B(B(ops))) && symp(A(ops)) ? ops : 0; } // exactly one binder
+static bool id_lam(struct g *c, word v) {             // (\ x x): body IS the binder
+ word ops = lam_src1(c, v);
+ return ops && A(ops) == A(B(ops)); }
+static bool k1_lam(struct g *c, word v) {             // (\ _ 1): body is the literal 1
+ word ops = lam_src1(c, v);
+ return ops && A(B(ops)) == putfix(1); }
 g_noinline bool eqv(struct g *g, word a, word b) {
  word *base = off_pool(g), *top = base + g->len, *w = base;
  struct g *c = g_core_of(g);
@@ -4226,8 +4231,9 @@ g_noinline bool eqv(struct g *g, word a, word b) {
      if (!salpha(g, sa, sb, 0)) return false;             // α-equivalence of source \-exprs
      a = b; continue; }                                   // equal -> drain worklist
     return false; }
-   // 1 (identity numeral) bridges to (\ x x) (identity lambda) extensionally.
+   // The numerals 1 and 0 bridge to their lambdas extensionally: (\ x x), (\ _ 1).
    if ((a == putfix(1) && id_lam(c, b)) || (b == putfix(1) && id_lam(c, a))) { a = b; continue; }
+   if ((a == putfix(0) && k1_lam(c, b)) || (b == putfix(0) && k1_lam(c, a))) { a = b; continue; }
    if (((a | b) & 1) || !datp(a) || !datp(b) || typ(a) != typ(b)) return false;
    switch (typ(a)) {
     default: return false;
