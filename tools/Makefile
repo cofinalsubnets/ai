@@ -1,6 +1,6 @@
-# Validation gates for the l rewrites of the old Python build tools.
+# Validation gates for the love rewrites of the old Python build tools.
 #
-# Each l tool in this directory (gen_data.l, vmret.l) must
+# Each love tool in this directory (gen_data.l, vmret.l) must
 # produce output identical to the frozen Python reference under py/ (see
 # py/README.md). These targets diff the two over every relevant build artifact
 # present in the tree -- so they only check what you've actually built. Run all
@@ -14,7 +14,7 @@ include $(R)/common.mk
 .PHONY: all test_gen_data test_vmret
 all: test_gen_data test_vmret
 
-# Build the host l on demand (it runs the .g tools); only if it's missing.
+# Build the host love on demand (it runs the .l tools); only if it's missing.
 $(m):
 	@$(MAKE) -C $(R)/host
 
@@ -33,11 +33,11 @@ test_gen_data: | $(m)
 
 # vmret.l vs py/vmret.py over the host binary plus any kernel arch ELFs
 # present (each arch exercises a different ret matcher + the objdump choice).
-# l0 is skipped: it builds -Dg_tco=0 (trampoline), where handler rets are
+# love0 is skipped: it builds -Dg_tco=0 (trampoline), where handler rets are
 # expected -- the vmret signal is noise there.
 test_vmret: | $(m)
 	@echo TEST vmret.l
-	@for e in $(R)/out/host/l `find $(R)/out/free -name 'l-*.elf' 2>/dev/null`; do \
+	@for e in $(R)/out/host/love `find $(R)/out/free -name 'love-*.elf' 2>/dev/null`; do \
 	  python3 $(R)/tools/py/vmret.py $$e > $(R)/out/host/.vmret.py 2>&1; \
 	  $(m) $(R)/tools/vmret.$x $$e > $(R)/out/host/.vmret.l 2>&1; \
 	  cmp -s $(R)/out/host/.vmret.py $(R)/out/host/.vmret.l && echo "  ok   $$e" \

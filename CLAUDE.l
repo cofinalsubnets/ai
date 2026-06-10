@@ -1,6 +1,6 @@
-; l -- a small lisp where every value is a monadic, auto-curried function.
-; a portable C runtime (l.c + l.h) plus a self-hosting compiler written in l
-; (the l/{prelude,ev,repl}.l layers). source is .l; the host binary is `l`. see README.md.
+; love -- a small lisp where every value is a monadic, auto-curried function.
+; a portable C runtime (love.c + love.h) plus a self-hosting compiler written in love
+; (the love/{prelude,ev,repl}.l layers). source is .l; the host binary is `love`. see README.md.
 ;
 ; this file is three things at once: the SPEC, a real TEST in the corpus, and my own
 ; working notes -- CLAUDE.md (my context file) is exactly this file in a code fence,
@@ -9,15 +9,15 @@
 ; one-line experiment. every semantic claim below is assert-backed on every target.
 
 ; --- how to work here (read this first) ---
-; * `make test` is the gate: host + the self-hosted bootstrap l0, BOTH required to print
-;   the zz-fin "tests pass" summary (l0 exactly twice -- a silent reader stop exits 0
+; * `make test` is the gate: host + the self-hosted bootstrap love0, BOTH required to print
+;   the zz-fin "tests pass" summary (love0 exactly twice -- a silent reader stop exits 0
 ;   without reaching zz-fin, so exit code alone proves nothing). `make test_all` adds the
-;   qemu kernel + tool diffs; `make valg` for memory. one file at a time: `out/host/l
+;   qemu kernel + tool diffs; `make valg` for memory. one file at a time: `out/host/love
 ;   test/x.l` -- but the corpus runs CONCATENATED in one global scope, so keep helpers
 ;   local (give `:` a body) and remember single-file runs lack the assert harness.
-; * footgun: edit l.h => `make clean` or l0 hangs; stash out/dl first (clean nukes the
+; * footgun: edit love.h => `make clean` or love0 hangs; stash out/dl first (clean nukes the
 ;   ovmf/limine downloads).
-; * C files EMBED lisp the .l sweeps cannot see: l.c (g_evals_'s driver string), main.c
+; * C files EMBED lisp the .l sweeps cannot see: love.c (g_evals_'s driver string), main.c
 ;   (s2cl + runner), kmain.c (the K_TEST runner), wasm/. grep them on every rename.
 ; * a bare all-punct symbol mid-list captures its left operand at read time -- escape it
 ;   in parens ((+) is + as a value); quoted lists need each operator quoted alone.
@@ -30,7 +30,7 @@
 ; the heap to the ap that runs it. the VM is tail-threaded (aps tail-jump, never return --
 ; `make vmret` checks it) over a two-space copying heap. every operation is *fully generic* --
 ; it dispatches on a value's *kind*, and the kinds form a lattice that is literally the
-; diagonal of the dispatch tables. the C core is tiny; most of the language is l closures
+; diagonal of the dispatch tables. the C core is tiny; most of the language is love closures
 ; installed reflectively from the prelude, then baked into a heap image (the *egg*) at
 ; compile time. the gritty details sit at the bottom.
 
@@ -346,10 +346,10 @@
 ;   wev -- the source->source pre-pass before analysis: expand macros, apply boxfix, fold pure
 ;     globals, mark apply strategy, and flip (? !e a b) to (? e b a).
 ;   maps -- #(..)/map expand to nested pins; a map is a lookup function.
-; the *egg* (l/egg.l): the evaluator SITS on the egg (the quoted prelude+ev corpus) twice --
+; the *egg* (love/egg.l): the evaluator SITS on the egg (the quoted prelude+ev corpus) twice --
 ; compile the compiler with the C bootstrap, recompile the whole corpus through itself -- and
 ; the hatchling installs as `ev`, baked into the image at C compile time, no allocation;
-; `born` records the hatch time (unbound pre-egg: l0's first corpus pass runs PRE-egg,
+; `born` records the hatch time (unbound pre-egg: love0's first corpus pass runs PRE-egg,
 ; and an absent global reads as nil). before it is born the egg PULLS every runtime-
 ; internal name: the raw cell nifs (peek poke seek; lamb stays), the compiler's machinery
 ; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
@@ -367,9 +367,9 @@
 ; diagonal; the three core tables are + , * , and apply. a both-fixnum fast path skips the
 ; table; otherwise one indexed jump picks a lane that widens only as far as the operands need
 ; (array, complex, bignum, float, ...). the VM is tail-threaded over a two-space copying
-; collector; out-of-pool constants are immortal. the l/ layer (prelude ev repl cli egg) bakes
-; into every frontend: the host (out/host/l), the freestanding kernel (x86_64/aarch64),
-; and wasm. build codegen lives in l under tools/; the C is
+; collector; out-of-pool constants are immortal. the love/ layer (prelude ev repl cli egg) bakes
+; into every frontend: the host (out/host/love), the freestanding kernel (x86_64/aarch64),
+; and wasm. build codegen lives in love under tools/; the C is
 ; freestanding, -Wall -Wextra -Werror.
 
 ; --- odds & ends --- show renders a value as its reparsable printed form; (clock t) is

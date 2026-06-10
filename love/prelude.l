@@ -1,4 +1,4 @@
-; prelude.l -- l prelude: data + function + macro definitions.
+; prelude.l -- love prelude: data + function + macro definitions.
 (: id 1
    (co f g x) (f (g x))
    (const x _) x

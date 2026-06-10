@@ -243,7 +243,7 @@ typedef g_word num, word;
 // The unique empty string and empty (anonymous) symbol -- data-segment globals the
 // GC never moves (gcp's out-of-pool short-circuit). Strings are immutable, so one
 // empty string suffices and zero-length ones are never heap-allocated; g_sym_empty
-// is the additive identity for `+` on symbols. See l.c for the rationale.
+// is the additive identity for `+` on symbols. See love.c for the rationale.
 extern const struct g_str g_str_empty;
 extern const struct g_atom g_sym_empty;
 #define EmptyString ((word) &g_str_empty)
@@ -264,12 +264,12 @@ g_vm(g_vm_gc, uintptr_t);
 // g_kind maps any value to its enum q: KFix for a fixnum, KLam for a non-data heap
 // pointer (text/function/map), else g_typ's data kind -- refined for a rank>=1 tuple,
 // which expands by element tier to KArrZ..KArrO (a rank-0 box stays KTuple). Lives in
-// l.c (it needs g_typ from the generated data.h) and is shared by data.c's apply
+// love.c (it needs g_typ from the generated data.h) and is shared by data.c's apply
 // sentinels. Both the `+`/`*` matrices and the apply matrix dispatch on this.
 enum q g_kind(word);
 // Apply dispatch matrix, indexed [static: the applied data kind, g_typ(Ip)][dynamic:
 // the argument kind, g_kind(Sp[0])]. The data sentinels (data.c) tail-jump through
-// it; the aps + the table itself live in l.c. Row indexed by the full kind
+// it; the aps + the table itself live in love.c. Row indexed by the full kind
 // (g_typ returns one of the five data kinds), so the first dimension is KN, not g_data_n.
 extern g_vm_t *g_apply_mx[KN][KN];
 extern union u const numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
@@ -286,7 +286,7 @@ static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b)
  return w->ap = g_vm_two, w->a = a, w->b = b, w; }
 static g_inline struct g *encode(struct g*g, enum g_status s) { return
   (struct g*) ((uintptr_t) g | s); }
-// Throw: to the global `trap` function when installed, else throw_c (l.c).
+// Throw: to the global `trap` function when installed, else throw_c (love.c).
 // gtrap re-throws an already-tagged g's own status.
 struct g *gtrap2(struct g*, enum g_status), *gtrap(struct g*);
 static g_inline struct g *g_have(struct g *g, uintptr_t n) {

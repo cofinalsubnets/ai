@@ -1,12 +1,12 @@
-#include "l.h"
-// The build's version string (the git hash), generated into out/lib/l_version.h by
+#include "love.h"
+// The build's version string (the git hash), generated into out/lib/love_version.h by
 // the Makefile and surfaced in the runtime as the `version-number` global (g_ini_0).
 // Optional include so a standalone/unwired compile still builds; falls back to "unknown".
-#if defined(__has_include) && __has_include("l_version.h")
-#include "l_version.h"
+#if defined(__has_include) && __has_include("love_version.h")
+#include "love_version.h"
 #endif
-#ifndef L_VERSION
-#define L_VERSION "unknown"
+#ifndef LOVE_VERSION
+#define LOVE_VERSION "unknown"
 #endif
 
 // ============================================================================
@@ -489,7 +489,7 @@ static g_inline struct g_str *ini_str(struct g_str *s, uintptr_t len) {
 // for `+` on symbols (empty name -> contributes no bytes) and the canonical value of
 // any empty-named symbol concat. Predicates read `ap`, so these behave as a normal
 // string/sym value; the FAM `bytes[]` is simply absent (len 0).
-// External linkage (declared in l.h with the EmptyString/empty_sym macros) so the
+// External linkage (declared in love.h with the EmptyString/empty_sym macros) so the
 // frontends can return them too (e.g. host_run's empty-output capture).
 const struct g_str g_str_empty = { .ap = g_vm_str, .len = 0 };
 const struct g_atom g_sym_empty = { .ap = g_vm_sym, .code = 0, .nom = 0, .l = 0, .r = 0 };
@@ -644,7 +644,7 @@ nifs(native_implemented_function);
 static g_vm(_g_vm_yield_c) { return Pack(g), g; }
 static union u const yield_c[] = { {_g_vm_yield_c} };
 
-// g_vm_trap: the default trap ap, a first-class vm ap (declared in l.h with
+// g_vm_trap: the default trap ap, a first-class vm ap (declared in love.h with
 // ret0/cur/port_io). A throw enters it with the thrown status encoded into g
 // (see gtrap2 below). The MORE bit is read control flow, not a sing: the
 // thrower left [resume port sentinel] on the stack (the fread protocol), so
@@ -663,7 +663,7 @@ g_vm(g_vm_trap) {
 static union u const throw_c[] = { {g_vm_trap} };
 
 // gtrap2/gtrap are defined after numap_drive (the trap call frame runs
-// through its 3-arg twin); declared in l.h.
+// through its 3-arg twin); declared in love.h.
 
 static struct g_def const def1[] = { nifs(niff) insts(i_entry)};
 
@@ -703,9 +703,9 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
   g = g_push(g, 3, empty_sym, empty_sym, g->dict);
   g = g_mapput(g);
   g = g_pop(g, 1);
-  // `version-number`: the build's git hash (l_version.h), surfaced on init so the user
+  // `version-number`: the build's git hash (love_version.h), surfaced on init so the user
   // can read the running version. A non-fixnum global, harmlessly skipped by ev.l's pureset.
-  if (g_ok(g = g_strof(g, L_VERSION))) {
+  if (g_ok(g = g_strof(g, LOVE_VERSION))) {
    struct g_def vd[] = {{"version-number", g_pop1(g)}};
    g = g_defn(g, vd, countof(vd)); }
   // dict['operators]: the reader's operator table, char -> name | (name . arity).
@@ -3894,7 +3894,7 @@ static g_vm(g_vm_add_string) {
 static g_vm(g_vm_0) {                             // unsupported mix (array <-> string)
  return *++Sp = nil, Ip++, Continue(); }
 
-// The fundamental value kind for generic-op dispatch (enum q in l.h): a fixnum is
+// The fundamental value kind for generic-op dispatch (enum q in love.h): a fixnum is
 // the odd tag (KFix), a non-data heap pointer is a text/function (KLam), else g_typ
 // gives the data kind. The one refinement: a rank>=1 tuple (array) expands by element
 // tier to KArrZ..KArrO so the array tower dispatches inline with the scalar tower it
@@ -4016,7 +4016,7 @@ static g_vm(data_pair_apply) {
 
 // === the three generic-op dispatch matrices, adjacent ======================
 // All indexed by g_kind (g_apply_mx's row by g_typ, the data-kind subrange). The kind
-// order (l.h) makes each lane a contiguous block: [KFix..KArrO] arithmetic (the
+// order (love.h) makes each lane a contiguous block: [KFix..KArrO] arithmetic (the
 // scalar tower fix/tuple/big then the parallel array tower arrZ/arrR/arrC/arrO), then
 // [KString..KTwo] sequence, then KMap, then KLam. Lanes:
 //   *n   = numeric tower & arrays (arithmetic / broadcast) -- the lane ap still
@@ -5211,7 +5211,7 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
 
 // === ordered comparison: a total order over lisp values ======================
 // `< <= > >=` extend across EVERY kind, not just numbers. The CROSS-kind order is
-// the enum q type lattice (l.h) -- fixnum/number LOW, lambda HIGH, the very
+// the enum q type lattice (love.h) -- fixnum/number LOW, lambda HIGH, the very
 // order the generic-op matrix diagonals encode: number < string < symbol < pair <
 // map < lambda. (Arrays are the exception: an array operand compares ELEMENTWISE -> a
 // 0/1 mask via g_vm_vbin, never the scalar order.) WITHIN a kind:

@@ -5,7 +5,7 @@
 # Per-frontend build output lives under $R/out/<frontend>/.
 R ?= .
 
-n = l
+n = love
 x = l
 m = $R/out/host/$n
 a ?= $(shell uname -m)
@@ -14,7 +14,7 @@ a ?= $(shell uname -m)
 t = $R/test/00-init.$x $R/CLAUDE.$x $(filter-out %/00-init.$x,$(sort $(wildcard $R/test/*.$x)))
 
 g_h = $(wildcard $R/*.h)
-g_c = $R/l.c $R/data.c
+g_c = $R/love.c $R/data.c
 f_c = $(wildcard $R/font/*.c)
 c_c = $(wildcard $R/libc/*.c)
 

@@ -1,4 +1,4 @@
-#include "l.h"
+#include "love.h"
 #include <data.h>
 
 // ;;; FIXME the historical style gwen still appears in this file, update the instances.
@@ -8,7 +8,7 @@
 // in the pinned gwen_data section -- a single shift). Applying a data value lands
 // on its sentinel, which tail-jumps through the apply matrix with one static index
 // (its own kind, g_typ(Ip)) and one dynamic index (the argument's kind,
-// g_kind(Sp[0])). The matrix and its handlers live in l.c.
+// g_kind(Sp[0])). The matrix and its handlers live in love.c.
 //
 // The dispatch (incl. g_typ) lives in ONE shared callee, data_apply; the sentinels
 // are tiny, byte-identical tail calls into it. This is deliberate: the section

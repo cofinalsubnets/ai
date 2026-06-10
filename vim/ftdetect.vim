@@ -1,1 +1,1 @@
-au BufRead,BufNewFile *.l set filetype=l
+au BufRead,BufNewFile *.l set filetype=love
