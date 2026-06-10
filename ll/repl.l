@@ -1,14 +1,14 @@
 ; the read-eval-print loop and its multi-line line editor. loaded after
 ; boot.l by the interactive frontends (host and kernel).
 ;
-; parsing is delegated to the C reader: the editor's flattened charlist
-; becomes a synthetic input port via (strin cl), and (fread port e) walks
-; it one datum at a time. fread returns the datum on success; its more-bit
-; conditions route through the trap continuation, whose default delivers
-; the sentinel `e` on eof and the port itself on more (input ends inside
-; an unfinished form). that lets parseall distinguish "all done" from
-; "keep editing" -- parseall is the lisp-visible face of the more bit,
-; and a global `trap` function takes over that dispatch.
+; parsing is delegated to the C reader: the editor's flattened charlist is
+; implicitly parenthesized and read as ONE expression via (strin ..) + fread
+; -- a line `x y z` is the application (x y z), and reader infix works at
+; the prompt. fread's more-bit conditions route through the trap
+; continuation, whose default delivers the port itself on more (input ends
+; inside an unfinished form, incl. a pending infix operand). that lets
+; parseall distinguish "submit" from "keep editing" -- parseall is the
+; lisp-visible face of the more bit; a global `trap` takes over that dispatch.
 ;
 ; the editor buffer is a four-zipper threaded positionally through
 ; the editor functions: u (lines above the cursor, reversed), l (chars
@@ -29,17 +29,18 @@
 
    (revcat a b) (foldl (flip X) b a)
 
-   ; drain a charlist into a list of all the datums it holds. returns m
-   ; if the input ends inside an unfinished form; otherwise the (possibly
-   ; empty) list of parsed datums.
+   ; parse a charlist as ONE expression: the line is implicitly parenthesized,
+   ; so `x y z` reads as (x y z) -- a single application -- and infix works at
+   ; the prompt (`1 = 1` is ((= 1 1)) = 1). a lone value is unchanged by
+   ; (f) == f. returns m if the input ends inside an unfinished form (incl. a
+   ; pending infix operand), 0 for a blank line, else a one-form list.
    (parseall cl)
-     (: p (strin cl)
-        (loop acc)
-          (: r (fread p eofsym)
-             (? (= r p)      m                 ; port == port: g_status_more
-                (= r eofsym) (revcat acc 0)    ; clean EOF: emit in source order
-                (loop (X r acc))))
-        (loop 0))
+     (: p (strin (X 40 (cat cl (L 41))))
+        r (fread p eofsym)
+        (? (= r p)      m                  ; ends inside an unfinished form
+           (= r eofsym) 0                  ; unreachable: the wrap always closes
+           (idp r ())   0                  ; blank line reads the empty symbol
+           (L r)))
 
    ; --- editor ---
 
@@ -207,8 +208,8 @@
    ; print the prompt, then dispatch events until ^D or until enter
    ; at end-of-buffer with the buffer fully parsed. enter always
    ; splits the current line at the cursor; only when the cursor is
-   ; at end-of-buffer do we try parseall, which may yield multiple
-   ; datums on one line. returns eofsym on ^D, otherwise
+   ; at end-of-buffer do we try parseall, which reads the buffer as
+   ; one expression. returns eofsym on ^D, otherwise
    ; (X vs (X nhu nhd)) so the repl can thread history.
    ;
    ; the loop carries pra = rows above the cursor as of the previous

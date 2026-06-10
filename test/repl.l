@@ -183,20 +183,20 @@
         (= (k7 0 0 0 0 (X cur 0) 0 0)
            (downhist k7 0 (X 49 0) 0 0 0 0 cur)))
 
-     ; --- parseall: integration check ---
-     ; "1 2 3" parses to (1 2 3)
-     (= '(1 2 3) (parseall '(49 32 50 32 51)))
-     ; "(1 2)" parses to ((1 2))
-     (= '((1 2)) (parseall '(40 49 32 50 41)))
+     ; --- parseall: integration check (a line is ONE expression) ---
+     ; "1 2 3" parses to the single form (1 2 3)
+     (= '((1 2 3)) (parseall '(49 32 50 32 51)))
+     ; "(1 2)" parses to (((1 2)))
+     (= '(((1 2))) (parseall '(40 49 32 50 41)))
      ; trailing whitespace OK, empty yields 0
      (= 0 (parseall 0))
      ; unclosed list yields m -- we can detect via twop being false
      !(twop (parseall '(40 49)))
 
      ; --- floats: parse and round-trip via the ll reader ---
-     ; "1.5" parses to (1.5); the value is an actual flo, not a symbol
-     (= 1.5 (A (parseall '(49 46 53))))
+     ; "1.5" parses to ((1.5)); the value is an actual flo, not a symbol
+     (= 1.5 (A (A (parseall '(49 46 53)))))
      ; "1e3" parses as float, not symbol
-     (= 1000.0 (A (parseall '(49 101 51))))
+     (= 1000.0 (A (A (parseall '(49 101 51)))))
      ; "1.2.3" stays a symbol (g_strtod partial-consume)
-     (symp (A (parseall '(49 46 50 46 51))))))
+     (symp (A (A (parseall '(49 46 50 46 51)))))))
