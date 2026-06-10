@@ -19,12 +19,12 @@ $(m):
 	@$(MAKE) -C $(R)/host
 
 # gen_data.l vs py/gen_data.py over every data.o in a build tree (host,
-# playdate ELF32, the kernel arches). The sed folds the .py's generator-name
+# the kernel arches). The sed folds the .py's generator-name
 # token in the header comment to the .g's so only the reflected stride is
 # compared.
 test_gen_data: | $(m)
 	@echo TEST gen_data.l
-	@for o in `find $(R)/out/host $(R)/out/playdate $(R)/out/free -name data.o 2>/dev/null`; do \
+	@for o in `find $(R)/out/host $(R)/out/free -name data.o 2>/dev/null`; do \
 	  python3 $(R)/tools/py/gen_data.py $$o | sed 's@gen_data\.py@gen_data.l@' > $(R)/out/host/.data.py.h; \
 	  $(m) $(R)/tools/gen_data.$x $$o > $(R)/out/host/.data.l.h; \
 	  cmp -s $(R)/out/host/.data.py.h $(R)/out/host/.data.l.h && echo "  ok   $$o" \

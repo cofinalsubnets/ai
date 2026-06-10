@@ -269,8 +269,8 @@
 ; table; otherwise one indexed jump picks a lane that widens only as far as the operands need
 ; (array, complex, bignum, float, ...). the VM is tail-threaded over a two-space copying
 ; collector; out-of-pool constants are immortal. the ll/ layer (prelude ev repl cli egg) bakes
-; into every frontend: the host (out/host/ll), the freestanding kernel (x86_64/aarch64/
-; playdate), and wasm. build codegen lives in ll under tools/; the C is
+; into every frontend: the host (out/host/ll), the freestanding kernel (x86_64/aarch64),
+; and wasm. build codegen lives in ll under tools/; the C is
 ; freestanding, -Wall -Wextra -Werror.
 
 ; --- odds & ends --- inspect renders a value as its reparsable printed form; (clock t) is

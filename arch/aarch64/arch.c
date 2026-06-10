@@ -254,12 +254,9 @@ void archinit(void) {
   asm volatile ("mrs x9, cpacr_el1; orr x9, x9, #(3 << 20); msr cpacr_el1, x9; isb"
                 ::: "x9", "memory");
   asm volatile ("msr vbar_el1, %0; isb" :: "r"((uintptr_t) vectors));
-  // Under Limine the HHDM covers RAM only, so mmio_map() walks TTBR1 to
-  // add 2 MiB block descriptors at HHDM+phys for the GIC and UART pages.
-  // Under UEFI khhdm == 0, the GIC/UART live in TTBR0's identity map
-  // that firmware set up, and walking TTBR1 for them would fault -- so
-  // skip the walk entirely; mmio_rd/wr (khhdm + phys + off) already
-  // resolves to the right physical address.
+  // The HHDM covers RAM only, so mmio_map() walks TTBR1 to add 2 MiB
+  // block descriptors at HHDM+phys for the GIC and UART pages (skipped
+  // when the HHDM response is absent and khhdm == 0).
   if (khhdm) mmio_map();
   gic_init();
   timer_init();

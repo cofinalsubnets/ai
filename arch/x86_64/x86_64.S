@@ -2,13 +2,9 @@
 // PS/2 keyboard / COM1), and archinit (IDT + PIC + PIT). Pairs with
 // arch.c, which provides the C-side handlers. Translated 1-to-1 from
 // the original NASM source so clang's integrated assembler can build
-// it -- same source then feeds both the Limine (ELF / SysV) and the
-// UEFI (PE / MS x64) targets without nasm in the loop.
+// it without nasm in the loop.
 //
-// Calls to C use SysV register order (rdi for arg0). The two C
-// callees -- kb_int (main.c) and k_exception (arch.c) -- are tagged
-// __attribute__((sysv_abi)) so the EFI build, whose default is MS x64,
-// matches; the attribute is a no-op for the Limine build.
+// Calls to C use SysV register order (rdi for arg0).
 
 .intel_syntax noprefix
 

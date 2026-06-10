@@ -10,11 +10,10 @@ void
  k_log_clear(void),
  k_log_char(char);
 
-// k_boot -- the small struct that both bootloader backends populate
-// before they call kmain(). kmain.c reads this in meminit/fbinit; the
-// Limine path fills it in limine_to_kboot(), the UEFI path fills it in
-// efi_main(). Adding a new backend is just "write something that fills
-// kboot, then jump to kmain."
+// k_boot -- the small struct the bootloader hand-off populates before
+// kmain() runs. kmain.c reads this in meminit/fbinit; the Limine path
+// fills it in limine_to_kboot(). Adding a new backend is just "write
+// something that fills kboot, then jump to kmain."
 #include <stdint.h>
 #include <stdbool.h>
 

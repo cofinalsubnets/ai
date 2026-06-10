@@ -3,7 +3,7 @@
 // Default data-kind recovery (see ll.h for the contract). The five DATA_SENTINEL
 // bodies (data.c) are laid out contiguously and in enum order in the
 // .gwen_data section by data.ld (host) or the equivalent inline
-// block in each frontend's own full linker script (free/, playdate/). g_typ()
+// block in the kernel's full linker script (arch/<a>/<a>.lds). g_typ()
 // reads a kind straight out of an ap's slot index: every sentinel shares one
 // body and size, so they tile the section evenly and the slot is
 // (ap - start) / unit, unit = span / count (the ARM Thumb low bit on ap washes

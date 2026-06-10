@@ -22,7 +22,7 @@ every build artifact present. Keeping the Python around means a regression in a
 compiler/runtime — is caught immediately against an independent implementation.
 
 They are no longer invoked by any build: `gen_data.l` generates every
-frontend's `data.h` (host, kernel, playdate), and `make vmret` runs
+frontend's `data.h` (host, kernel), and `make vmret` runs
 `vmret.l`. The scripts here are frozen
 — edit the `.g` tools, not these — and exist solely so the gates have something
 trustworthy to check against. If a ll tool ever needs to intentionally change

@@ -1,17 +1,17 @@
 # Project root. Single Makefile: cross-cutting tasks (test, clean, install, ...)
 # plus the host (POSIX CLI) and kernel (freestanding) builds inlined directly
-# here. The playdate embedded shell lives under arch/ with its own
-# build files; wasm keeps its own Makefile. Build output lands under out/
-# (out/host, out/free, out/lib, out/playdate, out/dl). Shared vars live in common.mk.
+# here; wasm keeps its own Makefile. Device ports (playdate, rp2040) live in
+# the separate ll-ports repo. Build output lands under out/
+# (out/host, out/free, out/lib, out/dl). Shared vars live in common.mk.
 R := .
 include common.mk
 
 CCACHE ?= $(shell command -v ccache 2>/dev/null)
 
 .PHONY: all install uninstall clean distclean
-.PHONY: host kernel playdate wasm ll0
+.PHONY: host kernel wasm ll0
 .PHONY: test test_host test_all test_tools test_gl0
-.PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench sim
+.PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench
 test: test_host test_gl0
 # test_kernel is in test_all but NOT the fast `test` target: it needs qemu + an
 # OVMF download and is x86_64-only (a no-op on other hosts). See its rule below.
@@ -33,7 +33,7 @@ test_host: host
 # tools/py/ (gen_data / vmret). See tools/Makefile + tools/py/README.md.
 test_tools: host
 	@$(MAKE) -C tools
-all: host kernel playdate wasm
+all: host kernel wasm
 
 # Static lisp headers: each ll/*.g is serialized to a C string literal in
 # out/lib/*.h by tools/lcat.l (run on the bootstrap interpreter ll0). Frontends
@@ -158,7 +158,7 @@ $(ho)/$n.1: $(ho)/$n ll/manpage.$x
 # ====================================================================
 # kernel (freestanding) build -- outputs under out/free. Was free/Makefile.
 # Arch-independent glue is kmain.c + k.h at the root; per-arch code lives in
-# arch/<a>/ (arch.c, *.S, *.lds, efi_main.c). Limine vs UEFI toggle is EFI=1.
+# arch/<a>/ (arch.c, *.S, *.lds). Boots via Limine.
 # ====================================================================
 ko = out/free
 dl = out/dl
@@ -177,26 +177,14 @@ KCC ?= clang
 KLD ?= ld.lld
 KCC_IS_CLANG := $(shell $(KCC) --version 2>/dev/null | grep -qiw clang && echo 1)
 
-ifdef EFI
-ifeq ($(filter $a,x86_64 aarch64),)
-$(error EFI=1 is only wired up for x86_64 and aarch64)
-endif
 k_arch_c = $(wildcard $(R)/arch/$a/*.c)
-k_asm =
-else
-k_arch_c = $(filter-out $(R)/arch/$a/efi_%.c,$(wildcard $(R)/arch/$a/*.c))
 k_asm = $(wildcard $(R)/arch/$a/*.asm)
-endif
 k_free_c = $R/kmain.c
 k_shared_c = $(g_c) $(f_c) $(c_c)
 k_S = $(wildcard $(R)/arch/$a/*.S)
 k_h = $(g_h) $(wildcard *.h $(R)/arch/$a/*.h)
 
-ifdef EFI
-k_odir = $(ko)/$a-efi
-else
 k_odir = $(ko)/$a$(ksuf)
-endif
 
 k_shared_o = $(k_shared_c:$(R)/%.c=$(k_odir)/%.o)
 k_arch_o = $(k_arch_c:$(R)/%.c=$(k_odir)/%.o)
@@ -221,9 +209,6 @@ kcppflags := \
   -isystem c \
   $(kcppflags) \
   -DLIMINE_API_REVISION=3
-ifdef EFI
-kcppflags += -DK_EFI
-endif
 ifdef K_TEST
 # Trampoline (g_tco=0), like ll0: the stackless cooperative scheduler needs a
 # single dispatch loop to be reentrant under nested (ev …), which the threaded
@@ -233,18 +218,10 @@ kcppflags += -DK_TEST -Dg_tco=0
 endif
 
 ifeq ($(KCC_IS_CLANG),1)
-ifdef EFI
-kcc_if_clang = -target $a-unknown-windows
-else
 kcc_if_clang = -target $a-unknown-none-elf
 endif
-endif
 
-ifdef EFI
-kcflags_x86_64 = -m64 -march=x86-64 -mno-red-zone
-else
 kcflags_x86_64 = -m64 -march=x86-64 -mabi=sysv -mno-red-zone -mcmodel=kernel
-endif
 kcflags_aarch64 = -mcpu=generic -march=armv8-a
 
 kldflags_x86_64 = -m elf_x86_64
@@ -259,14 +236,6 @@ $(ko)/$n-$a$(ksuf).elf: $(R)/arch/$a/$a.lds $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(KLD) $(kldflags) $(k_o) -o $@
-
-# EFI link: clang drives lld-link via the *-unknown-windows triple.
-$(ko)/$n-$a.efi: $(k_o)
-	@echo LD	$@
-	@mkdir -p "$(dir $@)"
-	@$(KCC) $(kcflags) $(kcflags_$a) $(kcc_if_clang) -nostdlib -fuse-ld=lld \
-	  -Wl,-subsystem:efi_application -Wl,-entry:efi_main \
-	  $(k_o) -o $@
 
 # The data-sentinel TU bootstraps from the portable header (no $(kdata_h) prereq
 # -- circular). On a clean build data.h doesn't exist yet, so -I$(k_odir) finds
@@ -300,7 +269,7 @@ $(k_odir)/%.o: $(R)/%.asm $(k_h)
 	@mkdir -p "$(dir $@)"
 	@nasm $< -o $@ $(k_nasmflags)
 
-# --- ISO / HDD / EFI image rules -------------------------------------
+# --- ISO / HDD image rules -------------------------------------------
 k_xorriso_x86_64 = \
   -b boot/limine/limine-bios-cd.bin \
   -no-emul-boot -boot-load-size 4 -boot-info-table
@@ -346,27 +315,14 @@ $(ko)/$n-$a.hdd: $(ko)/$n-$a.elf $(dl)/limine/limine $(ko)/limine.conf
 	@mcopy -i $@@@1M $(dl)/limine/BOOTIA32.EFI ::/EFI/BOOT
 	@mcopy -i $@@@1M $(dl)/limine/BOOTAA64.EFI ::/EFI/BOOT
 
-k_efi_short_x86_64 = BOOTX64
-k_efi_short_aarch64 = BOOTAA64
-$(ko)/$n-$a-efi.img: $(ko)/$n-$a.efi
-	@echo MK $@
-	@rm -f $@
-	@dd if=/dev/zero bs=1M count=0 seek=64 of=$@ 2>/dev/null
-	@mformat -i $@ -F
-	@mmd -i $@ ::/EFI ::/EFI/BOOT
-	@mcopy -i $@ $< ::/EFI/BOOT/$(k_efi_short_$a).EFI
-
 # --- qemu run targets ------------------------------------------------
-k_efi_drive_x86_64 = -drive if=ide,format=raw,file=$<
-k_efi_drive_aarch64 = -drive if=none,format=raw,file=$<,id=hd0 -device virtio-blk-device,drive=hd0
-
 k_qemu_x86_64 = -M q35 -serial stdio
 k_qemu_risc = -device ramfb -device qemu-xhci -device usb-kbd -device usb-mouse
 k_qemu_aarch64 = -M virt,gic-version=2 -cpu cortex-a72 -serial stdio $(k_qemu_risc)
 k_qemu = qemu-system-$a -m 256M $(k_qemu_$a) \
   -drive if=pflash,unit=0,format=raw,file=$(dl)/edk2-ovmf/ovmf-code-$a.fd,readonly=on
 
-.PHONY: run run-hdd run-$a run-hdd-$a run-headless run-efi run-efi-headless
+.PHONY: run run-hdd run-$a run-hdd-$a run-headless
 run: run-$a
 run-hdd: run-hdd-$a
 run-$a: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
@@ -375,10 +331,6 @@ run-hdd-$a: $(ko)/$n-$a.hdd $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	$(k_qemu) -hda $<
 run-headless: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	$(k_qemu) -cdrom $< -display none -no-reboot
-run-efi: $(ko)/$n-$a-efi.img $(dl)/edk2-ovmf/ovmf-code-$a.fd
-	$(k_qemu) $(k_efi_drive_$a)
-run-efi-headless: $(ko)/$n-$a-efi.img $(dl)/edk2-ovmf/ovmf-code-$a.fd
-	$(k_qemu) $(k_efi_drive_$a) -display none -no-reboot
 
 # --- headless serial test (wired into test_all; x86_64 + qemu only) ------------
 # The K_TEST kernel boots, runs the baked corpus through the self-hosted ev, and
@@ -438,19 +390,14 @@ $(dl)/limine/limine:
 	@$(MAKE) -sC $(dl)/limine
 
 # ====================================================================
-# embedded shells (own build files, under arch/) + wasm
+# wasm (own Makefile)
 # ====================================================================
-playdate:
-	@$(MAKE) -C arch/playdate
 wasm:
 	@$(MAKE) -C wasm
-sim:
-	$(MAKE) -C arch/playdate sim
 
 clean:
 	rm -rf out
 	@$(MAKE) -C wasm clean
-	@$(MAKE) -C arch/playdate clean 2>/dev/null || true
 distclean: clean
 
 valg: host

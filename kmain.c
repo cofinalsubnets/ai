@@ -1,6 +1,4 @@
-#ifndef K_EFI
 #include "limine.h"
-#endif
 #include "k.h"
 #include "ll.h"
 #include "cb.h"
@@ -9,9 +7,8 @@
 
 uint64_t kticks;
 // Higher-half direct map offset: physical address P is reachable at
-// khhdm + P. The Limine build copies this out of the HHDM response; the
-// EFI build leaves it 0 (identity-mapped). Set before archinit, so arch
-// code can use it for MMIO.
+// khhdm + P, copied out of Limine's HHDM response. Set before archinit,
+// so arch code can use it for MMIO.
 uintptr_t khhdm;
 
 static struct mem {
@@ -79,7 +76,6 @@ static g_inline void kwait(void) { asm volatile (
 
 #include "cb.h"
 #include <stdarg.h>
-#ifndef K_EFI
 __attribute__((used, section(".limine_requests_start")))
 static volatile LIMINE_REQUESTS_START_MARKER;
 #define _L __attribute__((used, section(".limine_requests"))) static volatile
@@ -94,8 +90,7 @@ _L struct limine_executable_cmdline_request cmdline_req = { .id = LIMINE_EXECUTA
 __attribute__((used, section(".limine_requests_end")))
 static volatile LIMINE_REQUESTS_END_MARKER;
 
-// kboot is shared with the EFI backend; defined here for the Limine
-// build and populated by limine_to_kboot() at the top of kmain.
+// kboot -- populated by limine_to_kboot() at the top of kmain.
 struct k_boot kboot;
 static void limine_to_kboot(void) {
   if (hhdm_req.response) kboot.hhdm = hhdm_req.response->offset;
@@ -114,7 +109,6 @@ static void limine_to_kboot(void) {
     kboot.fb.h        = g->height;
     kboot.fb.pitch_px = g->pitch >> 2;
     kboot.has_fb      = true; } }
-#endif
 
 #define kb_code_lshift 0x2a
 #define kb_code_rshift 0x36
@@ -292,10 +286,6 @@ _Static_assert(LEN(kb2ascii) == LEN(shift_kb2ascii));
 // CSI form (`ESC [ 1 ; 5 H/F`) that the editor reads as buffer top /
 // buffer end. Ctrl+letter becomes the matching control byte (so
 // Ctrl-A/E reach the editor as home/end, Ctrl-D as quit).
-// sysv_abi tag matches what x86_64.S's keyboard_isr passes -- a no-op
-// for the Limine build (SysV default), required for the EFI build
-// (default is MS x64) so arg0 is read out of rdi rather than rcx.
-__attribute__((sysv_abi))
 void kb_int(const uint8_t code) {
   if (code == kb_code_extend) { kkb.g |= kb_flag_extend; return; }
   bool ext = kkb.g & kb_flag_extend, up = code & 128;
@@ -508,8 +498,7 @@ void kmain(void) {
  // no output) if SSE is still masked. CR0: clear EM (no FPU emulation), set
  // MP; CR4: set OSFXSR | OSXMMEXCPT. The "memory" clobber keeps clang from
  // hoisting any vectorized access above this. This is the single SSE-enable
- // point -- archinit no longer repeats it. (EFI firmware already has SSE on,
- // but re-asserting it here is harmless.)
+ // point -- archinit no longer repeats it.
  asm volatile(
   "mov %%cr0, %%rax\n\t"
   "and $~(1 << 2), %%rax\n\t"          // CR0.EM = 0
@@ -520,11 +509,9 @@ void kmain(void) {
   "mov %%rax, %%cr4\n\t"
   ::: "rax", "memory");
 #endif
-#ifndef K_EFI
- // Limine path: copy the requested responses into kboot before anything
- // else reads it. The EFI path has already populated kboot in efi_main.
+ // Copy the requested Limine responses into kboot before anything else
+ // reads it.
  limine_to_kboot();
-#endif
  khhdm = kboot.hhdm;
  archinit();
  serial_init();

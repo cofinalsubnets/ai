@@ -1,8 +1,8 @@
-# Shared variables for the host, free (freestanding kernel), and playdate
-# Makefiles. Each includer sets R to the relative path to the project root
-# before including this file: the root Makefile sets R := . and subdir
-# Makefiles (host/, free/, playdate/) set R := .. so the paths below resolve
-# from any cwd. Per-frontend build output lives under $R/out/<frontend>/.
+# Shared variables for the host and free (freestanding kernel) builds, and
+# for out-of-tree ports (the ll-ports repo). Each includer sets R to the
+# relative path to the project root before including this file (the root
+# Makefile sets R := .) so the paths below resolve from any cwd.
+# Per-frontend build output lives under $R/out/<frontend>/.
 R ?= .
 
 n = ll
