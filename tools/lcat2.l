@@ -65,12 +65,12 @@
    (pickname u) ((: (g k) (: nm (intern (shortlex k)) (? (avail? nm u) nm (g (+ 1 k))))) 0)
    (cntle a b) (: ca (peek cnt a 0) cb (peek cnt b 0)    ; order a scope's bindings: count desc,
        (? (> ca cb) 1 (< ca cb) 0                      ; then length desc, then name -- deterministic
-          (: la (hash (string a)) lb (hash (string b)) (? (> la lb) 1 (< la lb) 0 (< a b)))))
+          (: la (sat (string a)) lb (sat (string b)) (? (> la lb) 1 (< la lb) 0 (< a b)))))
    ; assign fresh names to a scope's co-live bindings (count order). a frozen (tainted)
    ; or can't-shrink binding is kept (mapped to itself, no name spent). -> (env-frame . used').
    (assign syms used) ((: (g ss m u) (? (twop ss)
          (: s (A ss) nm (pickname u)
-            (? (&& !(peek taint s 0) (< (hash nm) (hash (string s))))
+            (? (&& !(peek taint s 0) (< (sat nm) (sat (string s))))
                (: i (intern nm) (g (B ss) (X (X s i) m) (X i u)))
                (g (B ss) (X (X s s) m) u)))
          (X m u))) (sort cntle syms) 0 used)
@@ -99,11 +99,11 @@
      (atomp x) x
      (= '\ (A x)) (? (lambp x)
         (: lb (lp x) ps (A lb) bd (B lb) r (assign ps used) am (A r) u2 (B r)
-           env2 (cat am env) ps2 (mapf (\ p (mapped p am)) ps)
+           env2 (cat am env) ps2 (map (\ p (mapped p am)) ps)
            (X '\ (cat ps2 (list (rec bd env2 u2 0 rec)))))
         x)
      (= ': (A x)) (rn-let (B x) env used top rec)
-     (mapf (\ e (rec e env used 0 rec)) x)))
+     (map (\ e (rec e env used 0 rec)) x)))
 
 ; === lcat2 SURFACE -- builds the core's inputs (cnt/taint) from un-expanded source, and
 ; adapts the binding/quote macros the compiler would have already expanded away. `rn` is
@@ -123,7 +123,7 @@
 
 ; --- minify (identical to lcat): drop a space only where the two flanking bytes
 ; re-parse to the same datum count without it; then C-escape the survivors. ---
-(: (s2cl s) ((: (g i) (? (< i (hash s)) (X (peek s i 0) (g (+ 1 i))))) 0)
+(: (s2cl s) ((: (g i) (? (< i (sat s)) (X (peek s i 0) (g (+ 1 i))))) 0)
    (nforms s) ((: (g p e n) (: r (fread p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
                (strin (s2cl s)) (nom 0) 0)
    (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
@@ -135,7 +135,7 @@
    (joinforms fs) (? (atomp fs) "" (atomp (B fs)) (inspect (rn (A fs) 0 0 1 rn))
        (scat (scat (inspect (rn (A fs) 0 0 1 rn)) " ") (joinforms (B fs))))
    (emit acc) (: _ (fputc out 34)
-       _ ((: (g i pc instr) (? (< i (hash acc))
+       _ ((: (g i pc instr) (? (< i (sat acc))
             (: c (peek acc i 0) (? instr
                (? (= c 92) (: _ (eb c) _ (eb (peek acc (+ i 1) 0)) (g (+ i 2) 0 1))
                   (: _ (eb c) (g (+ i 1) c (? (= c 34) 0 1))))
@@ -148,8 +148,8 @@
    _ (? p 0 (: _ (fputs err "lcat2: cannot open input") (exit 1)))
    e (nom 0)
    forms (readforms p e)
-   _ (mapf (\ m (pin cnt m (+ 1 (peek cnt m 0)))) (mapk macros))  ; macro heads bypass scoping
-   _ (mapf collect forms)                                        ; count symbols + taint qq
+   _ (map (\ m (pin cnt m (+ 1 (peek cnt m 0)))) (hashk macros))  ; macro heads bypass scoping
+   _ (map collect forms)                                        ; count symbols + taint qq
    acc (joinforms forms)
    _ (emit acc)
    (fputc out 10))

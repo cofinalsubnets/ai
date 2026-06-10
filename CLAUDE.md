@@ -28,7 +28,7 @@
 (assert
  (= 1 (0 5)) (= 5 (1 5))                         ; 0 is const-1, 1 is the identity
  (= 8 (3 2)) (= 262144 (2 3 4))                  ; (n x) = x**n; the tower (2 3 4) = 4**(3**2)
- (= 12 (3 (+ 1) 9)) (= '(2 3 4) (mapf (+ 1) '(1 2 3)))  ; (n f) composes f n times; currying *is* partial application
+ (= 12 (3 (+ 1) 9)) (= '(2 3 4) (map (+ 1) '(1 2 3)))  ; (n f) composes f n times; currying *is* partial application
  (= 0.5 (-1 2)) (= 3.0 ((/ 1 2) 9)))            ; (-1 x) = 1/x; (1/2 x) = sqrt x
 
 ; --- build & test --- `make test` is the default task and the commit gate: it builds
@@ -50,16 +50,16 @@
 
 ; --- true and false --- false is *nothing*: a scalar that sorts <= 0 in the total order, an
 ; empty container, or an array of zero norm. everything positive/nonempty is true. there is no
-; "truthy"/"falsy" -- true and false are the bits 1 and 0 of the `!!#` projection. `#` measures
+; "truthy"/"falsy" -- true and false are the bits 1 and 0 of the `!!$` projection. `$` (sat) measures
 ; a value (its size/magnitude, 0 when empty or <= 0); `!` is the falsity oracle, with the
-; invariant !x == (= 0 #x). so `!!#x` is x's truth bit and `!` negates it.
+; invariant !x == (= 0 $x). so `!!$x` is x's truth bit and `!` negates it.
 (assert
- !0 !"" !%() !@0 !() !0.0 !~(0 0)                ; zero / empty -> false
+ !0 !"" !#() !@0 !() !0.0 !~(0 0)                ; zero / empty -> false
  !-5 !-3.9 !~(-3 4) !~(0 -1)                     ; <= 0 in the total order -> false (complex by re then im)
  !!5 !!"x" !!'a !!A !!i !!~(3 -4) !!@(-3 -4)     ; positive / nonempty / nonzero-norm -> true
- (= 1 !!#5) (= 0 !!#0) (= 0 !!#-3)               ; !!# is the truth bit (1 true, 0 false)
+ (= 1 !!$5) (= 0 !!$0) (= 0 !!$-3)               ; !!$ is the truth bit (1 true, 0 false)
  (= 0 !5) (= 1 !0)                               ; ! negates it
- (= !"" (= 0 #"")) (= !-5 (= 0 #-5)))            ; the invariant !x == (= 0 #x)
+ (= !"" (= 0 $"")) (= !-5 (= 0 $-5)))            ; the invariant !x == (= 0 $x)
 
 ; --- types & predicates --- a fixnum is a tagged word; everything else is a heap object whose
 ; first word dispatches. the storage predicates:
@@ -71,7 +71,7 @@
 ; predicate of their own and answer `lamp` (they act as functions). `!` (nilp) and `done?` are
 ; truth/task tests, not type tests.
 (assert
- (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp A) (mapp %(1 2))
+ (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp A) (mapp #(1 2))
  (bigp (100 2)) (boxp (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (tupp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
  (lamp (bufnew 4))                               ; an opaque handle answers lamp -- the predicate gap
@@ -179,52 +179,52 @@
 (assert
  (= 1 (A '(1 2 3))) (= '(2 3) (B '(1 2 3))) (= 3 (AB '(2 3 4))) (= '(1 2) (X 1 (X 2 0)))
  (= 1 (car '(1 2 3))) (= 3 (cadr '(2 3 4)))
- (= '(2 3 4) (mapf inc '(1 2 3))) (= 24 (foldl (*) 1 '(1 2 3 4))) (= 6 (foldr (+) 0 '(1 2 3)))
+ (= '(2 3 4) (map inc '(1 2 3))) (= 24 (foldl (*) 1 '(1 2 3 4))) (= 6 (foldr (+) 0 '(1 2 3)))
  (= '(1 3) (filter (\ x (mod x 2)) '(1 2 3 4))) (= '(1 2 3) (sort (<) '(3 1 2)))
- (= '(1 2 3 4) (cat '(1 2) '(3 4))) (= '(3 2 1) (rev '(1 2 3))) (= '(1 2) (mapf A (zip '(1 2) '(3 4))))
+ (= '(1 2 3 4) (cat '(1 2) '(3 4))) (= '(3 2 1) (rev '(1 2 3))) (= '(1 2) (map A (zip '(1 2) '(3 4))))
  (= 20 (AB (assq 2 (list (L 1 10) (L 2 20))))) (= '(1 2) (take 2 '(1 2 3 4))) (= '(3 4) (drop 2 '(1 2 3 4)))
  (= 3 (last '(1 2 3))) (= '(1 2) (init '(1 2 3))) (memq 3 '(1 2 3)) !(memq 9 '(1 2 3))
- (all (\ x (< 0 x)) '(1 2 3)) (any (\ x (< 2 x)) '(1 2 3)) (= 3 #'(a b c)))
+ (all (\ x (< 0 x)) '(1 2 3)) (any (\ x (< 2 x)) '(1 2 3)) (= 3 $'(a b c)))
 
 ; --- strings & symbols --- a symbol is interned ('x), named-uninterned ($x = (nom 'x)), or
 ; anonymous ((nom 0)). `()` is THE empty symbol -- one canonical value, (intern ""), the
-; `+`-identity on symbols, self-evaluating, false by !!# -- but a symbol, NOT the number 0.
-; a string indexes its bytes ("abc" 0 -> 97). # is a *saturating* size:
+; `+`-identity on symbols, self-evaluating, false by !!$ -- but a symbol, NOT the number 0.
+; a string indexes its bytes ("abc" 0 -> 97). $ (sat) is a *saturating* size:
 ; a container's count, a symbol's name length, a number's ceil-magnitude clamped to >= 0
-; (#-3.9 = 0), or an array's ceil L2 norm -- so # and abs diverge ((abs -5) = 5 but #-5 = 0).
+; ($-3.9 = 0), or an array's ceil L2 norm -- so # and abs diverge ((abs -5) = 5 but $-5 = 0).
 ; ssub takes a half-open slice; scat concatenates ("" is the identity); string coerces; \n escapes.
 (assert
- (symp ()) !(= () 0) (idp () (intern "")) (idp () '()) (= 0 #()) !() !!#'x
+ (symp ()) !(= () 0) (idp () (intern "")) (idp () '()) (= 0 $()) !() !!$'x
  (= 'x (+ () 'x)) (= "()" (inspect ()))
- (= 97 ("abc" 0)) (= 3 #"abc") (= 4 #3.9) (= 0 #-3.9) (= 5 #@(3 4)) (= 5 (abs -5))
+ (= 97 ("abc" 0)) (= 3 $"abc") (= 4 $3.9) (= 0 $-3.9) (= 5 $@(3 4)) (= 5 (abs -5))
  (= "bidden" (ssub "forbidden planet" 3 9)) (= "abcd" (scat "ab" "cd")) (= 1 ("hi" 9))
  (= 'asdf (intern "asdf")) !(= (nom 0) (nom 0)) (= "asdf" (string 'asdf))
  (= "\"a\\nb\"" (inspect "a\nb")) (= "$x" (inspect (nom "x"))))
 
-; --- maps --- %(k v ..) or (map ..) build; %() or (mapn 0) is empty; mutable. the accessors are
+; --- hashes --- #(k v ..) or (hasht ..) build; #() or (hashn 0) is empty; mutable. the accessors are
 ; collection-first: (peek coll k default) reads, (pin coll k v) sets, (pull coll k default) removes-
 ; and-returns. peek and pull share the default-if-absent fallback; only pull mutates a key away.
-; also mapd, mapk (the keys), # is the key count. (t k) == (peek t k 0) -- a map is a lookup
-; function. (digest k) hashes a key.
+; also hashd, hashk (the keys), # is the key count. (t k) == (peek t k 0) -- a map is a lookup
+; function. (hash k) hashes a key.
 (assert
- (: t %(1 10 2 20) (&& (= 20 (peek t 2 0)) (= 20 (t 2)) (= 99 (peek t 9 99))))
- (= 50 (peek (pin %() 5 50) 5 0)) (: t %(1 10 2 20) _ (mapd 0 t 1) (= 1 #t))
- (: t %(1 10 2 20) v (pull t 2 0) (&& (= 20 v) (= 1 #t) (= 99 (peek t 2 99)) (= -1 (pull t 9 -1))))  ; pull: value or default, removes the key
- (= 2 #(mapk %(1 10 2 20))) (= (digest 'k) (digest 'k)) (mapp %()) !(mapp 5))
+ (: t #(1 10 2 20) (&& (= 20 (peek t 2 0)) (= 20 (t 2)) (= 99 (peek t 9 99))))
+ (= 50 (peek (pin #() 5 50) 5 0)) (: t #(1 10 2 20) _ (hashd 0 t 1) (= 1 $t))
+ (: t #(1 10 2 20) v (pull t 2 0) (&& (= 20 v) (= 1 $t) (= 99 (peek t 2 99)) (= -1 (pull t 9 -1))))  ; pull: value or default, removes the key
+ (= 2 $(hashk #(1 10 2 20))) (= (hash 'k) (hash 'k)) (mapp #()) !(mapp 5))
 
 ; --- buffers --- (bufnew n) gives n mutable zeroed bytes; # /peek/pin a byte (0..255); bcopy;
 ; identity equality.
 (assert
- (: b (bufnew 3) _ (pin b 0 65) (= 65 (peek b 0 0))) (= 4 #(bufnew 4))
+ (: b (bufnew 3) _ (pin b 0 65) (= 65 (peek b 0 0))) (= 4 $(bufnew 4))
  (: b (bufnew 1) _ (pin b 0 257) (= 1 (peek b 0 0))) (: b (bufnew 4) _ (bcopy b 0 "ABCD" 0 4) (= 68 (peek b 3 0)))
  !(= (bufnew 2) (bufnew 2)))
 
 ; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). a PREFIX
 ; operator char reads its next N datums and desugars to (name d1 .. dN); the table is
 ; dict['operators] (char -> name | (name . arity), arity 1-7) -- extensible with a plain
-; pin (see test/operator.l). eight ship at arity 1 (glyph / name): # hash (saturation),
-; ' quote (= one-operand \), ! bang (negation), . dot (print), $ nom (gensym), @ tup
-; (array), % map, ` quasiquote. , unquote, ,@ splice, and ~ wave (complex/conjugate)
+; pin (see test/operator.l). seven ship at arity 1 (glyph / name): $ sat (saturation), # hasht (hash table),
+; ' quote (= one-operand \), ! bang (negation), . dot (print), @ tup
+; (array), ` quasiquote. % is infix mod. , unquote, ,@ splice, and ~ wave (complex/conjugate)
 ; stay reader digraphs. ~(re im) splices to (com re im); a bare ~x is (clift x).
 ; INFIX operators are all-punct symbols in dict['infix] (symbol -> arity): with a left
 ; operand available the symbol captures it and collects arity-1 more, nesting RIGHT-
@@ -234,11 +234,11 @@
 ; see test/infixop.l.
 (assert
  (= '(1 (\ x) 3) `(1 'x 3)) (= '(1 2 3 4) (: xs '(2 3) `(1 ,@xs 4)))
- (= 5 #"hello") (= 42 #42) (symp $x) (= 1 !0) (= 0 !5) !!5
+ (= 5 $"hello") (= 42 $42) (symp (gsym x)) (= 1 !0) (= 0 !5) !!5
  (= i ~(0 1)) (= ~(2 3) (com 2 3)) (= '~x '(clift x)) (= '(dot x) '.x) (lamp dot)
  (= 3 (1 + 2)) (= 7 (1 + 2 * 3)) (= 'b (0 ? 'a 'b)) (= 'big ((1 < 2) ? 'big 'small))
  (= 12 (foldl (+) 0 '(3 4 5)))
- (: t (peek dict 'operators 0) (&& (mapp t) (= 'hash (t ("#" 0))) (= 'map (t ("%" 0))))))
+ (: t (peek dict 'operators 0) (&& (mapp t) (= 'sat (t ("$" 0))) (= 'hasht (t ("#" 0))))))
 
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships
 ; do/let/if/cond/quote, && and || (short-circuiting), L/list, tuple/map/array, the body-first
@@ -283,7 +283,7 @@
 ;     macroexpansion, one source of truth shared with the C bootstrap compiler.
 ;   wev -- the source->source pre-pass before analysis: expand macros, apply boxfix, fold pure
 ;     globals, mark apply strategy, and flip (? !e a b) to (? e b a).
-;   maps -- %(..)/map expand to nested pins; a map is a lookup function.
+;   maps -- #(..)/map expand to nested pins; a map is a lookup function.
 ; the *egg* (ll/egg.l): compile the compiler with the C bootstrap, recompile the whole
 ; prelude+ev corpus through itself, and install it as `ev` -- baked into the image at C compile
 ; time, no allocation.

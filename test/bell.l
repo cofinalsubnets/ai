@@ -14,7 +14,7 @@
 ; so memoization here uses module-level hashes + named recursive functions,
 ; which compile correctly. Same algorithm, identical output.
 
-(: facts %() bells %() digits "0123456789abcdefghijklmnopqrstuvwxyz"
+(: facts #() bells #() digits "0123456789abcdefghijklmnopqrstuvwxyz"
    (digit d) (ssub digits d (+ d 1))
    (choose n k) (/ (fact n) (* (fact k) (fact (- n k))))
    (fact n) (:
@@ -25,9 +25,9 @@
     (f n k x) (? (>= k n) x (f n (+ k 1) (+ x (* (choose (- n 1) k) (bell k)))))
     v (bells n)
     (? v v (: v (? (< n 2) 1 (f n 0 0)) _ (pin bells n v) v)))
-   (showloop acc n) (? (< n 1) acc (showloop (scat (digit (mod n (hash digits))) acc)(// n (hash digits)) ))
+   (showloop acc n) (? (< n 1) acc (showloop (scat (digit (mod n (sat digits))) acc)(// n (sat digits)) ))
    show (showloop "")
-   (gen i limit) (: b (show (bell i)) (? (<= (hash b) limit) (X b (gen (+ i 1) limit))))
+   (gen i limit) (: b (show (bell i)) (? (<= (sat b) limit) (X b (gen (+ i 1) limit))))
    (leq a b) (? (twop a) (? (twop b) (? (= (A a) (A b)) (leq (B a) (B b)) 0) 0)
                          (? (twop b) 0 1))
    out (gen 0 280)
@@ -337,6 +337,6 @@
   (= "" (show 0)) (= "1" (show 1)) (= "f" (show 15)) (= "z" (show 35))
   (= "10" (show 36)) (= "zz" (show 1295))
   ; the full output matches the Ruby program's, line for line
-  (= 291 (hash out))
-  (= (hash expected) (hash out))
+  (= 291 (sat out))
+  (= (sat expected) (sat out))
   (leq out expected)))

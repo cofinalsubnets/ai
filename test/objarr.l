@@ -88,8 +88,8 @@
  (= -3 (amin (arrl o '(3) (L 5 -3 7))))
  (aall (arrl o '(2) '(1 2)))
  (nilp (aall (arrl o '(2) '(1 0))))
- (hash (arrl o '(2) '(0 5)))
- (nilp (hash (arrl o '(2) '(0 0))))
+ (sat (arrl o '(2) '(0 5)))
+ (nilp (sat (arrl o '(2) '(0 0))))
 
  ; --- arithmetic under GC pressure: bignum products survive collection ---
  (= 0 (oa-churn 40))
@@ -141,12 +141,12 @@
    oa-b2 (array 2 (100 2) 0))                 ; bignum element saturates pin, forces o
 (assert
  (= c (atype oa-z2)) (= c (atype oa-c2)) (= o (atype oa-b2))
- (= 0 (hash oa-z2)) (nilp oa-z2)                   ; all-zero object array -> falsy, pin 0
- (= 5 (hash oa-c2)) !!oa-c2                         ; one nonzero element -> truthy, ceil(5)
+ (= 0 (sat oa-z2)) (nilp oa-z2)                   ; all-zero object array -> falsy, pin 0
+ (= 5 (sat oa-c2)) !!oa-c2                         ; one nonzero element -> truthy, ceil(5)
  !!oa-b2                                          ; a bignum element is truthy
- (= 0 (hash (arr o '(2 2))))                       ; all-nil object array -> pin 0
+ (= 0 (sat (arr o '(2 2))))                       ; all-nil object array -> pin 0
  !!(array 2 'a 'b)                                ; symbol elements -> truthy
  ; the defining invariant (nilp x) == (= 0 (pin x)) on each:
- (= (? (nilp oa-z2) 1 0) (? (= 0 (hash oa-z2)) 1 0))
- (= (? (nilp oa-c2) 1 0) (? (= 0 (hash oa-c2)) 1 0))
- (= (? (nilp oa-b2) 1 0) (? (= 0 (hash oa-b2)) 1 0)))
+ (= (? (nilp oa-z2) 1 0) (? (= 0 (sat oa-z2)) 1 0))
+ (= (? (nilp oa-c2) 1 0) (? (= 0 (sat oa-c2)) 1 0))
+ (= (? (nilp oa-b2) 1 0) (? (= 0 (sat oa-b2)) 1 0)))

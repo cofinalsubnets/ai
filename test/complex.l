@@ -99,9 +99,9 @@
  (< 1e29 (re (+ i B100)))                  ; real part ~ 2^100
 
  ; --- complex as hash keys: eql-distinct from the equal real (sticky) ---
- (= 'hit (peek (pin (mapn 0) ~(2 0) 'hit) ~(2 0) 'miss))
- (= 'miss (peek (pin (mapn 0) ~(2 0) 'hit) 2 'miss))   ; 2 and 2+0i are different keys
- (= 'iv (peek (pin (mapn 0) i 'iv) i 'miss)))
+ (= 'hit (peek (pin (hashn 0) ~(2 0) 'hit) ~(2 0) 'miss))
+ (= 'miss (peek (pin (hashn 0) ~(2 0) 'hit) 2 'miss))   ; 2 and 2+0i are different keys
+ (= 'iv (peek (pin (hashn 0) i 'iv) i 'miss)))
 
 ; --- step 7b: full-rank complex arrays (packed (re,im) g_C tuples) -----------
 ; a complex value packs two floats per element into a `c` array (type code c = 2,
@@ -158,18 +158,18 @@
  ; --- aall/aany lift the 0+0i-is-falsy rule ---
  (aall ca-v)
  (nilp (aall (arrl c '(2) (L ~(0 0) ~(1 1)))))   ; a 0+0i element fails aall
- (hash (arrl c '(2) (L ~(0 0) ~(1 1))))          ; one nonzero satisfies aany
- (nilp (hash ca-z))
+ (sat (arrl c '(2) (L ~(0 0) ~(1 1))))          ; one nonzero satisfies aany
+ (nilp (sat ca-z))
 
  ; --- abs of a complex array = the flat L2 norm over every (re, im) ---
  (= 5.0 (abs (arrl c '(1) (L ~(3 4)))))          ; |3+4i| = 5
  (close ((/ 1 2) 30) (abs ca-v))                     ; sqrt(1+4+9+16)
 
  ; --- pin / nilp: the invariant (nilp x) == (= 0 (pin x)) holds here too ---
- (= 0 (hash ca-z))   (nilp ca-z)
- !!ca-v   (= 6 (hash ca-v))                        ; ceil(sqrt 30) = 6
- (= (? (nilp ca-v) 1 0) (? (= 0 (hash ca-v)) 1 0))
- (= (? (nilp ca-z) 1 0) (? (= 0 (hash ca-z)) 1 0))
+ (= 0 (sat ca-z))   (nilp ca-z)
+ !!ca-v   (= 6 (sat ca-v))                        ; ceil(sqrt 30) = 6
+ (= (? (nilp ca-v) 1 0) (? (= 0 (sat ca-v)) 1 0))
+ (= (? (nilp ca-z) 1 0) (? (= 0 (sat ca-z)) 1 0))
 
  ; --- printer: rank-1 terse @((C…)…); rank>=2 (array '(…) (C…)…) ---
  (= "@(~(1.0 2.0) ~(3.0 4.0))" (inspect ca-v))

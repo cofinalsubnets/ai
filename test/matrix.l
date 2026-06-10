@@ -28,7 +28,7 @@
    mx-usy $cd                            ; KSym (uninterned)
    mx-lst '(1 2)                         ; KTwo (pair / list)
    mx-fn  (+ 1)                          ; KLam (nif partial application)
-   mx-mapf (pin (pin (mapn 0) 1 10) 2 20)) ; KLam (a map is a lookup-lambda)
+   mx-map (pin (pin (hashn 0) 1 10) 2 20)) ; KLam (a map is a lookup-lambda)
 
 ; ============================================================================
 ; APPLY matrix: g_apply_mx[applied data kind = g_typ(v)][arg kind = g_kind(x)]
@@ -75,8 +75,8 @@
  (= 8 (3 2))   (= 5 (1 5))   (= 1 (0 'anything))   ; KFix numeral (odd-tag path)
  (= 36 ((\ x (* x x)) 6))                     ; KLam: a lambda applies directly
  (= 7 (((+) 3) 4))                            ; KLam: a nif / partial application
- (= 10 (mx-mapf 1))   (= 20 (mx-mapf 2))        ; KLam: a map looks its key up
- (nilp (mx-mapf 9))                            ; ...missing key -> nil
+ (= 10 (mx-map 1))   (= 20 (mx-map 2))        ; KLam: a map looks its key up
+ (nilp (mx-map 9))                            ; ...missing key -> nil
  (= 1 ((bufnew 4) 'x)))                       ; opaque handle (buf) behaves as 0
 
 ; ============================================================================
@@ -131,7 +131,7 @@
  (= '(1 2 3 4) (+ '(1 2) '(3 4)))             ; list + list
  (= '(5 1 2) (+ 5 '(1 2)))   (= '(1 2 5) (+ '(1 2) 5))   ; num <-> list
  (= '("ab" 1 2) (+ "ab" '(1 2)))              ; str <-> list (str is one element)
- (= 3 (hash (+ @(1 2) '(7 8))))                ; array <-> list (array is one element)
+ (= 3 (sat (+ @(1 2) '(7 8))))                ; array <-> list (array is one element)
 
  ; --- addl lane: a lambda operand anywhere -> CHURCH-NUMERAL add (not pointwise):
  ;     (m + n) a x == m a (n a x), so the result is a function awaiting (f x).
@@ -175,7 +175,7 @@
  ; --- mull: a lambda operand anywhere -> composition (Church mul) ---
  (= 36 ((* (\ x (* x x)) (\ x (+ x 1))) 5))   ; sq(inc 5) = sq 6 = 36
  (= 26 ((* (\ x (+ x 1)) 2) 5))               ; (inc (2 5)) = inc 25 = 26 (numeral then inc)
- (= 10 ((* mx-mapf (\ x (- x 1))) 2)))         ; a map composes too: m(2-1) = m 1 = 10
+ (= 10 ((* mx-map (\ x (- x 1))) 2)))         ; a map composes too: m(2-1) = m 1 = 10
 
 ; ============================================================================
 ; the other dyadic generic ops (lane handlers, not explicit tables): -, /, mod,

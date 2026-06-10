@@ -7,18 +7,18 @@
      p2 (pat2pred (B p))
    (\ x (? (twop x) (? (p1 (A x)) (p2 (B x)))))))
  (pat2x p b) (:
-  t (mapn 0)
+  t (hashn 0)
 
   (ff q p) (?
    (symp p) (pin t p q)
    (twop p) (: _ (ff (co A q) (A p))
                 (ff (co B q) (B p))))
   _ (ff id p)
-  ks (mapk t)
+  ks (hashk t)
 
   lam (X '\ (cat ks (list b)))
   y (nom 0)
-  (ev (list '\ y (X lam (mapf (\ k (list (peek t k 0) y)) ks)))))
+  (ev (list '\ y (X lam (map (\ k (list (peek t k 0) y)) ks)))))
 
  (pmatch x1 x2 f) (:
  p (pat2pred x1)

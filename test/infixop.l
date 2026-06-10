@@ -13,6 +13,7 @@
  (= 1 (3 = 3.0)) (= 0 (3 = 4))
  (= 1 (1 < 2)) (= 1 (1 <= 1)) (= 1 (2 > 1)) (= 1 (2 >= 2)) (= 0 (2 < 1))
  (= 15 (8 | 4 | 2 | 1)) (= 0 (5 & 2)) (= 7 (5 | 2))
+ (= 1 (5 % 2)) (= 'mod (A (A '(5 % 2))))        ; % is an alias entry: desugars to mod
 
  ; right-associativity; parens override
  (= 7 (1 + 2 * 3))                              ; (+ 1 (* 2 3))
@@ -35,7 +36,7 @@
  (symp '+) (= 7 ((+) 3 4))
 
  ; composes with prefix operators (# wraps eagerly, then + captures the result)
- (= 4 (#"ab" + 2)))
+ (= 4 ($"ab" + 2)))
 
 ; incomplete: "(1 +" pends -> the port comes back
 (: p (strin '(40 49 32 43)) (assert (= p (fread p 99))))

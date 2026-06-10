@@ -12,8 +12,8 @@
   (= "" "")                                  ; but all empty strings are equal
 
   ; pin: both the empty string and 0 have empty length
-  (= 0 (hash ""))
-  (= 0 (hash 0))
+  (= 0 (sat ""))
+  (= 0 (sat 0))
 
   ; + / scat: "" is a two-sided identity, and joining empties yields ""
   (= "ab" (+ "" "ab"))   (= "ab" (+ "ab" ""))

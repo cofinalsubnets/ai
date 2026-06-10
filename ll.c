@@ -578,11 +578,11 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_intern, "intern", S1(g_vm_intern)) _(nif_nom, "nom", S1(g_vm_nom))\
  _(nif_lam, "lam", S1(g_vm_lam))\
  _(nif_peek, "peekl", S2(g_vm_peek2)) _(nif_poke, "pinl", S3(g_vm_poke2)) _(nif_trim, "trim", S1(g_vm_trim))\
- _(nif_seek, "seekl", S2(g_vm_seek)) _(nif_pin, "hash", S1(g_vm_pin)) _(nif_get, "peek", S3(g_vm_get))\
- _(nif_put, "pin", S3(g_vm_put)) _(nif_pull, "pull", S3(g_vm_pull)) _(nif_hnew, "mapn", S1(g_vm_hnew)) _(nif_hashk, "mapk", S1(g_vm_hashk))\
- _(nif_hash, "digest", S1(g_vm_hashof))\
+ _(nif_seek, "seekl", S2(g_vm_seek)) _(nif_pin, "sat", S1(g_vm_pin)) _(nif_get, "peek", S3(g_vm_get))\
+ _(nif_put, "pin", S3(g_vm_put)) _(nif_pull, "pull", S3(g_vm_pull)) _(nif_hnew, "hashn", S1(g_vm_hnew)) _(nif_hashk, "hashk", S1(g_vm_hashk))\
+ _(nif_hash, "hash", S1(g_vm_hashof))\
  _(nif_bufnew, "bufnew", S1(g_vm_bufnew)) _(nif_bcopy, "bcopy", S5(g_vm_bcopy))\
- _(nif_hashd, "mapd", S3(g_vm_hashd)) _(nif_twop, "twop", S1(g_vm_twop)) _(nif_strp, "strp", S1(g_vm_strp))\
+ _(nif_hashd, "hashd", S3(g_vm_hashd)) _(nif_twop, "twop", S1(g_vm_twop)) _(nif_strp, "strp", S1(g_vm_strp))\
  _(nif_flo, "flo", S1(g_vm_flo)) _(nif_flop, "flop", S1(g_vm_flop))\
  _(nif_sin, "sin", S1(g_vm_sin)) _(nif_cos, "cos", S1(g_vm_cos))\
  _(nif_log, "log", S1(g_vm_log)) _(nif_pow, "pow", S2(g_vm_pow))\
@@ -708,11 +708,11 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
    struct g_def vd[] = {{"version-number", g_pop1(g)}};
    g = g_defn(g, vd, LEN(vd)); }
   // dict['operators]: the reader's operator table, char -> name | (name . arity).
-  // Seeded with the 8 builtin sigil operators at arity 1; `~` and `,` stay
+  // Seeded with the 7 builtin sigil operators at arity 1; `~` and `,` stay
   // hardcoded digraphs. Lisp extends it with a plain pin (arity 1..7).
   { struct { char c; char const *n; } const ops[] = {
-     {'\'', "\\"}, {'`', "qq"}, {'%', "map"}, {'#', "hash"},
-     {'@', "tuple"}, {'$', "gsym"}, {'!', "nilp"}, {'.', "dot"} };
+     {'\'', "\\"}, {'`', "qq"}, {'#', "hasht"},
+     {'@', "tuple"}, {'$', "sat"}, {'!', "nilp"}, {'.', "dot"} };
    g = map_new(g);                                  // sp[0] = the table
    for (uintptr_t i = 0; i < LEN(ops); i++) {
     g = intern(g_strof(g, ops[i].n));               // sp[0]=name sp[1]=table
@@ -735,6 +735,10 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
     if (g_ok(g)) {                                  // swap to (key val map) = (sym arity table)
      word t = g->sp[0]; g->sp[0] = g->sp[1], g->sp[1] = t;
      g = g_mapput(g); } }                           // -> sp[0]=table
+   g = intern(g_strof(g, "mod"));                   // % aliases: entry (mod . 2)
+   g = gxr(g_push(g, 1, putfix(2)));                // [(mod . 2) table]
+   g = intern(g_strof(g, "%"));                     // [% (mod.2) table]
+   g = g_mapput(g);                                 // -> [table]
    g = intern(g_strof(g, "infix"));                 // [key table]
    g = g_push(g, 1, nil);
    if (g_ok(g)) {                                   // permute to (key val map)=(infix table dict)
@@ -2480,7 +2484,7 @@ static g_inline struct g*gzput_sym(struct g*g, word _) {
  return g_pop(g, 1); }
 
 
-// Maps print as %(k v …), round-tripping through the %( reader, like hashes.
+// Maps print as #(k v …), round-tripping through the #( reader.
 // A map is mutable and can hold itself, so guard the recursion with the seen
 // list. Snapshot k/v into a list first (printing may GC and move the map).
 static g_inline struct g*gzput_map(struct g*g, word x, uintptr_t off) {
@@ -2499,9 +2503,9 @@ static g_inline struct g*gzput_map(struct g*g, word x, uintptr_t off) {
    ini_two(kv, s[2 * i], s[2 * i + 1]);                 // (k . v)
    ini_two(p, (word) kv, list), list = (word) p++; }    // cons onto the snapshot
  fs0(g) = list;
- if (!twop(fs0(g))) g = gzputcs(g, "%0");              // empty map prints %0 (reads back via %0/%())
+ if (!twop(fs0(g))) g = gzputcs(g, "#0");              // empty map prints #0 (reads back via #0/#())
  else {
-  if (g_ok(g = gzprintf(g, "%%("))) for (bool sp = false;;) {
+  if (g_ok(g = gzprintf(g, "#("))) for (bool sp = false;;) {
    if (sp) g = gzputc(g, ' ');
    sp = true;
    g = gzputx(g, AA(g_core_of(g)->sp[0]), off);
@@ -2915,7 +2919,7 @@ static struct g* g_z_getc(struct g*g) {
   default: return g;
   case '\n': case '\r': continue;
   case 0: case ' ': case '\t': case '\f': continue;
-  case '#':                                          // #! is a line comment; bare # is significant (len macro)
+  case '#':                                          // #! is a line comment; bare # is significant (the hasht macro)
    if (!g_ok(g = zgetc(g))) return g;
    if (g->b != '!') {                                // not a shebang: push back, return #
     if ((int) g->b != EOF && !g_ok(g = zungetc(g, g->b))) return g;
@@ -2977,7 +2981,7 @@ static g_inline bool symeq(word x, char const *nm, uintptr_t n) {
  if (!s || !strp(word(s)) || s->len != n) return false;
  for (uintptr_t i = 0; i < n; i++) if (s->bytes[i] != nm[i]) return false;
  return true; }
-static g_inline bool hashsym(word x) { return symeq(x, "map", 3); }
+static g_inline bool hashsym(word x) { return symeq(x, "hasht", 5); }
 static g_inline bool splicesym(word x) { return hashsym(x) || symeq(x, "tuple", 5) || symeq(x, "com", 3); }
 
 static struct g *gz_parse(struct g *g, bool multi) {
@@ -3043,13 +3047,16 @@ static struct g *gz_parse(struct g *g, bool multi) {
     // It captures the operand and pends for arity-1 more (right-associative:
     // capturing FROM a filled wrap nests the new operator inside it).
     if (symp(g->sp[0]) && punctsymp(g->sp[0]) && !nilp(g->sp[1])) {
+     struct g *c2 = g_core_of(g);    // NOT cg: gzread1sym may have MOVED the pool
      word F = A(g->sp[1]);
      bool fw = filled_wrapp(F);
      bool lf = !fw && twop(F) && !fixp(A(F));          // list frame with elements (head is a cons)
      if (fw || lf) {
-      struct g_atom *is = sym_probe(cg, "infix", 5);
-      word tb = is ? g_mapget(cg, nil, word(is), cg->dict) : nil;
-      word iv = mapp(tb) ? g_mapget(cg, nil, g->sp[0], tb) : nil;
+      struct g_atom *is = sym_probe(c2, "infix", 5);
+      word tb = is ? g_mapget(c2, nil, word(is), c2->dict) : nil;
+      word iv = mapp(tb) ? g_mapget(c2, nil, g->sp[0], tb) : nil;
+      if (twop(iv) && symp(A(iv)) && fixp(B(iv)))      // (name . arity): an alias --
+       g->sp[0] = A(iv), iv = B(iv);                   // % desugars to mod
       if (fixp(iv) && getfix(iv) >= 2 && getfix(iv) <= 7) {
        intptr_t n = getfix(iv);
        word operand;
@@ -3098,15 +3105,15 @@ static struct g *gz_parse(struct g *g, bool multi) {
     else __builtin_trap();                             // unreachable under an N-ary wrap
     g->sp++; }                                         // pop newcons -> [d ctx]
    if (symp(A(g->sp[1]))) {                            // reader-macro wrap, pop the wrap frame
-    if (hashsym(A(g->sp[1])) && (nilp(g->sp[0]) || g->sp[0] == EMPTY_SYM)) { // %() -> (mapn 0)
+    if (hashsym(A(g->sp[1])) && (nilp(g->sp[0]) || g->sp[0] == EMPTY_SYM)) { // #() -> (hashn 0)
      g->sp[0] = nil;                                   // d -> (0 . nil) = (0)
      g = gxr(g_push(g, 1, nil));
-     g = gxl(intern(g_strof(g, "mapn")));              // (mapn . (0)) = (mapn 0)
+     g = gxl(intern(g_strof(g, "hashn")));              // (hashn . (0)) = (hashn 0)
      if (g_ok(g)) g->sp[1] = B(g->sp[1]); }            // pop wrap
     else if (splicesym(A(g->sp[1])) &&
              (twop(g->sp[0]) || nilp(g->sp[0]) || g->sp[0] == EMPTY_SYM)) {
      if (g->sp[0] == EMPTY_SYM) g->sp[0] = nil;        // @() -> (tuple), ~() -> (com)
-     g = gxl(g_push(g, 1, A(g->sp[1])));               // %(k v …)/@(e …)/@() : splice -> (sym . d)
+     g = gxl(g_push(g, 1, A(g->sp[1])));               // #(k v …)/@(e …)/@() : splice -> (sym . d)
      if (g_ok(g)) g->sp[1] = B(g->sp[1]); }
     else {                                             // 'x `x ,x  #x %atom/@atom -> (wrapsym d)
      g = gxr(g_push(g, 1, nil));                       // (d . nil)

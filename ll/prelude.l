@@ -102,7 +102,7 @@
 (: (scomb f g a x) (f a (g a x))
    (bcomb f g x) (f (g x))
    _ (pin dict 'scomb scomb) _ (pin dict 'bcomb bcomb))
-(: (mapf f l) (? (twop l) (X (f (A l)) (mapf f (B l))))
+(: (map f l) (? (twop l) (X (f (A l)) (map f (B l))))
    (foldl f z l) (? (twop l) (foldl f (f z (A l)) (B l)) z)
    (foldr f z l) (? (twop l) (f (A l) (foldr f z (B l))) z))
 (: (foldl1 f l) (foldl f (A l) (B l))
@@ -219,21 +219,20 @@
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
    (a-type d) (: r (foldl a-emax 0 d) (? (= r 0) i64 (= r 1) f64 (= r 2) c o))
    (a-dim d) (int (abs d))
-   (a-shape s) (? (twop s) (mapf a-dim s) (L (a-dim s))))
+   (a-shape s) (? (twop s) (map a-dim s) (L (a-dim s))))
 
-; tuple/hash value constructors (also the read-back targets of the `@(…)` / `%(…)`
+; tuple/hash value constructors (also the read-back targets of the `@(…)` / `#(…)`
 ; printer-sugar forms). `tuple` builds a rank-1 array from its element args,
 ; inferring the element type via a-type (so it carries bignums/symbols in an o
 ; array, not just i64/f64); `map` builds a map from alternating key/value args.
 (: (ltuple l) (arrl (a-type l) (L (foldl (\ n _ (+ 1 n)) 0 l)) l))
 (:: 'tuple (\ a (list 'ltuple (X 'list a))))
-(: (mapx a) (? (twop a) (list 'pin (mapx (BB a)) (A a) (AB a)) '(mapn 0)))
-(:: 'map (\ a (mapx a)))
+(: (hashtx a) (? (twop a) (list 'pin (hashtx (BB a)) (A a) (AB a)) '(hashn 0)))
+(:: 'hasht (\ a (hashtx a)))
 
-; the `$` reader sigil wraps its operand with nom: `$x` -> (gsym x) -> the macro
-; quotes the operand, giving (nom 'x) -- a fresh uninterned symbol named x. a
-; non-name operand (e.g. the $<addr> an anonymous nom prints as) quotes to itself
-; and nom makes it anonymous. mirrors the printer in gzput_sym.
+; (gsym x) quotes its operand, giving (nom 'x) -- a fresh uninterned symbol
+; named x. its `$` glyph went to sat; gsyms still PRINT as $<name>/$<addr>
+; (display only, see gzput_sym) and are made by calling gsym or nom directly.
 (:: 'gsym (\ a (list 'nom (list '\ (A a)))))
 
 ; (array shape elem…): the ergonomic N-D array constructor. `shape` is either a
@@ -280,11 +279,11 @@
     (atomp (B bs)) (w v (A bs) bnd u)
     (: nd (dsug (A bs) (AB bs)) (? (w v (B nd) bnd u) 1 (wl v (BB bs) bnd u))))
    ; boxset: value bindings whose init closes over the name (or a no-later sibling).
-   (boxset prs) (: nm (mapf A prs)
+   (boxset prs) (: nm (map A prs)
      (filter (\ v (&& (nilp (lambp (B (assq v prs))))
                       (any (\ p (w v (B p) 0 0)) (take (+ 1 (lidx v nm)) prs)))) nm))
-   (mkcs bx) (mapf (\ v (X v (nom 0))) bx)
-   (cellbinds cs) (mapf (\ c (X (B c) (list 'X 0 0))) cs))
+   (mkcs bx) (map (\ v (X v (nom 0))) bx)
+   (cellbinds cs) (map (\ c (X (B c) (list 'X 0 0))) cs))
 ; boxfix-core (c0): same prep + rewrites refs via sub/subl (c0 has no analysis-time
 ; redirect). Returns (prepped-prs . body') or 0.
 (: (boxfix-core prs body) (:
@@ -295,7 +294,7 @@
     (: h (A x) (?
       (= h '\) (? (atomp (BB x)) x (: r (lp x) (X '\ (cat (A r) (list (sub (rmc cs (A r)) (B r)))))))
       (= h ':) (X ': (subl (rmc cs (ln (B x))) (B x)))
-      (: m (? (symp h) (peek macros h 0) 0) (? m (sub cs (m (B x))) (mapf (\ e (sub cs e)) x))))))
+      (: m (? (symp h) (peek macros h 0) 0) (? m (sub cs (m (B x))) (map (\ e (sub cs e)) x))))))
    (subl cs bs) (?
     (atomp bs) bs
     (atomp (B bs)) (list (sub cs (A bs)))
@@ -304,7 +303,7 @@
       (? (nilp bx) 0
        (: cs (mkcs bx)
           (one p) (: d (sub cs (B p)) (? (memq (A p) bx) (X '_ (list 'pinl 1 d (B (assq (A p) cs)))) (X (A p) d)))
-          (X (cat (cellbinds cs) (mapf one prs)) (sub cs body)))))))
+          (X (cat (cellbinds cs) (map one prs)) (sub cs body)))))))
 ; flat-list adapter for c0 (ev.c): a `:` binding list (n1 d1 .. [body]) -> the
 ; rewritten list, or the input unchanged. even (body-less) lets and lets that
 ; need no boxing pass through verbatim.

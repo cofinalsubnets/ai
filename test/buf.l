@@ -6,8 +6,8 @@
 
 (assert
  ; --- construction + length, and what a buf is NOT ---
- (= 4 (hash (bufnew 4)))
- (= 0 (hash (bufnew 0)))
+ (= 4 (sat (bufnew 4)))
+ (= 0 (sat (bufnew 0)))
  !(strp (bufnew 4))                          ; a buf is not a string
  !(fixp (bufnew 4))                          ; ...nor a number
 
@@ -41,7 +41,7 @@
     (&& (= 7 (peek d 0 0)) (= 9 (peek d 2 0))))
 
  ; --- bcopy clamps an oversized count rather than trampling the heap ---
- (: b (bufnew 2) _ (bcopy b 0 "ABCD" 0 100) (= 2 (hash b)))
+ (: b (bufnew 2) _ (bcopy b 0 "ABCD" 0 100) (= 2 (sat b)))
 
  ; --- equality is by identity (a buf is mutable) ---
  (: b (bufnew 2) (= b b))                       ; a buf equals itself

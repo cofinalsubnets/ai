@@ -79,8 +79,8 @@
  ; --- comparison -> 0/1 bool array ---
  (aall (< (arrl i64 '(3) '(1 2 3)) 10))
  !(aall (< (arrl i64 '(3) '(1 2 30)) 10))
- (hash (< (arrl i64 '(3) '(1 20 30)) 10))
- !(hash (< (arrl i64 '(3) '(10 20 30)) 5))
+ (sat (< (arrl i64 '(3) '(1 20 30)) 10))
+ !(sat (< (arrl i64 '(3) '(10 20 30)) 5))
  (aall (= (arrl i8 '(3) '(1 0 1)) (< (arrl i64 '(3) '(1 5 2)) 3)))
  (= i8 (atype (< (arr i64 '(3)) 1)))               ; bool array is i8
  ; whole-array equality is (aall (= a b))
@@ -96,8 +96,8 @@
  (= 21 (asum (arrl i64 '(2 3) '(1 2 3 4 5 6))))    ; reduces over all axes
  (aall (arrl i64 '(3) '(1 2 3)))                   ; no zero element
  !(aall (arrl i64 '(3) '(1 0 3)))               ; a zero element
- (hash (arrl i64 '(3) '(0 0 3)))
- !(hash (arr i64 '(3)))                         ; all zero
+ (sat (arrl i64 '(3) '(0 0 3)))
+ !(sat (arr i64 '(3)))                         ; all zero
 
  ; --- reductions are the identity on a scalar (rank-agnostic idiom) ---
  (= 5 (asum 5))

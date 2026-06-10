@@ -9,7 +9,7 @@
 
 (: sa-i (\ x (? (symp x) (= x (intern (string x))) 0))        ; interned symbol?
    sa-u (\ x (? (symp x) (nilp (= x (intern (string x)))) 0)) ; named-uninterned symbol?
-   sa-U $cd                                                   ; one fixed uninterned sym, name "cd"
+   sa-U (nom (\ cd))                                                   ; one fixed uninterned sym, name "cd"
    sa-z (intern ""))                                          ; the empty symbol (anonymous singleton)
 
 (assert
@@ -29,14 +29,14 @@
  ; === row ARR (a = @(1 2)) =============================================
  (aall (= @(3 4) (+ @(1 2) 2)))                ; ARR+NUM -> broadcast
  (aall (= @(4 6) (+ @(1 2) @(3 4))))           ; ARR+ARR
- (= 3 (hash (+ @(1 2) '(7 8))))                 ; ARR+LIST -> array as a single list element
+ (= 3 (sat (+ @(1 2) '(7 8))))                 ; ARR+LIST -> array as a single list element
  (nilp (+ @(1 2) "ab"))                        ; ARR+STR  -> nil
  (nilp (+ @(1 2) sa-U))                        ; ARR+USYM -> nil
  (nilp (+ @(1 2) 'ef))                         ; ARR+ISYM -> nil
 
  ; === row LIST (a = '(1 2)) ============================================
  (= '(1 2 65) (+ '(1 2) 65))                   ; LIST+NUM -> append element
- (= 3 (hash (+ '(1 2) @(3 4))))                 ; LIST+ARR -> append (array element)
+ (= 3 (sat (+ '(1 2) @(3 4))))                 ; LIST+ARR -> append (array element)
  (= '(1 2 3 4) (+ '(1 2) '(3 4)))              ; LIST+LIST
  (= '(1 2 "ab") (+ '(1 2) "ab"))               ; LIST+STR -> append (str element)
  (= 'ef (AB (B (+ '(1 2) 'ef))))               ; LIST+ISYM -> append (sym element)
@@ -49,10 +49,10 @@
  (= "abcd" (+ "ab" sa-U))   (strp (+ "ab" sa-U)) ; STR+USYM -> demote to str
  (= "abef" (+ "ab" 'ef))    (strp (+ "ab" 'ef))  ; STR+ISYM -> demote to str
 
- ; === row USYM (a = $cd) ===============================================
+ ; === row USYM (a = (nom (\ cd))) ===============================================
  (= "cdC" (string (+ sa-U 67)))   (sa-u (+ sa-U 67)) ; USYM+NUM -> sym (byte at back)
  (nilp (+ sa-U @(1 2)))                        ; USYM+ARR -> nil
- (= 3 (hash (+ sa-U '(1 2))))                   ; USYM+LIST -> X (sym element)
+ (= 3 (sat (+ sa-U '(1 2))))                   ; USYM+LIST -> X (sym element)
  (= "cdab" (+ sa-U "ab"))   (strp (+ sa-U "ab"))  ; USYM+STR -> demote to str
  (= "cdcd" (string (+ sa-U sa-U)))   (sa-u (+ sa-U sa-U)) ; USYM+USYM -> usym
  (= "cdef" (string (+ sa-U 'ef)))    (sa-u (+ sa-U 'ef))  ; USYM+ISYM -> demote to usym
@@ -60,7 +60,7 @@
  ; === row ISYM (a = 'ef) ===============================================
  (= 'efC (+ 'ef 67))   (sa-i (+ 'ef 67))       ; ISYM+NUM -> interned sym
  (nilp (+ 'ef @(1 2)))                         ; ISYM+ARR -> nil
- (= 3 (hash (+ 'ef '(1 2))))                    ; ISYM+LIST -> X (sym element)
+ (= 3 (sat (+ 'ef '(1 2))))                    ; ISYM+LIST -> X (sym element)
  (= "efab" (+ 'ef "ab"))   (strp (+ 'ef "ab")) ; ISYM+STR -> demote to str
  (= "efcd" (string (+ 'ef sa-U)))   (sa-u (+ 'ef sa-U)) ; ISYM+USYM -> demote to usym
  (= 'efef (+ 'ef 'ef))   (sa-i (+ 'ef 'ef))    ; ISYM+ISYM -> interned sym

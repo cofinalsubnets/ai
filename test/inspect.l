@@ -19,12 +19,12 @@
   ; interned symbols print as their name
   (= "foo" (inspect 'foo))
   ; gensyms print with the `$` sigil: named-uninterned as $<name>, anonymous as
-  ; $<addr>. the `$` reader macro wraps with nom, so $x re-reads to a symbol.
+  ; $<addr>. display form only -- `$` READS as the sat operator now.
   (= "$x" (inspect (nom "x")))
   (= "$foo" (inspect (nom 'foo)))
   (= "$" (ssub (inspect (nom 0)) 0 1))           ; anonymous -> $<addr>
-  (symp $x)                                          ; $x reads back as a (fresh) symbol
-  (= "$bar" (inspect $bar))
+  (symp (gsym x))
+  (= "$bar" (inspect (gsym bar)))
 
   ; quote sugar: a pair (` x) prints as 'x
   (= "'foo"      (inspect ''foo))
@@ -43,14 +43,14 @@
   (strp (inspect 0))
   (strp (inspect "hi"))
   (strp (inspect '(1 2 3)))
-  (strp (inspect (mapn 0)))
+  (strp (inspect (hashn 0)))
 
   ; buffer growth: a 200-element list far exceeds the 32-byte initial buf,
   ; forcing several doublings inside to_putc.
   (: (rng n) (? (= n 0) 0 (X n (rng (- n 1))))
      s (inspect (rng 200))
      ; 200 numbers + 199 separators + 2 parens = at least 400 chars
-   (do (strp s) (< 400 (hash s))))
+   (do (strp s) (< 400 (sat s))))
 
   ; GC stress: 500 inspects in a loop. Each call alloc'd a heap port + buf,
   ; provoking many GCs. Final call must still produce the expected output.
