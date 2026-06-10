@@ -1,10 +1,10 @@
-; reader infix -- dict['infix] maps an (all-punct) SYMBOL -> arity. in operand
+; reader infix -- the infix table maps an (all-punct) SYMBOL -> arity. in operand
 ; position with a left operand available, the symbol captures it and collects
 ; arity-1 more datums, nesting RIGHT-associatively (a following operator takes
 ; the nearest operand). with no left operand it reads as the plain symbol, so
 ; (+ 1 2) prefix, '+ quote, and (+)-as-a-value all keep working. parenthesized
 ; infix double-wraps -- (1 + 2) reads as ((+ 1 2)) -- and evaluates via (f)==f.
-(: in-tbl (peep dict 'infix 0))
+(: in-tbl infix)
 (assert (mapp in-tbl) (= 2 (in-tbl '+)) (= 2 (in-tbl '<=)) (= 3 (in-tbl '?)))
 
 (assert
@@ -55,7 +55,7 @@
  (= 7 ((#() <- 'k 7) 'k))                        ; <- returns the collection
  (= 9 (#(1 10) -> 2 9))                          ; -> falls back to the default
  (= 65 (: b (buf 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
- (= 'pin (cap (peep (peep dict 'infix 0) '<- 0)))  ; the table entries are (name . arity) aliases
- (= 3 (cbp (peep (peep dict 'infix 0) '-> 0)))
+ (= 'pin (cap (peep infix '<- 0)))  ; the table entries are (name . arity) aliases
+ (= 3 (cbp (peep infix '-> 0)))
  (symp '<-) (= 30 ((->) #(3 30) 3 0))            ; escaped, -> is still peep-as-a-value
  (idp pin (<-)) (idp peep (->)) (= 1 ((%) 5 2)))  ; every alias is a bound global

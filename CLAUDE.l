@@ -274,9 +274,9 @@
  !((buf 2) = (buf 2)))
 
 ; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). TWO sibling
-; reader tables, split by the CHAR-CLASS law: dict['operators] keys prefix SIGILS by char --
+; reader tables, split by the CHAR-CLASS law: the `operators` table keys prefix SIGILS by char --
 ; token-BREAKING chars that desugar their next N datums to (name d1 .. dN); value name |
-; (name . arity), arity 1-7 -- and dict['infix] keys INFIX by interned all-punct symbol --
+; (name . arity), arity 1-7 -- and the `infix` table keys INFIX by interned all-punct symbol --
 ; token-JOINING names (kebab keeps - inside names) whose valence resolves by position: with
 ; a left operand the symbol captures it and collects arity-1 more, nesting RIGHT-
 ; associatively; with none it reads as the plain symbol, so (+ 1 2), '+, and
@@ -296,8 +296,8 @@
  (3 = 1 + 2) (7 = 1 + 2 * 3) ('b = 0 ? 'a 'b) ('big = (1 < 2) ? 'big 'small)
  (20 = (#(1 10 2 20) -> 2 0)) (7 = ((#() <- 'k 7) 'k)) (9 = (#() -> 'k 9))
  (12 = (foldl (+) 0 '(3 4 5)))
- (: t (peep dict 'operators 0) (&& (mapp t) ('sat = (t ("$" 0))) ('hash = (t ("#" 0)))))
- (: t (peep dict 'infix 0)
+ (: t operators (&& (mapp t) ('sat = (t ("$" 0))) ('hash = (t ("#" 0)))))
+ (: t infix
     (&& (mapp t) (2 = (t '+)) (3 = (t '?)) ('mod = (cap (t '%))))))
 
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships
@@ -312,7 +312,7 @@
 ; --- control --- ev compiles and runs; call-cc is a one-shot escape; tasks are
 ; spawn/wait/yield/sleep/done?/kill/key?; the RNG is xoshiro256++: C ships only rng-seed and
 ; the pure rand-next/randf-next over explicit state -- the global rand/randf stream is
-; prelude lisp over dict['rng-state]. a global `trap` function receives every
+; prelude lisp over hidden rng state. a global `trap` function receives every
 ; throw as (trap s a b) -- s = the status word, two bits: sing (1, something wrong) and
 ; more (2, read control flow); more alone = incomplete, eof = more|sing. a/b = the
 ; condition data; the result is delivered per the bits (the more bit: to the reader's
@@ -349,15 +349,18 @@
 ; the *egg* (l/egg.l): the evaluator SITS on the egg (the quoted prelude+ev corpus) twice --
 ; compile the compiler with the C bootstrap, recompile the whole corpus through itself -- and
 ; the hatchling installs as `ev`, baked into the image at C compile time, no allocation;
-; `born` records the hatch time. (its pin defaults 0 deliberately: l0's first corpus
-; pass runs PRE-egg, where born does not exist yet.) before it is born the egg PULLS the
-; runtime-internal names from dict: the raw cell nifs (peek poke seek), every hot g_vm_*
-; pointer, and `macros` (the table stays at dict[0]) -- compiled references were folded,
-; so only the names die.
-(assert (lamp ev) (fixp (peep dict 'born 0))
-        (? (peep dict 'born 0) !(peep dict 'macros 0) 1)     ; post-birth the names are gone
-        (? (peep dict 'born 0) !(peep dict 'poke 0) 1)       ; (pre-egg they still exist,
-        (? (peep dict 'born 0) !(peep dict 'g_vm_ret 0) 1))  ;  hence the born guard)
+; `born` records the hatch time (unbound pre-egg: l0's first corpus pass runs PRE-egg,
+; and an absent global reads as nil). before it is born the egg PULLS every runtime-
+; internal name: the raw cell nifs (peek poke seek; lamb stays), the compiler's machinery
+; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
+; lives on inside the compiler's closures), the repl sentinels, every hot g_vm_* pointer,
+; and finally `dict` itself. compiled references were folded, so only the names die.
+; names the printer or an expander EMITS (uq ltuple cons pin table ..) stay, as do the
+; C-resolved hooks (num-ap scomb bcomb trap) and the repl's test-driven editor surface.
+(assert (lamp ev) (? born (fixp born) 1)
+        (? born !macros 1) (? born !poke 1)     ; post-birth the names are gone
+        (? born !boxfix 1) (? born !g_vm_ret 1) ; (pre-egg they still exist,
+        (? born !dict 1))                       ;  hence the born guards)
 
 ; --- under the hood --- a generic op dispatches on a value's kind (an enum whose order is the
 ; lattice above). a dyadic op is an NxN table indexed by the two kinds; a monadic op is its

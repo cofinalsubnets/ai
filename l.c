@@ -120,7 +120,7 @@ g_vm_t g_vm_kcall,
  g_vm_sort,
  g_vm_put, g_vm_pull, g_vm_table,   g_vm_keys,  g_vm_dig,
  g_vm_unc, g_vm_poke, g_vm_peek,
- g_vm_seek,  g_vm_trim,   g_vm_lam,   g_vm_add,
+ g_vm_seek,  g_vm_trim,   g_vm_lamb,   g_vm_add,
  g_vm_sub,   g_vm_mul,    g_vm_quot,   g_vm_fquot, g_vm_rem,  g_vm_arg,
  g_vm_bmul_start, g_vm_bmul,   // resumable (yieldable) bignum multiply
  g_vm_quote, g_vm_freev,  g_vm_eval,   g_vm_cond, g_vm_jump,   g_vm_defglob,
@@ -577,7 +577,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_fread, "fread", s2(g_vm_fread))\
  _(nif_string, "string", s1(g_vm_string))\
  _(nif_intern, "intern", s1(g_vm_intern)) _(nif_nom, "nom", s1(g_vm_nom))\
- _(nif_lam, "lam", s1(g_vm_lam))\
+ _(nif_lamb, "lamb", s1(g_vm_lamb))\
  _(nif_peek, "peek", s2(g_vm_peek)) _(nif_poke, "poke", s3(g_vm_poke)) _(nif_trim, "trim", s1(g_vm_trim))\
  _(nif_seek, "seek", s2(g_vm_seek)) _(nif_pin, "sat", s1(g_vm_pin)) _(nif_peep, "peep", s3(g_vm_peep))\
  _(nif_put, "pin", s3(g_vm_put)) _(nif_pull, "pull", s3(g_vm_pull)) _(nif_table, "table", s1(g_vm_table)) _(nif_keys, "keys", s1(g_vm_keys))\
@@ -2078,7 +2078,7 @@ g_vm(g_vm_poke) {
  union u *c = cell(Sp[2]) + getfix(Sp[0]);
  return c->x = Sp[1], *(Sp += 2) = word(c), Ip++, Continue(); }
 
-g_vm(g_vm_lam) {
+g_vm(g_vm_lamb) {
  size_t n = getfix(Sp[0]);
  Have(n + Width(struct g_tag));
  union u *k = (union u*) Hp;

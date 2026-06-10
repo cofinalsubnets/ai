@@ -1,8 +1,8 @@
-; the reader's operator table -- dict['operators]: char -> name | (name . arity).
+; the reader's operator table -- the operators table: char -> name | (name . arity).
 ; an operator char reads its next N datums and desugars to (name d1 .. dN); the 7
 ; builtin sigils are seeded at arity 1. entries are live immediately: the test
 ; runner reads one datum at a time, so a pin in one form governs the next form.
-(: op-tbl (peep dict 'operators 0))             ; leak to global scope for this file
+(: op-tbl operators)             ; leak to global scope for this file
 (assert (mapp op-tbl)
  (= 'hash (op-tbl ("#" 0))) (= 'tuple (op-tbl ("@" 0))) (= 'sat (op-tbl ("$" 0)))
  (= 'nilp (op-tbl ("!" 0))) (= 'dot (op-tbl ("." 0)))

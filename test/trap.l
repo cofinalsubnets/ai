@@ -34,6 +34,6 @@
         (= 'gotcha (sing 'any 'thing)))            ; the deliberate sing resumes the same way
 
 ; uninstall; the raw default is back
-(pull dict 'trap 0)
-(assert !(peep dict 'trap 0) (= 'eof (fread (sip 0) 'eof))
+(: trap 0)                       ; uninstall: a non-lamp value defers to the raw default
+(assert !trap (= 'eof (fread (sip 0) 'eof))
         (: p (sip '(40)) (= p (fread p 99))))

@@ -2,7 +2,7 @@
 ; - state is a rank-1 word-int tuple of length 4 (256 bits), riding the tuple machinery.
 ; - C holds no state: the primitives are rng-seed plus the pure functional
 ;   stream rand-next / randf-next (the input state is copied, never mutated).
-; - the global stream is prelude lisp over dict['rng-state]: rng-get reads it
+; - the global stream is prelude lisp over hidden rng state: rng-get reads it
 ;   (lazily clock-seeding on first use); rng-set validates + installs; rand /
 ;   randf draw through rand-next / randf-next and store the successor state.
 ; - (rand n) -> [0,n); n <= 0 -> a full-width non-negative fixnum. (randf _) ->
