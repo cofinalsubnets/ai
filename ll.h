@@ -121,9 +121,6 @@ struct g {
     g_word fd;
     g_word ungetc_buf;            // pushed-back byte; putfix(EOF) = empty
     g_word eof_seen; } *io; };
-  // rng: global RNG state (rank-1 i64 tuple, len 4, xoshiro256++). Lives in &v0..end
-  // so gc.c's root loop forwards it.
-  g_word rng;
   // The C->lisp hooks (num-ap, scomb, bcomb, trap, operators) live on dict
   // (GC-traced, egg-baked): no slots, no key caches -- C materializes the
   // keys by name per use (sym_probe walks the intern tree allocation-free;

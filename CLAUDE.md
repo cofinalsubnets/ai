@@ -242,8 +242,9 @@
  (= 3 (:- (+ a b) a 1 b 2)) (= 'big (?- 'else (< 1 2) 'big)) (= 9 ((<=< inc (\ x (* x 2))) 4)))
 
 ; --- control --- ev compiles and runs; call-cc is a one-shot escape; tasks are
-; spawn/wait/yield/sleep/done?/kill/key?; the RNG is xoshiro256++ (global rand/randf plus the
-; pure rand-next/randf-next over explicit state). a global `trap` function receives every
+; spawn/wait/yield/sleep/done?/kill/key?; the RNG is xoshiro256++: C ships only rng-seed and
+; the pure rand-next/randf-next over explicit state -- the global rand/randf stream is
+; prelude lisp over dict['rng-state]. a global `trap` function receives every
 ; throw as (trap s a b) -- s = the status word, two bits: scare (1, something wrong) and
 ; more (2, read control flow); more alone = incomplete, eof = more|scare. a/b = the
 ; condition data; the result is delivered per the bits (the more bit: to the reader's

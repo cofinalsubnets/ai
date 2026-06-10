@@ -159,6 +159,19 @@
 (:: '?- (\ a (X '? (cat (B a) (X (A a) 0)))))
 (:: '>>= (\ l (X (last l) (init l))))
 (:: '<=< (\ g (: y (nom 0) (list '\ y (foldr (\ f x (list f x)) y g)))))
+; the global RNG stream lives on dict ('rng-state) and advances by the pure
+; rand-next/randf-next -- C holds no state and never draws. rng-get lazily
+; clock-seeds on first use; rng-set validates and installs (the state, or nil
+; if malformed). (rand n) -> fixnum in [0,n), n <= 0 (or non-fixnum) -> a
+; full-width non-negative fixnum; (randf _) -> float in [0,1).
+(: (rng-get _) (: st (peek dict 'rng-state 0)
+                  (? st st (: f (rng-seed (clock 0)) _ (pin dict 'rng-state f) f)))
+   (rng-set st) (? (&& (arrp st) (= 1 (arank st)) (= 4 (alen st)) (= z (atype st)))
+                   (: _ (pin dict 'rng-state st) st)
+                   0)
+   (rand n) (: r (rand-next (rng-get 0)) _ (pin dict 'rng-state (B r))
+               (? (&& (fixp n) (< 0 n)) (mod (A r) n) (A r)))
+   (randf _) (: r (randf-next (rng-get 0)) _ (pin dict 'rng-state (B r)) (A r)))
 ; readability / lisp-compat aliases by head-symbol substitution.
 ; do/begin/progn sequence side effects and return the last (identical to the
 ; current `,` macro -> `(: _ a _ b ... last)`); let -> the `:` let form;

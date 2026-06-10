@@ -374,8 +374,7 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
 // the full 256-bit payload -- Z (one word) on 64-bit, C (two words) on 32-bit.
 #define RNG_VT (Bytes == 4 ? g_C : g_Z)
 void g_rng_seed(struct g_tuple*, uint64_t);   // shape an i64 state tuple + seed it (SplitMix64)
-g_vm_t g_vm_rng_seed, g_vm_rng_get, g_vm_rng_set,
-       g_vm_rand, g_vm_randf, g_vm_rand_next, g_vm_randf_next;
+g_vm_t g_vm_rng_seed, g_vm_rand_next, g_vm_randf_next;
 int memcmp(void const*, void const*, size_t);
 void *malloc(size_t), free(void*),
  *memcpy(void*restrict, void const*restrict, size_t),
@@ -612,8 +611,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_fgetc, "fgetc", S1(g_vm_fgetc)) _(nif_fungetc, "fungetc", S2(g_vm_fungetc)) _(nif_feof, "feof", S1(g_vm_feof))\
  _(nif_fputc, "fputc", S2(g_vm_fputc)) _(nif_fputs, "fputs", S2(g_vm_fputs))  _(nif_fflush, "fflush", S1(g_vm_fflush))\
  _(nif_dot, "dot", S1(g_vm_dot))\
- _(nif_rng_seed, "rng-seed", S1(g_vm_rng_seed)) _(nif_rng_get, "rng-get", S1(g_vm_rng_get)) _(nif_rng_set, "rng-set", S1(g_vm_rng_set))\
- _(nif_rand, "rand", S1(g_vm_rand)) _(nif_randf, "randf", S1(g_vm_randf))\
+ _(nif_rng_seed, "rng-seed", S1(g_vm_rng_seed))\
  _(nif_rand_next, "rand-next", S1(g_vm_rand_next)) _(nif_randf_next, "randf-next", S1(g_vm_randf_next))
 #define native_implemented_function(n, _, d) static union u const n[] = d;
 #define insts(_) _(g_vm_unc) _(g_vm_freev) _(g_vm_ret) _(g_vm_ap) _(g_vm_tap) _(g_vm_apn) _(g_vm_tapn)\
@@ -724,13 +722,7 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
    g = g_push(g, 1, nil);
    if (g_ok(g)) {                                   // permute to (key val map)=(operators table dict)
     g->sp[0] = g->sp[1], g->sp[1] = g->sp[2], g->sp[2] = g->dict;
-    g = g_pop(g_mapput(g), 1); } }
-  // Eager-seed the global RNG stream so g->rng is always a valid state tuple (ll0
-  // bootstrap included). The seed mixes the clock with the rotated pool address.
-  if (g_ok(g = g_have(g, RNG_VEC_REQ))) {
-   struct g_tuple *v = bump(g, RNG_VEC_REQ);
-   g_rng_seed(v, (uint64_t) (g_clock() ^ rot((uintptr_t) g)));
-   g->rng = word(v); } }
+    g = g_pop(g_mapput(g), 1); } } }
  return g; }
 
 struct g *g_ini_m(void *(*ma)(struct g*, size_t), void (*fr)(struct g*, void*)) {
@@ -4094,11 +4086,11 @@ uintptr_t g_tuple_bytes(struct g_tuple *v) {
 // / gen_data / wasm-vt changes (cf. complex, Step 7). The payload is treated
 // as raw bytes (memcpy), never via the typed tuple_get/put accessors, so the
 // 64-bit limbs survive on 32-bit ports and a given seed reproduces the same
-// sequence on host/kernel/MCU/WASM/Playdate. Two stream flavors share the one
-// representation: a global stream in g->rng (mutated in place by rand/randf) and
-// a functional stream threaded explicitly (rand-next/randf-next copy the input
-// state, step the copy, return (value . new-state) -- the input is never
-// mutated). Not a CSPRNG. See [[project-todo-math]] step 8.
+// sequence on host/kernel/MCU/WASM/Playdate. C holds no RNG state and never
+// draws: the only primitives are rng-seed (fresh state from a fixnum) and the
+// functional steps rand-next/randf-next (copy the input state, step the copy,
+// return (value . new-state) -- the input is never mutated). The global stream
+// (rand/randf over dict['rng-state]) is prelude lisp. Not a CSPRNG.
 
 static g_inline uint64_t rotl64(uint64_t x, int k) {
  return (x << k) | (x >> (64 - k)); }
@@ -4141,9 +4133,9 @@ static g_inline g_flo_t u64_to_unit(uint64_t u) {
 #endif
 }
 
-// Shape v as an i64 state tuple (rank 1, len 4) and seed it. Exposed for the eager
-// seed in g_ini_0. ini_tuple + a pointer write only, so an inlining caller keeps
-// its tail call; the &s scratch stays inside rng_seed_into.
+// Shape v as an i64 state tuple (rank 1, len 4) and seed it. ini_tuple + a
+// pointer write only, so an inlining caller keeps its tail call; the &s
+// scratch stays inside rng_seed_into.
 void g_rng_seed(struct g_tuple *v, uint64_t seed) {
  ini_tuple(v, RNG_VT, 1);
  v->shape[0] = RNG_STATE_LEN;
@@ -4173,42 +4165,6 @@ g_vm(g_vm_rng_seed) {
  struct g_tuple *v = (struct g_tuple*) Hp; Hp += RNG_VEC_REQ;
  g_rng_seed(v, seed);
  return Sp[0] = word(v), Ip++, Continue(); }
-
-// (rng-get _): a snapshot copy of the global state tuple (never aliases it).
-g_vm(g_vm_rng_get) {
- Have(RNG_VEC_REQ);
- struct g_tuple *src = tuple(g->rng);            // re-read post-Have (GC may move it)
- struct g_tuple *v = rng_copy(&Hp, src);
- return Sp[0] = word(v), Ip++, Continue(); }
-
-// (rng-set v): install v's 4 limbs into the global state (copies, never aliases),
-// returning v; nil if v isn't a valid state tuple.
-g_vm(g_vm_rng_set) {
- word v = Sp[0];
- if (!rng_state_p(v)) return Sp[0] = nil, Ip++, Continue();
- memcpy(tuple_data(tuple(g->rng)), tuple_data(tuple(v)), RNG_PAYLOAD_BYTES);
- return Ip++, Continue(); }            // Sp[0] (== v) is the result
-
-// (rand n): global draw, fixnum in [0,n); n <= 0 (incl. nil) -> a full-width
-// non-negative fixnum. No allocation (the result is always a fixnum), so no Have
-// and no GC concern from mutating g->rng in place.
-g_vm(g_vm_rand) {
- word n = Sp[0];
- uint64_t r = rng_step(tuple_data(tuple(g->rng)));
- intptr_t out = fixp(n) && getfix(n) > 0
-   ? (intptr_t) (r % (uint64_t) getfix(n))
-   : (intptr_t) (r & (uint64_t) FIX_MAX);
- return Sp[0] = putfix(out), Ip++, Continue(); }
-
-// (randf _): global draw, float in [0,1). Have() runs before stepping so a
-// GC-triggered handler restart doesn't double-advance the state.
-g_vm(g_vm_randf) {
- word _res;
- Have(BOX_REQ);
- uint64_t r = rng_step(tuple_data(tuple(g->rng)));
- g_flo_t u = u64_to_unit(r);
- EMIT_FLO(u);
- return Sp[0] = _res, Ip++, Continue(); }
 
 // (rand-next st): functional draw -> (value . st'), value a full-width
 // non-negative fixnum. st is copied (referentially transparent); st' is the
