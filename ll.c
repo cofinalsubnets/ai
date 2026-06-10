@@ -135,7 +135,7 @@ g_vm_t g_vm_kcall,
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  g_vm_arr, g_vm_arank, g_vm_alen, g_vm_ashape, g_vm_atype,
  g_vm_asum, g_vm_aprod, g_vm_amax, g_vm_amin, g_vm_aall,
- g_vm_tupp, g_vm_bigp, g_vm_boxp, g_vm_arrp, g_vm_intf, g_vm_lamp;
+ g_vm_tupp, g_vm_bigp, g_vm_boxp, g_vm_arrp, g_vm_intf, g_vm_lamp, g_vm_handlep;
 // Carry extra operands, so (like g_vm_gc) they are declared apart from the
 // plain g_vm_t list, which fixes the 4-argument handler signature. g_vm_vbin
 // is the elementwise/broadcast dyadic engine (vop selects the op); g_vm_vmap1
@@ -599,7 +599,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_tupp, "tupp", S1(g_vm_tupp)) _(nif_bigp, "bigp", S1(g_vm_bigp)) _(nif_boxp, "boxp", S1(g_vm_boxp))\
  _(nif_arrp, "arrp", S1(g_vm_arrp)) _(nif_intf, "int", S1(g_vm_intf))\
  _(nif_symp, "symp", S1(g_vm_symp)) _(nif_mapp, "mapp", S1(g_vm_mapp)) _(nif_fixp, "fixp", S1(g_vm_fixp))\
- _(nif_lamp, "lamp", S1(g_vm_lamp))\
+ _(nif_lamp, "lamp", S1(g_vm_lamp)) _(nif_handlep, "handlep", S1(g_vm_handlep))\
  _(nif_nilp, "nilp", S1(g_vm_nilp)) _(nif_ev, "ev", S1(g_vm_eval))\
  _(nif_callk, "call-cc", S1(g_vm_callk)) _(nif_yield, "yield", S1(g_vm_yield_nif)) \
  _(nif_spawn, "spawn", S2(g_vm_spawn)) _(nif_wait, "wait", S1(g_vm_wait)) \
@@ -3352,6 +3352,10 @@ op11(g_vm_mapp, mapp(Sp[0]) ? putfix(1) : nil)
 // (lamp x): is x a heap object (a pointer), i.e. not a fixnum? true for every
 // present non-fixnum value -- pairs, symbols, strings, tuples, maps, threads.
 op11(g_vm_lamp, lamp(Sp[0]) ? putfix(1) : nil)
+// (handlep x): is x an opaque handle -- a buf or a port? (a task is referenced
+// by a fixnum id, not a handle object.) a handle also answers lamp (it acts as
+// a constant function); handlep is the refinement that names the zoo.
+op11(g_vm_handlep, (bufp(Sp[0]) || iop(Sp[0])) ? putfix(1) : nil)
 
 // (hash x) -- the general hashing method exposed to ll as a fixnum.
 op11(g_vm_hashof, putfix(hash(g, Sp[0])))

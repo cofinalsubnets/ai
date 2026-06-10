@@ -21,7 +21,7 @@
 ; string < symbol < pair < map < functions, each band ordered within itself (text and pairs
 ; lexicographically, maps and functions by an alpha-invariant hash). a map has its own rung
 ; just under the functions, though it still acts as a lookup lambda for +/*/apply. the
-; opaque handles (buf/port/thread) sit in the function band: truthy when nonempty
+; opaque handles (buf/port -- `handlep`) sit in the function band: truthy when nonempty
 ; ($out = 1), compared by identity, and applying a handle acts like 0 (const-1). every
 ; predicate ends in `p`; they are enumerated below.
 
@@ -73,14 +73,17 @@
 ;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `tupp`
 ;   strp symp twop mapp lamp  -- string, symbol, pair, map, lambda
 ; derived: `nump` (any number: fix/box/big/float/complex/array), `intp` (any integer), `atomp`
-; (anything but a pair). `i` is ~(0 1). one real gap: opaque handles (buf/port/thread) have no
-; predicate of their own and answer `lamp` (they act as functions). `!` (nilp) and `done?` are
-; truth/task tests, not type tests.
+; (anything but a pair). `i` is ~(0 1). opaque handles (buf/port) answer `handlep` -- and
+; `lamp` too, since they act as functions; a task is referenced by a fixnum id, not a handle
+; object. `!` (nilp) and `done?` are truth/task tests, not type tests.
 (assert
  (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp A) (mapp #(1 2))
  (bigp (100 2)) (boxp (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (tupp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
- (lamp (buf 4))                               ; an opaque handle answers lamp -- the predicate gap
+ (handlep (buf 4)) (handlep out) (handlep (sip '(104)))   ; the handle zoo, named
+ !(handlep #()) !(handlep A) !(handlep 5) !(handlep "s")  ; maps/functions/data are not handles
+ (lamp (buf 4))                               ; a handle still answers lamp -- it acts as a function
+ (fixp (: p (spawn (\ x x) 0) _ (wait p) p))  ; a task id is a number, not a handle
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
  (5.0 = (abs ~(3 4))) (~(2.0 3.0) = 2 + 3 * i))  ; mixed arithmetic widens to the higher tier
 
