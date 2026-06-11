@@ -44,9 +44,10 @@
 ; string < symbol < product < map < hom, each band ordered within itself (text and products
 ; lexicographically, maps and homs by an alpha-invariant hash). a map has its own rung
 ; just under the homs, though it still acts as a lookup hom for +/*/apply. the
-; opaque hots (buf/port -- `hotp`) sit in the hom band: truthy when nonempty
-; ($out = 1), compared by identity, and applying one acts like 0 (const-1). every
-; predicate ends in `p`; they are enumerated below.
+; opaque hots (buf/port -- `hotp`) sit in the hom band: a buf measures by content
+; (zeroed -> nothing), a port is present ($out = 1, drained or not), compared by
+; identity, and applying one acts like 0 (const-1). every predicate ends in `p`;
+; they are enumerated below.
 
 ; --- everything is a function --- (f x y) == ((f x) y) and (f) == f, so application is just
 ; left-to-right currying. numbers are church numerals, a list of numbers is an exponential
@@ -71,24 +72,29 @@
 ; body-less top-level `:` leaks its bindings to the global scope (that's how tests share helpers).
 (: (twice f x) (f (f x)) (assert (12 = (twice inc 10))))
 
-; --- true and false --- false is *nothing*: whatever NETS <= 0. every value has a signed
-; net measure: a number is its own value (complex: |z| signed by the total order), text
-; SUMS ITS CHARMS (a string is packed chars, measured by content -- a NUL contributes
-; nothing, so an all-NUL text is nothing), a symbol nets its spelling, a list or array
-; is the SUM of its elements' nets -- recursive and unclamped, so negatives cancel
-; positives and a PRODUCT OF NOTHINGS is nothing too. the law of saturation holds at
+; --- true and false --- false is *nothing*: whatever NETS <= 0. every value has a net
+; measure, COMPLEX-VALUED: a number is its own value -- a complex nets ITSELF, phase
+; intact -- text SUMS ITS CHARMS (a string is packed chars, measured by content -- a
+; NUL contributes nothing, so an all-NUL text or zeroed buf is nothing), a symbol nets
+; its spelling, a list or array is the SUM of its elements' nets -- a TRUE complex sum,
+; recursive and unclamped, the SPINE only (a dotted tail is not an element) -- so
+; negatives cancel positives, opposite phases cancel as VECTORS (never by the order's
+; tiebreak), and a PRODUCT OF NOTHINGS is nothing too. the law of saturation holds at
 ; every rank: positive to positive, zero-or-negative to zero, so a list or array of
 ; negatives is nothing, exactly like a negative scalar. maps stay key-counted: presence
 ; is information there, and #0 must stay truthy. there is no "truthy"/"falsy" -- true
-; and false are the bits 1 and 0 of the `!!$` projection. `$` (sat) is ONE saturating
-; clamp over the net, max(0, ceil(net)); `!` is the falsity oracle (the nif `nilp`, the
-; classical name; `non` is its normal alias, so !$x reads "non sat x"), with the
-; invariant !x == (0 = $x). net is additive wherever + is total -- EXACTLY now: $(a + b)
-; saturates net a + net b over numbers, text, and lists alike, the byte law included
-; (a string + a byte nets the byte: + is a true measure homomorphism). the COUNT --
-; how many, not how much -- is `tally`: a string or buf counts its charms, a list its
-; spine, an array its cells, a map its keys, a symbol its spelling, a scalar nothing.
-; tally is what "length" always was; $ never was.
+; and false are the bits 1 and 0 of the `!!$` projection. the net is OBSERVED through
+; one retraction at the boundary: `!` (the nif `nilp`, the classical name; `non` is its
+; normal alias) reads the net's sign in the total order (re, then im -- applied ONCE,
+; never per element), and `$` (sat) is ONE saturating clamp over the net's order-signed
+; magnitude, max(0, ceil), with the invariant !x == (0 = $x). net is additive wherever
+; + is total -- EXACTLY, complex included: $(a + b) saturates net a + net b over
+; numbers, text, and lists alike, the byte law included (a string + a byte nets the
+; byte: + is a true measure homomorphism), and the ARRANGEMENT does not matter: a
+; packed complex array, the list of the same values, and their asum all net the same
+; sum. the COUNT -- how many, not how much -- is `tally`: a string or buf counts its
+; charms, a list its spine, an array its cells, a map its keys, a symbol its spelling,
+; a scalar nothing. tally is what "length" always was; $ never was.
 (assert
  !0 !"" !#() !@0 !() !0.0 !~(0 0)                ; zero / empty -> false
  !-5 !-3.9 !~(-3 4) !~(0 -1)                     ; <= 0 in the total order -> false (complex by re then im)
@@ -96,6 +102,8 @@
  !'(() ()) !'(0 0) !'((0) (())) (0 = $'(() () ()))  ; a product of nothings is nothing, recursively
  !'(-5) !@(-3 -4) !'(-2 1) !!'(0 1)              ; negatives net <= 0 at every rank; -2+1 < 0 < 0+1
  (3 = $'(1 () 2)) (6 = $'(1 2 3)) (7 = $@(3 4))  ; $ sums the nets, then clamps once
+ (1 = $(cons 1 2)) !(cons 0 2)                   ; the SPINE carries the measure: a dotted tail is not an element
+ (8 = $(L ~(3 4) ~(-3 4))) !(L ~(0 5) -1)        ; phases sum as vectors; the order signs the TOTAL, once
  (1 = $#0) !!#0                                  ; ... but a box stays truthy: maps count keys
  (1 = !!$5) (0 = !!$0) (0 = !!$-3)               ; !!$ is the truth bit (1 true, 0 false)
  (0 = !5) (1 = !0) (idp non nilp) (1 = (non 0))  ; ! negates it; non is nilp
@@ -119,6 +127,7 @@
  (hotp (buf 4)) (hotp out) (hotp (sip '(104)))   ; the hot zoo, named
  !(hotp #()) !(hotp cap) !(hotp 5) !(hotp "s")   ; maps/functions/data are not hots
  (homp (buf 4)) (homp '(1)) (homp "s") !(homp 5) ; homp is presence: any heap value
+ (1 = $cap) (1 = $out) (1 = $(sip 0))            ; homs and ports net 1: present, drained or not
  (fixp (: p (spawn (\ x x) 0) _ (wait p) p))  ; a task id is a number, not a handle
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
  (5.0 = (abs ~(3 4))) (~(2.0 3.0) = 2 + 3 * i))  ; mixed arithmetic widens to the higher tier
@@ -158,7 +167,8 @@
  (: g (\ a (\ b (+ a b))) (&& ((g 1) = (g 1)) !((g 1) = (g 2))))   ; closures: equal iff captures match
  ((+ 1) = (+ 1)) !((\ x x) < (\ y y)) !((\ x (cap x)) = cap)           ; partial apps too; eta not bridged
  (1 = (\ x x)) ((\ y y) = 1) !(idp 1 (\ x x))                      ; 1 = identity, either side
- (0 = (\ _ 1)) ((\ q 1) = 0) !(0 = (\ _ 2)) !(0 = (\ _ _)))        ; 0 = const-1 (and only that)
+ (0 = (\ _ 1)) ((\ q 1) = 0) !(0 = (\ _ 2)) !(0 = (\ _ _))        ; 0 = const-1 (and only that)
+ !!(\ _ 1) (1 = $(\ _ 1)))     ; the bridge crosses the measure: =-equal to 0, yet present (a hom nets 1)
 
 ; --- + and * are generic --- `+` adds numbers, concatenates strings, and appends
 ; lists; `-` is numeric only. the BYTE LAW: a string + a number is one byte, strictly --
@@ -219,11 +229,14 @@
  (2.0 = (re ~(2 3))) (i < 1) !(1 < i) ("~(0.0 1.0)" = (show i))
  (0.0 = (peep (arg ~(1 @(1 0))) 1 0)))           ; arg broadcasts -- (arg ~(1 x)) = atan, elementwise
 ; a rank-N complex array packs (re,im) into a `c`-typed array: peep yields a ~(..) box,
-; + - * / broadcast numpy-style, `=` gives a mask, and asum/aprod fold complex.
+; + - * / broadcast numpy-style, `=` gives a mask, and asum/aprod fold complex. the net
+; is the complex SUM of the cells, so $v = $(asum v) and a packed array nets exactly
+; like the list of the same values -- the arrangement does not matter.
 (assert
  (: v (array 2 ~(1 2) ~(3 4)) (&& (c = (atype v)) (~(1 2) = (peep v 0 0)) (~(4 6) = (asum v))
     (~(2 4) = (peep (v + v) 0 0)) (~(2 4) = (peep (~(2 0) * v) 0 0)) !(v < v)
-    ("@(~(1.0 2.0) ~(3.0 4.0))" = (show v)))))
+    ($v = $(asum v)) ("@(~(1.0 2.0) ~(3.0 4.0))" = (show v))))
+ (8 = $(array 2 ~(3 4) ~(-3 4))) (8 = $(L ~(3 4) ~(-3 4))))
 
 ; --- arrays --- (arr type shape vals) is THE typed constructor: vals 0 zero-fills, a list
 ; fills row-major; (array shape elem..) infers the type and curries; @(..) is a rank-1
@@ -301,6 +314,7 @@
     (&& (1 = (t a)) (2 = (t b)) (2 = $t)))      ; same-name noms are distinct map keys
  (97 = ("abc" 0)) (294 = $"abc") (3 = (tally "abc")) (4 = $3.9) (0 = $-3.9) (7 = $@(3 4)) (5 = (abs -5)) (5.0 = (abs @(3 4)))
  !(string 0) !!(string 1)                        ; a NUL nets nothing: the product of nothings reaches the bytes
+ !(slice (+ "a" 0) 1 2) (97 = $(+ "a" 0))        ; ... an all-NUL text IS nothing, and the NUL byte appends for free
  ("bidden" = (slice "forbidden planet" 3 9)) ("abcd" = (+ "ab" "cd")) (1 = ("hi" 9))
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))
  ("\"a\\nb\"" = (show "a\nb")) ("(mint 0)" = (show (mint 0))))
@@ -322,10 +336,11 @@
  !(#(1 10) = #(1 10)) (: t #(1 10) (t = t))      ; mutable -> identity =
  (40 = (: t #(1 10) _ (t <- 4 40) (t -> 4 0))))  ; the infix accessors
 
-; --- buffers --- (buf n) gives n mutable zeroed bytes; $/peep/pin a byte (0..255); blit;
-; identity equality.
+; --- buffers --- (buf n) gives n mutable zeroed bytes; peep/pin a byte (0..255); $ nets
+; the charms (a zeroed buf is nothing); blit; identity equality.
 (assert
  (: b (buf 3) _ (pin b 0 65) (65 = (peep b 0 0))) (0 = $(buf 4)) (4 = (tally (buf 4)))
+ !(buf 3) (65 = (: b (buf 1) _ (pin b 0 65) $b))  ; zeroed -> nothing; bytes are charms (lockstep at bufs)
  (: b (buf 1) _ (pin b 0 257) (1 = (peep b 0 0))) (: b (buf 4) _ (blit b 0 "ABCD" 0 4) (68 = (peep b 3 0)))
  !((buf 2) = (buf 2)))
 

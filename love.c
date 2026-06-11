@@ -287,16 +287,18 @@ static g_inline word tuple_get_obj(struct g_tuple *v, uintptr_t i) {
 static g_inline void tuple_put_obj(struct g_tuple *v, uintptr_t i, word x) {
  ((word*) tuple_data(v))[i] = x; }
 
-// Truthiness: x is false iff (= 0 ($ x)) -- NEGATIVE-OR-ZERO is false, POSITIVE is
-// true, where the measure is the NET (g_net below): an ordered scalar's own signed
-// value (complex: |z| signed by the total order, re first then im), a container's
-// count, and a product's or array's SUM of element nets -- signed and unclamped, so
-// a list or array of negatives nets <= 0 and is false, per the saturation law:
-// positive to positive, zero-or-negative to zero, at every rank. The common kinds
-// short-circuit with NO walk: nil (the 0 word), EmptyString, fixnum sign, table key
-// count, bignum sign, symbol name; only products and tuples (boxed scalars, rank>=1
-// arrays) compute their net, and those sums cannot short-circuit -- a later negative
-// can cancel an early positive. Lockstep with g_pin (lvm_pin): same zero conditions.
+// Truthiness: x is false iff (= 0 ($ x)) -- the net's sign read in the total order.
+// THE NET'S CODOMAIN IS COMPLEX (g_net below): a complex scalar nets ITSELF, phase
+// intact; every other scalar nets on the real line; aggregates SUM as complex
+// numbers -- + is total there, so the net is additive EXACTLY, at every rank and
+// phase. Truth and $ each observe the net through ONE retraction at the boundary:
+// g_nilp reads the lex sign (re, then im -- the flagged order choice, applied once,
+// never per element), g_pin the order-signed magnitude. The common kinds short-
+// circuit with NO walk: nil (the 0 word), EmptyString, fixnum sign, table key count,
+// bignum sign, symbol name; products, tuples, strings and bufs compute their net
+// (content measures: an all-NUL text or zeroed buf is nothing, and a sum cannot
+// short-circuit -- a later negative can cancel an early positive). Lockstep with
+// g_pin (lvm_pin): same zero conditions.
 // a symbol's net, shared by g_net ($) and g_nilp (!): the SPELLING's charm
 // sum (a symbol nets what its nom pair nets -- chars measure by content now).
 // THE empty symbol (prints as ()) and every MINT (the nameless fresh point:
@@ -308,15 +310,21 @@ static g_inline intptr_t pin_sym(word x) {
   intptr_t t = 0;
   for (uintptr_t i = 0; i < nm->len; i++) t += (uint8_t) nm->bytes[i];
   return t; }
-static g_flo_t g_net(word);                          // fwd: products and tuples sum their elements
+struct g_zn { g_flo_t re, im; };                     // the net: a complex value
+static g_inline struct g_zn zn(g_flo_t re, g_flo_t im) {
+  struct g_zn z = {re, im}; return z; }
+static g_inline bool zn_nonpos(struct g_zn z) {      // <= 0 in the total order
+  return z.re < 0 || (z.re == 0 && z.im <= 0); }
+static struct g_zn g_net(word);                      // fwd: aggregates sum their elements
 static g_inline bool g_nilp(word x) {
   if (x == nil || x == EmptyString) return true;
   if (fixp(x)) return getfix(x) < 0;                 // 0 is nil (caught above); negatives false
   if (mapp(x)) return map_len(x) == 0;
   if (bigp(x)) return ((struct g_big*) x)->slen < 0; // a negative bignum is false
   if (symp(x)) return pin_sym(x) == 0;               // empty/anonymous symbol name -> nil (pin lockstep)
-  if (twop(x) || tupp(x)) return g_net(x) <= 0;      // product / boxed scalar / array: net <= 0
-  return false; }                                    // non-empty string / buf / fn / port: present
+  if (twop(x) || tupp(x) || strp(x) || bufp(x))
+    return zn_nonpos(g_net(x));                      // content measures: net <= 0 in the order
+  return false; }                                    // fn / port: present
 
 // Truncation toward zero / float remainder. Pure, freestanding-safe (no libm):
 // 1/0 lowers to an FPU divide that yields +-inf or NaN per IEEE, and inf*0=NaN
@@ -410,11 +418,8 @@ static g_inline g_flo_t cplx_im(word x) {
 static g_inline g_flo_t cplx_mod(word x) {
  g_flo_t re = cplx_re(x), im = cplx_im(x);
  return g_sqrt(re * re + im * im); }
-// Total-order non-positive test for a complex scalar (re first, then im): the
-// falsiness oracle for `~(re im)` -- false iff it sorts <= 0+0i (re < 0, or re == 0
-// and im <= 0). Lockstep with g_nilp/g_pin: negative-or-zero is FALSE, positive TRUE.
-static g_inline bool cplx_nonpos(word x) {
- g_flo_t re = cplx_re(x); return re < 0 || (re == 0 && cplx_im(x) <= 0); }
+// (the total-order non-positive test for a boxed complex lives on the net now:
+// g_net returns the value itself and zn_nonpos reads the lex sign -- once.)
 static g_inline void cplx_put(struct g_tuple *v, g_flo_t re, g_flo_t im) {
  v->shape[0] = ((g_flo_pun){ .d = re }).u;
  v->shape[1] = ((g_flo_pun){ .d = im }).u; }
@@ -2128,58 +2133,66 @@ static g_inline intptr_t len_sat(g_flo_t m) {
   if (m >= (g_flo_t) fix_max) return fix_max;
   intptr_t i = (intptr_t) m;                    // trunc toward 0 (m >= 0)
   return i + (m > (g_flo_t) i ? 1 : 0); }       // bump for any fractional part -> ceil
-// The NET: the SIGNED measure of any value, before the single saturating clamp in
-// g_pin. A number is its own value (complex: |z| signed by the total order, re then
-// im); text is its byte/name length; a table its key count; a fn/port 1 (present);
-// a product or rank>=1 array the SUM of its elements' nets, recursive and UNCLAMPED,
-// so a list of negatives nets negative and a product of nothings nets to nothing.
-// Additive wherever + is total: net(a + b) = net a + net b over numbers, text, and
-// products alike -- the one measure $ saturates and ! reads the sign of.
-//   g_C  packed (re,im) float pairs at tuple_data -> modulus of the complex sum,
-//        signed by the sum's total-order position
+// The NET: the COMPLEX-VALUED measure of any value (the net->C round: the spec's
+// additivity law -- net(a + b) = net a + net b wherever + is total -- holds over
+// complex operands only if the measure keeps phase, so the codomain is C and the
+// order retraction happens ONCE, in the observers). A complex scalar nets ITSELF;
+// every other scalar nets on the real line (a number its value, text/spellings
+// their charm sums, a table its key count, a fn/port 1); a product or rank>=1
+// array nets the SUM of its elements' nets -- a TRUE complex sum, recursive and
+// UNCLAMPED, the SPINE only (a dotted tail is not an element) -- so a list of
+// negatives nets negative, a product of nothings nets to nothing, and opposite
+// phases annihilate by VECTOR cancellation, not by the order's tiebreak. The
+// arrangement does not matter: a packed g_C array and the o-list of the same
+// values net the same sum, and net(asum v) = net(v) by construction.
+//   g_C  packed (re,im) float pairs at tuple_data -> componentwise sum
 //   g_O  object words -> each element's own g_net (recursive; depth bounded by nesting)
-//   g_Z/g_R  the element values directly (tuple_get_flo)
-static g_flo_t g_net(word x) {
-  if (fixp(x)) return (g_flo_t) getfix(x);                      // fixnum: its value
+//   g_Z/g_R  the element values directly (tuple_get_flo), imaginary part 0
+static struct g_zn g_net(word x) {
+  if (fixp(x)) return zn((g_flo_t) getfix(x), 0);               // fixnum: its value
   if (bufp(x)) { struct g_str *b = buf_str(x); g_flo_t t = 0;   // hot chars: Σ charms, like a string
     for (uintptr_t i = 0; i < b->len; i++) t += (uint8_t) b->bytes[i];
-    return t; }
-  if (mapp(x)) return (g_flo_t) map_len(x);                     // table: key count
-  if (!datp(x)) return 1;                                       // opaque but present (fn / port): truthy
+    return zn(t, 0); }
+  if (mapp(x)) return zn((g_flo_t) map_len(x), 0);              // table: key count
+  if (!datp(x)) return zn(1, 0);                                // opaque but present (fn / port): truthy
   switch (typ(x)) {
-    default: return 1;                                          // unknown present data kind -> truthy
+    default: return zn(1, 0);                                   // unknown present data kind -> truthy
     case KString: { g_flo_t t = 0;                                 // a string is PACKED CHARS: Σ charms
       for (uintptr_t i = 0; i < len(x); i++) t += (uint8_t) txt(x)[i];
-      return t; }                                                  // (the count moved to tally)
-    case KTwo: { g_flo_t s = 0; word p = x;                      // product: sum the elements' nets --
-      do s += g_net(A(p)), p = B(p); while (twop(p));            // signed, so negatives cancel and a
-      return s; }                                                // product of nothings nets to nothing
-    case KBig: return g_big_to_flo(x);                          // bignum: full magnitude, sign intact
-    case KSym: { struct g_str *nm = sym(x)->nom; g_flo_t t = 0;   // a symbol nets its SPELLING's charms
-      if (!nm) return 0;                                           // (a mint: the distinct nothing)
-      for (uintptr_t i = 0; i < nm->len; i++) t += (uint8_t) nm->bytes[i];
-      return t; }
+      return zn(t, 0); }                                           // (the count moved to tally)
+    case KTwo: { struct g_zn s = zn(0, 0); word p = x;           // product: sum the SPINE's nets --
+      do { struct g_zn e = g_net(A(p));                          // complex sums, so negatives cancel,
+           s.re += e.re, s.im += e.im;                           // phases cancel, and a product of
+           p = B(p); } while (twop(p));                          // nothings nets to nothing
+      return s; }
+    case KBig: return zn(g_big_to_flo(x), 0);                   // bignum: full magnitude, sign intact
+    case KSym: return zn((g_flo_t) pin_sym(x), 0);              // a symbol nets its SPELLING's charms
+                                                                // (a mint: the distinct nothing)
     case KTuple: { struct g_tuple *v = tuple(x);                 // boxed scalar or rank-n array
       uintptr_t i, n = tuple_nelem(v);
-      if (!v->rank) {                                            // rank-0 scalar: its signed value
-        if (v->type == g_C) return cplx_nonpos(x) ? -cplx_mod(x) : cplx_mod(x);
-        if (v->type == g_R) return flo_get(x);
-        return (g_flo_t) box_get(x); }                           // g_Z wide-int box
-      g_flo_t s = 0;                                             // rank>=1 array -> Σ elem (signed)
-      if (v->type == g_C) { g_flo_t sr = 0, si = 0, *re = tuple_data(v);
-        for (i = 0; i < n; i++) sr += re[2*i], si += re[2*i+1];
-        s = g_sqrt(sr*sr + si*si);                               // the sum's modulus, order-signed
-        return sr < 0 || (sr == 0 && si <= 0) ? -s : s; }
-      if (v->type == g_O) for (i = 0; i < n; i++) s += g_net(tuple_get_obj(v, i));
-      else for (i = 0; i < n; i++) s += tuple_get_flo(v, i);
+      if (!v->rank) {                                            // rank-0 scalar: its value
+        if (v->type == g_C) return zn(cplx_re(x), cplx_im(x));   // a complex nets ITSELF
+        if (v->type == g_R) return zn(flo_get(x), 0);
+        return zn((g_flo_t) box_get(x), 0); }                    // g_Z wide-int box
+      struct g_zn s = zn(0, 0);                                  // rank>=1 array -> Σ elem
+      if (v->type == g_C) { g_flo_t *d = tuple_data(v);
+        for (i = 0; i < n; i++) s.re += d[2*i], s.im += d[2*i+1];
+        return s; }
+      if (v->type == g_O)
+        for (i = 0; i < n; i++) { struct g_zn e = g_net(tuple_get_obj(v, i));
+          s.re += e.re, s.im += e.im; }
+      else for (i = 0; i < n; i++) s.re += tuple_get_flo(v, i);
       return s; } } }
-// The $ operator: ONE saturating clamp over the net -- max(0, ceil(net x)) -- so
-// (nilp x) == (= 0 ($ x)) at every kind and rank: a negative real, a non-positive
-// complex, a list or array whose elements sum <= 0 all measure 0. Lockstep w/ g_nilp.
+// The $ operator: the net observed once -- max(0, ceil) of its ORDER-SIGNED
+// MAGNITUDE (a real net is its own magnitude, exactly; a phaseful net takes
+// |z|, signed by zn_nonpos) -- so (nilp x) == (= 0 ($ x)) at every kind and
+// rank: a negative real, a non-positive complex, a list or array whose net
+// sums <= 0 in the order all measure 0. Lockstep with g_nilp.
 static intptr_t g_pin(word x) {
   if (fixp(x)) { intptr_t n = getfix(x); return n <= 0 ? 0 : n; }   // <= 0 -> 0 (0 is nil), exact
-  g_flo_t m = g_net(x);
-  return m <= 0 ? 0 : len_sat(m); }
+  struct g_zn z = g_net(x);
+  if (zn_nonpos(z)) return 0;
+  return len_sat(z.im == 0 ? z.re : g_sqrt(z.re * z.re + z.im * z.im)); }
 lvm(lvm_pin) { Sp[0] = putfix(g_pin(Sp[0])); Ip += 1; return Continue(); }
 
 // ============================================================================
