@@ -19,4 +19,9 @@
   (9 = (zev (zs "(: q (\\ x (x * x)) (q 3))")))
   !(zev (zs ""))                              ; nothing readable is nothing
   !(zev (zs "(+ 1"))                          ; an unfinished shape is nothing
-  (1 = (zev (zs "1")))))
+  (1 = (zev (zs "1")))
+  ; zevs: the stream shell -- a port is the lazy charms; every form evals,
+  ; the last value is the value. the host/love0/kernel runners ARE zevs.
+  (42 = (zevs (sip (zs "(: zq 41) (zq + 1)"))))  ; defines land: the second form reads the first's
+  !(zevs (sip (zs "")))
+  (7 = (zevs (sip (zs "1 2 (3 + 4)"))))))     ; forms eval in order; the last one answers

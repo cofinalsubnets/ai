@@ -541,11 +541,10 @@ void kmain(void) {
  g_egg_post
 #include "repl.h"
 #ifdef K_TEST
- // test build: read each form out of the baked `tests` string (string -> charlist
- // -> sip port -> read) and eval it via the self-hosted ev -- the same shape as
- // the host's stdin runner. zz-fin.l prints the summary and (exit 1)s on failure.
- "(: p (sip ((: (g i) (? (< i (sat tests)) (cons (peep tests i 0) (g (+ 1 i))))) 0))"
- " ((: (g e) (: r (read p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))"
+ // test build: drink the baked `tests` string (string -> charlist -> sip port)
+ // through zevs (repl.l) -- the same stream shell as the host's stdin runner.
+ // zz-fin.l prints the summary and (exit 1)s on failure.
+ "(zevs (sip ((: (g i) (? (< i (sat tests)) (cons (peep tests i 0) (g (+ 1 i))))) 0)))"
 #else
  "(repl 0 0)"
 #endif

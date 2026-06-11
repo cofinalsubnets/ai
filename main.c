@@ -296,10 +296,10 @@ static union u const
 // twice -- once compiled by the C bootstrap compiler (c0), once by the
 // self-hosted ev installed from ev.l -- so one love0 invocation exercises both
 // compilers (and -Dg_tco=0 makes it the trampoline path). s2cldef installs
-// s2cl (string -> charlist); runner reads the baked corpus (the global
-// `tests`) through a sip port and evals each form via `(ev 'ev r)` -- the
-// `'ev` indirection late-binds to whatever `ev` is now, so the same source
-// drives the c0 pass and (after the egg) the self-hosted pass.
+// s2cl (string -> charlist); runner drinks the baked corpus (the global
+// `tests`) through zevs (repl.l), whose `(ev 'ev r)` indirection late-binds
+// to whatever `ev` is now, so the same shell drives the c0 pass and (after
+// the egg) the self-hosted pass.
 static char const cli[] =
 #include "cli0.h"
  ;
@@ -308,8 +308,7 @@ static char const tests0[] =
  ;
 static char const
  s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (sat s)) (cons (peep s i 0) (g (+ 1 i))))) 0))",
- runner[] = "(: p (sip (s2cl tests))"
-            " ((: (g e) (: r (read p e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (nom 0)))";
+ runner[] = "(zevs (sip (s2cl tests)))";   // the stream shell (repl.l) drinks the baked corpus
 
 // With args, run the build tool (lcat / gen_data) through the CLI driver.
 // With no args, self-test: eval prelude+repl and run the baked corpus via c0,
@@ -356,7 +355,7 @@ static char const cli[] =
 #include "cli.h"
  ;
 static char const
- rel[] = "(:(g e)(: r(read in e)(?(= e r)0(: _(ev'ev r)(g e))))(g(nom 0)))";
+ rel[] = "(zevs in)";   // non-tty stdin: the stream shell (repl.l) drinks the in port
 
 static struct g *boot(struct g *g, bool argp) {
   bool replp = !argp && isatty(STDIN_FILENO);
