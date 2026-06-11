@@ -6,10 +6,10 @@
    (do (putc 10)
 
      ;(: i (BBB (gauge 0)) (do (putx (AB i)) (puts " cycles ") (putx (ABB i)) (puts "/") (putx (A (BBB i))) (puts " pin/heap max") (putc 10)))
-     (putx (- (test_get 'count) (sat f))) (puts " tests pass in ")
+     (putx (- (test_get 'count) (tally f))) (puts " tests pass in ")
      (putx s) (puts p) (puts (putx ms) (puts " seconds") (putc 10))
      (? f (do
-      (putx (sat f)) (puts " failed:") (putc 10)
+      (putx (tally f)) (puts " failed:") (putc 10)
       (each f (\ x (do (puts "  ") (putx x) (putc 10))))
       (exit 1)
       ))
