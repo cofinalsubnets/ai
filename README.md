@@ -1,6 +1,8 @@
-# love
+# cofinal subnets
 
 broadcasting live from the GTX tower
+
+the language is love; the project is cofinal subnets.
 
 ## **love never fails**
 
@@ -39,14 +41,13 @@ love has three special forms plus "operators". the forms are
 
 the prefix reader operators aka sigils are
 - `.` dot (printing identity function, does what you want on strings)
-- `$` sat (aka cash; saturating reduction to fixed width nat, len on collections)
-- `!` nil (negation); `!!$` defines the `?` condition
+- `$` sat (saturating reduction to fixed width nat, len on hashes)
+- `!` not (negation); `!!$` defines the `?` condition
 - `'` quote (desugars to monadic lambda)
-- `` ` `` quasiquotation with the usual `,` `,@`
 
 plus the data constructors
-- `#` hash (hash/box literal)
 - `@` at (array literal)
+- `#` hash (hash/box literal)
 - `~` plex (complex literal/conjugate)
 
 and the infix operators
