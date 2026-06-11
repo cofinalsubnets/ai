@@ -260,6 +260,11 @@
 ; --- strings & symbols --- a symbol is interned ('x), named-uninterned ($x = (nom 'x)), or
 ; anonymous ((nom 0)). `()` is THE empty symbol -- one canonical value, (intern ""), the
 ; `+`-identity on symbols, self-evaluating, false by !!$ -- but a symbol, NOT the number 0.
+; every nom draws a MINT SERIAL from the one mint stream (task pids draw from it too):
+; symbols order by name first (the nameless below every named), then the interned one
+; (the canonical point precedes the fresh), then by serial -- creation order -- so the
+; total order is TOTAL over symbols, GC-stable; the serial is also the nom's hash, so
+; same-name noms key a map apart.
 ; a string indexes its bytes ("abc" 0 -> 97). $ (sat) clamps the net measure once,
 ; max(0, ceil(net)): a string's byte count, a symbol's name length, a number's own value
 ; ($-3.9 = 0), a list's or array's element sum -- so $ and abs diverge ((abs -5) = 5 but
@@ -269,6 +274,10 @@
 (assert
  (symp ()) !(() = 0) (idp () (intern "")) (idp () '()) (0 = $()) !() !!$'x
  ('x = () + 'x) ("()" = (show ()))
+ (: a (nom 'x) b (nom 'x) (&& (a < b) !(b < a) !(a = b)))   ; the serial: creation order, trichotomy holds
+ ('x < (nom 'x)) (() < (nom 0))                  ; interned first on a name tie; the floor below the fresh
+ (: a (nom 'k) b (nom 'k) t #() _ (pin t a 1) _ (pin t b 2)
+    (&& (1 = (t a)) (2 = (t b)) (2 = $t)))      ; same-name noms are distinct map keys
  (97 = ("abc" 0)) (3 = $"abc") (4 = $3.9) (0 = $-3.9) (7 = $@(3 4)) (5 = (abs -5)) (5.0 = (abs @(3 4)))
  ("bidden" = (slice "forbidden planet" 3 9)) ("abcd" = (+ "ab" "cd")) (1 = ("hi" 9))
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))

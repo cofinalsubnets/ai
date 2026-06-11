@@ -86,7 +86,11 @@ struct g {
  g_word *hp, *sp;
  union u *tasks;       // task ring head (running task's node); always non-NULL after g_ini
  uintptr_t yield_ctr,  // ap-cycles since last cooperative yield; counts up to yield_interval (level-triggered)
-           next_pid,   // monotonic pid counter; pre-incremented, so first spawn returns 1
+           next_serial, // THE MINT STREAM: one monotonic counter every fresh identity draws
+                        // from -- task pids and nom serials alike (pre-incremented; 0 = the
+                        // empty symbol's code). a nom's serial lands in its `code` slot: its
+                        // hash AND its order tiebreak -- same-name noms order by creation,
+                        // GC-stable (code rides the copy), closing trichotomy.
            next_wake_at; // raw deadline for next yield_sw snapshot's wake_at slot; 0 = always runnable
  intptr_t next_wait_fd; // fd the task suspended on, -1 = not waiting on I/O. Installed into next yield_sw snapshot's wait_fd slot.
  struct g_atom {

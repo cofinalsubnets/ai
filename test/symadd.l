@@ -76,3 +76,25 @@
  ; + identity, partner unchanged (a real anonymous nom still demotes, rows above)
  (= 'ef (+ sa-z 'ef))   (sa-i (+ sa-z 'ef))    ; () + isym -> the isym itself
  (= 'ef (+ 'ef sa-z))   (sa-i (+ 'ef sa-z)))   ; isym + () -> the isym itself
+
+; --- mint serials: the total order is TOTAL over symbols -------------------
+; every nom draws a serial from the one mint stream (pids share it); symbols
+; order by name, then interned-first, then serial (creation order). closes
+; the old trichotomy hole: same-name noms compared pairwise INCOMPARABLE.
+(: a (nom 'q) b (nom 'q) c (nom 'q)
+   n1 (nom 0) n2 (nom 0)
+ (assert
+  (a < b) (b < c) (a < c) !(b < a) !(c < b)     ; strict, transitive, by creation
+  !(a = b) !(b = c)                             ; the order is finer than = used to see
+  ('q < a) !(a < 'q)                            ; interned first on the name tie
+  (n1 < n2) !(n2 < n1) !(n1 = n2)               ; anonymous mints order by creation too
+  (() < n1) !(n1 < ())                          ; the zero point sits first among the nameless
+  (n1 < a)                                      ; nameless below named (lex on "")
+  ('(1 2 3) = (map cbp (sort (L (cons c 3) (cons a 1) (cons b 2)))))  ; sort sees the serials
+  ; GC stability: the order survives heap churn (serials ride the copy)
+  (: pre (L (a < b) (n1 < n2) (() < n1))
+     _ ((: (churn k) (? (< 0 k) (: _ (map (\ i (string (nom 0))) '(1 2 3 4 5 6 7 8)) (churn (- k 1))) 0)) 500)
+     (pre = (L (a < b) (n1 < n2) (() < n1))))
+  ; the serial is the nom's hash: same-name noms key a map apart, stably
+  (: t #() _ (pin t a 'one) _ (pin t b 'two)
+     (&& ('one = (t a)) ('two = (t b)) (2 = $t)))))

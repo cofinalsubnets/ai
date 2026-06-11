@@ -1859,7 +1859,7 @@ g_vm(g_vm_spawn) {
  union u *N = (union u*) Hp;
  Hp += 8;
  word fn = Sp[0], x = Sp[1];
- uintptr_t pid = ++g->next_pid;
+ uintptr_t pid = ++g->next_serial;   // a pid is a fresh identity: drawn from the mint stream
  N[0].m = g->tasks->m;
  N[1].m = (union u*) spawn_body;
  N[2].x = Sp[1] = putfix(pid);
@@ -3535,6 +3535,10 @@ g_vm(g_vm_intern) {
 // symbol it would intern to) or a symbol (used directly). The new symbol stores
 // that naming SYMBOL as its nom, which marks it uninterned (interned syms have a
 // string nom; see ini_usym). Any other arg yields an anonymous nom (nom 0).
+// `code` gets THE MINT SERIAL (monotonic, pre-incremented; 0 is the empty
+// symbol's) -- the fresh point's hash and its place in the total order: same-
+// name noms order by creation. (g_clock once sat here: same-tick mints
+// collided, leaving distinct noms pairwise incomparable -- order wasn't total.)
 g_vm(g_vm_nom) {
  if (Sp[0] == EmptyString) return Sp[0] = empty_sym, Ip += 1, Continue(); // ""->the empty sym
  Have(2 * Width(struct g_atom));               // room for the wrapper + a fresh intern
@@ -3544,7 +3548,8 @@ g_vm(g_vm_nom) {
  else nom = symp(Sp[0]) ? sym(Sp[0]) : 0;      // symbol arg used as-is; else anonymous
  struct g_atom *y = (struct g_atom*) Hp;
  Hp += Width(struct g_atom) - 2;               // uninterned/anonymous: no l/r subtree slots
- nom ? ini_usym(y, nom, g_clock()) : ini_anon(y, g_clock());
+ uintptr_t serial = ++g->next_serial;
+ nom ? ini_usym(y, nom, serial) : ini_anon(y, serial);
  return
   Sp[0] = word(y),
   Ip += 1,
@@ -5089,15 +5094,16 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
 //            sorts lexicographically by (re, im). IEEE-faithful: NaN is unordered,
 //            so every ordering of it is false.
 //   strings  lexicographic over bytes (a prefix sorts first)
-//   symbols  lexicographic over the name (anonymous == the empty name)
+//   symbols  the product order: name lex (anonymous == the empty name), then
+//            interned-first, then the mint serial -- TOTAL (see sym_cmp)
 //   pairs    lexicographic over (car, then cdr), recursively
 //   maps     by representation hash, in their OWN band (pair < map < lambda)
 //   lambdas  by representation hash (ports/bufs too) -- a GC-stable order
 // ANTISYMMETRY: only `<` and `<=` are implemented; `>` and `>=` REVERSE the
 // operands and reuse them (a > b == b < a), which is also the right NaN behaviour
 // (swap, never negate). A total PREORDER: agrees with `=` (eqv) except where eqv
-// is finer -- distinct same-name uninterned symbols, or hash-colliding lambdas,
-// compare EQUAL in the order but are not `=`.
+// is finer -- hash-colliding lambdas compare EQUAL in the order but are not `=`
+// (symbols no longer: the mint serial made their order total).
 // cross-kind rank = the enum q kind, every numeric kind folded to the arith lane
 // (KFix) so fix/box/big/float/complex order by VALUE, not representation. Arrays
 // divert to g_vm_vbin before this, so KArr* never appear. One source of truth:
@@ -5107,9 +5113,22 @@ static g_inline intptr_t bytes_cmp(const char *pa, uintptr_t la, const char *pb,
  uintptr_t n = la < lb ? la : lb;
  int c = n ? memcmp(pa, pb, n) : 0;
  return c ? (c < 0 ? -1 : 1) : la < lb ? -1 : la > lb ? 1 : 0; }
-static g_inline intptr_t sym_cmp(word a, word b) {          // by name (anon -> "")
+// symbols: the PRODUCT ORDER -- name lex first (anon -> "", so the nameless sit
+// below every named symbol), then on a name tie between distinct atoms the
+// interned one first (the canonical point precedes the fresh), then the mint
+// serial (`code`; creation order). same-name noms used to compare EQUAL here
+// while not being `=` -- the order wasn't total; the serial closes trichotomy.
+static g_inline bool sym_interned(word x) {
+ return x == empty_sym || (sym(x)->nom && strp(word(sym(x)->nom))); }
+static g_inline intptr_t sym_cmp(word a, word b) {
+ if (a == b) return 0;
  struct g_str *na = add_name(a), *nb = add_name(b);
- return bytes_cmp(na ? txt(na) : "", na ? na->len : 0, nb ? txt(nb) : "", nb ? nb->len : 0); }
+ intptr_t c = bytes_cmp(na ? txt(na) : "", na ? na->len : 0, nb ? txt(nb) : "", nb ? nb->len : 0);
+ if (c) return c;
+ bool ia = sym_interned(a), ib = sym_interned(b);
+ if (ia != ib) return ia ? -1 : 1;
+ uintptr_t ca = sym(a)->code, cb = sym(b)->code;
+ return ca < cb ? -1 : ca > cb ? 1 : 0; }
 // 3-way total-order comparator (-1/0/1); the recursive engine for the pair case.
 // Floats collapse NaN to "equal" here (a structural total order can't carry IEEE
 // unorderedness); the scalar lane below keeps NaN unordered at the top level. hash
