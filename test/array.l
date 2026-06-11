@@ -152,3 +152,24 @@
  (nilp (+ (arr z '(3) 0) "x"))              ; non-numeric operand
  (nilp (arr z '(3) 0))                      ; (sanity) zero array is falsy
  (nilp (arr 99 '(3) 0)))                      ; bad type code -> nil
+
+; --- empty arrays: the first stone of the APL buildout. a shape-(0) array
+; prints the (array '(shape)) surface form (@ has no empty spelling and @0
+; used to collide with the one-element zero array), broadcast keeps a
+; 0-axis empty (a 1-axis takes the OTHER size including 0 -- max here once
+; filled one element out of an empty operand), and empty reductions answer
+; their monoid UNITS: the floor appears as the values of empty reductions.
+(: e (arr z '(0) 0)
+ (assert
+  ("(array '(0))" = (show e)) ('(0) = (ashape e)) (1 = (arank e)) (0 = (alen e))
+  (0 = (asum e)) (1 = (aprod e)) (aall e)        ; the units: empty sum 0, empty product 1, empty conjunction true
+  !e (0 = $e)                                    ; an empty nets nothing
+  (0 = (alen (e + e))) (0 = (alen (e * 2))) (0 = (alen (1 + e)))
+  (0 = (alen (e < 1))) (0 = (alen (e = e)))      ; compare masks stay empty
+  (0 = (alen (e 2)))                             ; an empty exponent array applies empty
+  (0 = (alen (sin e))) (0 = (alen (pow e 2)))    ; elementwise maps stay empty
+  (0 = (alen ((arr z '(1) '(5)) + e)))           ; a 1-axis broadcasts to 0, not 1
+  (-1 = (peep e 0 -1))                           ; out of bounds -> the default
+  ('(0 3) = (ashape ((arr r '(0 3) 0) + 1)))     ; rank-2 empties keep their shape
+  (: rt (ev '(array '(0)))                       ; the printed form reads back
+     (&& (0 = (alen rt)) ('(0) = (ashape rt)) (z = (atype rt))))))

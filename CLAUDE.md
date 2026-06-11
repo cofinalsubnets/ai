@@ -222,7 +222,11 @@
 ; (compare -> a z mask); `/` promotes the whole result to r the moment any element divides
 ; inexactly. reduce with asum aprod amax amin aall (a conjunction). an array nets the SUM of
 ; its elements ($ = max(0, ceil(asum)), like a list), so an all-zero or net-negative array
-; is false. sin/cos/log/pow and the derived forms map elementwise.
+; is false. sin/cos/log/pow and the derived forms map elementwise. a 0-axis is real:
+; broadcast keeps it empty (a 1-axis takes the OTHER size, 0 included), an empty
+; rank-1 prints (array '(0)) (@ has no empty spelling), and EMPTY REDUCTIONS ANSWER
+; THEIR MONOID UNITS -- (asum e) = 0, (aprod e) = 1, (aall e) true: the floor
+; appears as the values of empty reductions.
 (assert
  (6 = (alen (arr z '(2 3) 0))) (2 = (arank (arr z '(2 3) 0))) ('(2 3) = (ashape (arr z '(2 3) 0)))
  (z = (atype (arr z '(2 3) 0))) (20 = (peep @(10 20 30) 1 -1)) (-1 = (peep @(10 20 30) 9 -1))
@@ -231,7 +235,9 @@
  (60 = (asum @(10 20 30))) (30 = (amax @(10 30 20))) (5 = (asum 5)) (aall (1 < 2))
  (aall (@(2.0 3.0) = ((/ 1 2) @(4.0 9.0)))) (@(3.5 5.5) = @(7 11) / 2) (@(3 5) = (// @(7 11) 2))
  (@(4 6) = @(8 12) / 2) !(arr z '(3) 0) ("@(10 20 30)" = (show @(10 20 30)))
- (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3) 0))
+ (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3) 0)
+ (0 = (asum (arr z '(0) 0))) (1 = (aprod (arr z '(0) 0))) (aall (arr z '(0) 0))
+ ("(array '(0))" = (show (arr z '(0) 0))) (0 = (alen ((arr z '(0) 0) + 1))))
 
 ; --- products & lists --- cons builds the product (the cartesian kind, classically the
 ; pair); cap and cbp take the Contents of the A/B Part of the product (no cap: you have

@@ -2386,15 +2386,16 @@ static struct g *gzput_arr_elem(struct g *g, uintptr_t i, uintptr_t type, uintpt
 static struct g *gzput_arr(struct g *g, uintptr_t off) {
  struct g_tuple *v = tuple(g->sp[0]);
  uintptr_t rank = v->rank, type = v->type, nelem = tuple_nelem(v);
- if (rank == 1 && nelem == 0)
-  return gzputcs(g, "@0");                             // empty rank-1 -> @0
- if (rank == 1) {                                      // terse rank-1: @(…)
+ if (rank == 1 && nelem) {                             // terse rank-1: @(…)
   g = gzputc(g, '@'); g = gzputc(g, '(');
   for (uintptr_t i = 0; g_ok(g) && i < nelem; i++) {
    if (i) g = gzputc(g, ' ');
    g = gzput_arr_elem(g, i, type, off); }
   return g_ok(g) ? gzputc(g, ')') : g; }
- g = gzprintf(g, "(array '(");                         // rank>=2: (array '(shape) elem …)
+ // rank>=2 -- and the EMPTY rank-1, which has no @ spelling: (array '(0))
+ // reads back to the empty array (a-type of no elements infers z, the same
+ // re-inference loss every surface form accepts).
+ g = gzprintf(g, "(array '(");                         // (array '(shape) elem …)
  for (uintptr_t i = 0; g_ok(g) && i < rank; i++) {
   if (i) g = gzputc(g, ' ');
   g = gzputn(g, tuple(g->sp[0])->shape[i], 10); }
@@ -5213,6 +5214,12 @@ static intptr_t vcmp_sign(int op, int s) {
   case vop_gt: return s > 0; case vop_ge: return s >= 0;
   default: return s == 0; } }                   // vop_eq
 
+// The broadcast dim of two conformant axis sizes: a size-1 axis takes the
+// OTHER size -- INCLUDING 0, so an empty axis stays empty (a max here turns
+// (0,1) into 1 and fills one element out of an empty operand: garbage).
+static g_inline uintptr_t bdim(uintptr_t da, uintptr_t db) {
+ return da == 1 ? db : db == 1 ? da : da; }
+
 // Fill the (already-shaped) result r with a `op` b, broadcasting. All the
 // &-taking stack arrays (strides, odometer) live here so the g_vm wrapper stays
 // TCO-clean. No allocation inside, so operand pointers can't move under us.
@@ -5275,7 +5282,7 @@ static g_noinline bool vquot_needs_float(word a, word b) {
  for (uintptr_t k = 0; k < R; k++) {
   uintptr_t da = (aarr && k < ra) ? va->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? vb->shape[rb - 1 - k] : 1;
-  shp[R - 1 - k] = (intptr_t) (da > db ? da : db); n *= da > db ? da : db; }
+  shp[R - 1 - k] = (intptr_t) bdim(da, db); n *= bdim(da, db); }
  for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
  if (aarr) { intptr_t s = 1; for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
    intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank; ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
@@ -5319,7 +5326,7 @@ g_vm(g_vm_vbin, int op) {
   uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
   if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
-  n *= da > db ? da : db; }
+  n *= bdim(da, db); }
  // `/` over an all-integer broadcast promotes the whole result to f64 the moment
  // any element divides inexactly (matching the scalar `/`); `//` (vop_fquot) stays
  // integer. Scan only after conformance is known good (offsets are then in range).
@@ -5333,7 +5340,7 @@ g_vm(g_vm_vbin, int op) {
  for (uintptr_t k = 0; k < R; k++) {
   uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
-  r->shape[R - 1 - k] = da > db ? da : db; }
+  r->shape[R - 1 - k] = bdim(da, db); }
  vbin_fill(r, a, b, op, fdom);
  return *++Sp = word(r), Ip++, Continue(); }
 
@@ -5380,7 +5387,7 @@ g_vm(g_vm_vmap2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
   uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
   if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
-  n *= da > db ? da : db; }
+  n *= bdim(da, db); }
  uintptr_t bytes = sizeof(struct g_tuple) + R * sizeof(word) + n * g_T[g_R];
  Have(b2w(bytes));
  a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);       // re-read post-Have
@@ -5389,7 +5396,7 @@ g_vm(g_vm_vmap2, g_flo_t (*fn)(g_flo_t, g_flo_t)) {
  for (uintptr_t k = 0; k < R; k++) {
   uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
-  r->shape[R - 1 - k] = da > db ? da : db; }
+  r->shape[R - 1 - k] = bdim(da, db); }
  vmap2_fill(r, a, b, fn);
  return *++Sp = word(r), Ip++, Continue(); }
 
@@ -5497,7 +5504,7 @@ static struct g *obin_run(struct g *g, int op) {
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
   if (da != db && da != 1 && db != 1) {                        // non-conforming -> nil
    g->sp[1] = nil, g->sp++, g->ip = (union u*) g->ip + 1; return g; }
-  shp[R - 1 - k] = da > db ? da : db; n *= da > db ? da : db; }
+  shp[R - 1 - k] = bdim(da, db); n *= bdim(da, db); }
  uintptr_t bytes = sizeof(struct g_tuple) + R * sizeof(word) + n * g_T[g_O];
  if (!g_ok(g = g_have(g, b2w(bytes)))) return g;
  struct g_tuple *r = (struct g_tuple*) g->hp; g->hp += b2w(bytes);
@@ -5664,7 +5671,7 @@ g_vm(g_vm_cbin, int op) {
   uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
   if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
-  n *= da > db ? da : db; }
+  n *= bdim(da, db); }
  enum g_tuple_type rt = cmp ? g_Z : g_C;              // compare -> i64 mask, else packed complex
  uintptr_t bytes = sizeof(struct g_tuple) + R * sizeof(word) + n * g_T[rt];
  Have(b2w(bytes));
@@ -5674,7 +5681,7 @@ g_vm(g_vm_cbin, int op) {
  for (uintptr_t k = 0; k < R; k++) {
   uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
-  r->shape[R - 1 - k] = da > db ? da : db; }
+  r->shape[R - 1 - k] = bdim(da, db); }
  cbin_fill(r, a, b, op, cmp);
  return *++Sp = word(r), Ip++, Continue(); }
 
@@ -5782,7 +5789,7 @@ g_vm(g_vm_cplx) {
    uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
    uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
    if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
-   n *= da > db ? da : db; }
+   n *= bdim(da, db); }
   uintptr_t bytes = sizeof(struct g_tuple) + R * sizeof(word) + n * g_T[g_C];
   Have(b2w(bytes));
   a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);     // re-read post-Have
@@ -5791,7 +5798,7 @@ g_vm(g_vm_cplx) {
   for (uintptr_t k = 0; k < R; k++) {
    uintptr_t da = (aarr && k < ra) ? tuple(a)->shape[ra - 1 - k] : 1;
    uintptr_t db = (barr && k < rb) ? tuple(b)->shape[rb - 1 - k] : 1;
-   r->shape[R - 1 - k] = da > db ? da : db; }
+   r->shape[R - 1 - k] = bdim(da, db); }
   cplx_build_fill(r, a, b);
   return *++Sp = word(r), Ip++, Continue(); }
  if (!isnum(a) || !isnum(b)) return *++Sp = nil, Ip++, Continue();

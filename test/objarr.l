@@ -113,7 +113,7 @@
  (= o   (atype oa-bn))
  ; numeric shape -> rank-1 vector of length ($ n); a non-positive shape is empty
  (= 1 (arank (array 4 1 2 3 4)))
- (= 0 (alen (array -3))) (= "@0" (show (array -3)))
+ (= 0 (alen (array -3))) (= "(array '(0))" (show (array -3)))
  ; shape list -> rank-N
  (= 2 (arank oa-m))   (= 4 (peep oa-m (L 1 1) 0))
  ; elements stored verbatim, in order
@@ -121,8 +121,9 @@
  (= (100 2) (peep oa-bn 0 0))                  ; full bignum, not truncated to z
  ; currying: a partial collector is a function; completing it builds the array
  (= "@('a 'b)" (show ((array 2) 'a 'b)))
- ; (array 0) -> empty rank-1 array, no elements to collect
- (= "@0" (show (array 0)))
+ ; (array 0) -> empty rank-1 array, no elements to collect; the empty
+ ; prints the ctor surface form (@ has no empty spelling)
+ (= "(array '(0))" (show (array 0)))
  ; round-trips: numeric array result prints as the terse @(…) sugar
  (= "@(1 2 3)" (show (array 3 1 2 3)))
  ; saturating shape coercion: a float / complex / vector dimension -> ($ d)
