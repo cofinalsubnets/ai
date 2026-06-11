@@ -231,7 +231,7 @@
    (edline hu hd)
      (: pr ps1
         _ (puts pr)
-        pl (sat pr)
+        pl (tally pr)
         (loop pra u l r d hu hd cur)
           (: _ (edrender pl pra u l r d)
              c (edev 0)
