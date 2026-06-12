@@ -3127,12 +3127,54 @@ static struct g *gz_parse(struct g *g, bool multi) {
     if (g_ok(g)) g->sp[1] = B(g->sp[1]);
     break;
    case '"': g = gzread1str(g); break;
-   default:                                            // operator run, else a symbol/number token
-    g = c != '-' && c != '+' && !op_break(c)
-      ? gzread1op(g, c, &pending)                      // sigil: a plain symbol, factored by opfix later
-      : gzread1sym(g, c);                              // name/number ('-'/'+' lead numbers and -> etc.)
+   default: {                                          // operator run, else a symbol/number token
+    bool opp = c != '-' && c != '+' && !op_break(c);
+    if (!opp && (c == '-' || c == '+')) {              // +/- lead numbers and names (kebab), EXCEPT
+     if (!g_ok(g = zgetc(g))) return g;                // glued to a constructor datum -- +'(..),
+     int cpm = g->b;                                   // -(f x), +@(..), +~(..), +"s", +#(..) --
+     if (cpm != EOF && !g_ok(g = zungetc(g, cpm))) return g;  // where they are monadic runs (net, neg)
+     opp = cpm == '(' || cpm == '\'' || cpm == '"' ||
+           cpm == '@' || cpm == '~' || cpm == '#'; }
+    if (opp) {
+     int lead = c;                                     // the run's first char: '\' never fuses (form space)
+     g = gzread1op(g, c, &pending);                    // sigil: a plain symbol, factored by opfix later
+     if (!g_ok(g)) return g;
+     if (lead == '\\') break;
+     // the VALENCE LAW, reader half: a run GLUED to a following datum is
+     // monadic -- the run itself becomes a wrap under a `mono` wrap, so the
+     // next datum d delivers as (mono (run d)); opfix factors the run
+     // against book['monadics] (glued is monadic, spaced is dyadic). a shed
+     // '-' (pending) means a number follows: glued by definition. the
+     // emission is a plain list, so data round-trips through show.
+     int c3 = EOF;
+     if (!pending) {
+      if (!g_ok(g = zgetc(g))) return g;
+      c3 = g->b;
+      if (c3 != EOF && !g_ok(g = zungetc(g, c3))) return g; }
+     // HEAD POSITION NEVER FUSES: a run right after an open delimiter is
+     // the form's operator -- the section/escape law, and what keeps
+     // minified source ((:(co ..) like (: (co ..)) legal. head = the top
+     // frame's head is still nil; a pending wrap (quote etc) is a symbol on
+     // the ctx, not a frame, and does not suppress fusion.
+     word rctx = g->sp[1];
+     bool headp = twop(rctx) && twop(A(rctx)) && nilp(A(A(rctx)));
+     if (!headp &&
+         (pending || !(c3 == ' ' || c3 == '\n' || c3 == '\t' || c3 == '\r' ||
+                       c3 == '\f' || c3 == ';' || c3 == ')' || c3 == ']' ||
+                       c3 == '}' || c3 == 0 || c3 == EOF))) {
+      g = intern(g_strof(g, "mono"));                  // [mono run ctx]
+      if (!g_ok(g)) return g;
+      word w = g->sp[1]; g->sp[1] = g->sp[2], g->sp[2] = w;  // [mono ctx run]
+      g = gxl(g);                                      // [(mono . ctx) run]
+      if (!g_ok(g)) return g;
+      w = g->sp[0], g->sp[0] = g->sp[1], g->sp[1] = w; // [run (mono . ctx)]
+      g = gxl(g);                                      // ctx' = (run mono . ctx)
+      if (!g_ok(g)) return g;
+      continue; }                                      // the wraps take the next datum
+     break; }
+    g = gzread1sym(g, c);                              // name/number ('-'/'+' lead numbers, -> and \names etc.)
     if (!g_ok(g)) return g;
-    break; }
+    break; } }
   if (!g_ok(g)) return g;
   // deliver the datum at sp[0] into the frame stack at sp[1]
   for (bool done = false; g_ok(g) && !done; ) {

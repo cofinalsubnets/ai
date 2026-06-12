@@ -151,11 +151,13 @@
 ; overflow grows fixnum -> wide box -> bignum; a non-number gives nil. `/` is *true* division --
 ; an inexact integer quotient promotes to float ((/ 1 2) is 0.5) but an exact one stays integer
 ; ((/ 4 2) is 2); /0 gives IEEE inf/nan. `//` truncates toward zero (the partner of `%`).
-; bitwise << >> & | ^ on integers (complement is (^ x -1)). there are NO monadic puns:
-; the monadic readings are SECTIONS, by the curry law -- (- 0) is neg, (/ 1) is reciprocal,
-; generic like their operators -- and the numerals carry the power family ((-1 x) = 1/x,
-; ((/ 1 2) x) = sqrt; see numeric functions). the higher-order canon stays words by law:
-; (foldl (+) 0) is APL's +/ , and $ is +/ of the nets.
+; bitwise << >> & | ^ on integers (complement is (^ x -1)). the MONADIC readings ride
+; the VALENCE LAW (see reader operators): glued is monadic -- -(f x) is neg, /4 is
+; reciprocal, |x abs, %x frac -- while the sections ((- 0), (/ 1)) remain their
+; word-level spellings, generic like their operators, and the numerals carry the
+; power family ((-1 x) = 1/x, ((/ 1 2) x) = sqrt; see numeric functions). the two
+; monoid folds are notation now -- +l is the net, *l the product -- and general
+; higher-order stays words: (foldl f z l), $ = the net's charm.
 (assert
  (3 = 1 + 2) (2.5 = 5 / 2) (2 = (// 5 2)) (0.5 = 1 / 2) (1 = 5 % 2) (3.5 = 1 + 2.5)
  (2 = 4 / 2) (fixp (4 / 2)) (-2 = (// -5 2))
@@ -399,6 +401,17 @@
 ; = < <= > >= | &; ? at three -- the cond form infix, (t ? a b); aliases: <- pin and
 ; -> peep, collection-first -- (t <- k v) pins (giving back t, so it chains), (t -> k d)
 ; peeps. (1 + 2) factors to ((+ 1 2)) and evaluates via (f) == f.
+; the VALENCE LAW: every operator is two operators -- GLUED IS MONADIC, SPACED IS
+; DYADIC. a run glued to a following datum reads as (mono (run datum)) (a plain list,
+; so data round-trips); opfix factors the run greedily against `monadics` (then the
+; operators table at one, so live pins keep the dynamic lane), all factors monadic --
+; <>x is (cap (cbp x)). HEAD POSITION NEVER FUSES: a run right after an open delimiter
+; is the form's operator (the section/escape law, and what keeps minified source
+; legal); + and - lead numbers and kebab names, fusing only to ( ' " @ ~ # -- so -3 is
+; a number and -x a name, while -(f x) is neg. the monadic words: < cap, > cbp
+; (<< >> <> >< the compounds, riding the shifts' free slots), + net (the content
+; measure -- the true sum, + turned inward), * prod, | abs, - neg, / recip, % frac,
+; ? bit (the Iverson bracket); $ ! . ride the same lane. \ never fuses (form space).
 (assert
  ('(1 (\ x) 3) = `(1 'x 3)) ('(1 2 3 4) = (: xs '(2 3) `(1 ,@xs 4)))
  (532 = $"hello") (5 = (tally "hello")) (42 = $42) (symp (gsym x)) (1 = !0) (0 = !5) !!5
@@ -408,6 +421,12 @@
  (1 = (3 != 4)) (0 = (3 != 3))                   ; the factorization law: != = ! of =
  (197 = ($"ab" + 2))                             ; one binds tightest: (+ ($ "ab") 2)
  (3 = ((1 +) 2))                                 ; the curry law: (1 +) folds to (+ 1)
+ (1 = <'(1 2 3)) (2 = <>'(1 2 3)) ('(3) = >>'(1 2 3))   ; glued runs are MONADIC
+ (6 = +'(1 2 3)) (-1 = +'(-2 1)) (24 = *'(1 2 3 4))     ; +/ and */ -- the net, unclamped
+ (5 = |-5) (-3 = -(1 + 2)) (0.25 = /4) (1 = ?7) (0 = ?"")
+ (3 = (+ 1 2)) (1 = ((< 5) 9))                   ; head position never fuses: call and section
+ ('(mono (< x)) = (cabp (read (sip '(40 102 32 60 120 41)) 99)))  ; the emission, data-lane
+ ('cap = (monadics '<)) ('net = (monadics '+))
  (20 = (#(1 10 2 20) -> 2 0)) (7 = ((#() <- 'k 7) 'k)) (9 = (#() -> 'k 9))
  (12 = (foldl (+) 0 '(3 4 5)))
  (: t operators

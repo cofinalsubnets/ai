@@ -119,6 +119,23 @@
 (: (map f l) (? (twop l) (cons (f (cap l)) (map f (cbp l))))
    (foldl f z l) (? (twop l) (foldl f (f z (cap l)) (cbp l)) z)
    (foldr f z l) (? (twop l) (f (cap l) (foldr f z (cbp l))) z))
+; the monadic words behind the glued sigils (the valence law; see opfix and
+; book['monadics] below). net is the CONTENT MEASURE as a value -- + turned
+; inward: a number is its own net (phase intact, exact), an array sums its
+; cells, a list the nets of its spine, and everything else is non-negative
+; so its net IS its sat. prod is the product twin; neg/recip/frac the
+; dyadics turned inward; bit the truth bit (the Iverson bracket, !!).
+(: (net x) (? (arrp x) (asum x)
+              (nump x) x
+              (twop x) (foldl (\ a e (+ a (net e))) 0 x)
+              (sat x))
+   (prod x) (? (arrp x) (aprod x)
+               (twop x) (foldl (\ a e (* a (prod e))) 1 x)
+               x)
+   neg (- 0)
+   recip (/ 1)
+   (frac x) (% x 1)
+   (bit x) (nilp (nilp x)))
 (: (foldl1 f l) (foldl f (cap l) (cbp l))
    (foldr1 f l) (foldr f (last l) (init l))
    ap (foldl id)
@@ -199,6 +216,21 @@
    _ (pin t '| 2) _ (pin t '& 2) _ (pin t '? 3)
    _ (pin t '<- (cons 'pin 3)) _ (pin t '-> (cons 'peep 3))
    t))
+; the VALENCE LAW's table: a glued operator run is MONADIC (the reader emits
+; (mono (run datum))); spaced, the run keeps its dyadic/infix life. each entry
+; maps a run-piece to its monadic word; a run factors greedily (longest
+; prefix), all factors monadic, so <>x is (cap (cbp x)) and !!x double-
+; negates. << and >> ride the shift tokens' free monadic slots. an
+; unfactorable run falls back to the plain application.
+(: monadics (: t (tablet 0)
+   _ (pin t '< 'cap)   _ (pin t '> 'cbp)
+   _ (pin t '<< 'caap) _ (pin t '>> 'cbbp)
+   _ (pin t '+ 'net)   _ (pin t '* 'prod)
+   _ (pin t '| 'abs)   _ (pin t '- 'neg)
+   _ (pin t '/ 'recip) _ (pin t '% 'frac)
+   _ (pin t '? 'bit)
+   _ (pin t '$ 'sat)   _ (pin t '! 'nilp) _ (pin t '. 'dot)
+   t))
 ; the FACTORIZATION LAW: greedy longest-prefix match against the table, no
 ; backtracking; every factor but the last must be arity one; the last factor
 ; takes the positional valence. a token that doesn't factor is a plain
@@ -242,6 +274,31 @@
                             (= (cbp e) 1) (: r (go (+ i k))  ; non-last factors must be arity one
                                              (? (twop r) (cons e r) 0))
                             0))
+                    0))
+              0))
+        0))
+   ; longest prefix of nm[i..n) that has a monadic meaning -> (len . word),
+   ; or 0. monadics first, then an operators entry at arity ONE (the legacy
+   ; prefix lane -- $ ! . and live pins alike), so the table stays dynamic.
+   (mono-long nm i n)
+    ((: (go k) (? (< k 1) 0
+                  (: s (intern (slice nm i (+ i k)))
+                     e (monadics s)
+                     (? (symp e) (cons k e)
+                        (: o (op-ent s)
+                           (? (? (twop o) (= 1 (cbp o)) 0) (cons k (cap o))
+                              (go (- k 1))))))))
+     (- n i))
+   ; factor a glued run against the monadic table -> the word list
+   ; (outermost first), or 0; every factor is monadic by construction
+   (monofactor s)
+    (: nm (string s) n (tally nm)
+       ((: (go i)
+           (? (< i n)
+              (: m (mono-long nm i n)
+                 (? (twop m)
+                    (? (= (+ i (cap m)) n) (cons (cbp m) 0)
+                       (: r (go (+ i (cap m))) (? (twop r) (cons (cbp m) r) 0)))
                     0))
               0))
         0)))
@@ -343,6 +400,13 @@
        (: h (cap x)
           (? (&& (= h '\) (atomp (cbbp x))) x
              (= h 'qq) (cons 'qq (cons (op-qq (cabp x) 1) 0))
+             ; the reader's glued-run emission (mono (run d)): factor the run
+             ; monadically around the (recursively opfixed) datum; an
+             ; unfactorable run is the plain application (run d)
+             (&& (= h 'mono) (twop (cbp x)) (twop (cabp x)))
+              (: p (cabp x) r (cap p) d (opfix (cabp p))
+                 fs (? (symp r) (monofactor r) 0)
+                 (? (twop fs) (op-fin fs d) (cons r (cons d 0))))
              (op-w x 0 0)))))
 ; the global RNG stream lives on book ('rng-state) and advances by the pure
 ; rand-next/randf-next -- C holds no state and never draws. rng-get lazily

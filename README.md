@@ -51,11 +51,17 @@ and the infix operators
 - `%` mod
 - `<-` pin, `->` peep (the collection accessors: `(t <- k v)`, `(t -> k d)`)
 
-there are no monadic puns: the monadic readings are sections, by currying --
-`(- 0)` is neg, `(/ 1)` is reciprocal -- and the numerals carry the whole
-power family (`-1 x = 1 / x`, `(1 / 2) x = sqrt x`, `n x = x ** n`). words
-cover the rest (`abs int gcd // << >> ^ sin cos log pow`), and the
-higher-order canon stays words: `(foldl (+) 0)` is `+/`.
+and the valence law: every operator is two operators -- GLUED IS MONADIC,
+SPACED IS DYADIC. head position never fuses, so calls, sections and minified
+source read as ever (`(+ 1 2)`, `(1 +)`).
+- `<x >x` cap and cbp; `<>x ><x <<x >>x` the compounds, by factorization
+- `+l` the net -- the true sum, APL's `+/` -- and `*l` the product
+- `|x` abs, `-x` neg (of `(...)`-data; `-3` is a number, `-x` a name),
+  `/x` reciprocal, `%x` frac, `?x` the iverson bracket
+- `$x !x .x` as ever: sat, not, print
+the numerals still carry the power family (`-1 x = 1 / x`, `(1 / 2) x =
+sqrt x`, `n x = x ** n`); words cover the rest (`abs int gcd // << >> ^
+sin cos log pow`), and general folds stay words: `(foldl f z l)`.
 
 pure lisp is the lassoc subset: `?` is still the cond form at the head of a
 list, and bare punct symbols escape in parens -- `(+)` is `+` as a value --

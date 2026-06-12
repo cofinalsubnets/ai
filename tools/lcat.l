@@ -27,10 +27,25 @@
                 (= c 34) 1 (= c 59) 1 (= c 39) 1 (= c 96) 1 (= c 44) 1
                 (= c 64) 1 (= c 126) 1 (= c 35) 1
                 0)
+   ; an operator-run byte: punct that is neither a hard boundary nor \ nor a
+   ; name char. under the VALENCE LAW a run glued to a datum is monadic, and
+   ; the probe below tests in isolation -- head position, where fusion is
+   ; suppressed -- so a space between a run's end and a datum start is kept
+   ; conservatively: it is semantic mid-list.
+   (opb? c) (? (hardb c) 0 (= c 92) 0
+               (&& (<= 48 c) (<= c 57)) 0
+               (&& (<= 65 c) (<= c 90)) 0
+               (&& (<= 97 c) (<= c 122)) 0
+               (= c 95) 0
+               1)
+   (dstart? b) (? (= b 41) 0 (= b 93) 0 (= b 125) 0 (= b 59) 0
+                  (= b 32) 0 (= b 10) 0 (= b 9) 0
+                  1)
    ; ctx = the bytes since the last hard boundary, reversed. is the space
    ; between them and byte b redundant? (same datum count joined vs spaced)
-   (redundant? ctx b) (= (nforms (string (rev (cons b ctx))))
-                         (nforms (string (rev (cons b (cons 32 ctx))))))
+   (redundant? ctx b) (? (&& (twop ctx) (opb? (cap ctx)) (dstart? b)) 0
+                         (= (nforms (string (rev (cons b ctx))))
+                            (nforms (string (rev (cons b (cons 32 ctx)))))))
    ; emit one byte to out, C-escaped for the string literal.
    (eb c) (? (= c 10) (fputs out "\\n")
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))

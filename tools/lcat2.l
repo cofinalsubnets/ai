@@ -126,7 +126,23 @@
 (: (s2cl s) ((: (g i) (? (< i (tally s)) (cons (peep s i 0) (g (+ 1 i))))) 0)
    (nforms s) ((: (g p e n) (: r (read p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
                (sip (s2cl s)) (nom 0) 0)
-   (redundant? a b) (= (nforms (string (L a b))) (nforms (string (L a 32 b))))
+   ; the valence-law guard (cf. lcat.l): a space between an operator byte and
+   ; a datum start is semantic mid-list (glued = monadic); the probe below
+   ; tests at head position where fusion is suppressed, so keep it.
+   (opb? c) (? (= c 32) 0 (= c 10) 0 (= c 9) 0 (= c 92) 0
+               (= c 40) 0 (= c 41) 0 (= c 91) 0 (= c 93) 0 (= c 123) 0 (= c 125) 0
+               (= c 34) 0 (= c 59) 0 (= c 39) 0 (= c 96) 0 (= c 44) 0
+               (= c 64) 0 (= c 126) 0 (= c 35) 0
+               (&& (<= 48 c) (<= c 57)) 0
+               (&& (<= 65 c) (<= c 90)) 0
+               (&& (<= 97 c) (<= c 122)) 0
+               (= c 95) 0
+               1)
+   (dstart? b) (? (= b 41) 0 (= b 93) 0 (= b 125) 0 (= b 59) 0
+                  (= b 32) 0 (= b 10) 0 (= b 9) 0
+                  1)
+   (redundant? a b) (? (&& (opb? a) (dstart? b)) 0
+                       (= (nforms (string (L a b))) (nforms (string (L a 32 b)))))
    (eb c) (? (= c 10) (fputs out "\\n")
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
               (fputc out c)))
