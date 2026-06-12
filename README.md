@@ -151,7 +151,7 @@ per the law.
   (x86_64/aarch64 via limine), and wasm.
 - status rides the two pointer tag bits: scare (something is wrong) and more
   (the reader wants more); eof = more|scare. a global `help` function receives
-  every throw as `(help s a b)`.
+  every raise as `(help s a b)`.
 - `=` is exact, so e^(i*pi) honestly misses -1 by ~1e-16 -- but the principal
   log is exact (`(log -1) = i * pi`, since atan2(0,-1) is pi by IEEE fiat),
   and sqrt factors its angle through sinpi/cospi, so `(1 / 2) -1 = i` on the

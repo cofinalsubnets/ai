@@ -20,7 +20,7 @@
 ; conjugate a complex to ~(re -im), ~0 -> ~(0 0). One formula -- plex of the real
 ; part and the negated imaginary part -- since (re r)=r, (im r)=0 for a real, and
 ; (re z)/(im z) for a complex. (The 2-operand ~(a b) splices into (plex a b).)
-(: (clift x) (plex (re x) (- 0 (im x))))
+(: (wave x) (plex (re x) (- 0 (im x))))
 ; a NOM is the literal pair of a name string and a MINT (the nameless fresh
 ; point the mint nif adjoins; identity its only property, $mint = 0). the old
 ; named-uninterned atom species is gone -- McCarthy's symbol, restored as the
@@ -73,8 +73,8 @@
      _ (nfa th 0 n)
      _ (poke (+ 3 (* 3 n)) lvm_ret th) _ (poke (+ 4 (* 3 n)) 1 th)
    (seek 1 th))
-   (nump x) (| (fixp x) (| (tupp x) (bigp x)))   ; whole tower: fixnum / float box / wide-int box / complex / array / bignum
-   (intp n) (| (fixp n) (| (boxp n) (bigp n)))       ; integer-valued numeral (exact power exponent / composition count)
+   (nump x) (| (fixp x) (| (packp x) (bigp x)))   ; whole tower: fixnum / float / wide int / complex / array / bignum
+   (intp n) (| (fixp n) (| (widep n) (bigp n)))       ; integer-valued numeral (exact power exponent / composition count)
    ; b ** k by exact squaring (O(log k)); k>=0. The lone home of integer power --
    ; (k b) numeral application routes here, so `**` is unneeded.
    ; the count ceiling: a PUBLIC tunable box. a numeral compose count or exact-power
@@ -108,14 +108,14 @@
 ; text (function) combinators for + and *, installed like num-ap. a text operand
 ; takes precedence over every other type, so +/* of a function build a function. these
 ; are the README's Church numeral arithmetic, so +/* on numerals agree with the numbers:
-;   (+ f g) = Church add     ((+ f g) a x) = (f a (g a x))   -- README `add`
-;   (* f g) = composition    ((* f g) x)   = (f (g x))       -- README `mul`
-; the C aps (lvm_addh / lvm_mulh) build the 2-arg partial (scomb f g)
-; / (bcomb f g); scomb's extra a-slot (threaded into both operands) is what makes + agree
+;   (+ f g) = Church add     ((+ f g) a x) = (f a (g a x))   -- the `add` below
+;   (* f g) = composition    ((* f g) x)   = (f (g x))       -- the `mul` below
+; the C aps (lvm_addh / lvm_mulh) build the 2-arg partial (add f g)
+; / (mul f g); add's extra a-slot (threaded into both operands) is what makes + agree
 ; with addition rather than the S combinator's (f x (g x)).
-(: (scomb f g a x) (f a (g a x))
-   (bcomb f g x) (f (g x))
-   _ (pin book 'scomb scomb) _ (pin book 'bcomb bcomb))
+(: (add f g a x) (f a (g a x))
+   (mul f g x) (f (g x))
+   _ (pin book 'add add) _ (pin book 'mul mul))
 (: (map f l) (? (twop l) (cons (f (cap l)) (map f (cbp l))))
    (foldl f z l) (? (twop l) (foldl f (f z (cap l)) (cbp l)) z)
    (foldr f z l) (? (twop l) (f (cap l) (foldr f z (cbp l))) z))
@@ -464,7 +464,7 @@
 ; non-positive -> 0, a float ceils, a complex its modulus, a vector its net sum). a list
 ; shape is coerced per-dim; a lone numeric is a rank-1 length (so (array 2.5 …)
 ; means rank-1 length 3, (array ~(3 4) …) length 5).
-(: (a-rank x) (? (flop x) 1 (| (fixp x) (boxp x)) 0 (comp x) 2 3)
+(: (a-rank x) (? (flop x) 1 (| (fixp x) (widep x)) 0 (comp x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
    (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) z (= k 1) r (= k 2) c o))
    (a-dim d) (? (twop d) (tally d) (sat d))
@@ -484,10 +484,6 @@
                  (list 'pin (hashtx (cbbp a)) (cap a) (cabp a))))
 (:: 'hash (\ a (hashtx a)))
 
-; (gsym x) mints a fresh point -- a nameless atom, still symp, so it binds as
-; a hygienic variable; the operand is decorative (kept for the source's eye).
-; a NAMED fresh identity is (nom 'x): the pair of the name and a mint.
-(:: 'gsym (\ a (list 'mint (list '\ (cap a)))))
 
 ; (array shape elem…): the ergonomic N-D array constructor. `shape` is either a
 ; dimension *list* (rank-N) or a single number n (a rank-1 vector of length |n|),

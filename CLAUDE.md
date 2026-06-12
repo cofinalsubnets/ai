@@ -42,7 +42,7 @@
 ; compile time. the gritty details sit at the bottom.
 
 ; --- the type lattice --- two axes. the *tier* spine, low to high:
-;   N the charms (naturals, the range of $)  <  Z integers (fixnum -> wide box -> bignum)
+;   N the charms (naturals, the range of $)  <  Z integers (fixnum -> wide int -> bignum)
 ;     <  R reals (float)  <  C complex  <  O objects (string < symbol < product < map < top)
 ; numbers nest as usual (N in Z in R in C). the *rank* axis is scalar (0) vs array (>= 1, one
 ; per tier: arrZ/R/C/O). the total order < flattens this lattice into BANDS: all numbers are
@@ -127,10 +127,10 @@
 
 ; --- types & predicates --- a fixnum is a tagged word; everything else is a heap object whose
 ; first word dispatches. the storage predicates:
-;   fixp bigp boxp  -- the integer reps (fixnum, bignum, wide-int box)
-;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `tupp`
+;   fixp bigp widep  -- the integer reps (fixnum, bignum, wide int)
+;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `packp`
 ;   strp symp twop mapp  -- string, symbol, product, map
-; derived: `nump` (any number: fix/box/big/float/complex/array), `intp` (any integer), `atomp`
+; derived: `nump` (any number: fix/wide/big/float/complex/array), `intp` (any integer), `atomp`
 ; (anything but a product). `i` is ~(0 1). `lamp` is PRESENCE, not a band: every heap
 ; value answers it (anything wired to a hot -- lit -- everything but a fixnum), pairs and
 ; strings included, so lamp SPANS the bands. the top band itself needs no predicate:
@@ -140,7 +140,7 @@
 ; truth/task tests, not type tests.
 (assert
  (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp cap) (mapp #(1 2))
- (bigp (100 2)) (boxp (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (tupp 1.5)
+ (bigp (100 2)) (widep (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (packp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
  (hotp (buf 4)) (hotp out) (hotp (sip '(104)))   ; the hot zoo, named
  !(hotp #()) !(hotp cap) !(hotp 5) !(hotp "s")   ; maps/functions/data are not hots
@@ -152,7 +152,7 @@
 
 ; --- arithmetic --- + - * / // % (infix, like the rest). fixnum fast path; a float makes it
 ; float; integer
-; overflow grows fixnum -> wide box -> bignum; a non-number gives nil. `/` is *true* division --
+; overflow grows fixnum -> wide int -> bignum; a non-number gives nil. `/` is *true* division --
 ; an inexact integer quotient promotes to float ((/ 1 2) is 0.5) but an exact one stays integer
 ; ((/ 4 2) is 2); /0 gives IEEE infinity/nan, spelled ieee-inf and ieee-nan -- the reader
 ; lexes exactly those names as floats (a float token otherwise leads with a digit; bare
@@ -385,7 +385,7 @@
 ; STRUCTURAL and environment-free: the reader knows tokens, parens, strings, and the value
 ; surface -- ' quote (= one-operand \), ` quasiquote, , unquote, ,@ splice, # hash, @ tup
 ; (array), ~ wave (complex/conjugate: ~(re im) splices to (plex re im), a bare ~x is
-; (clift x)) -- and NO operator tables, so the same reader serves data (read) and code.
+; (wave x)) -- and NO operator tables, so the same reader serves data (read) and code.
 ; the LEXER LAW splits tokens by leading char: a name token (alnum/_) keeps - ? ! etc
 ; inside (kebab law unchanged), while a punctuation-led token is a SIGIL -- a maximal run
 ; of operator chars (value-surface chars and delimiters break the run), read as ONE PLAIN
@@ -424,8 +424,8 @@
 ; ? bit (the Iverson bracket); $ ! . ride the same lane. \ never fuses (form space).
 (assert
  ('(1 (\ x) 3) = `(1 'x 3)) ('(1 2 3 4) = (: xs '(2 3) `(1 ,@xs 4)))
- (532 = $"hello") (5 = (tally "hello")) (42 = $42) (symp (gsym x)) (1 = !0) (0 = !5) !!5
- (i = ~(0 1)) (~(2 3) = (plex 2 3)) ('~x = '(clift x)) (lamp dot)
+ (532 = $"hello") (5 = (tally "hello")) (42 = $42) (1 = !0) (0 = !5) !!5
+ (i = ~(0 1)) (~(2 3) = (plex 2 3)) ('~x = '(wave x)) (lamp dot)
  ('((dot x)) = (opfix '(. x))) ('! = (cabp '(a ! b)))   ; opfix factors; quotes stay data
  (3 = 1 + 2) (7 = 1 + 2 * 3) ('b = 0 ? 'a 'b) ('big = (1 < 2) ? 'big 'small)
  (1 = (3 != 4)) (0 = (3 != 3))                   ; the factorization law: != = ! of =
@@ -457,7 +457,7 @@
 ; spawn/wait/yield/sleep/done?/hush/key?; the RNG is xoshiro256++: C ships only rng-seed and
 ; the pure rand-next/randf-next over explicit state -- the global rand/randf stream is
 ; prelude lisp over hidden rng state. a global `help` function receives every
-; throw as (help s a b) -- s = the status word, two bits: scare (1, something wrong) and
+; raise as (help s a b) -- s = the status word, two bits: scare (1, something wrong) and
 ; more (2, read control flow); more alone = incomplete, eof = more|scare. a/b = the
 ; condition data; the result is delivered per the bits (the more bit: to the reader's
 ; resume; a bare scare: observed). scare?/more?/eof? read s. (scare a b) raises
@@ -501,7 +501,7 @@
 ; --- bootstrapping --- the C core is minimal; the key semantics are l closures installed
 ; from the prelude and shared by both compilers:
 ;   numap -- fixnum/number application (x**n, or compose ($ n) times), an n-fold text.
-;   scomb/bcomb -- `+` and `*` of functions are church add and compose, so numerals agree.
+;   add/mul -- `+` and `*` of functions are church add and compose, so numerals agree.
 ;   opfix -- the operator factor pass (see reader operators above): sigil surface -> core
 ;     source, run FIRST, one source of truth shared with the C bootstrap compiler.
 ;   boxfix -- the letrec* "capture by location" rewrite (one scope): a forward-referenced
@@ -524,7 +524,7 @@
 ; and finally the `book` itself. compiled references were folded, so only the names die.
 ; names the printer, the reader, or an expander EMITS (uq ltuple cons pin
 ; tablet mono ..) stay, as do the
-; C-resolved hooks (num-ap scomb bcomb help) and the repl's test-driven editor surface.
+; C-resolved hooks (num-ap add mul help) and the repl's test-driven editor surface.
 (assert (lamp ev) (? born (fixp born) 1)
         (? born !macros 1) (? born !poke 1)     ; post-birth the names are gone
         (? born !boxfix 1) (? born !lvm_ret 1) ; (pre-egg they still exist,

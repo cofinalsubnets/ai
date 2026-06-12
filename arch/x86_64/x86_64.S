@@ -183,7 +183,7 @@ exc_common:
   iretq                               // (fatal handler never returns)
 
 // --- Timer (IRQ0) --------------------------------------------------
-// Minimal: bump the tick counter, EOI the master PIC. If we ever do
+// Minimal: bump the tick counter, EOI the primary PIC. If we ever do
 // more we'll need push15/pop15 to preserve registers.
 .balign 8
 timer_isr:
@@ -211,7 +211,7 @@ keyboard_isr:
 uart_isr:
   push15
   call k_uart
-  mov al, 0x20                        // EOI master PIC (IRQ4)
+  mov al, 0x20                        // EOI primary PIC (IRQ4)
   out 0x20, al
   pop15
   iretq
@@ -266,14 +266,14 @@ archinit:
   out 0x20, al
   out 0xa0, al
 
-  // master ICW2/ICW3: vector base 0x20, slave on IRQ2
+  // primary ICW2/ICW3: vector base 0x20, secondary on IRQ2
   mov dl, 0x21
   mov al, 0x20
   out dx, al
   mov al, 4
   out dx, al
 
-  // slave ICW2/ICW3: vector base 0x28, cascade id 2
+  // secondary ICW2/ICW3: vector base 0x28, cascade id 2
   mov dl, 0xa1
   mov al, 0x28
   out dx, al

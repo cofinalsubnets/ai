@@ -72,7 +72,7 @@ struct g_tuple {
  uintptr_t type, rank, shape[]; };
 
 // Status rides the 2 pointer tag bits, read as two flags: bit 0 is the SCARE
-// bit (something is wrong -- the thrower puts the relevant data on struct g for
+// bit (something is wrong -- the raise site puts the relevant data on struct g for
 // the help function to read; the bare scare is oom, which has no room to say
 // more), bit 1 is the MORE bit (read control flow: more input is wanted).
 // more alone = incomplete; eof = more|scare -- the end is the scary case of
@@ -140,7 +140,7 @@ struct g {
     g_word fd;
     g_word ungetc_buf;            // pushed-back byte; putfix(EOF) = empty
     g_word eof_seen; } *io; };
-  // The C->lisp hooks (num-ap, scomb, bcomb, help, operators) live on book
+  // The C->lisp hooks (num-ap, add, mul, help, operators) live on book
   // (GC-traced, egg-baked): no slots, no key caches -- C materializes the
   // keys by name per use (sym_probe walks the intern map allocation-free;
   // hot numeric code is compiled by the lisp compiler, which holds the
@@ -310,8 +310,8 @@ static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b)
  return w->ap = lvm_two, w->a = a, w->b = b, w; }
 static g_inline struct g *encode(struct g*g, enum g_status s) { return
   (struct g*) ((uintptr_t) g | s); }
-// Throw: to the global `help` function when installed, else throw_c (love.c).
-// ghelp re-throws an already-tagged g's own status.
+// Raise: to the global `help` function when installed, else raise_c (love.c).
+// ghelp re-raises an already-tagged g's own status.
 struct g *ghelp2(struct g*, enum g_status), *ghelp(struct g*);
 static g_inline struct g *g_have(struct g *g, uintptr_t n) {
  return !g_ok(g) || avail(g) >= n ? g : g_please(g, n); }

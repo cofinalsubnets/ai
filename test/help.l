@@ -22,7 +22,7 @@
 (: q (sip '(40)) (assert (= q (read q 99))))      ; more through the lisp help
 (assert (= 1 (peep help-log 3 0)) (= 1 (peep help-log 2 0)))
 
-; (scare a b) is the deliberate throw: the scare bit set unconditionally, the
+; (scare a b) is the deliberate raise: the scare bit set unconditionally, the
 ; ap hears (help 1 a b). unlike a C scare (oom, terminal), the raise point is
 ; a clean boundary, so the ap's result comes back as (scare a b)'s value.
 (assert (= 0 (scare 'deliberate 'data)))            ; the counting ap returns 0 on a scare

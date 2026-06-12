@@ -17,7 +17,7 @@
 (: mx-fix 5                              ; KFix
    mx-real 2.5                            ; KTuple, float box
    mx-cpx ~(2 3)                        ; KTuple, complex scalar (Cp)
-   mx-box (<< 1 62)                      ; KTuple, wide-int box (boxp)
+   mx-box (<< 1 62)                      ; KTuple, wide int (widep)
    mx-big (100 2)                     ; KBig
    mx-az  @(10 20)                       ; KArrZ (int array)
    mx-ar  @(1.5 2.5)                     ; KArrR (float array)
@@ -87,13 +87,13 @@
 ; addn lane (numeric tower & arrays): the matrix routes here for any arith x
 ; arith pair; the lane then refines by representation. Each rep pairing:
 (assert
- ; --- scalar tower: fix / float / wide-int box / bignum / complex, every mix ---
+ ; --- scalar tower: fix / float / wide int / bignum / complex, every mix ---
  (= 7 (+ 5 2))                                ; fix + fix (overflow-free fast path)
  (= 7.5 (+ 5 2.5))   (= 7.5 (+ 2.5 5))        ; fix + float (both orders)
  (= 5.0 (+ 2.5 2.5))                          ; float + float
  (= (63 2) (+ (<< 1 62) (<< 1 62)))        ; box + box -> 2^63 overflows z -> bignum
  (bigp (+ (<< 1 62) (<< 1 62)))
- (boxp (+ (<< 1 62) 1))                        ; box + fix stays a box (still > fixnum range)
+ (widep (+ (<< 1 62) 1))                        ; box + fix stays a box (still > fixnum range)
  (= (+ (<< 1 62) 1) (+ 1 (<< 1 62)))          ; ...and commutes
  (= (+ 1 (100 2)) (+ (100 2) 1))        ; big + fix == fix + big (commutes)
  (= (* 2 (100 2)) (+ (100 2) (100 2))) ; big + big

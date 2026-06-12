@@ -22,9 +22,9 @@ syn keyword LoveFunc map foldl foldr foldl1 foldr1 filter init last each all any
 syn keyword LoveFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge msort jot
 syn keyword LoveFunc + - * / % < <= = >= > <- -> idp inc dec abs gcd modpow int
 syn keyword LoveFunc ~ << >> & \| ^
-syn keyword LoveFunc sin cos log pow plex re im conj arg clift
+syn keyword LoveFunc sin cos log pow plex re im conj arg wave
 syn keyword LoveFunc nump intp powg num-ap numfn randint net prod neg recip frac bit
-syn keyword LoveFunc twop strp symp mapp lamp hotp tupp bigp boxp arrp comp flop fixp nilp atomp
+syn keyword LoveFunc twop strp symp mapp lamp hotp packp bigp widep arrp comp flop fixp nilp atomp
 syn keyword LoveFunc arr array arank alen ashape atype asum aprod amax amin aall
 syn keyword LoveFunc a-rank a-shape a-type a-dim
 syn keyword LoveFunc string slice intern nom mint tally slurp show sip pad page
@@ -39,7 +39,7 @@ syn keyword LoveFunc open close run getenv exit
 syn keyword LoveFunc clock gauge book macros assert version-number argv cmdline
 
 " Macros (head-symbol rewrites installed with ::)
-syn keyword LoveMacro :: L list do begin progn let if cond quote qq gsym tuple hash
+syn keyword LoveMacro :: L list do begin progn let if cond quote qq tuple hash
 syn keyword LoveMacro && \|\| :- ?- >>= <=<
 
 " Constants: booleans (1/0), the tier-spine array element-kind codes, e pi i

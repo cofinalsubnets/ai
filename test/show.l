@@ -23,8 +23,8 @@
   ; the old $<name> form died with the named-uninterned species: a nom is a
   ; pair now and prints like one.
   (= "(mint 0)" (show (mint 0)))
-  (symp (gsym x))
-  (= "(mint 0)" (show (gsym bar)))
+  (symp (mint 0))
+  (= "(mint 0)" (show (mint 'bar)))
 
   ; quote sugar: a pair (` x) prints as 'x
   (= "'foo"      (show ''foo))

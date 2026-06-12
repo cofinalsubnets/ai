@@ -9,7 +9,7 @@
 ; Usage: l gen_data.l <data.o> [-o data.h]   (writes stdout if no -o)
 ;
 ; Fixnum-only: every field of a real data.o (sizes, aligns, offsets) fits the
-; 62-bit fixnum range, so the wide-int box is never exercised here.
+; 62-bit fixnum range, so the wide int is never exercised here.
 
 (: (die m) (: _ (fputs err "gen_data: ") _ (fputs err m) _ (fputs err "\n") (exit 1)))
 

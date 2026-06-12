@@ -82,7 +82,7 @@
  (= 2 (int (abs (hash 1 10 2 20))))            ; abs of a table is its key count too
  (= (sat (100 2)) (sat (200 2)))          ; any positive bignum saturates to FIX_MAX
  (= 0 (sat (- 0 (100 2)))) (nilp (- 0 (100 2)))  ; negative bignum -> 0, falsy
- (= 0 (sat (- 0 (62 2))))                 ; negative wide-int box -> 0
+ (= 0 (sat (- 0 (62 2))))                 ; negative wide int -> 0
  (= 0 (sat -7)) (nilp -7))                      ; ordinary negative fixnum -> 0, falsy
 
 ; the defining invariant: (nilp x) == (= 0 (pin x)) for every value. empty

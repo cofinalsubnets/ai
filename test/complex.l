@@ -47,7 +47,7 @@
  (nilp (im 7))                             ; im of a real is 0
  (= 5 (conj 5))                            ; conj of a real is itself
 
- ; --- monadic ~ (clift): bare ~x (the `~` sigil not before `(`) lifts a real to
+ ; --- monadic ~ (wave): bare ~x (the `~` sigil not before `(`) lifts a real to
  ;     (r 0) and conjugates a complex; the 2-operand ~(a b) still splices into plex ---
  (= ~(5 0) ~5)   (comp ~5)                 ; ~r lifts a real to (r, 0) -- a true complex
  (= ~(0 0) ~0)   (= ~(-3.5 0) ~-3.5)       ; ~0 -> (0, 0); lift works on a negative real

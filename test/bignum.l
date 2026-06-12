@@ -1,5 +1,5 @@
 ; step 6: arbitrary-precision integers (bignums).
-; - the numeric tower closes: fixnum -> wide-int box -> bignum
+; - the numeric tower closes: fixnum -> wide int -> bignum
 ; - + - * overflow promotes to an exact bignum; / % are truncated division
 ; - canonical demotion: any result that fits a smaller tier shrinks back to it
 ;   (so = / eqv / hash keys stay well defined across tiers)

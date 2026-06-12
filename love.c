@@ -139,7 +139,7 @@ lvm_t lvm_kcall,
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  lvm_arr, lvm_arank, lvm_alen, lvm_ashape, lvm_atype,
  lvm_asum, lvm_aprod, lvm_amax, lvm_amin, lvm_aall,
- lvm_tupp, lvm_bigp, lvm_boxp, lvm_arrp, lvm_intf, lvm_lamp, lvm_hotp;
+ lvm_packp, lvm_bigp, lvm_widep, lvm_arrp, lvm_intf, lvm_lamp, lvm_hotp;
 // Carry extra operands, so (like lvm_gc) they are declared apart from the
 // plain lvm_t list, which fixes the 4-argument ap signature. lvm_vbin
 // is the elementwise/broadcast dyadic engine (vop selects the op); lvm_vmap1
@@ -168,7 +168,7 @@ char const *g_nif_name(intptr_t);
 #define fixp oddp
 #define sym(_) ((struct g_atom*)(_))
 static g_inline bool symp(word _) { return lamp(_) && cell(_)->ap == lvm_sym; }
-static g_inline bool tupp(word _) { return lamp(_) && cell(_)->ap == lvm_tuple; }
+static g_inline bool packp(word _) { return lamp(_) && cell(_)->ap == lvm_tuple; }
 static g_inline bool strp(word _) { return lamp(_) && cell(_)->ap == lvm_str; }
 // Mutable flat byte string. NOT a data kind: its head word is the
 // behaves-as-0 lvm_buf (like lvm_port_io for ports), so the GC walks a buf
@@ -216,7 +216,7 @@ static g_inline struct g_str *bytes_of(word x) { return bufp(x) ? buf_str(x) : s
 // bignum (it demotes to the fixnum nil), so slen is never 0 and the sign is
 // unambiguous. Canonical demotion keeps the tiers disjoint: a value in fixnum
 // range is a fixnum, one in intptr_t range a wide-int box, only wider values a
-// bignum -- so fixp/boxp/bigp are mutually exclusive and =/eqv stay well defined.
+// bignum -- so fixp/widep/bigp are mutually exclusive and =/eqv stay well defined.
 struct g_big { lvm_t *ap; intptr_t slen; uint32_t limb[]; };
 static g_inline bool bigp(word _) { return lamp(_) && cell(_)->ap == lvm_big; }
 static g_inline struct g_big *ini_big(struct g_big *b, intptr_t slen) {
@@ -235,22 +235,22 @@ struct g *g_big_dec(struct g*);             // sp[0] bignum -> decimal string
 struct g *g_big_read_dec(struct g*);        // sp[0] [+-]?digits token -> canonical value
 
 static g_inline bool flop(word _) {
-  return tupp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_R; }
+  return packp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_R; }
 // Wide-integer box: a rank-0 g_Z scalar tuple. Arises only from
 // transparent fixnum overflow (kernel/math.c); never holds a value that
 // fits the fixnum tag (canonical demotion keeps box and fixnum ranges
-// disjoint), so boxp and fixp never both hold for the same number.
-static g_inline bool boxp(word _) {
-  return tupp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_Z; }
+// disjoint), so widep and fixp never both hold for the same number.
+static g_inline bool widep(word _) {
+  return packp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_Z; }
 // A complex scalar: a rank-0 g_C tuple (two g_flo_t, re then im). Deliberately
 // NOT folded into isnum -- the real-tower macros (toflo/toint) would misread its
 // two-word payload, so the arith/eq paths handle complex via explicit Cp
 // branches placed before the real lanes (decision: complex > float > int/bignum).
 static g_inline bool Cp(word _) {
-  return tupp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_C; }
-// A rank>=1 typed array (vs a rank-0 scalar box, which flop/boxp catch). The
+  return packp(_) && tuple(_)->rank == 0 && tuple(_)->type == g_C; }
+// A rank>=1 typed array (vs a rank-0 scalar box, which flop/widep catch). The
 // elementwise arith/compare lanes divert to lvm_vbin when either operand arrp.
-static g_inline bool arrp(word _) { return tupp(_) && tuple(_)->rank >= 1; }
+static g_inline bool arrp(word _) { return packp(_) && tuple(_)->rank >= 1; }
 
 // Max array rank (bounds the stack index/stride arrays in the broadcast loop).
 #define maxrank 8
@@ -322,7 +322,7 @@ static g_inline bool g_nilp(word x) {
   if (mapp(x)) return map_len(x) == 0;
   if (bigp(x)) return ((struct g_big*) x)->slen < 0; // a negative bignum is false
   if (symp(x)) return pin_sym(x) == 0;               // empty/anonymous symbol name -> nil (pin lockstep)
-  if (twop(x) || tupp(x) || strp(x) || bufp(x))
+  if (twop(x) || packp(x) || strp(x) || bufp(x))
     return zn_nonpos(g_net(x));                      // content measures: net <= 0 in the order
   return false; }                                    // fn / port: present
 
@@ -339,13 +339,13 @@ static g_inline g_flo_t g_fmod(g_flo_t a, g_flo_t b) {
  return a - g_trunc(a / b) * b; }
 
 // --- numeric tower helpers (shared by math.c, arr.c, hash.c) ----------------
-// Numeric scalar = a fixnum, a boxed float (flop), or a boxed wide int (boxp).
-#define isnum(x) (fixp(x) || flop(x) || boxp(x) || bigp(x))
+// Numeric scalar = a fixnum, a boxed float (flop), or a boxed wide int (widep).
+#define isnum(x) (fixp(x) || flop(x) || widep(x) || bigp(x))
 // Integer value of a fixnum-or-box operand (callers must exclude floats AND
 // bignums -- a bignum doesn't fit an intptr_t; integer lanes guard on !bigp).
 #define toint(x) (fixp(x) ? (intptr_t) getfix(x) : box_get(x))
 // Double value of any numeric operand (a bignum widens via g_big_to_flo).
-#define toflo(x) (fixp(x) ? (g_flo_t) getfix(x) : flop(x) ? flo_get(x) : boxp(x) ? (g_flo_t) box_get(x) : g_big_to_flo(x))
+#define toflo(x) (fixp(x) ? (g_flo_t) getfix(x) : flop(x) ? flo_get(x) : widep(x) ? (g_flo_t) box_get(x) : g_big_to_flo(x))
 // Heap words for one scalar box. The float box (g_flo_t) and the wide-int box
 // (intptr_t) are both one pointer-width word, so one reservation fits.
 #define box_req (Width(struct g_tuple) + Width(intptr_t))
@@ -593,7 +593,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_asum, "asum", s1(lvm_asum)) _(nif_aprod, "aprod", s1(lvm_aprod))\
  _(nif_amax, "amax", s1(lvm_amax)) _(nif_amin, "amin", s1(lvm_amin))\
  _(nif_aall, "aall", s1(lvm_aall))\
- _(nif_tupp, "tupp", s1(lvm_tupp)) _(nif_bigp, "bigp", s1(lvm_bigp)) _(nif_boxp, "boxp", s1(lvm_boxp))\
+ _(nif_packp, "packp", s1(lvm_packp)) _(nif_bigp, "bigp", s1(lvm_bigp)) _(nif_widep, "widep", s1(lvm_widep))\
  _(nif_arrp, "arrp", s1(lvm_arrp)) _(nif_intf, "int", s1(lvm_intf))\
  _(nif_symp, "symp", s1(lvm_symp)) _(nif_mapp, "mapp", s1(lvm_mapp)) _(nif_fixp, "fixp", s1(lvm_fixp))\
  _(nif_lamp, "lamp", s1(lvm_lamp)) _(nif_hotp, "hotp", s1(lvm_hotp))\
@@ -642,12 +642,12 @@ static lvm(_lvm_yield_c) { return Pack(g), g; }
 static union u const yield_c[] = { {_lvm_yield_c} };
 
 // lvm_help: the default help ap, a first-class vm ap (declared in love.h with
-// ret0/cur/port_io). A throw enters it with the thrown status encoded into g
+// ret0/cur/port_io). A raise enters it with the raised status encoded into g
 // (see ghelp2 below). The MORE bit is read control flow, not a scare: the
-// thrower left [resume port sentinel] on the stack (the read protocol), so
+// raise site left [resume port sentinel] on the stack (the read protocol), so
 // deliver the port (more: incomplete) or the sentinel (eof) to the resume
 // text and keep running. A scare re-encodes and yields to C. Define a global
-// `help` function to land throws in l instead.
+// `help` function to land raises in l instead.
 // the scare exit door: re-encode and yield to C. Lives OUTSIDE the lvm_*
 // namespace (the underscore convention, like _lvm_yield_c above) because it
 // is the one designed return -- the vmret gate's no-ret invariant scans
@@ -662,7 +662,7 @@ lvm(lvm_help) {
   Sp += 2;
   return Continue(); }
  return Ap(_lvm_help_scare, g, s); }
-static union u const throw_c[] = { {lvm_help} };
+static union u const raise_c[] = { {lvm_help} };
 
 // ghelp2/ghelp are defined after numap_drive (the help call frame runs
 // through its 3-arg twin); declared in love.h.
@@ -1601,8 +1601,8 @@ static g_inline g_word resolve_hot(struct g *g, char const *nm, uintptr_t n) {
 // like num-ap. A text operand takes precedence over every other type, so
 // `+`/`*` of a function build a new function -- the README's Church arithmetic,
 // agreeing with numerals: `+` is Church add ((+ g g) a x = g a (g a x)), `*` is
-// composition. scomb is the 4-arg add lambda, bcomb the 3-arg compose; the C
-// aps reuse numap_drive to compute the partial (scomb g g) / (bcomb g g)
+// composition. add is the 4-arg add lambda, mul the 3-arg compose; the C
+// aps reuse numap_drive to compute the partial (add g g) / (mul g g)
 // -- itself the new function -- and leave it as the result, resuming at Ip+1.
 
 // Fixnum-as-function application. A fixnum operator n applied to x is dispatched
@@ -1625,12 +1625,12 @@ union u const numap_drive[] = { {lvm_ap}, {.ap = numap_swap}, {.ap = lvm_ret0} }
 // ============================================================================
 // the lisp help calling convention
 // ============================================================================
-// With a global `help` function installed, a throw becomes the call
+// With a global `help` function installed, a raise becomes the call
 // (help s a b): s = the status word (prelude readers scare?/more?/eof?),
 // a/b = the condition data -- for the more bit the port and the read sentinel,
 // for a scare nil nil (oom is bare; future scares define their shapes). The
 // frame runs through help_drive (numap_drive's 3-arg twin) into a per-class
-// epilogue: the more bit delivers the ap's result to the thrower's resume
+// epilogue: the more bit delivers the ap's result to the raise site's resume
 // text (the read protocol -- the ap chooses what the reader's caller
 // sees); a scare is observed, then takes the default escape to C.
 static lvm(help_ret_more) {   // [result resume port sentinel ..] -> resume sees result
@@ -1645,10 +1645,10 @@ static union u const help_scare_k[] = { {help_ret_scare} };
 static union u const help_drive[] =
  { {lvm_ap}, {.ap = numap_swap}, {.ap = numap_swap}, {.ap = lvm_ret0} };
 
-// Throw status s with condition data a/b to the help continuation. With a
-// global `help` function and 5 words of stack headroom (the throw path never
+// Raise status s with condition data a/b to the help continuation. With a
+// global `help` function and 5 words of stack headroom (the raise path never
 // allocates), build the (help s a b) frame and run it; else the C default
-// throw_c, which resumes the eof protocol raw. Pre-book throws (g_ini_0)
+// raise_c, which resumes the eof protocol raw. Pre-book raises (g_ini_0)
 // always take the default.
 static struct g *g_raise(struct g *c, enum g_status s, word a, word b,
                          union u const *K) {
@@ -1657,7 +1657,7 @@ static struct g *g_raise(struct g *c, enum g_status s, word a, word b,
   struct g_atom *ts = sym_probe(c, "help", 4);
   word h = ts ? g_mapget(c, nil, word(ts), c->book) : nil;
   if (lamp(h) && avail(c) >= 5) {
-   word *sp = c->sp -= 5;          // [s h a b K | thrower data ..]
+   word *sp = c->sp -= 5;          // [s h a b K | raise site data ..]
    sp[0] = putfix(s), sp[1] = h;
    sp[2] = a, sp[3] = b;
    sp[4] = word(K);
@@ -1668,7 +1668,7 @@ static struct g *g_raise(struct g *c, enum g_status s, word a, word b,
    return c;                       // ok-g: the trampoline dispatches help_drive
 #endif
   } }
- union u *t = (union u*) throw_c;
+ union u *t = (union u*) raise_c;
  c->ip = t;
 #if g_tco
  return t->ap(encode(c, s), t, c->hp, c->sp);
@@ -1682,9 +1682,9 @@ struct g *ghelp2(struct g *g, enum g_status s) {
  return g_raise(c, s,              // [resume port sentinel] sits on the stack
   rd ? c->sp[1] : nil, rd ? c->sp[2] : nil,
   rd ? help_more_k : help_scare_k); }
-// Throw on an already-tagged g: re-throw its own status.
+// Raise on an already-tagged g: re-raise its own status.
 struct g *ghelp(struct g *g) { return ghelp2(g_core_of(g), g_code_of(g)); }
-// (scare a b): the deliberate throw -- the user scares, the scare bit is set
+// (scare a b): the deliberate raise -- the user scares, the scare bit is set
 // unconditionally and the global help hears (help 1 a b). Unlike a C scare
 // (oom), the raise point here is a clean boundary, so the help's result is
 // delivered back as (scare a b)'s value via the more continuation -- the
@@ -1769,20 +1769,20 @@ static lvm(lvm_numtap) {
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 
-// `+`/`*` over a lambda operand: build the combinator partial (scomb/bcomb g g)
+// `+`/`*` over a lambda operand: build the combinator partial (add/mul g g)
 // and leave it as the result. Mirrors lvm_numap's frame -- [g, comb, g, ret=Ip+1]
 // run through numap_drive -- but the combinator (4-arg add / 3-arg compose) applied
 // to 2 args yields a closure (the new function) instead of a value. Ip is at the +/*
 // opcode (a re-runnable instruction), so a plain Have is safe; operands re-read after.
 static lvm(lvm_addh) {
  Have(2);
- word h = resolve_hot(g, "scomb", 5);
+ word h = resolve_hot(g, "add", 3);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static lvm(lvm_mulh) {
  Have(2);
- word h = resolve_hot(g, "bcomb", 5);
+ word h = resolve_hot(g, "mul", 3);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
@@ -2973,11 +2973,11 @@ lvm(lvm_read) {
   struct g *c = g_core_of(g); // reset stack on parse fail
   c->sp = (word*) c + c->len - depth;
   switch (g_code_of(g)) {
-   default: return ghelp(g);                          // scare: condition data per thrower
+   default: return ghelp(g);                          // scare: condition data per raise site
    case g_status_more: case g_status_eof:
     // The more bit routes control through the help continuation: push the read protocol's
-    // resume text under [port sentinel] and throw -- the help function (or
-    // throw_c's default) decides flow from the bits. Headroom for the push is
+    // resume text under [port sentinel] and raise -- the help function (or
+    // raise_c's default) decides flow from the bits. Headroom for the push is
     // the parse ctx frame, which exists wherever more/eof can arise.
     *--c->sp = word(c->ip);
     return ghelp2(c, g_code_of(g)); } }
@@ -3051,7 +3051,7 @@ static struct g* g_z_getc(struct g*g) {
 // either a *list accumulator* — a pair (head . tail) holding the elements read so
 // far in source order, ((nil . nil) when empty), built in place by appending at
 // `tail` so no reverse pass is needed — or a *reader-macro* — the wrap symbol \ qq
-// uq uqs hash tuple plex clift, recognised by symp. A finished datum is `delivered`
+// uq uqs hash tuple plex wave, recognised by symp. A finished datum is `delivered`
 // to the top frame: appended to a list, or wrapped/spliced and re-delivered; with
 // no frame left it is the result. Everything lives on the l stack so GC relocates
 // it across the allocs that reading does.
@@ -3117,11 +3117,11 @@ static struct g *gz_parse(struct g *g, bool multi) {
    c = g->b; }
   switch (c) {
    case '(': case '[': case '{': g = push_frame(g); continue;   // [ ] { } are () synonyms
-   case '~':                                            // ~(re im)->(plex re im) [construct]; ~x->(clift x)
+   case '~':                                            // ~(re im)->(plex re im) [construct]; ~x->(wave x)
     if (!g_ok(g = zgetc(g))) return g;                 // peek the char after ~: `(` -> splice into plex (build
     c2 = g->b;                                         // a complex / curry); anything else -> monadic lift/conj
-    if (c2 != EOF) g = zungetc(g, c2);                 // (clift: real r -> ~(r 0); complex z -> conj z)
-    g = push_wrap(g, c2 == '(' ? "plex" : "clift"); continue;
+    if (c2 != EOF) g = zungetc(g, c2);                 // (wave: real r -> ~(r 0); complex z -> conj z)
+    g = push_wrap(g, c2 == '(' ? "plex" : "wave"); continue;
    case ',':                                            // unquote / unquote-splice
     if (!g_ok(g = zgetc(g))) return g;
     if ((c2 = g->b) == '@') { g = push_wrap(g, "uqs"); continue; }
@@ -3768,9 +3768,9 @@ g_noinline struct g_atom *intern_checked(struct g *g, struct g_str *b) {
  return y; }
 
 op11(lvm_symp, symp(Sp[0]) ? putfix(1) : nil)
-op11(lvm_tupp, tupp(Sp[0]) ? putfix(1) : nil)
+op11(lvm_packp, packp(Sp[0]) ? putfix(1) : nil)
 op11(lvm_bigp, bigp(Sp[0]) ? putfix(1) : nil)
-op11(lvm_boxp, boxp(Sp[0]) ? putfix(1) : nil)
+op11(lvm_widep, widep(Sp[0]) ? putfix(1) : nil)
 op11(lvm_arrp, arrp(Sp[0]) ? putfix(1) : nil)
 // (int x): truncate a float scalar to a fixnum; other numbers pass through. Used by
 // num-ap to get an integer composition count from a non-integer numeral operator.
@@ -3844,7 +3844,7 @@ lvm(lvm_cons) {
 // defined after vcmp_int/vcmp_flo (the per-op helpers they reuse), by lvm_vbin.
 #define bit_slow(n, c_op) static lvm(lvm_##n##_slow) {               \
  word a = Sp[0], b = Sp[1], _res;                                     \
- if (!(fixp(a) || boxp(a)) || !(fixp(b) || boxp(b)))                  \
+ if (!(fixp(a) || widep(a)) || !(fixp(b) || widep(b)))                  \
   return *++Sp = nil, Ip++, Continue();                               \
  Have(box_req);                                                       \
  emit_int(toint(a) c_op toint(b));                                    \
@@ -4214,7 +4214,7 @@ lvm(lvm_bxor) { word a = Sp[0], b = Sp[1];
 // >> : arithmetic right shift. A fixnum value only shrinks, so it keeps a
 // non-allocating fast path; a boxed value routes to the slow ap.
 static lvm(lvm_bsr_slow) { word a = Sp[0], b = Sp[1], _res;
- if (!(fixp(a) || boxp(a)) || !fixp(b)) return *++Sp = nil, Ip++, Continue();
+ if (!(fixp(a) || widep(a)) || !fixp(b)) return *++Sp = nil, Ip++, Continue();
  Have(box_req);
  emit_int(toint(a) >> getfix(b));
  return *++Sp = _res, Ip++, Continue(); }
@@ -4227,7 +4227,7 @@ lvm(lvm_bsr) { word a = Sp[0], b = Sp[1];
 // (emit_int still demotes small results — only genuinely wide values
 // allocate). Shift done in uintptr_t for well-defined overflow.
 lvm(lvm_bsl) { word a = Sp[0], b = Sp[1], _res;
- if (!(fixp(a) || boxp(a)) || !fixp(b)) return *++Sp = nil, Ip++, Continue();
+ if (!(fixp(a) || widep(a)) || !fixp(b)) return *++Sp = nil, Ip++, Continue();
  Have(box_req);
  emit_int((intptr_t)((uintptr_t) toint(a) << getfix(b)));
  return *++Sp = _res, Ip++, Continue(); }
@@ -4378,7 +4378,7 @@ void g_rng_seed(struct g_tuple *v, uint64_t seed) {
 
 // Is x a well-formed state tuple (rank-1 i64, length 4)?
 static g_inline bool rng_state_p(word x) {
- return tupp(x) && tuple(x)->rank == 1 && tuple(x)->type == rng_vt
+ return packp(x) && tuple(x)->rank == 1 && tuple(x)->type == rng_vt
         && tuple(x)->shape[0] == rng_state_len; }
 
 // Build a fresh state tuple at Hp, copying the 4 limbs of `src` into it. Caller
@@ -5084,19 +5084,19 @@ lvm(lvm_arr) {
 
 // --- accessors -------------------------------------------------------------
 // rank / element-type code as fixnums; nil for a non-tuple. Both 0 for a scalar box.
-op11(lvm_arank, tupp(Sp[0]) ? putfix(tuple(Sp[0])->rank) : nil)
-op11(lvm_atype, tupp(Sp[0]) ? putfix(tuple(Sp[0])->type) : nil)
+op11(lvm_arank, packp(Sp[0]) ? putfix(tuple(Sp[0])->rank) : nil)
+op11(lvm_atype, packp(Sp[0]) ? putfix(tuple(Sp[0])->type) : nil)
 
 // total element count (1 for a scalar box), nil for a non-tuple.
 lvm(lvm_alen) {
  word x = Sp[0];
- if (!tupp(x)) return Sp[0] = nil, Ip++, Continue();
+ if (!packp(x)) return Sp[0] = nil, Ip++, Continue();
  return Sp[0] = putfix(tuple_nelem(tuple(x))), Ip++, Continue(); }
 
 // dimensions as a list (allocates rank cons cells), nil for a non-tuple.
 lvm(lvm_ashape) {
  word x = Sp[0];
- if (!tupp(x)) return Sp[0] = nil, Ip++, Continue();
+ if (!packp(x)) return Sp[0] = nil, Ip++, Continue();
  uintptr_t r = tuple(x)->rank;
  Have(r * Width(struct g_pair));
  struct g_tuple *v = tuple(Sp[0]);                 // re-read post-Have
@@ -5118,7 +5118,7 @@ static struct g *ored(struct g *g, int kind);   // kind: 0 sum, 1 prod, 2 max, 3
 // same expression works whether a/b are scalars or arrays.
 lvm(lvm_asum) {
  word x = Sp[0];
- if (!tupp(x)) return Ip++, Continue();        // scalar: (asum 5) = 5
+ if (!packp(x)) return Ip++, Continue();        // scalar: (asum 5) = 5
  if (tuple(x)->type == g_O) {
   Pack(g); g = ored(g, 0);
   if (!g_ok(g)) return ghelp(g);
@@ -5148,7 +5148,7 @@ lvm(lvm_asum) {
 
 lvm(lvm_aprod) {
  word x = Sp[0];
- if (!tupp(x)) return Ip++, Continue();
+ if (!packp(x)) return Ip++, Continue();
  if (tuple(x)->type == g_O) {
   Pack(g); g = ored(g, 1);
   if (!g_ok(g)) return ghelp(g);
@@ -5180,7 +5180,7 @@ lvm(lvm_aprod) {
 // empty -> nil; scalar -> identity. The kind selects the comparison sense.
 static lvm(lvm_aextreme, int kind) {
  word x = Sp[0];
- if (!tupp(x)) return Ip++, Continue();
+ if (!packp(x)) return Ip++, Continue();
  if (tuple(x)->type == g_O) {
   Pack(g); g = ored(g, kind);
   if (!g_ok(g)) return ghelp(g);
@@ -5208,7 +5208,7 @@ lvm(lvm_amin) { return Ap(lvm_aextreme, g, 3); }
 // nonzero, i.e. (nilp x) == (= 0 (len x)) -- so `(len x)` replaces `(aany x)`.
 lvm(lvm_aall) {
  word x = Sp[0];
- if (!tupp(x)) return Ip++, Continue();
+ if (!packp(x)) return Ip++, Continue();
  struct g_tuple *v = tuple(x);
  uintptr_t n = tuple_nelem(v);
  if (v->type == g_O) {                         // object: a falsy element fails the conjunction
@@ -6073,7 +6073,7 @@ lvm(lvm_abs) {
   return Sp[0] = _res, Ip++, Continue(); }
  if (flop(a)) { g_flo_t v = flo_get(a); if (v < 0) v = -v;
   Have(box_req); emit_flo(v); return Sp[0] = _res, Ip++, Continue(); }
- if (boxp(a)) { intptr_t n = box_get(a);
+ if (widep(a)) { intptr_t n = box_get(a);
   Have(box_req); emit_int(n < 0 ? (intptr_t) (0 - (uintptr_t) n) : n);
   return Sp[0] = _res, Ip++, Continue(); }
  if (bigp(a)) {
