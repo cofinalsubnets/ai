@@ -478,7 +478,7 @@ static g_inline struct g_str *ini_str(struct g_str *s, uintptr_t len) {
 // segment, so the Cheney forwarder leaves any pointer to them untouched (gcp's
 // out-of-pool short-circuit, like g_stdin/stdout/stderr) -- immortal, never copied
 // or freed, so `const` is safe. Strings are immutable, so a single empty string
-// suffices and we NEVER heap-allocate a zero-length one (str0/scat/strin/reader and
+// suffices and we NEVER heap-allocate a zero-length one (str0/strin/the reader and
 // the `+` string lane all hand back g_str_empty). g_sym_empty is the canonical
 // empty-named symbol (intern "" answers it; symbols have no + since the mint
 // round). Predicates read `ap`, so these behave as a normal
@@ -641,7 +641,7 @@ static union u const yield_c[] = { {_lvm_yield_c} };
 // lvm_trap: the default trap ap, a first-class vm ap (declared in love.h with
 // ret0/cur/port_io). A throw enters it with the thrown status encoded into g
 // (see gtrap2 below). The MORE bit is read control flow, not a scare: the
-// thrower left [resume port sentinel] on the stack (the fread protocol), so
+// thrower left [resume port sentinel] on the stack (the read protocol), so
 // deliver the port (more: incomplete) or the sentinel (eof) to the resume
 // text and keep running. A scare re-encodes and yields to C. Define a global
 // `trap` function to land throws in l instead.
@@ -1625,7 +1625,7 @@ union u const numap_drive[] = { {lvm_ap}, {.ap = numap_swap}, {.ap = lvm_ret0} }
 // for a scare nil nil (oom is bare; future scares define their shapes). The
 // frame runs through trap_drive (numap_drive's 3-arg twin) into a per-class
 // epilogue: the more bit delivers the ap's result to the thrower's resume
-// text (the fread protocol -- the ap chooses what the reader's caller
+// text (the read protocol -- the ap chooses what the reader's caller
 // sees); a scare is observed, then takes the default escape to C.
 static lvm(trap_ret_more) {   // [result resume port sentinel ..] -> resume sees result
  Ip = cell(Sp[1]);
@@ -2952,7 +2952,7 @@ lvm(lvm_read) {
   switch (g_code_of(g)) {
    default: return gtrap(g);                          // scare: condition data per thrower
    case g_status_more: case g_status_eof:
-    // The more bit routes control through the trap continuation: push fread's
+    // The more bit routes control through the trap continuation: push the read protocol's
     // resume text under [port sentinel] and throw -- the trap function (or
     // throw_c's default) decides flow from the bits. Headroom for the push is
     // the parse ctx frame, which exists wherever more/eof can arise.
@@ -4013,7 +4013,7 @@ static lvm(lvm_mul_rep) {
                   : Ap(lvm_intern, g); }          // interned symbol
 
 // --- apply lane (the data-value `(g x)` aps; moved here from data.c) -----
-// When a data value is applied, its sentinel (data.c, pinned in the gwen_data
+// When a data value is applied, its sentinel (data.c, pinned in the love_data
 // section) tail-jumps through g_apply_mx[g_typ(Ip)][g_kind(Sp[0])] -- the static
 // kind of the applied value and the dynamic kind of the argument. Every data kind
 // has a meaningful apply (pair = eliminator, string/symbol = byte index, numeric

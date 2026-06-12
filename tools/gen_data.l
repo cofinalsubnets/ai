@@ -3,7 +3,7 @@
 ;
 ; Port of tools/gen_data.py (see it for the full rationale). Reflects on an
 ; ELF object (data.o), recovers the per-sentinel byte stride of the
-; gwen_data.* input sections, and emits a data.h that hard-codes it so
+; love_data.* input sections, and emits a data.h that hard-codes it so
 ; g_typ()'s two link-time divides fold away (a shift when the stride is 2^k).
 ;
 ; Usage: l gen_data.l <data.o> [-o data.h]   (writes stdout if no -o)
@@ -28,7 +28,7 @@
    (pow2? n) (&& (< 0 n) (= 0 (& n (- n 1))))
    (bitlen n) ((: (f n k) (? (< 0 n) (f (>> n 1) (+ k 1)) k)) n 0))
 
-(: prefix "gwen_data."   ; input subsections gwen_data.00 .. .04
+(: prefix "love_data."   ; input subsections love_data.00 .. .04
    N 5)                     ; enum q data kinds: tuple/big/two/string/sym -- must match l.h
 
 ; --- emit the generated header to port p ----------------------------
@@ -43,15 +43,15 @@
               (fputs p "is a divide by the constant UNIT (lowered to a multiply)"))
       _ (fputs p ".\n")
       _ (fputs p "// `start` stays a link-time symbol, so only the divides go, not the subtract.\n")
-      _ (fputs p "extern char __start_gwen_data[], __stop_gwen_data[];\n")
+      _ (fputs p "extern char __start_love_data[], __stop_love_data[];\n")
       _ (fputs p "#define G_DATA_UNIT ") _ (fputn p unit 10)
       _ (fputs p "u   // sentinel stride in bytes, from data.o\n")
       _ (fputs p "static g_inline bool in_data(void *a) {\n")
-      _ (fputs p " return (uintptr_t) a >= (uintptr_t) __start_gwen_data\n")
-      _ (fputs p "     && (uintptr_t) a <  (uintptr_t) __stop_gwen_data; }\n")
+      _ (fputs p " return (uintptr_t) a >= (uintptr_t) __start_love_data\n")
+      _ (fputs p "     && (uintptr_t) a <  (uintptr_t) __stop_love_data; }\n")
       _ (fputs p "static g_inline enum q g_typ(union u *o) {\n")
       _ (fputs p " static const enum q kinds[] = { KTuple, KBig, KString, KSym, KTwo };\n")
-      _ (fputs p " return kinds[((uintptr_t) o->ap - (uintptr_t) __start_gwen_data) ")
+      _ (fputs p " return kinds[((uintptr_t) o->ap - (uintptr_t) __start_love_data) ")
       _ (? po2 (: _ (fputs p ">> ") (fputn p shift 10)) (fputs p "/ G_DATA_UNIT"))
       _ (fputs p "]; }\n")
       (fputs p "#endif\n")))
@@ -76,7 +76,7 @@
       sofld    (? is64 0x18 0x10)             ; sh_offset
       shoff-of (\ i (+ shoff (* i shent)))
       stroff   (rdw s (+ (shoff-of shstrndx) sofld))
-      ; collect (size . align) for every gwen_data.* section
+      ; collect (size . align) for every love_data.* section
       secs (: (loop i acc)
                (? (< i shnum)
                   (: o  (shoff-of i)

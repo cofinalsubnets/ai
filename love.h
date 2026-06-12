@@ -1,5 +1,5 @@
-#ifndef _gwen_h
-#define _gwen_h
+#ifndef _love_h
+#define _love_h
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
