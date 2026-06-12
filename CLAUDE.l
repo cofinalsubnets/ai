@@ -380,8 +380,10 @@
 ; (clift x)) -- and NO operator tables, so the same reader serves data (read) and code.
 ; the LEXER LAW splits tokens by leading char: a name token (alnum/_) keeps - ? ! etc
 ; inside (kebab law unchanged), while a punctuation-led token is a SIGIL -- a maximal run
-; of operator chars, read as ONE PLAIN SYMBOL (value-surface chars and delimiters break
-; the run). code then factors sigils against the ONE `operators` table at COMPILE time:
+; of operator chars (value-surface chars and delimiters break the run), read as ONE PLAIN
+; SYMBOL when spaced, or fused to its datum as (mono (run datum)) when GLUED mid-list
+; (the valence law below; head position and \ never fuse, - and + only to ( ' " @ ~ #).
+; code then factors sigils against the ONE `operators` table at COMPILE time:
 ; `opfix`, a source->source prepass hooked by both compilers (c0 probes book['opfix] like
 ; boxfix; ev runs it before wev -- ev is opfix after read, so the two input lanes, data
 ; and characters, meet at one core). the table: symbol -> arity (the symbol names itself)
@@ -510,7 +512,8 @@
 ; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
 ; lives on inside the compiler's closures), the repl sentinels, every hot lvm_* pointer,
 ; and finally the `book` itself. compiled references were folded, so only the names die.
-; names the printer or an expander EMITS (uq ltuple cons pin table ..) stay, as do the
+; names the printer, the reader, or an expander EMITS (uq ltuple cons pin
+; tablet mono ..) stay, as do the
 ; C-resolved hooks (num-ap scomb bcomb trap) and the repl's test-driven editor surface.
 (assert (homp ev) (? born (fixp born) 1)
         (? born !macros 1) (? born !poke 1)     ; post-birth the names are gone

@@ -3,6 +3,8 @@
 every expression in love has a value up to OOM or looping.
 stackless operation, all recursion on heap, overflow safe.
 every quote below evals to 1. try them in the repl :)
+(or in your browser: [index.html](index.html) runs the same
+image compiled to wasm -- nothing mocked.)
 
 - `0 x = 1`
 - `1 x = x`
@@ -13,6 +15,13 @@ every quote below evals to 1. try them in the repl :)
 - `-1 = i * i`
 - `(log -1) = i * pi`
 - `i = (1 / 2) -1`
+- `1 = (i love you)`
+
+that last one holds because `i` is the identity count, an unbound name
+reads as the unit, and the unit applies as the constant. love stays out
+of the book, so the sentence stays true -- solve for love and you get 1,
+but only the trap that answers every absence with one can witness it:
+bind love and the sentence breaks.
 
 
 ## language
@@ -70,6 +79,8 @@ so these are true too:
 - `24 = (foldl (*) 1 '(1 2 3 4))`
 - `'(1 2 3) = (sort '(3 1 2))`
 - `'(2 3 4) = (map (+ 1) '(1 2 3))`
+- `'(0 1 2) = (jot 3)`
+- `10 = +(jot 5)`
 
 the full spec
 is [CLAUDE.md](CLAUDE.md) -- the root test file CLAUDE.l in a code fence, so
@@ -95,12 +106,20 @@ the spec stays green.
 - `make` build + test
 - `make repl` interactive shell
 - `make test_all` adds the freestanding kernel (qemu) + tool diffs
+- `make wasm` build the browser image (wasm/love.js, used by index.html)
 - `out/host/love file.l` run a file
 - `echo .ev | love` print the compiler
 
 that last one is not a joke. `.` prints, `ev` is the self-hosted evaluator,
 and what comes out is the lambda the compiler compiled itself into -- a couple
 kilobytes of the whole back end.
+
+the shell survives its mistakes: with no trap of your own installed it
+provides one, so any condition prints `# a b` -- `# anon undefined-name`,
+`# apcap 3000000` -- answers `()`, and the session keeps going. multiline
+entry continues while a shape is open; enter cashes any complete buffer;
+history is a normal shell's. scripts and files stay untrapped (terminal),
+per the law.
 
 ### under the hood
 - one word per value: a fixnum is a tagged odd word, anything else is a heap
