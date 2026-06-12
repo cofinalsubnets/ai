@@ -1698,7 +1698,8 @@ static union u const no_entry[1];
 // const-1 like every unit. absence is a POINT, not a quantity: a number
 // would exponentiate under a numeral ((i love) = 0**i is honest nan), a
 // unit absorbs -- which is what keeps (i love you) = 1. data-segment
-// rooted (gcp's out-of-pool short-circuit), prints (mint 0).
+// rooted (gcp's out-of-pool short-circuit). prints () -- the face of
+// absence; it re-reads as 0, but no spelling carries a point back anyway.
 static const struct g_atom g_zero_point = { .ap = lvm_sym, .code = 0, .nom = 0 };
 #define zero_point ((word) &g_zero_point)
 // The late-bound global read. A hit patches the site to a quote of the value
@@ -2585,6 +2586,7 @@ static g_inline struct g*gzput_str(struct g*g, word _) {
 // map is a fresh map): identity is the mint's whole product, so no spelling
 // can carry it.
 static g_inline struct g*gzput_sym(struct g*g, word _) {
+ if (_ == zero_point) return gzputcs(g, "()");  // the face of absence
  if (g_ok(g = g_push(g, 1, _))) {
   word nom = word(sym(g->sp[0])->nom);
   if (!nom) g = gzprintf(g, "(mint 0)");                    // a mint: fresh on re-read

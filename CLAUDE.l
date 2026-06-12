@@ -319,8 +319,9 @@
 ; `()` reads as 0 -- nothing's plain spelling -- and (intern "") is 0: the empty
 ; spelling names nothing (the empty-symbol species is gone). ABSENCE is another
 ; matter: a helpless missing read answers the ZERO POINT, the mint at serial 0 --
-; nameless, $0, false, and a UNIT: it absorbs application where a number would
-; exponentiate, which is what keeps (1 = (i love you)). every mint draws a SERIAL
+; nameless, $0, false, printed as () (the face of absence; like any point, no
+; spelling carries it back), and a UNIT: it absorbs application where a number
+; would exponentiate, which is what keeps (1 = (i love you)). every mint draws a SERIAL
 ; from the one mint stream (task pids draw from it too): symbols order by name first
 ; (mints below every named symbol), then by serial -- creation order -- so the total
 ; order is TOTAL, GC-stable; the
@@ -337,7 +338,7 @@
 (assert
  (0 = ()) !(symp ()) (0 = (intern "")) (idp 0 '()) (0 = $()) !() !!$'x
  ("0" = (show ()))
- (: z zz-never-pinned (&& (symp z) !z (idp z (:)) ("(mint 0)" = (show z))))   ; absence: the zero point
+ (: z zz-never-pinned (&& (symp z) !z (idp z (:)) ("()" = (show z))))   ; absence: the zero point, wearing ()
  (symp (mint 0)) (0 = $(mint 0)) !(mint 0)       ; the fresh point: a nameless atom, materially empty
  (1 = ((mint 0) 5)) (1 = ('xyz 1))               ; units apply const-1; the name index is gone
  !((mint 0) = (mint 0)) (: m (mint 0) (&& (m = m) (idp m m)))  ; distinct always; itself only
