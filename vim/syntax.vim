@@ -30,7 +30,7 @@ syn keyword LoveFunc a-rank a-shape a-type a-dim
 syn keyword LoveFunc string slice intern nom mint tally slurp show sip pad page
 syn keyword LoveFunc tablet keys dig sat non peep pin pull buf blit anon
 syn keyword LoveFunc lamb peek poke seek trim mono
-syn keyword LoveFunc fgetc fungetc feof fputc fputs fputn fputx fflush read
+syn keyword LoveFunc fgetc fungetc feof fputc fputs fputbn fputx fflush read
 syn keyword LoveFunc putc puts putn putx getc read in out dot
 syn keyword LoveFunc ev call-cc yield spawn wait sleep done? kill key?
 syn keyword LoveFunc trap scare scare? more? eof?
@@ -43,7 +43,7 @@ syn keyword LoveMacro :: L list do begin progn let if cond quote qq gsym tuple h
 syn keyword LoveMacro && \|\| :- ?- >>= <=<
 
 " Constants: booleans (1/0), the tier-spine array element-kind codes, e pi i
-syn keyword LoveConst true false e pi i
+syn keyword LoveConst true false e pi i ieee-inf ieee-nan
 syn keyword LoveConst z r c o
 
 " Quoted atoms: 'foo   (' is one-operand \ = quote)

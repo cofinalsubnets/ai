@@ -3,7 +3,7 @@
 
 ll recovers a heap object's kind from its `ap`: the five self-quote sentinels
 (data.c, DATA_SENTINEL) are pinned contiguously and in enum order into the
-.gwen_data section, so a kind is just a slot index into that section --
+.love_data section, so a kind is just a slot index into that section --
 g_typ(o) == (ap - start) / unit, unit == (stop - start) / N (see data.h).
 
 Both `start` and `unit` are link-time quantities, so the portable header leaves
@@ -13,7 +13,7 @@ shift, because the compiler never sees the section's size.
 
 But the sentinels live in their own translation unit (data.c -> data.o), and
 that object already records each sentinel's size as the size of its
-gwen_data.NN input section -- before the link, no link needed. This script
+love_data.NN input section -- before the link, no link needed. This script
 reflects on data.o, recovers that stride, and emits a data.h that hard-codes
 it. Result: `unit` is a literal (the derive-divide folds away) and, when the
 stride is a power of two, the index-divide becomes a shift. `start` stays a
@@ -32,7 +32,7 @@ Usage: gen_data.py <data.o> [-o data.h]   (writes stdout if no -o)
 
 import struct, sys
 
-PREFIX = "gwen_data."      # input subsections: gwen_data.00 .. .04
+PREFIX = "love_data."      # input subsections: love_data.00 .. .04
 N = 5                      # enum q data kinds: tuple/big/two/string/sym -- must match ll.h
 
 
@@ -105,7 +105,7 @@ def read_sections(path):
 def stride_from(path):
     """Recover the per-sentinel byte stride from data.o.
 
-    The sentinels share one body, so every gwen_data.NN section has the same
+    The sentinels share one body, so every love_data.NN section has the same
     size S and the same alignment A. The linker bumps each to its own alignment,
     so consecutive sentinels sit align_up(S, A) apart -- that padded value, not
     the raw S, is the real stride (on Thumb the 24-byte body is 16-aligned, so
@@ -113,7 +113,7 @@ def stride_from(path):
     (stop-start)/N only approximates it (152/5 = 30 there) and survives by
     flooring, but a baked constant has to be exact."""
     secs = [(n, sz, al) for (n, sz, al) in read_sections(path) if n.startswith(PREFIX)]
-    secs.sort(key=lambda s: s[0])   # gwen_data.00 .. .04, enum order
+    secs.sort(key=lambda s: s[0])   # love_data.00 .. .04, enum order
     if len(secs) != N:
         fail("found %d %s* sections in %s, expected %d (enum q in i.h)"
              % (len(secs), PREFIX, path, N))
@@ -144,14 +144,14 @@ HEADER = """\
 // expression (stop-start)/N. That removes both divides from g_typ: the derive-
 // divide folds away (UNIT is a literal) and the index-divide %s.
 // `start` stays a link-time symbol, so only the divides go, not the subtract.
-extern char __start_gwen_data[], __stop_gwen_data[];
+extern char __start_love_data[], __stop_love_data[];
 #define G_DATA_UNIT %du   // sentinel stride in bytes, from data.o
 static g_inline bool in_data(void *a) {
- return (uintptr_t) a >= (uintptr_t) __start_gwen_data
-     && (uintptr_t) a <  (uintptr_t) __stop_gwen_data; }
+ return (uintptr_t) a >= (uintptr_t) __start_love_data
+     && (uintptr_t) a <  (uintptr_t) __stop_love_data; }
 static g_inline enum q g_typ(union u *o) {
  static const enum q kinds[] = { KTuple, KBig, KString, KSym, KTwo };
- return kinds[((uintptr_t) o->ap - (uintptr_t) __start_gwen_data) %s]; }
+ return kinds[((uintptr_t) o->ap - (uintptr_t) __start_love_data) %s]; }
 #endif
 """
 

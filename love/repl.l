@@ -191,18 +191,18 @@
    ; the prompt's column; the topmost line shares it, subsequent
    ; lines start at column 0.
    (edrender pl pra u l r d)
-     (: _ (? (< 0 pra) (do (putc 27) (putc 91) (putn pra 10) (putc 65)) 0)
+     (: _ (? (< 0 pra) (do (putc 27) (putc 91) (putn pra) (putc 65)) 0)
         _ (putc 13)
-        _ (? (< 0 pl)  (do (putc 27) (putc 91) (putn pl 10)  (putc 67)) 0)
+        _ (? (< 0 pl)  (do (putc 27) (putc 91) (putn pl)  (putc 67)) 0)
         _ (putc 27) _ (putc 91) _ (putc 74) ; clear to end of screen
         _ (each (rev u) (\ ln (do (each ln prc) (putc 10))))
         _ (each (revcat l r) prc)
         _ (each d (\ ln (do (putc 10) (each ln prc))))
         ld (tally d)
         col (+ (? (twop u) 0 pl) (tally l))
-        _ (? (< 0 ld) (do (putc 27) (putc 91) (putn ld 10) (putc 65)) 0)
+        _ (? (< 0 ld) (do (putc 27) (putc 91) (putn ld) (putc 65)) 0)
         _ (putc 13)
-        _ (? (< 0 col) (do (putc 27) (putc 91) (putn col 10) (putc 67)) 0)
+        _ (? (< 0 col) (do (putc 27) (putc 91) (putn col) (putc 67)) 0)
         (fflush out))
 
    ps1 ";;; "
@@ -249,7 +249,7 @@
                 (= c 10) (: vs (parseall (flatten u l r d))
                             (? (= vs m)
                                (loop npra (cons (rev l) u) 0 r d (detach hu cur) hd 0)
-                               (: _ (? (twop d) (: _ (putc 27) _ (putc 91) _ (putn (tally d) 10) (putc 66)) 0)
+                               (: _ (? (twop d) (: _ (putc 27) _ (putc 91) _ (putn (tally d)) (putc 66)) 0)
                                   _ (putc 10)
                                   nhu (? (nilp vs) (revcat hd (detach hu cur))
                                          (take 100 (cons (mkframe u l r d) (revcat hd (detach hu cur)))))

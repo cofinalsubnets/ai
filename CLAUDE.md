@@ -152,7 +152,9 @@
 ; float; integer
 ; overflow grows fixnum -> wide box -> bignum; a non-number gives nil. `/` is *true* division --
 ; an inexact integer quotient promotes to float ((/ 1 2) is 0.5) but an exact one stays integer
-; ((/ 4 2) is 2); /0 gives IEEE inf/nan. `//` truncates toward zero (the partner of `%`).
+; ((/ 4 2) is 2); /0 gives IEEE infinity/nan, spelled ieee-inf and ieee-nan -- the reader
+; lexes exactly those names as floats (a float token otherwise leads with a digit; bare
+; inf/nan are honest symbols, free for binding). `//` truncates toward zero (the partner of `%`).
 ; bitwise << >> & | ^ on integers (complement is (^ x -1)). the MONADIC readings ride
 ; the VALENCE LAW (see reader operators): glued is monadic -- -(f x) is neg, /4 is
 ; reciprocal, |x abs, %x frac -- while the sections ((- 0), (/ 1)) remain their
@@ -165,6 +167,8 @@
  (2 = 4 / 2) (fixp (4 / 2)) (-2 = (// -5 2))
  (-5 = ((- 0) 5)) (0.25 = ((/ 1) 4)) (~(-1 -2) = ((- 0) ~(1 2)))   ; the sections are the monadics
  !(fixp (2 * 2305843009213693952)) (flop (1 / 0)) (1e308 < 1 / 0) !((/ 0 0) = (/ 0 0))
+ (ieee-inf = 1 / 0) ("ieee-inf" = (show (1 / 0))) ("-ieee-inf" = (show (-1 / 0)))
+ (flop ieee-nan) !(ieee-nan = ieee-nan) (symp 'inf) (symp 'nan)
  (-2 = (^ 1 -1)) (15 = 8 | 4 | 2 | 1) (16 = (>> 64 2)) (16 = (<< 2 3)))
 
 ; --- order & equality --- < <= > >= is a *total order over all values*: across kinds by the

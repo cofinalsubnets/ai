@@ -227,7 +227,7 @@
    ret?     (? x86? retx? (? (= mach 183) reta? retx?))
    _        (? known? 0
                (: _ (fputs err "vmret: note: ") _ (fputs err base)
-                  _ (fputs err " is an unrecognized arch (0x") _ (fputn err mach 16)
+                  _ (fputs err " is an unrecognized arch (0x") _ (fputbn err mach 16)
                   _ (fputs err "); falling back to the generic `ret` matcher\n") 0))
    ; objdump preference: GNU objdump for x86 (host-arch), llvm-objdump for the
    ; cross arches; an explicit --objdump or $OBJDUMP wins. execvp does the PATH
@@ -250,13 +250,13 @@
       (: k      (llen flagged)
          width  (maxlen flagged)
          sorted (esort flagged)
-         _ (fputs out base) _ (fputs out ": ") _ (fputn out k 10) _ (fputs out " of ")
-         _ (fputn out total 10) _ (fputs out " ") _ (fputs out prefix)
+         _ (fputs out base) _ (fputs out ": ") _ (fputbn out k 10) _ (fputs out " of ")
+         _ (fputbn out total 10) _ (fputs out " ") _ (fputs out prefix)
          _ (fputs out "* functions contain a ret (TCO suspects):\n")
          _ (each sorted (\ e
               (: name (cap e) rets (cbp e)
                  _ (fputs out "  ") _ (fputs out name) _ (fputs out (spaces (- width (tally name))))
                  _ (fputs out "  ret @ ") _ (fputs out (join-rets rets)) _ (fputc out 10) 0)))
          (exit 1))
-      (: _ (fputs out base) _ (fputs out ": all ") _ (fputn out total 10) _ (fputs out " ")
+      (: _ (fputs out base) _ (fputs out ": all ") _ (fputbn out total 10) _ (fputs out " ")
          _ (fputs out prefix) _ (fputs out "* functions are ret-free\n") (exit 0)))))

@@ -24,14 +24,12 @@ but only the trap that answers every absence with one can witness it:
 bind love and the sentence breaks.
 
 
-## language
+## love
 
-basically, love is a fusion of lisp apl and haskell over c
+basically, love is a synthesis of lisp haskell and apl over c
 where every value is a total function of one argument and every
-action is as generic and efficient as possible by definition.
+action is as defined as generically efficient as possible.
 
-- every value is a total function of one argument
-- all operations made as generic as possible
 - numeric tower with shaped array broadcasting
 - lambdas, macros, closures, multitasking
 - freestanding bare metal kernel build
@@ -90,11 +88,13 @@ is [CLAUDE.md](CLAUDE.md) -- the root test file CLAUDE.l in a code fence, so
 the spec stays green.
 
 
-### example program
+### hello world and fizzbuzz
 
-;;; is the comma on the first line valid yet?
 ```
-."hello world\n",
+."hello world\n"
+```
+
+```
 
 (100
  (\ n (: f (? (n % 3) "" "fizz")

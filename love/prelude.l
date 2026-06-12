@@ -45,7 +45,7 @@
 (: inc (+ 1) dec (+ -1) (:: a b) (pin macros a b)
    putc (fputc out)
    puts (fputs out)
-   putn (fputn out)
+   (putn n) (fputbn out n 10)
    putx (fputx out)
    (getc _) (fgetc in))
 ; the accessor aliases are plain globals too, so escaping works like (+)/'+ --

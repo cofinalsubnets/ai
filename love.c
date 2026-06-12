@@ -134,7 +134,7 @@ lvm_t lvm_kcall,
  lvm_callk, lvm_scare, lvm_anon, lvm_yield_sw, lvm_yield_nif, lvm_task_exit, lvm_spawn, lvm_wait,
  lvm_sleep, lvm_donep, lvm_kill, lvm_key,
  lvm_fgetc, lvm_fungetc, lvm_feof, lvm_fputc, lvm_fputs, lvm_fflush,
- lvm_fputn, lvm_read, lvm_dot,
+ lvm_fputbn, lvm_read, lvm_dot,
  // Step 5a -- typed multi-rank arrays (kernel/arr.c). lvm_vbin is the shared
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  lvm_arr, lvm_arank, lvm_alen, lvm_ashape, lvm_atype,
@@ -601,7 +601,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_sleep, "sleep", s1(lvm_sleep)) _(nif_donep, "done?", s1(lvm_donep)) \
  _(nif_kill, "kill", s1(lvm_kill)) \
  _(nif_key, "key?", s1(lvm_key)) \
- _(nif_fputn, "fputn", s3(lvm_fputn))\
+ _(nif_fputbn, "fputbn", s3(lvm_fputbn))\
  _(nif_fputx, "fputx", s2(lvm_fputx))\
  _(nif_fgetc, "fgetc", s1(lvm_fgetc)) _(nif_fungetc, "fungetc", s2(lvm_fungetc)) _(nif_feof, "feof", s1(lvm_feof))\
  _(nif_fputc, "fputc", s2(lvm_fputc)) _(nif_fputs, "fputs", s2(lvm_fputs))  _(nif_fflush, "fflush", s1(lvm_fflush))\
@@ -2363,11 +2363,11 @@ lvm(lvm_dot) {
  Unpack(g);
  return Ip++, Continue(); }
 
-static struct g*gfputn(struct g *g, intptr_t n, uint8_t b, struct g_io *o);
-lvm(lvm_fputn) {
+static struct g*gfputbn(struct g *g, intptr_t n, uint8_t b, struct g_io *o);
+lvm(lvm_fputbn) {
  if (iop(Sp[0])) {
    Pack(g);
-   if (!g_ok(g = gfputn(g, getfix(Sp[1]), getfix(Sp[2]), (struct g_io*) Sp[0]))) return gtrap(g);
+   if (!g_ok(g = gfputbn(g, getfix(Sp[1]), getfix(Sp[2]), (struct g_io*) Sp[0]))) return gtrap(g);
    Unpack(g);
    Sp[2] = Sp[1]; }
  return Sp += 2, Ip++, Continue(); }
@@ -2386,7 +2386,7 @@ static struct g*gzputn(struct g *g, intptr_t n, uint8_t b) {
  if (q) g = gzputn(g, q, b);
  return gzputc(g, g_digits[r]); }
 
-static g_inline struct g*gfputn(struct g *g, intptr_t n, uint8_t b, struct g_io *o) {
+static g_inline struct g*gfputbn(struct g *g, intptr_t n, uint8_t b, struct g_io *o) {
  return g->io = o, gzputn(g, n, b); }
 
 static struct g*gvzprintf(struct g*g, char const *fmt, va_list xs) {
@@ -2786,9 +2786,9 @@ static g_inline struct g *gfputx(struct g *g, struct g_io *o, intptr_t x) {
 
 static struct g* g_dtoa2(struct g*g, g_flo_t v) {
  int const max_frac = sizeof(g_flo_t) == 4 ? 7 : 15;
- if (v != v) return gzputs(g, "nan");
+ if (v != v) return gzputs(g, "ieee-nan");
  if (v < 0) g = gzputc(g, '-'), v = -v;
- if (v > dtoa_inf) return gzputs(g, "inf");
+ if (v > dtoa_inf) return gzputs(g, "ieee-inf");
  int exp = 0;
  bool sci = false;
  if (v != 0 && (v >= dtoa_sci_hi || v < dtoa_sci_lo)) {
@@ -3265,8 +3265,19 @@ static g_inline struct g *gzread1sym(struct g*g, int c) {
         box_put(b->shape, j);
         g->sp[0] = word(b); }
        return g; }
-      double d = strtod(txt(s), &e);
-      if (e == txt(s) || *e != 0) return intern(g);
+      // the IEEE specials read by their own names; everything else strtod
+      // would take by spelling (inf, infinity, nan) stays a symbol: a float
+      // token leads with a digit (a sign or dot may front it).
+      char *tx = txt(s);
+      double d;
+      if (n == 8 && !memcmp(tx, "ieee-inf", 8)) d = __builtin_inf();
+      else if (n == 9 && !memcmp(tx, "-ieee-inf", 9)) d = -__builtin_inf();
+      else if (n == 8 && !memcmp(tx, "ieee-nan", 8)) d = NAN;
+      else {
+       char c0 = *tx == '+' || *tx == '-' ? tx[1] : *tx;
+       if (!(c0 >= '0' && c0 <= '9') && c0 != '.') return intern(g);
+       d = strtod(tx, &e);
+       if (e == tx || *e != 0) return intern(g); }
       uintptr_t req = b2w(sizeof(struct g_tuple) + sizeof(g_flo_t));
       if (g_ok(g = g_have(g, req))) {
        struct g_tuple *r = ini_scalar(bump(g, req), g_R);
