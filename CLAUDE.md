@@ -21,7 +21,8 @@
 ; * C files EMBED lisp the .l sweeps cannot see: love.c (g_evals_'s driver string), main.c
 ;   (s2cl + runner), kmain.c (the K_TEST runner), wasm/. grep them on every rename.
 ; * a bare all-punct symbol mid-list captures its left operand when code compiles (the
-;   opfix pass) -- escape it in parens ((+) is + as a value); quoted lists are data and
+;   opfix pass) -- escape it in parens ((+) is + as a value); GLUED to a datum it is
+;   monadic instead (the valence law: space your dyadics); quoted lists are data and
 ;   keep their operators plain.
 ; * a corpus test that spawns must (wait p) its task: an orphan stalls the kernel runner.
 ; * the repl reads each LINE as one expression (1 = 1 answers 1); files read forms. the

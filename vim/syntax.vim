@@ -19,24 +19,24 @@ syn keyword LoveFunc cons cap cbp caap cabp cbap cbbp
 syn keyword LoveFunc caaap caabp cabap cabbp cbaap cbabp cbbap cbbbp
 syn keyword LoveFunc id co const flip
 syn keyword LoveFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
-syn keyword LoveFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge msort
+syn keyword LoveFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge msort jot
 syn keyword LoveFunc + - * / % < <= = >= > <- -> idp inc dec abs gcd modpow int
 syn keyword LoveFunc ~ << >> & \| ^
 syn keyword LoveFunc sin cos log pow plex re im conj arg clift
-syn keyword LoveFunc nump intp powg num-ap numfn randint
+syn keyword LoveFunc nump intp powg num-ap numfn randint net prod neg recip frac bit
 syn keyword LoveFunc twop strp symp mapp homp hotp tupp bigp boxp arrp comp flop fixp nilp atomp
 syn keyword LoveFunc arr array arank alen ashape atype asum aprod amax amin aall
 syn keyword LoveFunc a-rank a-shape a-type a-dim
-syn keyword LoveFunc string slice intern nom slurp show sip pad page
-syn keyword LoveFunc table keys dig sat non peep pin pull buf blit
-syn keyword LoveFunc lamb peek poke seek trim
+syn keyword LoveFunc string slice intern nom mint tally slurp show sip pad page
+syn keyword LoveFunc tablet keys dig sat non peep pin pull buf blit anon
+syn keyword LoveFunc lamb peek poke seek trim mono
 syn keyword LoveFunc fgetc fungetc feof fputc fputs fputn fputx fflush read
 syn keyword LoveFunc putc puts putn putx getc read in out dot
 syn keyword LoveFunc ev call-cc yield spawn wait sleep done? kill key?
 syn keyword LoveFunc trap scare scare? more? eof?
 syn keyword LoveFunc rand randf rand-next randf-next rng-seed rng-get rng-set
 syn keyword LoveFunc open close run getenv exit
-syn keyword LoveFunc clock gauge dict macros assert version-number argv cmdline
+syn keyword LoveFunc clock gauge book macros assert version-number argv cmdline
 
 " Macros (head-symbol rewrites installed with ::)
 syn keyword LoveMacro :: L list do begin progn let if cond quote qq gsym tuple hash
@@ -53,7 +53,8 @@ syn match LoveAtom "'[^ \t\n()`',;#\"]\+" contains=LoveAtomMark
 " Quasiquote marks: `tmpl  ,unquote  ,@unquote-splice
 syn match LoveQuasi ",@\|[`,]"
 
-" Prefix operators: @(…) array  #(…) hash  $x sat  (table: dict['operators])
+" Prefix operators: @(…) array  #(…) hash  $x sat  (the tables: book['operators],
+" book['monadics] -- glued runs are monadic, the valence law)
 syn match LoveSigil "[@#$]"
 
 " Numbers (integer / bignum literals, possibly negative)

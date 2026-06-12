@@ -110,6 +110,7 @@ the spec stays green.
 - `make repl` interactive shell
 - `make test_all` adds the freestanding kernel (qemu) + tool diffs
 - `make wasm` build the browser image (wasm/love.js, used by index.html)
+- `out/host/ai` is a symlink to `love` -- ai is love in the filesystem too
 - `out/host/love file.l` run a file
 - `echo .ev | love` print the compiler
 

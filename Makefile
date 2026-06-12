@@ -42,10 +42,10 @@ test_tools: host
 	@$(MAKE) -C tools
 all: host kernel wasm
 
-# Static lisp headers: each love/*.g is serialized to a C string literal in
+# Static lisp headers: each love/*.l is serialized to a C string literal in
 # out/lib/*.h by tools/lcat.l (run on the bootstrap interpreter love0). Frontends
 # #include these and assemble the bootstrap with G_EGG_PRE/POST (love.h).
-# Drop a .g into love/ and it is picked up automatically -- no rule to edit.
+# Drop a .l into love/ and it is picked up automatically -- no rule to edit.
 lib_h = $(patsubst love/%.$x,out/lib/%.h,$(wildcard love/*.$x))
 # love0's bootstrap headers: sed-wrapped raw source (a text->C-literal needing no
 # interpreter -- the l reader strips the ; comments at read time), since love0
@@ -144,7 +144,7 @@ $(love0): $(glove0_o) $(data_ld)
 	@mkdir -p $(dir $@)
 	@$(CC) $(g_cflags) $(ldflags) -o $@ $(glove0_o) -lm
 
-# tools/gen_data.l reflects $(ho)/data.o's gwen_data.NN section sizes into
+# tools/gen_data.l reflects $(ho)/data.o's love_data.NN section sizes into
 # $(ho)/data.h, whose g_typ() shifts instead of the portable header's divides.
 $(hdata_h): $(ho)/data.o $(love0) tools/gen_data.$x love/prelude.$x
 	@echo GEN	$@
@@ -165,6 +165,7 @@ $(ho)/$n: main.c $(ho)/lib$n.a out/lib/egg.h out/lib/prelude.h out/lib/ev.h out/
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) $(ldflags) -o $@ main.c $(ho)/lib$n.a -lm
+	@ln -sf $n $(ho)/ai   # ai is love: the blessed alias
 
 $(ho)/$n.1: $(ho)/$n love/manpage.$x
 	@echo GEN	$@

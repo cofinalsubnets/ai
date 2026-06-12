@@ -1,33 +1,27 @@
-; generates a manual page
-(: 
+; generates the manual page: out/host/love.1 (groff -man source on stdout)
+(:
  (putln s) (: _ (puts s) (putc 10))
- concat (foldl "" (+))
+ concat (foldl (+) "")
  sec "1"
  nom "love"
- upnom "GL"
+ upnom "LOVE"
  section (+ ".SH ")
- (\f i s) (concat (L "\\f[" i "]" s "\\f[R]"))
- \fB (\f "B")
- \fI (\f "I")
+ (fmt i s) (concat (L "\\f[" i "]" s "\\f[R]"))
+ bold (fmt "B")
+ ital (fmt "I")
  lines (L
-   (concat (L ".TH \"" upnom "\" \"" sec "\" \"\" \"Version " version "\" \"" upnom "\""))
+   (concat (L ".TH \"" upnom "\" \"" sec "\" \"\" \"Version " version-number "\" \"" upnom "\""))
    (section "NAME")
-   (+ (\fB nom) " \\- list expression interpreter")
+   (+ (bold nom) " \\- list expression interpreter")
    (section "SYNOPSIS")
    ".PP"
-   (concat (L (\fB nom) " [" (\fB "-h") "] [" (\fB "-v") "] [" (\fB "-r") "] [" (\fI "file") (\fI "\\&...") "]"))
+   (concat (L (bold nom) " [" (bold "-l") (ital " lib") "] [" (ital "file") (ital "\\&...") "]"))
    (section "DESCRIPTION")
-   (+ nom " is a minimal scheme-like lisp dialect with simple syntax and evaluation rules.")
+   (+ nom " is a small lisp where every value is a total function of one argument.")
    (section "COMMAND LINE OPTIONS")
    ".TP"
-   ".B \\-h"
-   "show help"
-   ".TP"
-   ".B \\-v"
-   "show version"
-   ".TP"
-   ".B \\-r"
-   "start a repl"
+   ".B \\-l \\fIlib\\fR"
+   "load lib before processing the remaining arguments"
    ".TP"
    ".I file\\&..."
    "scripts to eval"

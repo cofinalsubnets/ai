@@ -1423,9 +1423,10 @@ static g_inline struct g *ana_d(struct g *g, struct env **b, word exp) {
  // recursive-value boxing: c0 is the bootstrap compiler, so it delegates the
  // letrec*-value rewrite to the l `boxfix` prepass (prelude.l) -- evaluated
  // like a macro -- once that global exists (i.e. for everything after its own
- // definition partway through the prelude). It boxes a value binding whose init
- // closes over the name being defined into a heap cell. The runtime compiler
- // (ev.l) does the same natively in `l2x`. exp is rooted across the alloc.
+ // definition partway through the prelude). It indirects forward-referenced
+ // bindings through nom-keyed cells -- one scope; see prelude.l. The runtime compiler
+ // (ev.l) runs the same pass in wev, so both lanes share one boxfix. exp is
+ // rooted across the alloc.
  if (g_ok(g = intern(g_strof(g, "boxfix")))) {
   word bf = g_mapget(g, 0, pop1(g), g->book);
   if (bf && homp(bf)) {
