@@ -240,17 +240,20 @@
              (kedit uu lz rr dd) (loop npra uu lz rr dd (detach hu cur) hd 0)
              (khist uu lz rr dd nhu nhd ncur) (loop npra uu lz rr dd nhu nhd ncur)
              (? (= c -7) eofsym
-                (= c 10) (: nu (cons (rev l) u)
-                            (? (&& (nilp r) (nilp d))
-                               (: vs (parseall (flatten nu 0 r d))
-                                  (? (= vs m)
-                                     (loop npra nu 0 r d (detach hu cur) hd 0)
-                                     (: _ (putc 10)
-                                        nhu (? (nilp vs) (revcat hd (detach hu cur))
-                                               (twop cur) (revcat hd (cons cur hu))
-                                               (revcat hd (cons (mkframe u l r d) hu)))
-                                        (cons vs (cons nhu 0)))))
-                               (loop npra nu 0 r d (detach hu cur) hd 0)))
+                ; enter CASHES the buffer wherever the cursor sits, as long as
+                ; it parses complete; only an unfinished shape splits the line
+                ; at the cursor and keeps editing. on submit the buffer goes to
+                ; the END of history (the zipper re-merged in original order --
+                ; an edited recall's pristine original was already restored by
+                ; detach at the first edit), capped at 100 entries.
+                (= c 10) (: vs (parseall (flatten u l r d))
+                            (? (= vs m)
+                               (loop npra (cons (rev l) u) 0 r d (detach hu cur) hd 0)
+                               (: _ (? (twop d) (: _ (putc 27) _ (putc 91) _ (putn (tally d) 10) (putc 66)) 0)
+                                  _ (putc 10)
+                                  nhu (? (nilp vs) (revcat hd (detach hu cur))
+                                         (take 100 (cons (mkframe u l r d) (revcat hd (detach hu cur)))))
+                                  (cons vs (cons nhu 0)))))
                 (< 0 c)  (loop npra u (cons c l) r d (detach hu cur) hd 0)
                 (= c -1) (edleft  kloop u l r d)
                 (= c -2) (edright kloop u l r d)
