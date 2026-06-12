@@ -71,7 +71,7 @@ struct g_tuple {
  lvm_t *ap;
  uintptr_t type, rank, shape[]; };
 
-// Status rides the 2 pointer tag bits, read as two flags: bit 0 is the SING
+// Status rides the 2 pointer tag bits, read as two flags: bit 0 is the SCARE
 // bit (something is wrong -- the thrower puts the relevant data on struct g for
 // the help function to read; the bare scare is oom, which has no room to say
 // more), bit 1 is the MORE bit (read control flow: more input is wanted).
