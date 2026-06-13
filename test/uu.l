@@ -2272,6 +2272,64 @@
         n)))
  (idp (vof 0 '7) (vof 0 '(add (natminus 7 3) 3))))   ; (7-3)+3 computes to 7
 
+; NATURALNUMBERS round 23 -- natminus is monotone in the order: a triple rect
+; (n, m, k) down natminus's shape, the n=0 corner free (0-k is 0, natgtb 0 _ is
+; false). natlehandminusl (n<=m -> n-k <= m-k, monotone in the minuend): the
+; succ-succ-0 corner IS the hypothesis, the succ-succ-succ corner the IH.
+; natlehandminusr (k<=m -> n-m <= n-k, ANTITONE in the subtrahend) is heavier --
+; its m=0 corner splits on k (k=0 is isreflnatleh, k>0 contradicts), and its
+; m-succ-0 corner is natminusleh weakened by natlehsucc (n'-m' <= n' <= succ n').
+(assert
+ (defq 'natlehandminusl
+   '(pi n nat (pi m nat (pi k nat (pi h (paths bool (natgtb n m) false)
+      (paths bool (natgtb (natminus n k) (natminus m k)) false)))))
+   '(lam n
+      (nat_rect
+        (lam q (pi m nat (pi k nat (pi h (paths bool (natgtb q m) false)
+                 (paths bool (natgtb (natminus q k) (natminus m k)) false)))))
+        (lam m (lam k (lam h (idpath false))))
+        (lam n' (lam IHn
+          (lam m (nat_rect
+             (lam mr (pi k nat (pi h (paths bool (natgtb (succ n') mr) false)
+                      (paths bool (natgtb (natminus (succ n') k) (natminus mr k)) false))))
+             (lam k (lam h (fromempty (paths bool (natgtb (natminus (succ n') k) (natminus 0 k)) false) (nopathstruetofalse h))))
+             (lam m' (lam um
+               (lam k (nat_rect
+                  (lam kr (pi h (paths bool (natgtb (succ n') (succ m')) false)
+                           (paths bool (natgtb (natminus (succ n') kr) (natminus (succ m') kr)) false)))
+                  (lam h h)
+                  (lam k' (lam uk (lam h (IHn m' k' h))))
+                  k))))
+             m))))
+        n)))
+ (defq 'natlehandminusr
+   '(pi n nat (pi m nat (pi k nat (pi h (paths bool (natgtb k m) false)
+      (paths bool (natgtb (natminus n m) (natminus n k)) false)))))
+   '(lam n
+      (nat_rect
+        (lam q (pi m nat (pi k nat (pi h (paths bool (natgtb k m) false)
+                 (paths bool (natgtb (natminus q m) (natminus q k)) false)))))
+        (lam m (lam k (lam h (idpath false))))
+        (lam n' (lam IHn
+          (lam m (nat_rect
+             (lam mr (pi k nat (pi h (paths bool (natgtb k mr) false)
+                      (paths bool (natgtb (natminus (succ n') mr) (natminus (succ n') k)) false))))
+             (lam k (nat_rect
+                (lam kr (pi h (paths bool (natgtb kr 0) false)
+                         (paths bool (natgtb (natminus (succ n') 0) (natminus (succ n') kr)) false)))
+                (lam h (isreflnatleh n'))
+                (lam k' (lam uk (lam h (fromempty (paths bool (natgtb (natminus (succ n') 0) (natminus (succ n') (succ k'))) false) (nopathstruetofalse h)))))
+                k))
+             (lam m' (lam um
+               (lam k (nat_rect
+                  (lam kr (pi h (paths bool (natgtb kr (succ m')) false)
+                           (paths bool (natgtb (natminus (succ n') (succ m')) (natminus (succ n') kr)) false)))
+                  (lam h (natlehsucc (natminus n' m') n' (natminusleh n' m')))
+                  (lam k' (lam uk (lam h (IHn m' k' h))))
+                  k))))
+             m))))
+        n))))
+
 ; --- the kernel refuses: ill-typed terms scare; the help cell catches them.
 ; --- (install per the help law -- more/eof keep the read protocol.)
 (: (help s p e) (? (more? s) p (eof? s) e
