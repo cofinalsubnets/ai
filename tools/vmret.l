@@ -126,7 +126,7 @@
         m)
    (symtab-sizes d)                                       ; -> map: fn start address -> byte size
      (: st (find-symtab d (u64 d 40) (u16 d 58) (u16 d 60) 0)  ; e_shoff / e_shentsize / e_shnum
-        (? st (collect-syms d (cap st) (// (cbp st) 24) 0 (tablet 0)) (tablet 0))))
+        (? st (collect-syms d (cap st) (// (cup st) 24) 0 (tablet 0)) (tablet 0))))
 
 ; --- the scan (vmret.py scan(), grouping by function header) ----------
 ; close the current watched function: flag it iff it collected any rets.
@@ -142,7 +142,7 @@
    ((: (loop ls name watching lim rets flagged total)
        (? (twop ls)
           (: line (cap ls)
-             rest (cbp ls)
+             rest (cup ls)
              h    (parse-header line)
              (? h
                 (? (prefix? "." h)                              ; local label: stay inside
@@ -154,7 +154,7 @@
                       lim2 (? (< 0 sz) (+ ha sz) BIG)           ; extent end, or unbounded
                       (loop rest h w2 lim2 0 fl2 (? w2 (+ total 1) total))))
                 (: ins (? watching (parse-insn line) 0)         ; instruction: maybe a ret
-                   (? (&& ins (< (hex->int (cap ins)) lim) (ret? (mnemonic (cbp ins))))
+                   (? (&& ins (< (hex->int (cap ins)) lim) (ret? (mnemonic (cup ins))))
                       (loop rest name watching lim (cons (cap ins) rets) flagged total)
                       (loop rest name watching lim rets flagged total)))))
           (cons (close name watching rets flagged) total)))
@@ -169,7 +169,7 @@
                                   (? (< ca cb) 1 (? (> ca cb) 0 (f (+ i 1)))))))) 0)
    (maxlen fl)   (foldl (\ m e (: l (tally (cap e)) (? (< m l) l m))) 0 fl)
    (join-rets rs) (? (twop rs)
-                     (? (twop (cbp rs)) (+ (+ "0x" (cap rs)) (+ ", " (join-rets (cbp rs))))
+                     (? (twop (cup rs)) (+ (+ "0x" (cap rs)) (+ ", " (join-rets (cup rs))))
                                         (+ "0x" (cap rs)))
                      ""))
 
@@ -177,23 +177,23 @@
 ; the merge split counts the SPINE (entries are pairs; $ is the net sum), so fold.
 (: (emerge a b) (? (twop a) (? (twop b)
                      (? (str< (cap (cap a)) (cap (cap b)))
-                        (cons (cap a) (emerge (cbp a) b)) (cons (cap b) (emerge a (cbp b))))
+                        (cons (cap a) (emerge (cup a) b)) (cons (cap b) (emerge a (cup b))))
                      a) b)
    (llen l) (foldl (\ n _ (+ 1 n)) 0 l)
-   (esort l) (? (twop (cbp l)) (: n (>> (llen l) 1) (emerge (esort (take n l)) (esort (drop n l)))) l))
+   (esort l) (? (twop (cup l)) (: n (>> (llen l) 1) (emerge (esort (take n l)) (esort (drop n l)))) l))
 
 ; --- argument parsing ------------------------------------------------
 (: (parse-args args path prefix od)
    (? (twop args)
       (: a (cap args)
          (? (= a "--prefix")
-            (? (twop (cbp args)) (parse-args (cbp (cbp args)) path (cap (cbp args)) od) (die "missing argument for --prefix"))
+            (? (twop (cup args)) (parse-args (cup (cup args)) path (cap (cup args)) od) (die "missing argument for --prefix"))
          (? (= a "--objdump")
-            (? (twop (cbp args)) (parse-args (cbp (cbp args)) path prefix (cap (cbp args))) (die "missing argument for --objdump"))
+            (? (twop (cup args)) (parse-args (cup (cup args)) path prefix (cap (cup args))) (die "missing argument for --objdump"))
          (? (|| (= a "-h") (= a "--help")) (usage 0)
          (? (dash? a) (die (+ "unknown option: " a))
          (? path (die (+ "unexpected argument: " a))
-            (parse-args (cbp args) a prefix od)))))))
+            (parse-args (cup args) a prefix od)))))))
       (L path prefix od)))
 
 ; --- try candidate disassemblers in order ----------------------------
@@ -202,14 +202,14 @@
 (: (try-cands cs elf)
    (? (twop cs)
       (: r (run (L (cap cs) "-d" "--no-show-raw-insn" elf))
-         (? (twop r) (cons (cap cs) r) (try-cands (cbp cs) elf)))
+         (? (twop r) (cons (cap cs) r) (try-cands (cup cs) elf)))
       0))
 
 ; --- driver ----------------------------------------------------------
-(: parsed   (parse-args (cbp argv) 0 "lvm_" 0)
+(: parsed   (parse-args (cup argv) 0 "lvm_" 0)
    path     (cap parsed)
-   prefix   (cap (cbp parsed))
-   od       (cap (cbp (cbp parsed)))
+   prefix   (cap (cup parsed))
+   od       (cap (cup (cup parsed)))
    _        (? path 0 (die "usage: vmret.l ELF [--prefix PREFIX] [--objdump PATH]"))
    base     (basename path)
    port     (open path "r")
@@ -236,12 +236,12 @@
                           (? x86? "objdump" "llvm-objdump") (? x86? "llvm-objdump" "objdump")))
    chosen   (try-cands cands path)
    _        (? chosen 0 (die "no disassembler found (tried llvm-objdump, objdump); pass --objdump"))
-   status   (cap (cbp chosen))
-   output   (cbp (cbp chosen))
+   status   (cap (cup chosen))
+   output   (cup (cup chosen))
    _        (? (= 0 status) 0 (die (+ (+ (cap chosen) " failed: status ") (show status))))
    scanned  (scan-all (lines output) prefix ret? sizes)
    flagged  (cap scanned)
-   total    (cbp scanned)
+   total    (cup scanned)
    ; --- the report (byte-for-byte the same shape as vmret.py) ---
    (? (= 0 total)
       (: _ (fputs err "vmret: no ") _ (fputs err prefix) _ (fputs err "* functions found in ")
@@ -254,7 +254,7 @@
          _ (fputbn out total 10) _ (fputs out " ") _ (fputs out prefix)
          _ (fputs out "* functions contain a ret (TCO suspects):\n")
          _ (each sorted (\ e
-              (: name (cap e) rets (cbp e)
+              (: name (cap e) rets (cup e)
                  _ (fputs out "  ") _ (fputs out name) _ (fputs out (spaces (- width (tally name))))
                  _ (fputs out "  ret @ ") _ (fputs out (join-rets rets)) _ (fputc out 10) 0)))
          (exit 1))

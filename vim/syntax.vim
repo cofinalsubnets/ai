@@ -15,8 +15,8 @@ syn iskeyword @,33,37,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
 syn keyword LoveForm : ? \\
 
 " Built-in functions (C nifs) + prelude functions
-syn keyword LoveFunc cons cap cbp caap cabp cbap cbbp
-syn keyword LoveFunc caaap caabp cabap cabbp cbaap cbabp cbbap cbbbp
+syn keyword LoveFunc cons cap cup caap caup cuap cuup
+syn keyword LoveFunc caaap caaup cauap cauup cuaap cuaup cuuap cuuup
 syn keyword LoveFunc id co const flip
 syn keyword LoveFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
 syn keyword LoveFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge msort jot

@@ -64,7 +64,7 @@ compiles with it):
 and the valence law: every operator is two operators -- GLUED IS MONADIC,
 SPACED IS DYADIC. head position never fuses, so calls, sections and minified
 source read as ever (`(+ 1 2)`, `(1 +)`).
-- `<x >x` cap and cbp; `<>x ><x <<x >>x` the compounds, by factorization
+- `<x >x` cap and cup; `<>x ><x <<x >>x` the compounds, by factorization
 - `+l` the net -- the true sum, APL's `+/` -- and `*l` the product
 - `|x` abs, `-x` neg (`+` and `-` fuse only to `( ' " @ ~ #`, so `-3` stays a
   number and `-x` a kebab name), `/x` reciprocal, `%x` frac, `?x` the iverson bracket

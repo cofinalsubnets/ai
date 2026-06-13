@@ -5,7 +5,7 @@
       (\ k (pull book k 0)))
    (each (keys book)
     (\ k (? (symp k) (? (= "lvm_" (slice (string k) 0 4)) (pull book k 0) 0) 0)))))
- (sit e z a) (? (twop a) (sit e (e (cap a)) (cbp a)) z)
+ (sit e z a) (? (twop a) (sit e (e (cap a)) (cup a)) z)
 
  now (clock 0)
  _ (mop (pin book 'ev (sit (sit ev 0 egg) 0 egg)))

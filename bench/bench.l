@@ -21,7 +21,7 @@
        (? (< (cap r) bench-min-ms) (bench-loop work (* 2 reps)) (cons reps r)))
    (bench name work)
     (: r    (bench-loop work 1)
-       reps (cap r) ms (cabp r) chk (cbbp r)
+       reps (cap r) ms (caup r) chk (cuup r)
      (: _ (puts name)   _ (putc 32)
         _ (puts "love") _ (putc 32)
         _ (putx reps)   _ (putc 32)

@@ -4,10 +4,10 @@
 ; spaced, a run keeps its dyadic/infix life. HEAD POSITION NEVER FUSES:
 ; a run right after an open delimiter is the form's operator -- the
 ; section/escape law, and what keeps minified source legal. the words
-; behind the sigils: < cap, > cbp (<< >> <> >< the compounds), + net,
+; behind the sigils: < cap, > cup (<< >> <> >< the compounds), + net,
 ; * prod, | abs, - neg, / recip, % frac, ? bit; $ ! . ride the same lane.
 (assert
- ; cap and cbp, and the compounds by greedy monadic factorization
+ ; cap and cup, and the compounds by greedy monadic factorization
  (1 = <'(1 2 3)) ('(2 3) = >'(1 2 3))
  (2 = <>'(1 2 3)) ('(3) = >>'(1 2 3))
  (9 = <<'((9 8) 2)) ('(2) = ><'((1 2) 9))

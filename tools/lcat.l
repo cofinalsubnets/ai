@@ -51,7 +51,7 @@
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
               (fputc out c)))
 
-(: p (open (cap (cbp argv)) "r")
+(: p (open (cap (cup argv)) "r")
    _ (? p 0 (: _ (fputs err "lcat: cannot open input") (exit 1)))
    ; gather every canonical form into one space-joined string
    acc ((: (g acc e p first)

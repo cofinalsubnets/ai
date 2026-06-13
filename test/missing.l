@@ -22,7 +22,7 @@
 ; the help hears (help s 'missing nom) and its result is the value at the site
 (: help (\ s a b (? (&& (scare? s) (idp a 'missing)) (L 'missing-was b) 0)))
 (assert (: r an-ghost
-           (&& (twop r) (idp 'missing-was (cap r)) (idp 'an-ghost (cabp r)))))
+           (&& (twop r) (idp 'missing-was (cap r)) (idp 'an-ghost (caup r)))))
 (: help 0)
 
 ; the read of a lambda's free global happens at closure creation (the runtime
@@ -55,8 +55,8 @@
 
 ; the empty special forms are their head reads -- the same missing reads under a help
 (: help (\ s a b (? (&& (scare? s) (idp a 'missing)) (L 'empty-form b) 0)))
-(assert (: r (:) (&& (twop r) (idp ': (cabp r))))
-        (: r (?) (&& (twop r) (idp '? (cabp r)))))
+(assert (: r (:) (&& (twop r) (idp ': (caup r))))
+        (: r (?) (&& (twop r) (idp '? (caup r)))))
 (: help 0)
 
 ; (missing t k) -- the book read as a value: k present in tablet t answers the

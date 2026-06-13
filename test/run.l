@@ -17,16 +17,16 @@
   ; --- ran successfully: a pair, exit 0, and (here) no output ---
   (twop (run (L "true")))
   (= 0 (cap (run (L "true"))))
-  (= 0 (sat (cbp (run (L "true")))))            ; `true` writes nothing
+  (= 0 (sat (cup (run (L "true")))))            ; `true` writes nothing
 
   ; --- a nonzero exit code is reported as-is ---
   (= 1 (cap (run (L "false"))))
 
   ; --- stdout is captured (echo appends a newline) ---
-  (: r (run (L "echo" "hi")) (&& (= 0 (cap r)) (= "hi\n" (cbp r))))
+  (: r (run (L "echo" "hi")) (&& (= 0 (cap r)) (= "hi\n" (cup r))))
 
   ; --- multiple args are marshalled in order, with no shell in between ---
-  (: r (run (L "printf" "%s-%s" "ab" "cd")) (= "ab-cd" (cbp r)))
+  (: r (run (L "printf" "%s-%s" "ab" "cd")) (= "ab-cd" (cup r)))
 
   ; --- a program that can't be spawned -> positive errno fixnum, NOT a pair ---
   (: r (run (L "/no/such/prog-xyzzy")) (&& (fixp r) (< 0 r)))   ; abs path: ENOENT
@@ -37,7 +37,7 @@
   (= -1 (run (L "echo" 5)))                     ; 5 is not a string
 
   ; --- output larger than the initial buffer exercises the grow path ---
-  (: r (run (L "seq" "20000")) (&& (= 0 (cap r)) (< 65536 (sat (cbp r)))))
+  (: r (run (L "seq" "20000")) (&& (= 0 (cap r)) (< 65536 (sat (cup r)))))
 
   ; --- getenv: PATH is set (a string); a bogus name is unset (nil) ---
   (strp (getenv "PATH"))

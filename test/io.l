@@ -61,9 +61,9 @@
   (= 1 (read (sip '(49)) 99))                          ; "1"
   (= 'a (read (sip '(97)) 99))                         ; "a"
   (: r (read (sip '(40 49 32 50 41)) 99)               ; "(1 2)"
-     (do (twop r) (= 1 (cap r)) (= 2 (cabp r))))
+     (do (twop r) (= 1 (cap r)) (= 2 (caup r))))
   (: r (read (sip '(39 49)) 99)                        ; "'1" -> (` 1)
-     (do (twop r) (= 1 (cabp r))))
+     (do (twop r) (= 1 (caup r))))
   ; "hi" -- string literal round-trip through the ci port.
   (= (string (cons 104 (cons 105 0))) (read (sip '(34 104 105 34)) 99))
 

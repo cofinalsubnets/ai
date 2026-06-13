@@ -564,7 +564,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_same, "idp", s2(lvm_same)) \
  _(nif_bsl, "<<", s2(lvm_bsl)) _(nif_bsr, ">>", s2(lvm_bsr))\
  _(nif_band, "&", s2(lvm_band)) _(nif_bor, "|", s2(lvm_bor)) _(nif_bxor, "^", s2(lvm_bxor))\
- _(nif_cons, "cons", s2(lvm_cons)) _(nif_car, "cap", s1(lvm_car)) _(nif_cdr, "cbp", s1(lvm_cdr))\
+ _(nif_cons, "cons", s2(lvm_cons)) _(nif_car, "cap", s1(lvm_car)) _(nif_cdr, "cup", s1(lvm_cdr))\
  _(nif_sort, "sort", s1(lvm_sort)) _(nif_tally, "tally", s1(lvm_tally)) \
  _(nif_slice, "slice", s3(lvm_slice)) \
  _(nif_read, "read", s2(lvm_read))\
@@ -1555,7 +1555,7 @@ lvm(lvm_eval) { return Ip++, Pack(g),
  !g_ok(g = c0(g, lvm_jump)) ? ghelp(g) : (Unpack(g), Continue()); }
 
 g_noinline struct g *g_evals_(struct g*g, char const*s) {
- static char const *t = "((:(e a b)(? b(e(ev'ev(cap b))(cbp b))a)e)0)";
+ static char const *t = "((:(e a b)(? b(e(ev'ev(cap b))(cup b))a)e)0)";
  struct ti i = {{lvm_port_io, putfix(-1), putfix(EOF), putfix(false)}, t, 0};
  g = push0(pushq(push0(g_eval(g_reads(g, (void*) &i)))));
  i.t = s, i.i = 0, i.io.ungetc_buf = putfix(EOF), i.io.eof_seen = putfix(false);

@@ -32,8 +32,8 @@
  ; --- functional purity: rand-next does not mutate its input state ---
  (: st (rng-seed 7) a (cap (rand-next st)) b (cap (rand-next st)) (= a b))
  ; ...and chaining the returned state advances the stream
- (: st (rng-seed 7) p (rand-next st) q (rand-next (cbp p)) !(= (cap p) (cap q)))
- (: st (rng-seed 7) p (rand-next st) (= 4 (alen (cbp p))))   ; st' is a state tuple
+ (: st (rng-seed 7) p (rand-next st) q (rand-next (cup p)) !(= (cap p) (cap q)))
+ (: st (rng-seed 7) p (rand-next st) (= 4 (alen (cup p))))   ; st' is a state tuple
 
  ; --- rng-get / rng-set snapshot + restore reproduces a draw ---
  (: _ (rng-set (rng-seed 55)) g0 (rng-get 0)
@@ -53,7 +53,7 @@
  (flop (randf 0))
  (: p (randf-next (rng-seed 3)) (< (cap p) 1))
  (: p (randf-next (rng-seed 3)) (<= 0 (cap p)))
- (: p (randf-next (rng-seed 3)) (= 4 (alen (cbp p))))
+ (: p (randf-next (rng-seed 3)) (= 4 (alen (cup p))))
 
  ; --- invalid state -> nil (rng-set / functional draws validate) ---
  (nilp (rng-set 5))
@@ -65,7 +65,7 @@
  ; --- randint (prelude): bounded functional draw, pure in its state ---
  (: r (randint (rng-seed 9) 6) (<= 0 (cap r)))
  (: r (randint (rng-seed 9) 6) (< (cap r) 6))
- (: r (randint (rng-seed 9) 6) (= 4 (alen (cbp r))))
+ (: r (randint (rng-seed 9) 6) (= 4 (alen (cup r))))
  (: st (rng-seed 9) (= (cap (randint st 6)) (cap (randint st 6))))   ; purity
 
  ; --- cross-target reproducibility pins (64-bit host values) ---

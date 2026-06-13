@@ -49,8 +49,8 @@
    ; intersperse a list of charlists with newlines, in order
    (joinln ls)
      (? (twop ls)
-        (? (twop (cbp ls))
-           (cat (cap ls) (cons 10 (joinln (cbp ls))))
+        (? (twop (cup ls))
+           (cat (cap ls) (cons 10 (joinln (cup ls))))
            (cap ls))
         0)
 
@@ -62,7 +62,7 @@
    ; call k with (rev (take n xs)) and (drop n xs). stops cleanly at
    ; end-of-xs even if n exceeds the list length.
    (splitat k acc n xs)
-     (? (&& (twop xs) (< 0 n)) (splitat k (cons (cap xs) acc) (- n 1) (cbp xs))
+     (? (&& (twop xs) (< 0 n)) (splitat k (cons (cap xs) acc) (- n 1) (cup xs))
         (k acc xs))
 
    ; map non-printables to space; otherwise pass through
@@ -75,20 +75,20 @@
    ; the next line on. up/down preserve column, clamped to the
    ; destination line's length.
    (edleft k u l r d)
-     (? (twop l) (k u (cbp l) (cons (cap l) r) d)
-        (twop u) (k (cbp u) (rev (cap u)) 0 (cons (revcat l r) d))
+     (? (twop l) (k u (cup l) (cons (cap l) r) d)
+        (twop u) (k (cup u) (rev (cap u)) 0 (cons (revcat l r) d))
         (k u l r d))
    (edright k u l r d)
-     (? (twop r) (k u (cons (cap r) l) (cbp r) d)
-        (twop d) (k (cons (revcat l r) u) 0 (cap d) (cbp d))
+     (? (twop r) (k u (cons (cap r) l) (cup r) d)
+        (twop d) (k (cons (revcat l r) u) 0 (cap d) (cup d))
         (k u l r d))
    (edbsp k u l r d)
-     (? (twop l) (k u (cbp l) r d)
-        (twop u) (k (cbp u) (rev (cap u)) r d)
+     (? (twop l) (k u (cup l) r d)
+        (twop u) (k (cup u) (rev (cap u)) r d)
         (k u l r d))
    (eddel k u l r d)
-     (? (twop r) (k u l (cbp r) d)
-        (twop d) (k u l (cap d) (cbp d))
+     (? (twop r) (k u l (cup r) d)
+        (twop d) (k u l (cap d) (cup d))
         (k u l r d))
    (edhome k u l r d) (k u 0 (revcat l r) d)
    (edend  k u l r d) (k u (revcat r l) 0 d)
@@ -97,18 +97,18 @@
    ; buffer they degenerate to edhome / edend.
    (edtop k u l r d)
      (? (twop u) (: ru (rev u)
-                  (k 0 0 (cap ru) (cat (cbp ru) (cons (revcat l r) d))))
+                  (k 0 0 (cap ru) (cat (cup ru) (cons (revcat l r) d))))
         (k u 0 (revcat l r) d))
    (edbot k u l r d)
      (? (twop d) (: rd (rev d)
-                  (k (cat (cbp rd) (cons (revcat l r) u)) (revcat (cap rd) 0) 0 0))
+                  (k (cat (cup rd) (cons (revcat l r) u)) (revcat (cap rd) 0) 0 0))
         (k u (revcat r l) 0 d))
    (edup k u l r d)
-     (? (twop u) (splitat (\ lz rr (k (cbp u) lz rr (cons (revcat l r) d)))
+     (? (twop u) (splitat (\ lz rr (k (cup u) lz rr (cons (revcat l r) d)))
                           0 (tally l) (cap u))
         (k u l r d))
    (eddown k u l r d)
-     (? (twop d) (splitat (\ lz rr (k (cons (revcat l r) u) lz rr (cbp d)))
+     (? (twop d) (splitat (\ lz rr (k (cons (revcat l r) u) lz rr (cup d)))
                           0 (tally l) (cap d))
         (k u l r d))
 
@@ -136,7 +136,7 @@
      (? (twop hu)
         (: e (cap hu)
            nhd (? (emptybuf u l r d) hd (cons (mkframe u l r d) hd))
-           (k (cap e) (cap (cbp e)) (cap (cbp (cbp e))) (cbp (cbp (cbp e))) (cbp hu) nhd e))
+           (k (cap e) (cap (cup e)) (cap (cup (cup e))) (cup (cup (cup e))) (cup hu) nhd e))
         (&& (twop cur) (parses u l r d))
         (: nhd (cons (mkframe u l r d) hd)
            (k 0 0 0 0 hu nhd 0))
@@ -145,7 +145,7 @@
      (? (twop hd)
         (: e (cap hd)
            nhu (? (emptybuf u l r d) hu (cons (mkframe u l r d) hu))
-           (k (cap e) (cap (cbp e)) (cap (cbp (cbp e))) (cbp (cbp (cbp e))) nhu (cbp hd) e))
+           (k (cap e) (cap (cup e)) (cap (cup (cup e))) (cup (cup (cup e))) nhu (cup hd) e))
         (&& (twop cur) (parses u l r d))
         (: nhu (cons (mkframe u l r d) hu)
            (k 0 0 0 0 nhu hd 0))
@@ -301,8 +301,8 @@
      (: r (edline hu hd)
         (? (= r eofsym) 0
            (: vs  (cap r)
-              nhu (cabp r)
-              nhd (cbbp r)
+              nhu (caup r)
+              nhd (cuup r)
               _ (each vs (\ v (: _ (do_eval v) (putc 10))))
               (repl nhu nhd))))
 
@@ -333,8 +333,8 @@
 
 ; charms: the global character construction -- the LAZY charlist. a charm is
 ; a sat (a non-negative fixnum); a CHARS is a bare charlist (eager, ends at
-; 0); a CHARMS is the colist: (cap cs) is a charm, (cbp cs) is a top, and
-; the tail forced with the empty -- ((cbp cs) ()) -- types as charms + 0,
+; 0); a CHARMS is the colist: (cap cs) is a charm, (cup cs) is a top, and
+; the tail forced with the empty -- ((cup cs) ()) -- types as charms + 0,
 ; the coproduct, 0 the end (the floor as the nil injection). consumers
 ; dispatch on KIND: twop is a cell, anything else the end. `charms` is also
 ; the canonical lift into the construction: chars lift cell by cell, a port
@@ -345,7 +345,7 @@
 ; hot-based and answers true for every heap value, pairs included -- the
 ; lamp-spans-bands pin.)
 (: (charms s)
-   (? (twop s) (: t (cbp s)
+   (? (twop s) (: t (cup s)
                   (? (twop t) (cons (cap s) (\ u (charms t)))   ; chars: lift, lazy tail
                      (nilp t) (cons (cap s) (\ u ()))           ; the last chars cell
                      s))                                        ; a top tail: charms already
@@ -354,7 +354,7 @@
       ())
    (charms->chars s)
    (: cs (charms s)
-      (? (twop cs) (cons (cap cs) (charms->chars ((cbp cs) ()))) 0)))
+      (? (twop cs) (cons (cap cs) (charms->chars ((cup cs) ()))) 0)))
 ; zev: charms -> top, the reverse shell of the compiler -- the lane every
 ; shell ultimately feeds into. takes the global construction (anything the
 ; `charms` lift takes: chars, a port, charms proper), reads ONE form from it

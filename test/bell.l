@@ -28,7 +28,7 @@
    (showloop acc n) (? (< n 1) acc (showloop (+ (digit (% n (tally digits))) acc)(// n (tally digits)) ))
    show (showloop "")
    (gen i limit) (: b (show (bell i)) (? (<= (tally b) limit) (cons b (gen (+ i 1) limit))))
-   (leq a b) (? (twop a) (? (twop b) (? (= (cap a) (cap b)) (leq (cbp a) (cbp b)) 0) 0)
+   (leq a b) (? (twop a) (? (twop b) (? (= (cap a) (cap b)) (leq (cup a) (cup b)) 0) 0)
                          (? (twop b) 0 1))
    (ln x) (foldl (\ n _ (+ 1 n)) 0 x)            ; line count ($ on a list is the net sum)
    out (gen 0 280)

@@ -71,25 +71,25 @@
    (assign syms used) ((: (g ss m u) (? (twop ss)
          (: s (cap ss) nm (pickname u)
             (? (&& !(peep taint s 0) (< (tally nm) (tally (string s))))
-               (: i (intern nm) (g (cbp ss) (cons (cons s i) m) (cons i u)))
-               (g (cbp ss) (cons (cons s s) m) u)))
+               (: i (intern nm) (g (cup ss) (cons (cons s i) m) (cons i u)))
+               (g (cup ss) (cons (cons s s) m) u)))
          (cons m u))) (msort cntle syms) 0 used)
-   (mapped s m) (: p (assq s m) (? p (cbp p) s))
-   (flat lhs) (? (symp lhs) (cons lhs 0) (: r (flat (cap lhs)) (cons (cap r) (cat (cbp r) (cbp lhs)))))  ; unwind : head-sugar
+   (mapped s m) (: p (assq s m) (? p (cup p) s))
+   (flat lhs) (? (symp lhs) (cons lhs 0) (: r (flat (cap lhs)) (cons (cap r) (cat (cup r) (cup lhs)))))  ; unwind : head-sugar
    (lhs-rename lhs bmap am) (? (symp lhs) (mapped lhs (cat am bmap))  ; name via bmap, params via am
-       (twop lhs) (cons (lhs-rename (cap lhs) bmap am) (lhs-rename (cbp lhs) bmap am)) lhs)
-   (bodyless? bs) (? (atomp bs) 1 (atomp (cbp bs)) 0 (bodyless? (cbbp bs)))
+       (twop lhs) (cons (lhs-rename (cap lhs) bmap am) (lhs-rename (cup lhs) bmap am)) lhs)
+   (bodyless? bs) (? (atomp bs) 1 (atomp (cup bs)) 0 (bodyless? (cuup bs)))
    ; rebuild a : binding list; each binding's sugar params open a fresh sub-scope of its
    ; value (siblings all assign from u1, so their names recycle). recurse via `rec`.
    (rn-binds bs bmap env1 u1 rec) (?
-     (&& (twop bs) (twop (cbp bs)))
-       (: lhs (cap bs) val (cabp bs) f (flat lhs) r (assign (cbp f) u1) am (cap r) u2 (cbp r)
+     (&& (twop bs) (twop (cup bs)))
+       (: lhs (cap bs) val (caup bs) f (flat lhs) r (assign (cup f) u1) am (cap r) u2 (cup r)
           penv (cat am env1) lhs2 (lhs-rename lhs bmap am) val2 (rec val penv u2 0 rec)
-          (cons lhs2 (cons val2 (rn-binds (cbbp bs) bmap env1 u1 rec))))
+          (cons lhs2 (cons val2 (rn-binds (cuup bs) bmap env1 u1 rec))))
      (twop bs) (cons (rec (cap bs) env1 u1 0 rec) 0)         ; trailing body
      0)
    (rn-let bs env used top rec) (: names (ln bs) leak (? top (bodyless? bs) 0)
-       r (? leak (cons 0 used) (assign names used)) bmap (cap r) u1 (cbp r) env1 (cat bmap env)
+       r (? leak (cons 0 used) (assign names used)) bmap (cap r) u1 (cup r) env1 (cat bmap env)
        (cons ': (rn-binds bs bmap env1 u1 rec)))
    ; the macroexpanded renamer. top=1 only at a file form; a body-less top-level : leaks
    ; (its names are the global API -> kept). env/used thread scope; a one-operand `\`
@@ -98,25 +98,25 @@
      (symp x) (mapped x env)
      (atomp x) x
      (= '\ (cap x)) (? (lambp x)
-        (: lb (lp x) ps (cap lb) bd (cbp lb) r (assign ps used) am (cap r) u2 (cbp r)
+        (: lb (lp x) ps (cap lb) bd (cup lb) r (assign ps used) am (cap r) u2 (cup r)
            env2 (cat am env) ps2 (map (\ p (mapped p am)) ps)
            (cons '\ (cat ps2 (list (rec bd env2 u2 0 rec)))))
         x)
-     (= ': (cap x)) (rn-let (cbp x) env used top rec)
+     (= ': (cap x)) (rn-let (cup x) env used top rec)
      (map (\ e (rec e env used 0 rec)) x)))
 
 ; === lcat2 SURFACE -- builds the core's inputs (cnt/taint) from un-expanded source, and
 ; adapts the binding/quote macros the compiler would have already expanded away. `rn` is
 ; the recursion the core threads, so nested `:-`/qq are adapted at every level. ===
 (: (collect x) (? (symp x) (pin cnt x (+ 1 (peep cnt x 0)))
-     (twop x) (? (= 'qq (cap x)) (: _ (collect (cap x)) (tcollect (cbp x)))   ; qq body -> taint
-                 (: _ (collect (cap x)) (collect (cbp x)))) 0)
+     (twop x) (? (= 'qq (cap x)) (: _ (collect (cap x)) (tcollect (cup x)))   ; qq body -> taint
+                 (: _ (collect (cap x)) (collect (cup x)))) 0)
    (tcollect x) (? (symp x) (: _ (pin cnt x (+ 1 (peep cnt x 0))) (pin taint x 1))
-                    (twop x) (: _ (tcollect (cap x)) (tcollect (cbp x))) 0)
+                    (twop x) (: _ (tcollect (cap x)) (tcollect (cup x))) 0)
    (rn x env used top rec) (? (twop x)
-       (? (= ':- (cap x)) (: rl (rn-let (cat (cbbp x) (list (cabp x))) env used top rec)  ; :- = body-first :
-             rb (cbp rl) (cons ':- (cons (last rb) (init rb))))                             ; reorder body back
-          (= 'let (cap x)) (rn-let (cbp x) env used top rec)                            ; let = :
+       (? (= ':- (cap x)) (: rl (rn-let (cat (cuup x) (list (caup x))) env used top rec)  ; :- = body-first :
+             rb (cup rl) (cons ':- (cons (last rb) (init rb))))                             ; reorder body back
+          (= 'let (cap x)) (rn-let (cup x) env used top rec)                            ; let = :
           (= 'qq (cap x)) x                                                           ; quasiquote -> whole
           (mxrn x env used top rec))
        (mxrn x env used top rec)))
@@ -148,8 +148,8 @@
               (fputc out c)))
 
 (: (readforms p e) (: r (read p e) (? (= e r) 0 (cons r (readforms p e))))
-   (joinforms fs) (? (atomp fs) "" (atomp (cbp fs)) (show (rn (cap fs) 0 0 1 rn))
-       (+ (+ (show (rn (cap fs) 0 0 1 rn)) " ") (joinforms (cbp fs))))
+   (joinforms fs) (? (atomp fs) "" (atomp (cup fs)) (show (rn (cap fs) 0 0 1 rn))
+       (+ (+ (show (rn (cap fs) 0 0 1 rn)) " ") (joinforms (cup fs))))
    (emit acc) (: _ (fputc out 34)
        _ ((: (g i pc instr) (? (< i (tally acc))
             (: c (peep acc i 0) (? instr
@@ -160,7 +160,7 @@
                      (: _ (eb c) (g (+ i 1) c 0)))
                   (: _ (eb c) (g (+ i 1) c (= c 34)))))) 0)) 0 0 0)
        (fputc out 34))
-   p (open (cap (cbp argv)) "r")
+   p (open (cap (cup argv)) "r")
    _ (? p 0 (: _ (fputs err "lcat2: cannot open input") (exit 1)))
    e (nom 0)
    forms (readforms p e)

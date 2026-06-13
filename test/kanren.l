@@ -2,12 +2,12 @@
 (:
  (dict_has d k) (:
   (loop k ks vs) (? ks
-   (? (= k (cap ks)) vs (loop k (cbp ks) (cbp vs))))
-  (loop k (cap d) (cbp d)))
+   (? (= k (cap ks)) vs (loop k (cup ks) (cup vs))))
+  (loop k (cap d) (cup d)))
  (dict_get d k) (: x (dict_has d k) (? (twop x) (cap x)))
- (dict_set d k v) (cons (cons k (cap d)) (cons v (cbp d)))
+ (dict_set d k v) (cons (cons k (cap d)) (cons v (cup d)))
  (mintp x) (&& (symp x) (symp (string x)))   ; string of a named sym is its name; of a mint, itself
- (var? x) (&& (twop x) (mintp (cbp x)))
+ (var? x) (&& (twop x) (mintp (cup x)))
  (var x) (cons x (nom 0))
  empty_dict '(0)
  has_s dict_has
@@ -47,22 +47,22 @@
      (var? x) (sun (ext_s s x y))
      (var? y) (sun (ext_s s y x))
      (&& (twop x) (twop y)
-     (et (est (cap x) (cap y)) (est (cbp x) (cbp y)) s))))
+     (et (est (cap x) (cap y)) (est (cup x) (cup y)) s))))
  (Run n ks g) (:
   (walk_star u s) (?
    (var? u) (: t (has_s s u) (? (twop t) (walk_star (cap t) s) u))
-   (twop u) (cons (walk_star (cap u) s) (walk_star (cbp u) s))
+   (twop u) (cons (walk_star (cap u) s) (walk_star (cup u) s))
    u)
   (reify st) (flip catmap ks (\ k
-   (: it (has_s (cons (map cap (cap st)) (cbp st)) k)
+   (: it (has_s (cons (map cap (cap st)) (cup st)) k)
     (? (twop it) (L k (walk_star (cap it) st))))))
   (map reify ((? n (stake n) slist) (g empty_dict)))))
 
 (:: 'zz (\ x (: s (nom 0) n (nom 0) m (nom 0) y (nom 0) x2 (cap x)
  (L '\ s n m y (L m (L x2 s))))))
-(:: 'et (\ xs (: x (cap xs) r (cbp xs)
+(:: 'et (\ xs (: x (cap xs) r (cup xs)
  (foldl (\ a b (L (\ a b s (s_star (a s) b)) a b)) x r))))
-(:: 'vel (\ xs (: x (cap xs) r (cbp xs)
+(:: 'vel (\ xs (: x (cap xs) r (cup xs)
  (foldl (\ a b (L (\ a b s (s_plus (a s) (b s))) a b)) x r))))
 (:: '\\ (\ a (cons (cons '\ a) (map (\ a (L var (L '\ a))) (init a)))))
 

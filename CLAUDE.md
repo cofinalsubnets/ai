@@ -293,20 +293,22 @@
  ("(array '(0))" = (show (arr z '(0) 0))) (0 = (alen ((arr z '(0) 0) + 1))))
 
 ; --- products & lists --- cons builds the product (the cartesian kind, classically the
-; pair); cap and cbp take the Contents of the A/B Part of the product (no cap: you have
-; reached the end of the list); caap cabp .. cbbbp are the compounds, read right to left
-; like their classic c[ad]+r ancestors (which are gone, as is the X alias).
+; pair); cap and cup are its two projections -- the matched pair the string diagrams bend,
+; cap the head and cup the rest, each the other's mirror (no cap: you have reached the end
+; of the list); caap caup .. cuuup are the compounds, read right to left like their classic
+; c[ad]+r ancestors -- the lineage runs cap/cup <- cap/cbp <- car/cdr, the older names gone
+; now, as is the X alias.
 ; (sort l) orders by the total order, in C (descending = rev); (msort le l)
 ; takes a predicate. (jot n) counts out the first n charms, '(0 .. n-1).
 ; the other higher-order functions live in the prelude.
 (assert
- (1 = (cap '(1 2 3))) ('(2 3) = (cbp '(1 2 3))) (3 = (cabp '(2 3 4))) ('(1 2) = (cons 1 (cons 2 0)))
- !(cap 0) ('x = (cap 'x)) !(cbp 'x)              ; no cap at the end of the list; an atom is its own cap
+ (1 = (cap '(1 2 3))) ('(2 3) = (cup '(1 2 3))) (3 = (caup '(2 3 4))) ('(1 2) = (cons 1 (cons 2 0)))
+ !(cap 0) ('x = (cap 'x)) !(cup 'x)              ; no cap at the end of the list; an atom is its own cap
  ('(0 1 2) = (jot 3)) !(jot 0) (3 = $(jot 3)) ; jot: the first n charms; the empty count is nothing
  ('(2 3 4) = (map inc '(1 2 3))) (24 = (foldl (*) 1 '(1 2 3 4))) (6 = (foldr (+) 0 '(1 2 3)))
  ('(1 3) = (filter (\ x (x % 2)) '(1 2 3 4))) ('(1 2 3) = (sort '(3 1 2))) ('(3 2 1) = (msort (>) '(1 2 3)))
  ('(1 2 3 4) = (cat '(1 2) '(3 4))) ('(3 2 1) = (rev '(1 2 3))) ('(1 2) = (map cap (zip '(1 2) '(3 4))))
- (20 = (cabp (assq 2 (list (L 1 10) (L 2 20))))) ('(1 2) = (take 2 '(1 2 3 4))) ('(3 4) = (drop 2 '(1 2 3 4)))
+ (20 = (caup (assq 2 (list (L 1 10) (L 2 20))))) ('(1 2) = (take 2 '(1 2 3 4))) ('(3 4) = (drop 2 '(1 2 3 4)))
  (3 = (last '(1 2 3))) ('(1 2) = (init '(1 2 3))) (memq 3 '(1 2 3)) !(memq 9 '(1 2 3))
  (all (\ x (0 < x)) '(1 2 3)) (any (\ x (2 < x)) '(1 2 3))
  (294 = $'(a b c)) (3 = (tally '(a b c))))  ; net sums spellings; tally counts the spine
@@ -422,10 +424,10 @@
 ; DYADIC. a run glued to a following datum reads as (mono (run datum)) (a plain list,
 ; so data round-trips); opfix factors the run greedily against `monadics` (then the
 ; operators table at one, so live pins keep the dynamic lane), all factors monadic --
-; <>x is (cap (cbp x)). HEAD POSITION NEVER FUSES: a run right after an open delimiter
+; <>x is (cap (cup x)). HEAD POSITION NEVER FUSES: a run right after an open delimiter
 ; is the form's operator (the section/escape law, and what keeps minified source
 ; legal); + and - lead numbers and kebab names, fusing only to ( ' " @ ~ # -- so -3 is
-; a number and -x a name, while -(f x) is neg. the monadic words: < cap, > cbp
+; a number and -x a name, while -(f x) is neg. the monadic words: < cap, > cup
 ; (<< >> <> >< the compounds, riding the shifts' free slots), + net (the content
 ; measure -- the true sum, + turned inward), * prod, | abs, - neg, / recip, % frac,
 ; ? bit (the Iverson bracket); $ ! . ride the same lane. \ never fuses (form space).
@@ -433,7 +435,7 @@
  ('(1 (\ x) 3) = `(1 'x 3)) ('(1 2 3 4) = (: xs '(2 3) `(1 ,@xs 4)))
  (532 = $"hello") (5 = (tally "hello")) (42 = $42) (1 = !0) (0 = !5) !!5
  (i = ~(0 1)) (~(2 3) = (plex 2 3)) ('~x = '(wave x)) (lamp dot)
- ('((dot x)) = (opfix '(. x))) ('! = (cabp '(a ! b)))   ; opfix factors; quotes stay data
+ ('((dot x)) = (opfix '(. x))) ('! = (caup '(a ! b)))   ; opfix factors; quotes stay data
  (3 = 1 + 2) (7 = 1 + 2 * 3) ('b = 0 ? 'a 'b) ('big = (1 < 2) ? 'big 'small)
  (1 = (3 != 4)) (0 = (3 != 3))                   ; the factorization law: != = ! of =
  (197 = ($"ab" + 2))                             ; one binds tightest: (+ ($ "ab") 2)
@@ -442,7 +444,7 @@
  (6 = +'(1 2 3)) (-1 = +'(-2 1)) (24 = *'(1 2 3 4))     ; +/ and */ -- the net, unclamped
  (5 = |-5) (-3 = -(1 + 2)) (0.25 = /4) (1 = ?7) (0 = ?"")
  (3 = (+ 1 2)) (1 = ((< 5) 9))                   ; head position never fuses: call and section
- ('(mono (< x)) = (cabp (read (sip '(40 102 32 60 120 41)) 99)))  ; the emission, data-lane
+ ('(mono (< x)) = (caup (read (sip '(40 102 32 60 120 41)) 99)))  ; the emission, data-lane
  ('cap = (monadics '<)) ('net = (monadics '+))
  (20 = (#(1 10 2 20) -> 2 0)) (7 = (((tablet 0) <- 'k 7) 'k)) (9 = ((tablet 0) -> 'k 9))
  (12 = (foldl (+) 0 '(3 4 5)))
@@ -454,7 +456,7 @@
 ; --- macros --- a macro maps an argument list to code; install with `::`. the prelude ships
 ; do/let/if/cond/quote, && and || (short-circuiting), L/list, tuple/map/array, the body-first
 ; :- and ?-, and the pipes >>= <=<.
-(:: 'unless (\ a `(? ,(cap a) 0 ,(cabp a))))
+(:: 'unless (\ a `(? ,(cap a) 0 ,(caup a))))
 (assert
  ('ok = (unless 0 'ok)) (0 = (unless 1 'ok)) (3 = (&& 1 2 3)) !(&& 1 0 3)
  (2 = (|| 0 2 3)) ('(1 2 3) = (L 1 2 3)) (6 = (do 1 2 6)) (3 = (let a 1 b 2 (a + b)))

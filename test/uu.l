@@ -17,10 +17,10 @@
 (: GLOB (tablet 0) HELPC (tablet 0)
 
    (tagv v) (? (twop v) (cap v) v)
-   (e2 l) (cap (cbp l))
-   (e3 l) (cap (cbp (cbp l)))
-   (e4 l) (cap (cbp (cbp (cbp l))))
-   (e5 l) (cap (cbp (cbp (cbp (cbp l))))))
+   (e2 l) (cap (cup l))
+   (e3 l) (cap (cup (cup l)))
+   (e4 l) (cap (cup (cup (cup l))))
+   (e5 l) (cap (cup (cup (cup (cup l))))))
 
 (: (vsucc v) (? (fixp v) (v + 1) (L 'succ v))
 
@@ -57,7 +57,7 @@
                   (idp t 'zero) 0
                   (vof-sym en t))
       (: h (cap t)
-         (? (twop h) (vof-spine en (vof en h) (cbp t))
+         (? (twop h) (vof-spine en (vof en h) (cup t))
             (idp h 'lam)    (L 'lam (L 'clo en (e2 t) (e3 t)))
             (idp h 'pi)     (L 'pi  (vof en (e3 t)) (L 'clo en (e2 t) (e4 t)))
             (idp h 'total2) (L 'sig (vof en (e3 t)) (L 'clo en (e2 t) (e4 t)))
@@ -78,12 +78,12 @@
             (idp h 'coprod_rect) (docr (vof en (e2 t)) (vof en (e3 t)) (vof en (e4 t)) (vof en (e5 t)))
             (idp h 'empty_rect)  (doer (vof en (e2 t)) (vof en (e3 t)))
             (idp h 'paths_rect)  (dojr (vof en (e2 t)) (vof en (e3 t)) (vof en (e4 t)))
-            (vof-spine en (vof en h) (cbp t)))))
+            (vof-spine en (vof en h) (cup t)))))
 
    ; empty-list tests are STRUCTURAL (twop): a love list of zeros NETS zero,
    ; so !as would call (add n 0)'s final argument list (0) empty -- the net law.
    (vof-spine en f as)
-   (? !(twop as) f (vof-spine en (vapp f (vof en (cap as))) (cbp as)))
+   (? !(twop as) f (vof-spine en (vapp f (vof en (cap as))) (cup as)))
 
    (conv d a b)
    (? (idp a b) 1                    ; the same heap object converts to itself:
@@ -101,13 +101,13 @@
       (&& (idp (tagv a) 'sig) (idp (tagv b) 'sig))
       (&& (conv d (e2 a) (e2 b))
           (: fr (L 'nv d) (conv (d + 1) (capp (e3 a) fr) (capp (e3 b) fr))))
-      (&& (twop a) (twop b) (idp (cap a) (cap b))) (conv-args d (cbp a) (cbp b))
+      (&& (twop a) (twop b) (idp (cap a) (cap b))) (conv-args d (cup a) (cup b))
       0)
 
    (conv-args d as bs)
    (? (&& !(twop as) !(twop bs)) 1
       (|| !(twop as) !(twop bs)) 0
-      (&& (conv d (cap as) (cap bs)) (conv-args d (cbp as) (cbp bs))))
+      (&& (conv d (cap as) (cap bs)) (conv-args d (cup as) (cup bs))))
 
    (inf-sym cx x)
    (? (idp x 'UU) 'UU
@@ -125,7 +125,7 @@
       (idp (tagv f) 'pi)
       (: a (cap as)
          _ (chk cx en d a (e2 f))
-         (inf-spine cx en d (capp (e3 f) (vof en a)) (cbp as)))
+         (inf-spine cx en d (capp (e3 f) (vof en a)) (cup as)))
       (scare 'uu-not-a-pi as))
 
    (chk cx en d t T)
@@ -162,7 +162,7 @@
    (? (fixp t) 'nat
       (symp t) (inf-sym cx t)
       (: h (cap t)
-         (? (twop h) (inf-spine cx en d (inf cx en d h) (cbp t))
+         (? (twop h) (inf-spine cx en d (inf cx en d h) (cup t))
             (idp h 'pi)
             (: x (e2 t)
                _ (chk cx en d (e3 t) 'UU)
@@ -256,7 +256,7 @@
                      (vapp (vapp Pv bv) (vof en (e4 t))))
                   (scare 'uu-paths_rect t)))
             (memq h '(lam tpair ii1 ii2)) (scare 'uu-cannot-infer t)
-            (inf-spine cx en d (inf-sym cx h) (cbp t))))))
+            (inf-spine cx en d (inf-sym cx h) (cup t))))))
 
 ; --- drivers: a definition is checked then pinned; an axiom is a book entry
 ; --- with a type and no value (its value is its own neutral name); rejects

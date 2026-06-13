@@ -10,7 +10,7 @@
 (: help (\ s a b (? (&& (scare? s) (= a 'apcap)) (L 'capped b) (apcap-t0 s a b))))
 (assert
  ; a bignum compose count saturates to fix_max, far above the cap -> scares
- (: r ((100 2) (+ 1)) (&& (= 'capped (cap r)) (< 1048576 (cabp r))))
+ (: r ((100 2) (+ 1)) (&& (= 'capped (cap r)) (< 1048576 (caup r))))
  ; the exact-power path is capped too: 2 ** 2^100 would be the boom
  (: r ((100 2) 2) (= 'capped (cap r)))
  ; ... and via a huge negative exponent (the reciprocal still runs ipow)

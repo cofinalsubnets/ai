@@ -14,7 +14,7 @@
  (1 = (3 = 3.0)) (0 = (3 = 4))
  (1 = (1 < 2)) (1 = (1 <= 1)) (1 = (2 > 1)) (1 = (2 >= 2)) (0 = (2 < 1))
  (15 = (8 | 4 | 2 | 1)) (0 = (5 & 2)) (7 = (5 | 2))
- (1 = (5 % 2)) ('% = (cabp '(5 % 2)))               ; % is plain infix at two (mod is gone); quotes stay data
+ (1 = (5 % 2)) ('% = (caup '(5 % 2)))               ; % is plain infix at two (mod is gone); quotes stay data
 
  ; right-associativity; parens override
  (7 = (1 + 2 * 3))                              ; (+ 1 (* 2 3))
@@ -64,6 +64,6 @@
  (9 = (#(1 10) -> 2 9))                          ; -> falls back to the default
  (65 = (: b (buf 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
  ('pin = (cap (peep operators '<- 0)))  ; the table entries are (name . arity) aliases
- (3 = (cbp (peep operators '-> 0)))
+ (3 = (cup (peep operators '-> 0)))
  (symp '<-) (30 = ((->) #(3 30) 3 0))            ; escaped, -> is still peep-as-a-value
  (idp pin (<-)) (idp peep (->)) (1 = ((%) 5 2)))  ; every alias is a bound global

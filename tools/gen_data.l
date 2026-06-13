@@ -91,7 +91,7 @@
       n     (foldl (\ k _ (+ k 1)) 0 secs)
       size  (cap (cap secs))
       okeq  (all (\ e (= (cap e) size)) secs)
-      align (foldl (\ m e (? (< m (cbp e)) (cbp e) m)) 0 secs)
+      align (foldl (\ m e (? (< m (cup e)) (cup e) m)) 0 secs)
       unit  (align-up size align)
       ; the (? ...) is the BODY of this binding block, so it runs when gen is
       ; called with n/okeq/unit in scope -- not at definition time.
@@ -101,8 +101,8 @@
          (emit p unit (pow2? unit) (- (bitlen unit) 1)))))
 
 ; --- driver: (B argv) = (data.o [-o out]) --------------------------
-(: args (cbp argv)
+(: args (cup argv)
    path (? (twop args) (cap args) (die "usage: gen_data.l <data.o> [-o out]"))
-   rest (cbp args)
-   p (? (&& (twop rest) (= (cap rest) "-o")) (open (cap (cbp rest)) "w") out)
+   rest (cup args)
+   p (? (&& (twop rest) (= (cap rest) "-o")) (open (cap (cup rest)) "w") out)
    (gen path p))

@@ -5,9 +5,9 @@
   (meta_eval x) (?
    (symp x) (\ l (l x))
    (nilp (twop x)) (const x)
-   (: x0 (cap x) a (cbp x)
+   (: x0 (cap x) a (cup x)
     (? (= x0 'do) (foldl (\ a b l (do (a l) (b l))) 0 (map meta_eval a))
-       (= x0 '\) (? (atomp (cbp a)) (const (cap a)) ; one operand: quote
+       (= x0 '\) (? (atomp (cup a)) (const (cap a)) ; one operand: quote
                   (foldr (\ a f l x (f (\ y (? (= y a) x (l y)))))
                          (meta_eval (last a))
                          (init a)))
@@ -18,20 +18,20 @@
 
   (cond_loop a f) (?
    (nilp a) (cond_loop (cons 0 0) f)
-   (nilp (cbp a)) (f (meta_eval (cap a)))
-   (: ant (meta_eval (cap a)) con (meta_eval (cabp a))
-    (cond_loop (cbbp a) (\ alt (f (\ l (? (ant l) (con l) (alt l))))))))
+   (nilp (cup a)) (f (meta_eval (cap a)))
+   (: ant (meta_eval (cap a)) con (meta_eval (caup a))
+    (cond_loop (cuup a) (\ alt (f (\ l (? (ant l) (con l) (alt l))))))))
 
   (let_loop a b m) (?
    (nilp a) (let_loop (cons 0 0) b m)
-   (nilp (cbp a)) (meta_eval (cap a) (b m))
-   (desugar (cap a) (cabp a) (\ k v
+   (nilp (cup a)) (meta_eval (cap a) (b m))
+   (desugar (cap a) (caup a) (\ k v
     (: t (tablet 0) (Get k) (peep t k 0) (Put v) (pin t 0 v)
-     (let_loop (cbbp a) (\ l (do (Put (meta_eval v (b l))) l))
+     (let_loop (cuup a) (\ l (do (Put (meta_eval v (b l))) l))
                         (\ x (? (= x k) (Get 0) (m x))))))))
 
   (desugar k v c)
-   (? (twop k) (desugar (cap k) (cons '\ (cat (cbp k) (cons v 0))) c)
+   (? (twop k) (desugar (cap k) (cons '\ (cat (cup k) (cons v 0))) c)
                (c k v))
   ;return
   meta_eval)

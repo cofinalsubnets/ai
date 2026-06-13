@@ -18,8 +18,8 @@
 
  ; --- X / A / B fold; element access is correct ---
  (= 9  (cap (cons 9 8)))
- (= 8  (cbp (cons 9 8)))
- (= 2  (cabp '(1 2 3)))
+ (= 8  (cup (cons 9 8)))
+ (= 2  (caup '(1 2 3)))
  (= 4  (tally (+ "ab" "cd")))                 ; string built + counted at compile time
 
  ; --- currying: under-application yields a usable closure; prefix+unknown tail ---
