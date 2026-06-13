@@ -111,7 +111,7 @@ lvm_t lvm_kcall,
  lvm_two, lvm_tuple, lvm_sym, lvm_str, lvm_big, // data sentinels (enum q order); apply dispatches through g_apply_mx
  lvm_putn, lvm_gauge,    lvm_clock,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_intern, lvm_twop,
- lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy,
+ lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call,
  lvm_fixp,  lvm_symp,   lvm_strp,   lvm_mapp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
  lvm_sin, lvm_cos, lvm_log, lvm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not nifs
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
@@ -585,6 +585,7 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_table, "tablet", s1(lvm_table)) _(nif_keys, "keys", s1(lvm_keys))\
  _(nif_dig, "dig", s1(lvm_dig))\
  _(nif_bufnew, "buf", s1(lvm_bufnew)) _(nif_bcopy, "blit", s5(lvm_bcopy))\
+ _(nif_call, "call", s2(lvm_call))\
  _(nif_twop, "twop", s1(lvm_twop)) _(nif_strp, "strp", s1(lvm_strp))\
  _(nif_real, "real", s1(lvm_real)) _(nif_flop, "flop", s1(lvm_flop))\
  _(nif_sin, "sin", s1(lvm_sin)) _(nif_cos, "cos", s1(lvm_cos))\
@@ -3710,6 +3711,20 @@ lvm(lvm_bufnew) {
  ((struct g_buf*) k)->str = s;
  tagtext(k, Width(struct g_buf));
  return Sp[0] = word(k), Ip++, Continue(); }
+
+// (call b x) — the JIT trampoline: jump into the machine code stored in buf b,
+// passing x as the sole argument (SysV AMD64: %rdi/%rax; AArch64: x0/x0), and
+// wrap the returned machine word as a fixnum. The bytes in b are the caller's
+// responsibility -- an ill-formed body is a hard crash, by design. AArch64 must
+// __builtin___clear_cache(txt(s), txt(s)+len(s)) before the jump (I-cache not
+// coherent with freshly-written D-cache); omitted for the x86_64 probe.
+lvm(lvm_call) {
+ word b = Sp[0], x = Sp[1];
+ if (!bufp(b)) return *++Sp = putfix(0), Ip++, Continue();   // not a buf -> nothing
+ struct g_str *s = buf_str(b);
+ g_word (*fn)(g_word) = (g_word (*)(g_word)) txt(s);   // `word` is a macro; use g_word as a type
+ g_word r = fn(x);
+ return *++Sp = putfix(r), Ip++, Continue(); }   // arity 2: pop one, result at the new top
 
 // (bcopy dst doff src soff n) — copy n bytes from src[soff..] into buf dst at
 // doff. src may be a string or buf; dst must be a buf. Ranges are clamped to
