@@ -139,7 +139,8 @@ lvm_t lvm_kcall,
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
  lvm_arr, lvm_arank, lvm_alen, lvm_ashape, lvm_atype,
  lvm_asum, lvm_aprod, lvm_amax, lvm_amin, lvm_aall,
- lvm_packp, lvm_bigp, lvm_widep, lvm_arrp, lvm_intf, lvm_lamp, lvm_hotp;
+ lvm_packp, lvm_bigp, lvm_widep, lvm_arrp, lvm_intf, lvm_lamp, lvm_hotp,
+ lvm_absent, lvm_absent2;   // safe defaults for the frontend nifs (exit/open/..)
 // Carry extra operands, so (like lvm_gc) they are declared apart from the
 // plain lvm_t list, which fixes the 4-argument ap signature. lvm_vbin
 // is the elementwise/broadcast dyadic engine (vop selects the op); lvm_vmap1
@@ -667,6 +668,24 @@ static union u const raise_c[] = { {lvm_help} };
 
 static struct g_def const def1[] = { nifs(niff) insts(i_entry)};
 
+// --- frontend-nif defaults ---------------------------------------------------
+// exit/open/close/run/getenv are FRONTEND nifs: each frontend overrides them via
+// g_defn (main.c POSIX, kmain.c qemu, the wasm host emscripten) -- the book is
+// last-write-wins, and a frontend's g_defn runs after g_ini. The core installs
+// safe no-op defaults here so the NAMES ALWAYS EXIST. A frontend that omits one
+// then inherits a clean nil instead of a MISSING name -- whose capture-at-
+// creation would raise (scare 'missing ..) at every define that merely mentions
+// it, even in an unrun branch (the wasm host's missing `exit` did exactly that).
+// The defaults need no OS, so they live in the freestanding core. open is the
+// only 2-arg one (curried via lvm_cur like the real main.c nif).
+lvm(lvm_absent)  { return Sp[0] = nil, Ip++, Continue(); }                 // 1-arg -> nil
+lvm(lvm_absent2) { return Sp[1] = nil, Sp += 1, Ip++, Continue(); }        // 2-arg -> nil (open)
+static union u const nif_absent[]      = {{lvm_absent}, {lvm_ret0}};
+static union u const nif_absent_open[] = {{lvm_cur}, {.x = putfix(2)}, {lvm_absent2}, {lvm_ret0}};
+static struct g_def const frontend_defaults[] = {
+ {"exit", (word) nif_absent}, {"open", (word) nif_absent_open}, {"close", (word) nif_absent},
+ {"run", (word) nif_absent},  {"getenv", (word) nif_absent} };
+
 // reverse-lookup a function value against the builtin table -> its source name,
 // or NULL. Used by the printer to render nifs (e.g. `+`) by name.
 char const *g_nif_name(intptr_t x) {
@@ -709,6 +728,7 @@ static struct g *g_ini_0(struct g*g, uintptr_t len0, void *(*ma)(struct g*, size
    {"fix-min", putfix(-(g_word)((uintptr_t)-1 >> 2) - 1)}, };
   g = g_defn(g, def0, countof(def0));
   g = g_defn(g, def1, countof(def1));
+  g = g_defn(g, frontend_defaults, countof(frontend_defaults));   // overridable by the frontend
   // `love-version`: the build's version-control id (love_version.h), surfaced on init so the user
   // can read the running version. A non-fixnum global, harmlessly skipped by ev.l's pureset.
   if (g_ok(g = g_strof(g, LOVE_VERSION))) {
