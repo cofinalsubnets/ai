@@ -2096,6 +2096,68 @@
  (idp (vof 0 'true)  (vof 0 '(coprod_rect (lam c bool) (lam l true) (lam r false) (natgthorleh 5 3))))
  (idp (vof 0 'false) (vof 0 '(coprod_rect (lam c bool) (lam l true) (lam r false) (natgthorleh 3 5)))))
 
+; NATURALNUMBERS round 19 -- natleh is a partial order, on its "natgtb is false"
+; carrier (the false mirror of round 16's true-direction laws). isreflnatleh is
+; one induction landing on idpath false / its IH (natgtb n n is false). istrans /
+; isantisymm are the same triple/double rects as istransnatgth, but the false
+; case flips the work: the n=0 corner is now idpath false (not a contradiction),
+; and the succ-0 corners contradict through nopathstruetofalse (natgtb (succ _) 0
+; is true, so "= false" is absurd). antisymm closes by maponpaths succ on the IH.
+(assert
+ (defq 'isreflnatleh '(pi n nat (paths bool (natgtb n n) false))
+   '(lam n (nat_rect (lam q (paths bool (natgtb q q) false))
+      (idpath false)
+      (lam k (lam IH IH))
+      n)))
+ (defq 'istransnatleh
+   '(pi n nat (pi m nat (pi k nat (pi g (paths bool (natgtb n m) false)
+      (pi h (paths bool (natgtb m k) false) (paths bool (natgtb n k) false))))))
+   '(lam n
+      (nat_rect
+        (lam q (pi m nat (pi k nat (pi g (paths bool (natgtb q m) false)
+                 (pi h (paths bool (natgtb m k) false) (paths bool (natgtb q k) false))))))
+        (lam m (lam k (lam g (lam h (idpath false)))))
+        (lam p (lam IHn
+          (lam m (nat_rect
+            (lam r (pi k nat (pi g (paths bool (natgtb (succ p) r) false)
+                     (pi h (paths bool (natgtb r k) false)
+                       (paths bool (natgtb (succ p) k) false)))))
+            (lam k (lam g (lam h
+              (fromempty (paths bool (natgtb (succ p) k) false) (nopathstruetofalse g)))))
+            (lam q (lam u
+              (lam k (nat_rect
+                (lam s (pi g (paths bool (natgtb (succ p) (succ q)) false)
+                         (pi h (paths bool (natgtb (succ q) s) false)
+                           (paths bool (natgtb (succ p) s) false))))
+                (lam g (lam h (fromempty (paths bool (natgtb (succ p) 0) false) (nopathstruetofalse h))))
+                (lam j (lam v (lam g (lam h (IHn q j g h)))))
+                k))))
+            m))))
+        n)))
+ (defq 'isantisymmnatleh
+   '(pi n nat (pi m nat (pi g (paths bool (natgtb n m) false)
+      (pi h (paths bool (natgtb m n) false) (paths nat n m)))))
+   '(lam n
+      (nat_rect
+        (lam q (pi m nat (pi g (paths bool (natgtb q m) false)
+                 (pi h (paths bool (natgtb m q) false) (paths nat q m)))))
+        (lam m (nat_rect
+          (lam r (pi g (paths bool (natgtb 0 r) false)
+                   (pi h (paths bool (natgtb r 0) false) (paths nat 0 r))))
+          (lam g (lam h (idpath 0)))
+          (lam mp (lam u (lam g (lam h
+            (fromempty (paths nat 0 (succ mp)) (nopathstruetofalse h))))))
+          m))
+        (lam p (lam IHn
+          (lam m (nat_rect
+            (lam r (pi g (paths bool (natgtb (succ p) r) false)
+                     (pi h (paths bool (natgtb r (succ p)) false) (paths nat (succ p) r))))
+            (lam g (lam h (fromempty (paths nat (succ p) 0) (nopathstruetofalse g))))
+            (lam q (lam u (lam g (lam h
+              (maponpaths nat nat (lam w (succ w)) p q (IHn q g h))))))
+            m))))
+        n))))
+
 ; --- the kernel refuses: ill-typed terms scare; the help cell catches them.
 ; --- (install per the help law -- more/eof keep the read protocol.)
 (: (help s p e) (? (more? s) p (eof? s) e
