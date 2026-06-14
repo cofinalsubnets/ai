@@ -1,0 +1,79 @@
+; ============================================================================
+; jit/carray.l -- COMPLEX (c-array) kernels. A single-param (\ x <arith>) compiled
+; to SSE code over packed (re,im) f64 cells and applied by the acmap nif's C loop.
+; g_C cells are interleaved (re,im); the SysV ABI passes/returns a two-double
+; struct in %xmm0 (re) and %xmm1 (im), so a complex value lives in (%xmm0,%xmm1).
+;
+; The cell is saved to (%xmm14,%xmm15) in the prologue and re-read on each use of
+; x. Binops use a 16-byte machine-stack slot for the left operand. Integer
+; literals become (k, 0) via cvtsi2sd + pxor. Ops: + - * (complex literals and /
+; deferred). add/sub are componentwise; mul is (a+bi)(c+di) = (ac-bd)+(ad+bc)i.
+;
+; x86_64 host; load after jit/kernel.l (reuses leb, l2b):
+;     out/host/love -l jit/kernel.l jit/carray.l
+
+; --- recognizer: a closed complex-arith expr in the single cell variable v ---
+(: (carith e v)
+   (? (symp e) (idp e v)
+      (&& (fixp e) (<= 0 e)) 1                   ; non-negative int literal -> (k, 0)
+      (&& (twop e) (= 1 (tally e))) (carith (cap e) v)   ; peel op-core's ((e)) wrapper
+      (&& (twop e) (= 3 (tally e)) (memq (cap e) '(+ - *)))
+        (&& (carith (caup e) v) (carith (caup (cup e)) v))
+      0))
+
+; --- combine: A=(xmm0,xmm1)=(a,b), B=(xmm2,xmm3)=(c,d) -> result in (xmm0,xmm1) ---
+(: (ccombine op)
+   (? (idp op '+) '(242 15 88 194  242 15 88 203)        ; addsd xmm0,xmm2 ; addsd xmm1,xmm3
+      (idp op '-) '(242 15 92 194  242 15 92 203)        ; subsd xmm0,xmm2 ; subsd xmm1,xmm3
+      ; complex mul: re = ac-bd, im = ad+bc  (xmm4,xmm5 scratch)
+      '(242 15 16 224  242 15 89 226              ; movsd xmm4,xmm0(a) ; mulsd xmm4,xmm2  -> ac
+        242 15 16 233  242 15 89 235              ; movsd xmm5,xmm1(b) ; mulsd xmm5,xmm3  -> bd
+        242 15 92 229                             ; subsd xmm4,xmm5                       -> re=ac-bd
+        242 15 16 232  242 15 89 235              ; movsd xmm5,xmm0(a) ; mulsd xmm5,xmm3  -> ad
+        242 15 89 202                             ; mulsd xmm1,xmm2(b*c)                  -> bc
+        242 15 88 233                             ; addsd xmm5,xmm1                       -> im=ad+bc
+        242 15 16 196  242 15 16 205)))           ; movsd xmm0,xmm4(re) ; movsd xmm1,xmm5(im)
+
+; --- emit: bytes leaving e's value in (xmm0,xmm1) ---
+(: (cemit e v)
+   (? (symp e) '(242 65 15 16 198  242 65 15 16 207)     ; x: movsd xmm0,xmm14 ; movsd xmm1,xmm15
+      (fixp e) (cat (cons 72 (cons 184 (leb e 8)))       ; mov rax,imm64
+                    '(242 72 15 42 192  102 15 239 201)) ; cvtsi2sd xmm0,rax ; pxor xmm1,xmm1  -> (k,0)
+      (&& (twop e) (= 1 (tally e))) (cemit (cap e) v)     ; peel op-core's ((e)) wrapper
+      (: op (cap e) a (caup e) b (caup (cup e))
+         (cat (cemit a v)                                 ; (xmm0,xmm1) = A
+          (cat '(72 131 236 16  242 15 17 4 36  242 15 17 76 36 8)   ; sub rsp,16 ; push A (re,im)
+           (cat (cemit b v)                               ; (xmm0,xmm1) = B
+            (cat '(242 15 16 208  242 15 16 217           ; movsd xmm2,xmm0 ; movsd xmm3,xmm1  (B -> 2,3)
+                   242 15 16 4 36  242 15 16 76 36 8  72 131 196 16)  ; pop A (re,im) ; add rsp,16
+             (ccombine op))))))))                         ; (xmm0,xmm1) = (A op B)
+
+; --- driver: (\ x <arith>) -> (\ c-array -> c-array), each cell native (SSE) ---
+(: (cjit lam)
+   (: v (caup lam) body (caup (cup lam))
+      (? !(&& (symp v) (carith body v)) lam
+         (: code (forge (l2b (cat '(242 68 15 16 240  242 68 15 16 249)   ; prologue: save cell -> xmm14,xmm15
+                              (cat (cemit body v) '(195)))))              ; ... ; ret
+            (\ in (: out (arr c (ashape in) 0) _ (acmap code in out) out))))))
+
+; ============================================================================
+; SELF-CHECK: the native complex kernel must equal love's elementwise c-array ops,
+; bit-for-bit. (aeq a b) = every cell equal.
+(: bad (tablet 0)
+   (aeq a b) (aall (a = b))
+   (ck nm got want)
+     (: ok (aeq got want)
+        _ (dot (+ nm (+ ": " (+ (show got) (+ (? ok "  ==  " "  =/=  ") (+ (show want) (? ok "\n" "  FAIL\n")))))))
+        (? ok 0 (pin bad 0 (+ 1 (peep bad 0 0)))))
+   cv  (array 2 ~(1 2) ~(3 4))
+   dd  (cjit '(\ x (+ x x)))
+   sq  (cjit '(\ x (* x x)))                      ; the showcase: complex multiply
+   s1  (cjit '(\ x (- x 1)))
+   x2  (cjit '(\ x (* x 2)))
+   pol (cjit '(\ x (+ (* x x) 1)))                ; x^2 + 1, complex
+   _ (ck "x+x  c     " (dd  cv)   (cv + cv))
+   _ (ck "x*x  c     " (sq  cv)   (cv * cv))       ; ~(1 2)^2 = ~(-3 4); ~(3 4)^2 = ~(-7 24)
+   _ (ck "x-1  c     " (s1  cv)   (cv - 1))
+   _ (ck "x*2  c     " (x2  cv)   (cv * 2))
+   _ (ck "x*x+1 c    " (pol cv)   ((cv * cv) + 1))
+   _ (dot (? (peep bad 0 0) (+ (show (peep bad 0 0)) " FAILED\n") "ALL PASS\n")))

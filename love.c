@@ -111,7 +111,7 @@ lvm_t lvm_kcall,
  lvm_two, lvm_tuple, lvm_sym, lvm_str, lvm_big, // data sentinels (enum q order); apply dispatches through g_apply_mx
  lvm_putn, lvm_gauge,    lvm_clock,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_intern, lvm_twop,
- lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_amap, lvm_amap2, lvm_areduce, lvm_armap, lvm_forge,
+ lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_amap, lvm_amap2, lvm_areduce, lvm_armap, lvm_acmap, lvm_forge,
  lvm_fixp,  lvm_symp,   lvm_strp,   lvm_mapp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
  lvm_sin, lvm_cos, lvm_log, lvm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not nifs
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
@@ -588,7 +588,8 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_bufnew, "buf", s1(lvm_bufnew)) _(nif_bcopy, "blit", s5(lvm_bcopy))\
  _(nif_call, "call", s2(lvm_call)) _(nif_call2, "call2", s3(lvm_call2))\
  _(nif_amap, "amap", s3(lvm_amap)) _(nif_amap2, "amap2", s4(lvm_amap2))\
- _(nif_areduce, "areduce", s3(lvm_areduce)) _(nif_armap, "armap", s3(lvm_armap)) _(nif_forge, "forge", s1(lvm_forge))\
+ _(nif_areduce, "areduce", s3(lvm_areduce)) _(nif_armap, "armap", s3(lvm_armap))\
+ _(nif_acmap, "acmap", s3(lvm_acmap)) _(nif_forge, "forge", s1(lvm_forge))\
  _(nif_twop, "twop", s1(lvm_twop)) _(nif_strp, "strp", s1(lvm_strp))\
  _(nif_real, "real", s1(lvm_real)) _(nif_flop, "flop", s1(lvm_flop))\
  _(nif_sin, "sin", s1(lvm_sin)) _(nif_cos, "cos", s1(lvm_cos))\
@@ -3809,6 +3810,25 @@ lvm(lvm_armap) {
   g_flo_t *ic = (g_flo_t*) tuple_data(tuple(in)),
           *oc = (g_flo_t*) tuple_data(tuple(out));
   for (uintptr_t i = 0, n = tuple_nelem(tuple(in)); i < n; i++) oc[i] = fn(ic[i]);
+ }
+ return Sp[2] = out, Sp += 2, Ip++, Continue(); }   // arity 3: collapse two, out at the new top
+
+// (acmap code in out) — the COMPLEX array kernel. g_C cells are interleaved
+// (re,im) f64 pairs; the SysV ABI passes/returns a two-double struct in %xmm0
+// (re) and %xmm1 (im), so fn is struct g_c2(*)(struct g_c2). in/out are
+// equal-length g_C arrays. No allocation, GC-safe. Returns out.
+struct g_c2 { double re, im; };
+lvm(lvm_acmap) {
+ word code = Sp[0], in = Sp[1], out = Sp[2];
+ if (bufp(code) && arrp(in) && arrp(out)
+     && tuple(in)->type == g_C && tuple(out)->type == g_C
+     && tuple_nelem(tuple(in)) == tuple_nelem(tuple(out))) {
+  struct g_c2 (*fn)(struct g_c2) = (struct g_c2 (*)(struct g_c2)) txt(buf_str(code));
+  double *ic = (double*) tuple_data(tuple(in)), *oc = (double*) tuple_data(tuple(out));
+  for (uintptr_t i = 0, n = tuple_nelem(tuple(in)); i < n; i++) {
+   struct g_c2 r = fn((struct g_c2){ ic[2*i], ic[2*i+1] });
+   oc[2*i] = r.re, oc[2*i+1] = r.im;
+  }
  }
  return Sp[2] = out, Sp += 2, Ip++, Continue(); }   // arity 3: collapse two, out at the new top
 

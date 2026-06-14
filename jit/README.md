@@ -222,6 +222,25 @@ elementwise ops:
 out/host/love -l jit/kernel.l jit/farray.l   # x+x, x*2, x/2, x*x-1, x/0→ieee-inf — ALL PASS
 ```
 
+### Complex arrays — `acmap` + `jit/carray.l`
+
+`c`-array cells are interleaved `(re,im)` f64 pairs, and the SysV ABI
+passes/returns a two-double struct in `%xmm0` (re) / `%xmm1` (im), so `acmap` is
+`amap` with a `struct g_c2(*)(struct g_c2)` kernel and a complex value lives in
+`(%xmm0,%xmm1)`. `jit/carray.l` emits the SSE: the cell is saved to
+`(%xmm14,%xmm15)`, binops use a 16-byte stack slot, integer literals become
+`(k,0)` (`cvtsi2sd` + `pxor`), `+ -` are componentwise, and `*` is the complex
+formula `(ac−bd)+(ad+bc)i` in `%xmm4`/`%xmm5`. `(cjit '(\ x <arith>))` →
+`(\ c-array → c-array)`, verified bit-for-bit against love's complex broadcast
+ops — the multiply included (`~(1 2)² = ~(-3 4)`, `~(3 4)² = ~(-7 24)`):
+
+```sh
+out/host/love -l jit/kernel.l jit/carray.l   # x+x, x*x (complex mul), x-1, x*2, x*x+1 — ALL PASS
+```
+
+Deferred for both float lanes: comparisons (they yield a `z` mask), float/complex
+literals (need raw IEEE bits), complex `/` (the conjugate-divide formula).
+
 ## Reproducing the probe (x86_64 + qemu)
 
 ```sh
