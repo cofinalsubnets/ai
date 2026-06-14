@@ -1,16 +1,17 @@
-# Maintainer: gwem <cofinalsubnets@gmail.com>
-pkgname=ll-git
+# Maintainer: gwen <gwendolyn.whelan@gmail.com>
+pkgname=love-git
 pkgver=0.0.0
 pkgrel=1
-pkgdesc="list expression interpreter"
+pkgdesc="love -- a small lisp where every value is an auto-curried function of one argument"
 arch=(x86_64 i686 aarch64 armv7h)
-url="https://github.com/cofinalsubnets/ll"
-license=(Unlicense)
+url="https://github.com/cofinalsubnets/love"
+license=(custom)
 depends=('glibc')
 makedepends=('git')
-provides=('ll')
+provides=('love')
+conflicts=('love')
 _gitname="${pkgname}"
-source=("${_gitname}::git+https://github.com/cofinalsubnets/ll.git")
+source=("${_gitname}::git+https://github.com/cofinalsubnets/love.git")
 sha256sums=(SKIP)
 
 pkgver() {
@@ -18,11 +19,11 @@ pkgver() {
   git checkout main &> /dev/null
   git describe --always | sed 's/-/_/g'
 }
-  
+
 build() {
   cd ${_gitname}
   git checkout main &> /dev/null
-  make all_host
+  make host
 }
 
 check() {
@@ -35,4 +36,5 @@ package() {
   cd ${_gitname}
   git checkout main &> /dev/null
   make DESTDIR="${pkgdir}/" PREFIX="usr/" VIMPREFIX="usr/share/vim/vimfiles/" install
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }
