@@ -1,0 +1,19 @@
+; Cards.l is plain love: lay out the recipes, then cook a ticket.
+; build with:   ../../out/host/love -l ../cook.l Cards.l [ticket]
+; the first recipe ('all) is the default ticket.
+
+(recipe 'all '("hello") 0)                                  ; phony aggregate, no recipe
+
+(recipe "hello" '("hello.o" "greet.o")
+      '(("cc" "-o" "hello" "hello.o" "greet.o")))
+
+(recipe "hello.o" '("hello.c")
+      '(("cc" "-c" "-o" "hello.o" "hello.c")))
+
+(recipe "greet.o" '("greet.c")
+      '(("cc" "-c" "-o" "greet.o" "greet.c")))
+
+(recipe 'clean '()
+      '(("rm" "-f" "hello" "hello.o" "greet.o")))
+
+(cook (ticket 0))
