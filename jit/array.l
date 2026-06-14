@@ -71,6 +71,17 @@
             (? (= n 1) (\ in   (: out (arr z (ashape in) 0) _ (amap  code in out)   out))
                        (\ a b  (: out (arr z (ashape a)  0) _ (amap2 code a b out) out)))))))
 
+; --- reductions: (afold '(\ acc x <arith>) seed) -> (\ z-array -> scalar) that
+; folds the native 2-arg kernel (acc in %rdi, cell in %rsi) over the cells. The
+; accumulator wraps at int64 and boxes wide if out of fixnum range, matching
+; asum/aprod exactly. seed is a fixnum. ---
+(: (afold lam seed)
+   (: rest (cup lam) body (last rest) ps (init rest)
+      (? !(&& (= 2 (tally ps)) (all symp ps) (arith-arr body ps)) lam
+         (: regs (list (cons (cap ps) arrx) (cons (caup ps) arry))
+            code (forge (l2b (cat (emit-arr body regs) '(195))))   ; ... ; ret (raw)
+            (\ in (areduce code seed in))))))
+
 ; ============================================================================
 ; SELF-CHECK: the native cellwise kernel must equal love's elementwise ops,
 ; including the int64 wrap. (aeq a b) = every cell equal.
@@ -78,6 +89,10 @@
    (aeq a b) (aall (a = b))
    (ck nm got want)
      (: ok (aeq got want)
+        _ (dot (+ nm (+ ": " (+ (show got) (+ (? ok "  ==  " "  =/=  ") (+ (show want) (? ok "\n" "  FAIL\n")))))))
+        (? ok 0 (pin bad 0 (+ 1 (peep bad 0 0)))))
+   (cks nm got want)                            ; scalar compare (reductions return a scalar)
+     (: ok (= got want)
         _ (dot (+ nm (+ ": " (+ (show got) (+ (? ok "  ==  " "  =/=  ") (+ (show want) (? ok "\n" "  FAIL\n")))))))
         (? ok 0 (pin bad 0 (+ 1 (peep bad 0 0)))))
    sqr  (ajit '(\ x (* x x)))
@@ -97,4 +112,12 @@
    _ (ck "a+b  zip    " (zadd @(1 2 3) @(10 20 30))   (@(1 2 3) + @(10 20 30)))
    _ (ck "a*b+1 zip   " (zmad @(2 3 4) @(5 6 7))      ((@(2 3 4) * @(5 6 7)) + 1))
    _ (ck "a<b  zip    " (zlt @(1 5 3) @(2 4 9))       (@(1 5 3) < @(2 4 9)))
+   ; reductions (afold): compared to a SCALAR, so plain = not aeq
+   sum  (afold '(\ acc x (+ acc x)) 0)
+   prod (afold '(\ acc x (* acc x)) 1)
+   wide @(4611686018427387903 1)                      ; sum = 2^62, OUT of fixnum range -> wide box
+   _ (cks "sum   @10.. " (sum @(10 20 30))   (asum @(10 20 30)))     ; 60
+   _ (cks "prod  @1..4 " (prod @(1 2 3 4))   (aprod @(1 2 3 4)))     ; 24
+   _ (cks "sum   wide  " (sum wide)          (asum wide))            ; 2^62 boxed wide -- emit_int path
+   _ (cks "prod  big   " (prod (array 3 3000000000 3000000000 3000000000)) (aprod (array 3 3000000000 3000000000 3000000000)))   ; wraps
    _ (dot (? (peep bad 0 0) (+ (show (peep bad 0 0)) " FAILED\n") "ALL PASS\n")))

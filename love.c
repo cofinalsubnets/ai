@@ -111,7 +111,7 @@ lvm_t lvm_kcall,
  lvm_two, lvm_tuple, lvm_sym, lvm_str, lvm_big, // data sentinels (enum q order); apply dispatches through g_apply_mx
  lvm_putn, lvm_gauge,    lvm_clock,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_intern, lvm_twop,
- lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_amap, lvm_amap2, lvm_forge,
+ lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_amap, lvm_amap2, lvm_areduce, lvm_forge,
  lvm_fixp,  lvm_symp,   lvm_strp,   lvm_mapp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
  lvm_sin, lvm_cos, lvm_log, lvm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not nifs
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
@@ -587,7 +587,8 @@ static g_inline struct g*g_pop(struct g*g, uintptr_t n) {
  _(nif_dig, "dig", s1(lvm_dig))\
  _(nif_bufnew, "buf", s1(lvm_bufnew)) _(nif_bcopy, "blit", s5(lvm_bcopy))\
  _(nif_call, "call", s2(lvm_call)) _(nif_call2, "call2", s3(lvm_call2))\
- _(nif_amap, "amap", s3(lvm_amap)) _(nif_amap2, "amap2", s4(lvm_amap2)) _(nif_forge, "forge", s1(lvm_forge))\
+ _(nif_amap, "amap", s3(lvm_amap)) _(nif_amap2, "amap2", s4(lvm_amap2))\
+ _(nif_areduce, "areduce", s3(lvm_areduce)) _(nif_forge, "forge", s1(lvm_forge))\
  _(nif_twop, "twop", s1(lvm_twop)) _(nif_strp, "strp", s1(lvm_strp))\
  _(nif_real, "real", s1(lvm_real)) _(nif_flop, "flop", s1(lvm_flop))\
  _(nif_sin, "sin", s1(lvm_sin)) _(nif_cos, "cos", s1(lvm_cos))\
@@ -3775,6 +3776,24 @@ lvm(lvm_amap2) {
   for (uintptr_t i = 0, n = tuple_nelem(tuple(out)); i < n; i++) oc[i] = fn(ac[i], bc[i]);
  }
  return Sp[3] = out, Sp += 3, Ip++, Continue(); }   // arity 4: collapse three, out at the new top
+
+// (areduce code init in) — fold the native 2-arg kernel over z-array `in`:
+// acc = init; for each cell, acc = fn(acc, cell); return acc. fn takes the
+// accumulator in %rdi and the cell in %rsi (raw int64). The accumulator wraps at
+// int64 like z-array arithmetic, and the result boxes via emit_int -- a fixnum if
+// it fits, else a rank-0 wide scalar -- exactly like asum/aprod. init is a fixnum.
+// Validity check FIRST, then Have (so a GC retry re-runs the whole nif, not just
+// the box), then the no-allocation loop. Arity 3.
+lvm(lvm_areduce) {
+ if (!(bufp(Sp[0]) && fixp(Sp[1]) && arrp(Sp[2]) && tuple(Sp[2])->type == g_Z))
+  return Sp[2] = Sp[1], Sp += 2, Ip++, Continue();   // not applicable -> init
+ Have(box_req);
+ word code = Sp[0], in = Sp[2];
+ g_word (*fn)(g_word, g_word) = (g_word (*)(g_word, g_word)) txt(buf_str(code));
+ intptr_t *ic = (intptr_t*) tuple_data(tuple(in)), acc = getfix(Sp[1]);
+ for (uintptr_t i = 0, n = tuple_nelem(tuple(in)); i < n; i++) acc = fn(acc, ic[i]);
+ word _res; emit_int(acc);
+ return Sp[2] = _res, Sp += 2, Ip++, Continue(); }   // arity 3: collapse two, result at the new top
 
 // THE HOST EXEC ARENA (hosted builds only). The Linux malloc heap is NX, so a
 // buf of real code cannot be (call ...)ed directly -- the jump faults. forge

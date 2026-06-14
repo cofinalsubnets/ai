@@ -186,19 +186,22 @@ The `amap`/`amap2` nifs do the loop in C, where the tuple layout is known and
 nothing allocates (so no GC moves the cell buffers mid-loop):
 
 ```
-(amap  code in out)    ; out[i] = fn(in[i])        -- map, 1-arg kernel (cell in %rdi)
-(amap2 code a b out)   ; out[i] = fn(a[i], b[i])   -- zipWith, 2-arg kernel (%rdi, %rsi)
+(amap    code in out)     ; out[i] = fn(in[i])          -- map, 1-arg kernel (cell in %rdi)
+(amap2   code a b out)    ; out[i] = fn(a[i], b[i])     -- zipWith, 2-arg kernel (%rdi, %rsi)
+(areduce code init in)    ; acc=init; acc=fn(acc,cell)  -- fold, 2-arg kernel (acc %rdi, cell %rsi)
 ```
 
-`jit/array.l` is the codegen + driver: `(ajit '(\ x <arith>))` forges a raw 1-arg
-kernel and returns `(\ array → array)` over `amap`; `(ajit '(\ x y <arith>))`
-forges a raw 2-arg kernel (cells in `%rdi`/`%rsi`) and returns `(\ a b → array)`
-over `amap2`. Either way love allocates the matching output array and the native
-loop fills it. Ops: `+ - *` and comparisons (`// %` deferred — `idiv` `#DE`s on a
-zero cell). Verified equal to love's broadcast ops, wrap included:
+`jit/array.l` is the codegen + drivers. `(ajit '(\ x <arith>))` forges a raw 1-arg
+kernel → `(\ array → array)` over `amap`; `(ajit '(\ x y <arith>))` forges a raw
+2-arg kernel → `(\ a b → array)` over `amap2`. `(afold '(\ acc x <arith>) seed)`
+forges a 2-arg kernel → `(\ array → scalar)` over `areduce`. Map/zipWith let love
+allocate the matching output array; the fold returns a scalar via `emit_int` (a
+fixnum if it fits, else a wide-int box), so its wrap-and-box matches `asum`/`aprod`
+exactly. Ops: `+ - *` and comparisons (`// %` deferred — `idiv` `#DE`s on a zero
+cell). Verified equal to love's broadcast/reduction ops, wrap included:
 
 ```sh
-out/host/love -l jit/kernel.l jit/array.l   # map (x*x, x+1, x<3, wrap) + zipWith (a+b, a*b+1, a<b) — ALL PASS
+out/host/love -l jit/kernel.l jit/array.l   # map + zipWith + reductions (sum/prod, incl. wide box & wrap) — ALL PASS
 ```
 
 ## Reproducing the probe (x86_64 + qemu)
