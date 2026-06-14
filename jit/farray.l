@@ -105,44 +105,20 @@
                              (cat (femit body regs) '(195)))))
             (\ in (arreduce code seed in))))))
 
-; --- FLOAT WHOLE-LOOP FOLD: (arfoldw '(\ acc x <float-arith>) seed). Unlike
-; arfold (whose C nif loops and calls the kernel per cell), the forged code OWNS
-; the loop -- the op is inlined and there is NO per-cell call. The forged fn is
-; fn(double *cells %rdi, uintptr_t n %rsi, double init %xmm0) -> double %xmm0.
-; acc lives in %xmm14 across iterations, the cell is loaded into %xmm15 each pass,
-; and the body is the SAME `femit` used by arfold (regs acc->%xmm14, cell->%xmm15,
-; result %xmm0). Two self-relative jumps frame the loop; their rel32 offsets are
-; computed from B = the body length (see the offset map below). ---
-; the accumulate PEEPHOLE: when the body is exactly (op acc cell), op in {+ - *},
-; the whole step is one register-to-register op into the live accumulator --
-; <op>sd %xmm14,%xmm15 -- no stack round-trip, no acc reload. This is what lets
-; the forged loop actually MATCH the C builtin; without it the general femit body
-; (which spills the left operand to the machine stack per cell) dominates and
-; owning the loop buys nothing.
-(: (unwrap e) (? (&& (twop e) (= 1 (tally e))) (unwrap (cap e)) e)   ; peel op-core's ((..))
-   (facc op)                                            ; acc <op>= cell, result in xmm14
-   (? (idp op '+) '(242 69 15 88 247)                   ; addsd xmm14,xmm15
-      (idp op '-) '(242 69 15 92 247)                   ; subsd xmm14,xmm15
-      (idp op '*) '(242 69 15 89 247)                   ; mulsd xmm14,xmm15
-      ())
-   (accfast body acc cell)                              ; the fused inner, or () if not the idiom
-   (: u (unwrap body)
-      (? (&& (twop u) (= 3 (tally u)) (memq (cap u) '(+ - *))
-             (symp (caup u)) (idp (caup u) acc) (idp (caup (cup u)) cell))
-         (cat '(242 68 15 16 60 207) (facc (cap u)))    ; movsd xmm15,[rdi+rcx*8] ; <op>sd xmm14,xmm15
-         ()))
-
-   (arfoldw lam seed)
+; --- FLOAT WHOLE-LOOP FOLD: (arfoldw '(\ acc x <float-arith>) seed). The forged
+; code owns the loop for an ARBITRARY float body -- the JIT's remaining job, now
+; that sum/prod live (faster) in the C builtins asum/aprod. fn(double *cells %rdi,
+; uintptr_t n %rsi, double init %xmm0) -> double %xmm0; acc in %xmm14 across
+; iterations, cell loaded into %xmm15 each pass, body = femit (acc->%xmm14,
+; cell->%xmm15, result %xmm0). Two self-relative jumps frame the loop; their rel32
+; offsets are computed from the body length. ---
+(: (arfoldw lam seed)
    (: rest (cup lam) body (last rest) ps (init rest)
       (? !(&& (= 2 (tally ps)) (all symp ps) (farith body ps)) lam
          (: regs (list (cons (cap ps) fr1) (cons (caup ps) fr0))   ; acc->xmm14, cell->xmm15
-            fast (accfast body (cap ps) (caup ps))
-            ; INNER = the per-iteration work (between jge and inc): the fast fused
-            ; step, or the general (load cell ; femit body -> xmm0 ; acc<-xmm0).
-            inner (? fast fast
-                     (cat '(242 68 15 16 60 207)                   ; movsd xmm15,[rdi+rcx*8]
-                      (cat (femit body regs)                       ; body -> xmm0
-                           '(242 68 15 16 240))))                  ; movsd xmm14,xmm0  (acc=res)
+            inner (cat '(242 68 15 16 60 207)                      ; movsd xmm15,[rdi+rcx*8]
+                    (cat (femit body regs)                         ; body -> xmm0
+                         '(242 68 15 16 240)))                     ; movsd xmm14,xmm0  (acc=res)
             l (tally inner)
             ; offsets from loop-start: cmp[0,3) jge[3,9) inner[9,9+l)
             ; inc[9+l,12+l) jmp[12+l,17+l) done@17+l

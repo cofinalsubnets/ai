@@ -127,83 +127,19 @@
             (\ in (acreduce code seed in)))))
 
    ; --- COMPLEX WHOLE-LOOP FOLD: (acfoldw '(\ acc x <complex-arith>) seed). The
-   ; forged code owns the loop (op inlined, no per-cell call, cf. acreduce). fn is
-   ; fn(double *cells %rdi, uintptr_t n %rsi, struct g_c2 init %xmm0/%xmm1) ->
-   ; struct g_c2 %xmm0/%xmm1. acc lives in (%xmm12,%xmm13), the cell's (re,im) is
-   ; loaded into (%xmm14,%xmm15) each pass; cells are interleaved so the loop
-   ; counts doubles (rsi = 2n via shl, rcx += 2). Body = the SAME cfemit acfold
-   ; uses (acc->cr0, cell->cr1, result %xmm0/%xmm1). Offsets from loop-start:
-   ; cmp[0,3) jge[3,9) re[9,15) im[15,22) body[22,22+b) acc<-res[22+b,32+b)
-   ; add[32+b,36+b) jmp[36+b,41+b) done@41+b. ---
-   ; the complex accumulate PEEPHOLE: (+ acc cell)/(- acc cell) is componentwise,
-   ; one op per lane straight into the live acc pair -- addsd/subsd xmm12,xmm14 and
-   ; xmm13,xmm15 -- no stack, no acc reload, so complex SUM ties asum. Complex *
-   ; goes to its own SIMD kernel (cprodw, below); any other body is general cfemit.
-   (unwrap e) (? (&& (twop e) (= 1 (tally e))) (unwrap (cap e)) e)
-   (cacc op)                                            ; acc <op>= cell, result back in xmm12/13
-   (? (idp op '+) '(242 69 15 88 230  242 69 15 88 239) ; addsd xmm12,xmm14 ; addsd xmm13,xmm15
-      (idp op '-) '(242 69 15 92 230  242 69 15 92 239) ; subsd xmm12,xmm14 ; subsd xmm13,xmm15
-      ())
-   (caccfast body acc cell)                             ; fused inner (load + lanes), or ()
-   (: u (unwrap body)
-      (? (&& (twop u) (= 3 (tally u)) (memq (cap u) '(+ -))
-             (symp (caup u)) (idp (caup u) acc) (idp (caup (cup u)) cell))
-         (cat '(242 68 15 16 52 207  242 68 15 16 124 207 8) (cacc (cap u)))  ; load re,im ; lanes
-         ()))
-
-   ; --- MULTI-ACCUMULATOR complex-PRODUCT kernel (cprodw, K=4, forged once). A
-   ; product fold is LATENCY-bound -- acc_n depends on acc_n-1, so one sequential
-   ; chain stalls on the multiply latency. Four independent packed accumulators
-   ; (acc0..3 = xmm12,13,11,10), each taking every 4th cell and recombined at the
-   ; end, overlap four chains and run ~2.8x faster than aprod (K=2 1.6x, K=4 2.8x,
-   ; K=6 3.3x, saturating ~K=4-5). This REASSOCIATES the product, which is SOUND:
-   ; * is a commutative monoid, so the product's value is grouping-invariant BY
-   ; DEFINITION; IEEE * is commutative-but-not-associative, so groupings differ only
-   ; in the last-bit rounding -- each an equally valid approximation of the one true
-   ; product (aprod's left-to-right order is just one arbitrary choice, not canon).
-   ; Per cell: one 16B movupd + the SSE3 addsubpd complex-mul idiom. The main loop
-   ; does K cells (tail folds the <K remainder into acc0); offsets from segment
-   ; lengths. Needs SSE3; host-only opt-in lib. ---
-   (pcmul a)                                            ; xmm_a *= xmm14 (packed cell), scratch xmm0,1
-   (: lo (& a 7) m1 (| 200 lo) sh (| 192 (| (<< lo 3) lo)) mu (| 192 (| (<< lo 3) 6)) mv (| 192 (| (<< lo 3) 1))
-      (L 242 65 15 18 198  102 69 15 21 246  102 65 15 40 m1  102 15 89 200      ; movddup;unpckhpd;movapd xmm1,a;mulpd xmm1,xmm0
-         102 69 15 198 sh 1  102 69 15 89 mu  102 65 15 208 m1  102 68 15 40 mv)); shufpd a;mulpd a,xmm14;addsubpd xmm1,a;movapd a,xmm1
-   (cpmovq a)  (L 102 76 15 110 (| 192 (<< (& a 7) 3)))    ; movq xmm_a,rax   (init an accumulator to 1.0)
-   (cpmv14 a)  (L 102 69 15 40 (| 240 (& a 7)))            ; movapd xmm14,xmm_a (move an acc into the cell slot to recombine)
-   (cpld o) (? (= o 0) '(102 68 15 16 52 207) (L 102 68 15 16 116 207 o))   ; movupd xmm14,[rdi+rcx*8(+o)]
-   cpone (cons 72 (cons 184 (leb64 4607182418800017408 8)))                 ; mov rax, bits(1.0)
-   (cpbuild accs)                                        ; accs[0] MUST be 12 (init/result home)
-   (: k (tally accs) stride (* 2 k)
-      ids ((: (go l) (? l (cat (cpmovq (cap l)) (go (cup l))) ())) (cup accs))      ; acc1.. = 1.0 (identity)
-      pro (cat '(102 15 20 193  102 68 15 40 224) (cat cpone (cat ids '(72 209 230  72 49 201))))  ; unpcklpd xmm0,xmm1; movapd xmm12,xmm0(=acc0=init); ids; shl rsi,1; xor rcx,rcx
-      mb ((: (go i l) (? l (cat (cat (cpld (* 16 i)) (pcmul (cap l))) (go (+ i 1) (cup l))) ())) 0 accs)  ; K cells -> acc0..K-1
-      ml (+ 10 (+ 6 (+ (tally mb) 9)))                   ; main length (check 10 + jg 6 + body + addrcx 4 + jmp 5)
-      main (cat (cat '(72 137 200  72 131 192) (cat (L stride) '(72 57 240)))       ; mov rax,rcx; add rax,stride; cmp rax,rsi
-              (cat (cat '(15 143) (leb64 (- ml 16) 4))                              ; jg tail  (rel = ml-16)
-               (cat mb (cat (cat '(72 131 193) (L stride)) (cat '(233) (leb64 (- 0 ml) 4))))))  ; add rcx,stride; jmp main
-      tb (cat (cpld 0) (pcmul 12))                       ; tail: fold one remaining cell into acc0
-      tl (+ 3 (+ 6 (+ (tally tb) 9)))
-      tail (cat '(72 57 241) (cat (cat '(15 141) (leb64 (- tl 9) 4))                ; cmp rcx,rsi; jge comb (rel = tl-9)
-               (cat tb (cat '(72 131 193 2) (cat '(233) (leb64 (- 0 tl) 4))))))     ; add rcx,2; jmp tail
-      cmb ((: (go l) (? l (cat (cat (cpmv14 (cap l)) (pcmul 12)) (go (cup l))) ())) (cup accs))  ; acc0 *= acc1..
-      comb (cat cmb '(102 65 15 40 196  102 65 15 40 204  102 15 21 201  195))      ; movapd xmm0,xmm12; movapd xmm1,xmm12; unpckhpd xmm1,xmm1(=im); ret
-      (forge (l2b (cat pro (cat main (cat tail comb))))))
-   cprodw (cpbuild '(12 13 11 10))                       ; K=4
-
+   ; forged code owns the loop for an ARBITRARY complex body -- the JIT's remaining
+   ; job, now that sum/prod live (faster) in the C builtins. fn(double *cells %rdi,
+   ; uintptr_t n %rsi, struct g_c2 init %xmm0/%xmm1) -> struct g_c2 %xmm0/%xmm1;
+   ; acc in (%xmm12,%xmm13), cell's (re,im) loaded into (%xmm14,%xmm15) each pass;
+   ; cells interleaved -> loop counts doubles (rsi=2n via shl, rcx+=2). Body =
+   ; cfemit (acc->cr0, cell->cr1, result %xmm0/%xmm1); offsets from segment lengths.
    (acfoldw lam seed)
-   (: rest (cup lam) body (last rest) ps (init rest) u (unwrap body)
+   (: rest (cup lam) body (last rest) ps (init rest)
       (? !(&& (= 2 (tally ps)) (all symp ps) (cfarith body (list (cons (cap ps) cr0) (cons (caup ps) cr1)))) lam
-         (&& (twop u) (= 3 (tally u)) (idp (cap u) '*)             ; bare complex product -> K=4 unroll kernel
-             (idp (caup u) (cap ps)) (idp (caup (cup u)) (caup ps)))
-           (\ in (cfoldw cprodw seed in))
-         (: regs (list (cons (cap ps) cr0) (cons (caup ps) cr1))   ; else: the general whole-loop frame
-            fast (caccfast body (cap ps) (caup ps))
-            ; INNER (between jge and add): the fast fused step (+/-), or the general
-            ; (load re,im ; cfemit body -> xmm0/1 ; acc<-xmm0/1).
-            inner (? fast fast
-                     (cat '(242 68 15 16 52 207  242 68 15 16 124 207 8)   ; movsd xmm14,[..] ; xmm15,[..+8]
-                      (cat (cfemit body regs)                              ; body -> (xmm0,xmm1)
-                           '(242 68 15 16 224  242 68 15 16 233))))        ; xmm12=res.re ; xmm13=res.im
+         (: regs (list (cons (cap ps) cr0) (cons (caup ps) cr1))
+            inner (cat '(242 68 15 16 52 207  242 68 15 16 124 207 8)   ; movsd xmm14,[..] ; xmm15,[..+8]
+                    (cat (cfemit body regs)                             ; body -> (xmm0,xmm1)
+                         '(242 68 15 16 224  242 68 15 16 233)))        ; xmm12=res.re ; xmm13=res.im
             l (tally inner)
             ; offsets: cmp[0,3) jge[3,9) inner[9,9+l) add[9+l,13+l) jmp[13+l,18+l) done@18+l
             loopb (cat '(72 57 241)                                ; cmp rcx,rsi
