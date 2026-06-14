@@ -140,13 +140,23 @@
    ; xmm13,xmm15 -- no stack, no acc reload, so complex SUM ties asum. (Complex *
    ; is irreducibly ~7 instructions, so it stays on the general cfemit path.)
    (unwrap e) (? (&& (twop e) (= 1 (tally e))) (unwrap (cap e)) e)
-   (cacc op)                                            ; acc <op>= cell, lanes in xmm12/13
+   (cacc op)                                            ; acc <op>= cell, result back in xmm12/13
    (? (idp op '+) '(242 69 15 88 230  242 69 15 88 239) ; addsd xmm12,xmm14 ; addsd xmm13,xmm15
       (idp op '-) '(242 69 15 92 230  242 69 15 92 239) ; subsd xmm12,xmm14 ; subsd xmm13,xmm15
+      ; complex MUL, HAND-EMITTED in registers (no stack, no cfemit spill): with
+      ; acc=(a,b)=(xmm12,xmm13) and cell=(c,d)=(xmm14,xmm15), compute both lanes
+      ; into scratch xmm0..3 (re=a*c-b*d, im=a*d+b*c) BEFORE writing acc back, so
+      ; the read of a,b isn't clobbered mid-compute.
+      (idp op '*) '(242 65 15 16 196  242 65 15 16 204   ; movsd xmm0,xmm12 ; movsd xmm1,xmm12   (a, a)
+                    242 65 15 89 198  242 65 15 89 207    ; mulsd xmm0,xmm14 (a*c) ; mulsd xmm1,xmm15 (a*d)
+                    242 65 15 16 213  242 65 15 16 221    ; movsd xmm2,xmm13 ; movsd xmm3,xmm13   (b, b)
+                    242 65 15 89 215  242 65 15 89 222    ; mulsd xmm2,xmm15 (b*d) ; mulsd xmm3,xmm14 (b*c)
+                    242 15 92 194     242 15 88 203       ; subsd xmm0,xmm2 (re) ; addsd xmm1,xmm3 (im)
+                    242 68 15 16 224  242 68 15 16 233)   ; movsd xmm12,xmm0 ; movsd xmm13,xmm1
       ())
    (caccfast body acc cell)                             ; fused inner (load + lanes), or ()
    (: u (unwrap body)
-      (? (&& (twop u) (= 3 (tally u)) (memq (cap u) '(+ -))
+      (? (&& (twop u) (= 3 (tally u)) (memq (cap u) '(+ - *))
              (symp (caup u)) (idp (caup u) acc) (idp (caup (cup u)) cell))
          (cat '(242 68 15 16 52 207  242 68 15 16 124 207 8) (cacc (cap u)))  ; load re,im ; lanes
          ()))
