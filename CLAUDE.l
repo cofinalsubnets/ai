@@ -559,7 +559,7 @@
 ; diagonal; the three core tables are + , * , and apply. a both-fixnum fast path skips the
 ; table; otherwise one indexed jump picks a lane that widens only as far as the operands need
 ; (array, complex, bignum, float, ...). the VM is tail-threaded over a two-space copying
-; collector; out-of-pool constants are immortal. the love/ layer (prelude ev repl cli egg) bakes
+; collector; out-of-pool constants are immortal. the love/ layer (prelude ev repl cli egg) drips
 ; into every frontend: the host (out/host/love), the freestanding kernel (x86_64/aarch64),
 ; and wasm. build codegen lives in love under tools/; the C is
 ; freestanding, -Wall -Wextra -Werror.
