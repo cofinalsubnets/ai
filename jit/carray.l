@@ -17,7 +17,7 @@
    (? (symp e) (idp e v)
       (&& (fixp e) (<= 0 e)) 1                   ; non-negative int literal -> (k, 0)
       (&& (twop e) (= 1 (tally e))) (carith (cap e) v)   ; peel op-core's ((e)) wrapper
-      (&& (twop e) (= 3 (tally e)) (memq (cap e) '(+ - *)))
+      (&& (twop e) (= 3 (tally e)) (memq (cap e) '(+ - * /)))
         (&& (carith (caup e) v) (carith (caup (cup e)) v))
       0))
 
@@ -25,6 +25,7 @@
 (: (ccombine op)
    (? (idp op '+) '(242 15 88 194  242 15 88 203)        ; addsd xmm0,xmm2 ; addsd xmm1,xmm3
       (idp op '-) '(242 15 92 194  242 15 92 203)        ; subsd xmm0,xmm2 ; subsd xmm1,xmm3
+      (idp op '*)
       ; complex mul: re = ac-bd, im = ad+bc  (xmm4,xmm5 scratch)
       '(242 15 16 224  242 15 89 226              ; movsd xmm4,xmm0(a) ; mulsd xmm4,xmm2  -> ac
         242 15 16 233  242 15 89 235              ; movsd xmm5,xmm1(b) ; mulsd xmm5,xmm3  -> bd
@@ -32,6 +33,20 @@
         242 15 16 232  242 15 89 235              ; movsd xmm5,xmm0(a) ; mulsd xmm5,xmm3  -> ad
         242 15 89 202                             ; mulsd xmm1,xmm2(b*c)                  -> bc
         242 15 88 233                             ; addsd xmm5,xmm1                       -> im=ad+bc
+        242 15 16 196  242 15 16 205)             ; movsd xmm0,xmm4(re) ; movsd xmm1,xmm5(im)
+      ; complex div: re = (ac+bd)/D, im = (bc-ad)/D, D = c*c+d*d (xmm4..7 scratch;
+      ; SSE divsd by a 0 divisor is inf/nan, not #DE -- no crash). a,b,c,d kept in
+      ; xmm0..3 until the final stores.
+      '(242 15 16 242  242 15 89 246              ; movsd xmm6,xmm2(c) ; mulsd xmm6,xmm6  -> c*c
+        242 15 16 251  242 15 89 255              ; movsd xmm7,xmm3(d) ; mulsd xmm7,xmm7  -> d*d
+        242 15 88 247                             ; addsd xmm6,xmm7                       -> D=c*c+d*d
+        242 15 16 224  242 15 89 226              ; movsd xmm4,xmm0(a) ; mulsd xmm4,xmm2  -> ac
+        242 15 16 249  242 15 89 251              ; movsd xmm7,xmm1(b) ; mulsd xmm7,xmm3  -> bd
+        242 15 88 231                             ; addsd xmm4,xmm7                       -> ac+bd
+        242 15 16 233  242 15 89 234              ; movsd xmm5,xmm1(b) ; mulsd xmm5,xmm2  -> bc
+        242 15 16 248  242 15 89 251              ; movsd xmm7,xmm0(a) ; mulsd xmm7,xmm3  -> ad
+        242 15 92 239                             ; subsd xmm5,xmm7                       -> bc-ad
+        242 15 94 230  242 15 94 238              ; divsd xmm4,xmm6 ; divsd xmm5,xmm6      -> re,im
         242 15 16 196  242 15 16 205)))           ; movsd xmm0,xmm4(re) ; movsd xmm1,xmm5(im)
 
 ; --- emit: bytes leaving e's value in (xmm0,xmm1) ---
@@ -71,9 +86,15 @@
    s1  (cjit '(\ x (- x 1)))
    x2  (cjit '(\ x (* x 2)))
    pol (cjit '(\ x (+ (* x x) 1)))                ; x^2 + 1, complex
+   dv2 (cjit '(\ x (/ x 2)))                      ; complex / real
+   dvs (cjit '(\ x (/ x x)))                      ; x/x = 1 (the showcase: complex divide)
+   dvm (cjit '(\ x (/ (* x x) x)))                ; x^2/x = x
    _ (ck "x+x  c     " (dd  cv)   (cv + cv))
    _ (ck "x*x  c     " (sq  cv)   (cv * cv))       ; ~(1 2)^2 = ~(-3 4); ~(3 4)^2 = ~(-7 24)
    _ (ck "x-1  c     " (s1  cv)   (cv - 1))
    _ (ck "x*2  c     " (x2  cv)   (cv * 2))
    _ (ck "x*x+1 c    " (pol cv)   ((cv * cv) + 1))
+   _ (ck "x/2  c     " (dv2 cv)   (cv / 2))        ; @(~(0.5 1) ~(1.5 2))
+   _ (ck "x/x  c     " (dvs cv)   (cv / cv))       ; @(~1 ~1)
+   _ (ck "x*x/x c    " (dvm cv)   ((cv * cv) / cv)) ; back to cv (up to fp)
    _ (dot (? (peep bad 0 0) (+ (show (peep bad 0 0)) " FAILED\n") "ALL PASS\n")))

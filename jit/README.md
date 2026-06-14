@@ -271,17 +271,20 @@ passes/returns a two-double struct in `%xmm0` (re) / `%xmm1` (im), so `acmap` is
 `amap` with a `struct g_c2(*)(struct g_c2)` kernel and a complex value lives in
 `(%xmm0,%xmm1)`. `jit/carray.l` emits the SSE: the cell is saved to
 `(%xmm14,%xmm15)`, binops use a 16-byte stack slot, integer literals become
-`(k,0)` (`cvtsi2sd` + `pxor`), `+ -` are componentwise, and `*` is the complex
-formula `(ac−bd)+(ad+bc)i` in `%xmm4`/`%xmm5`. `(cjit '(\ x <arith>))` →
-`(\ c-array → c-array)`, verified bit-for-bit against love's complex broadcast
-ops — the multiply included (`~(1 2)² = ~(-3 4)`, `~(3 4)² = ~(-7 24)`):
+`(k,0)` (`cvtsi2sd` + `pxor`), `+ -` are componentwise, `*` is `(ac−bd)+(ad+bc)i`,
+and `/` is the conjugate-divide `((ac+bd)+(bc−ad)i)/(c²+d²)` (`%xmm4`–`%xmm7`
+scratch; SSE `divsd` by a zero divisor is inf/nan, not `#DE`, so no crash).
+`(cjit '(\ x <arith>))` → `(\ c-array → c-array)`, verified bit-for-bit against
+love's complex broadcast ops — the multiply and divide included (`~(1 2)² =
+~(-3 4)`; `x/x = ~1`; `x²/x` round-trips to `x`):
 
 ```sh
-out/host/love -l jit/kernel.l jit/carray.l   # x+x, x*x (complex mul), x-1, x*2, x*x+1 — ALL PASS
+out/host/love -l jit/kernel.l jit/carray.l   # x+x, x*x, x-1, x*2, x*x+1, x/2, x/x, x*x/x — ALL PASS
 ```
 
-Deferred for both float lanes: comparisons (they yield a `z` mask), float/complex
-literals (need raw IEEE bits), complex `/` (the conjugate-divide formula).
+Deferred for the float lanes: comparisons (they yield a `z` mask), and float/
+complex *literals* (`1.5` etc., which need their raw IEEE bits — a `(fbits f)` nif
+would unlock them; integer literals already convert via `cvtsi2sd`).
 
 ## Reproducing the probe (x86_64 + qemu)
 
