@@ -1,23 +1,22 @@
-; jit -- the (call buf x) trampoline jumps into the machine code in a buf and
-; runs it natively (SysV/AArch64 ABI: the arg in the first register, the result
-; in the return register, wrapped as a fixnum). (forge src) is the loader: it
-; returns an EXECUTABLE buf holding a copy of src's bytes -- on the host a W^X
-; mmap arena (the malloc heap is NX, so a raw (call <heap buf> ..) would fault),
-; on the freestanding kernel a plain heap buf (the HHDM is already executable).
-; The portable idiom is (call (forge bytes) x); see jit/README.md + jit/forge.l.
+; jit -- the (call <toast> x) trampoline jumps into the machine code held by a
+; TOAST (an opaque executable handle) and runs it natively (SysV/AArch64 ABI: the
+; arg in the first register, the result in the return register, wrapped as a fixnum).
+; (toast src) is the loader: it bakes src's bytes into an opaque toast -- on the host
+; a W^X mmap arena (the malloc heap is NX), on the freestanding kernel a plain heap
+; copy (the HHDM is already executable). The idiom is (call (toast bytes) x); see
+; jit/README.md + jit/probe.l.
 ;
-; These asserts are ARCHITECTURE-NEUTRAL on purpose: actually executing bytes is
-; machine-specific (x86_64 opcodes crash an aarch64 or wasm host), so the real
-; round-trip lives in the standalone jit/forge.l (host x86_64) and jit/probe.l
-; (kernel). Here we cover only what holds on every target: the guards and that
-; forge round-trips bytes into a buf without running them.
+; A toast is OPAQUE: hotp, but NOT a buf -- its code can't be peep/pin/tally'd as
+; data, only (call ..) runs it. These asserts are ARCHITECTURE-NEUTRAL on purpose:
+; actually executing bytes is machine-specific (x86_64 opcodes crash an aarch64 or
+; wasm host), so the real round-trip lives in the standalone jit/probe.l (kernel).
+; Here we cover what holds on every target: the guards and the opacity, no run.
 (assert
- (lamp call) (lamp forge)     ; both nifs present and applicable
- !(call 5 0)                  ; not a buf -> nothing (no jump)
- (0 = (call 'sym 0))          ; a symbol is not a buf
- !(call "text" 0)             ; a string is not a buf (bufp is false for strp)
- !(call () 0)                 ; nothing in -> nothing out
- (0 = (forge 5)) (0 = (forge 'x)) (0 = (forge ())) (0 = (forge ""))   ; non-bytes / empty -> 0
- (bufp (forge "AB"))          ; forge of bytes is a buf (executable, but a buf)
- (2 = (tally (forge "AB"))) (65 = (peep (forge "AB") 0 0)) (66 = (peep (forge "AB") 1 0))   ; bytes copied verbatim
- (: b (buf 3) _ (pin b 0 144) _ (pin b 1 195) f (forge b) (&& (bufp f) (144 = (peep f 0 0)))))  ; forge of a buf too
+ (lamp call) (lamp toast)     ; both nifs present and applicable
+ !(call 5 0) (0 = (call 'sym 0)) !(call "text" 0) !(call () 0)   ; a non-toast -> nothing (no jump)
+ !(call (buf 8) 0)            ; a plain buf is NOT callable -- only a toast runs
+ (0 = (toast 5)) (0 = (toast 'x)) (0 = (toast ())) (0 = (toast ""))   ; non-bytes / empty -> 0
+ (hotp (toast "AB")) !!(toast "AB")        ; a toast is an opaque hot, and present
+ (0 = (tally (toast "AB")))                ; OPAQUE: not a buf, so no length to read
+ (-1 = (peep (toast "AB") 0 -1))           ; OPAQUE: its code bytes are not readable
+ (: b (buf 3) _ (pin b 0 144) _ (pin b 1 195) t (toast b) (&& (hotp t) (0 = (tally t)))))  ; toast of a buf too

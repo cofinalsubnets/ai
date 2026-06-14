@@ -111,7 +111,7 @@ lvm_t lvm_kcall,
  lvm_two, lvm_tuple, lvm_sym, lvm_str, lvm_big, // data sentinels (enum q order); apply dispatches through g_apply_mx
  lvm_putn, lvm_gauge,    lvm_clock,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_intern, lvm_twop,
- lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_forge,
+ lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_toast, lvm_toasted,
  lvm_fixp,  lvm_symp,   lvm_strp,   lvm_mapp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
  lvm_sin, lvm_cos, lvm_log, lvm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not nifs
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
@@ -181,6 +181,9 @@ static g_inline bool strp(word _) { return lamp(_) && cell(_)->ap == lvm_str; }
 // binary image in place. Recognized by ap, like iop() for ports.
 struct g_buf { lvm_t *ap; struct g_str *str; };
 static g_inline bool bufp(word _) { return lamp(_) && cell(_)->ap == lvm_buf; }
+// a TOAST: an opaque executable handle (toasted native code). A hot like a buf, but a
+// DISTINCT ap so it is not bufp -- no peep/pin/blit/tally as data; only `call` runs it.
+static g_inline bool toastp(word _) { return lamp(_) && cell(_)->ap == lvm_toasted; }
 // A map is a lookup-lambda with stable identity across growth, like the hash it
 // replaces (whose struct stayed put while its bucket array reallocated). Two
 // texts: a fixed 2-word HEADER [lvm_map_lookup, backing, <tag>] that callers
@@ -597,7 +600,7 @@ lvm_t lvm_fault;
  _(nif_table, "tablet", s1(lvm_table)) _(nif_keys, "keys", s1(lvm_keys))\
  _(nif_dig, "dig", s1(lvm_dig))\
  _(nif_bufnew, "buf", s1(lvm_bufnew)) _(nif_bcopy, "blit", s5(lvm_bcopy))\
- _(nif_call, "call", s2(lvm_call)) _(nif_call2, "call2", s3(lvm_call2)) _(nif_forge, "forge", s1(lvm_forge))\
+ _(nif_call, "call", s2(lvm_call)) _(nif_call2, "call2", s3(lvm_call2)) _(nif_toast, "toast", s1(lvm_toast))\
  _(nif_twop, "twop", s1(lvm_twop)) _(nif_strp, "strp", s1(lvm_strp))\
  _(nif_real, "real", s1(lvm_real)) _(nif_flop, "flop", s1(lvm_flop))\
  _(nif_sin, "sin", s1(lvm_sin)) _(nif_cos, "cos", s1(lvm_cos))\
@@ -3616,7 +3619,7 @@ op11(lvm_lamp, lamp(Sp[0]) ? putfix(1) : nil)
 // (hotp x): is x an opaque hot handle -- a buf or a port? (a task is referenced
 // by a fixnum id, not a handle object.) a hot also answers lamp (it acts as
 // a constant function); hotp is the refinement that names the zoo.
-op11(lvm_hotp, (bufp(Sp[0]) || iop(Sp[0])) ? putfix(1) : nil)
+op11(lvm_hotp, (bufp(Sp[0]) || iop(Sp[0]) || toastp(Sp[0])) ? putfix(1) : nil)
 
 // (hash x) -- the general hashing method exposed to l as a fixnum.
 op11(lvm_dig, putfix(hash(g, Sp[0])))
@@ -3803,6 +3806,10 @@ lvm(lvm_slice) {
 // generic text path and the cheney sound forwards its backing-string pointer.
 lvm(lvm_buf) {
  return Ip = cell(*++Sp), *Sp = putfix(1), Continue(); }
+// the toast ap (its type tag): applied, a toast is const-1 like any opaque hot -- it is
+// meant to be (call ..)'d, not applied. Distinct from lvm_buf so toastp tells them apart.
+lvm(lvm_toasted) {
+ return Ip = cell(*++Sp), *Sp = putfix(1), Continue(); }
 
 // (buf n) — allocate a zeroed n-byte mutable buf. n<=0 / non-numeric -> the empty
 // string singleton EmptyString, so NO empty buf object ever exists (an un-writable 0-byte
@@ -3835,7 +3842,7 @@ lvm(lvm_bufnew) {
 lvm(lvm_fault) { volatile char *p = 0; (void) *p; return Sp[0] = putfix(0), Ip++, Continue(); }
 #endif
 
-// THE FAULT BARRIER (hosted). Running forged/native code is love's one
+// THE FAULT BARRIER (hosted). Running native (toasted) code is love's one
 // un-survivable corner: an ill-formed body faults the CPU (SIGSEGV/SIGILL/...),
 // below help. call_run wraps the native call in a sigsetjmp; a fault during it is
 // caught and reported via *bad (the caller returns 0, the same value the non-buf
@@ -3861,7 +3868,7 @@ static g_word call_run(void *fnp, g_word x, g_word y, int two, int *bad) {  // f
 
 lvm(lvm_call) {
  word b = Sp[0], x = Sp[1];
- if (!bufp(b)) return *++Sp = putfix(0), Ip++, Continue();   // not a buf -> nothing
+ if (!toastp(b)) return *++Sp = putfix(0), Ip++, Continue();   // only a toast is callable -> else nothing
  int bad; g_word r = call_run(txt(buf_str(b)), x, 0, 0, &bad);   // fault -> bad -> 0 (survivable)
  return *++Sp = putfix(bad ? 0 : r), Ip++, Continue(); }   // arity 2: pop one, result at the new top
 
@@ -3871,22 +3878,21 @@ lvm(lvm_call) {
 // barrier. Arity 3.
 lvm(lvm_call2) {
  word b = Sp[0], x = Sp[1], y = Sp[2];
- if (!bufp(b)) return Sp[2] = putfix(0), Sp += 2, Ip++, Continue();   // not a buf -> nothing
+ if (!toastp(b)) return Sp[2] = putfix(0), Sp += 2, Ip++, Continue();   // only a toast is callable
  int bad; g_word r = call_run(txt(buf_str(b)), x, y, 1, &bad);
  return Sp[2] = putfix(bad ? 0 : r), Sp += 2, Ip++, Continue(); }   // arity 3: collapse two, result at the new top
 
 // THE HOST EXEC ARENA (hosted builds only). The Linux malloc heap is NX, so a
-// buf of real code cannot be (call ...)ed directly -- the jump faults. forge
-// copies the bytes into a W^X mapping instead: mmap RW, write, mprotect to
-// R+X, and never write again (writable XOR executable, honored, so hardened
-// systems that forbid RWX still run it). The mapping is page-rounded and holds
-// a g_str header [len, bytes..] so the resulting buf is an ORDINARY buf whose
-// ->str simply lives outside the GC pool -- gcp's out-of-pool short-circuit
-// leaves the pointer untouched (like the immortal data-segment constants), and
-// a finalizer munmaps it when the buf is collected (mirrors io_close). The
-// freestanding kernel needs none of this: its HHDM is mapped executable, so a
-// plain heap buf already runs (see jit/README.md), and forge there is just a
-// buf copy. Either way the portable idiom is (call (forge bytes) x).
+// buf of real code cannot be run directly -- the jump faults. `toast` copies the
+// bytes into a W^X mapping instead: mmap RW, write, mprotect to R+X, and never
+// write again (writable XOR executable, honored, so hardened systems that forbid
+// RWX still run it). The mapping is page-rounded and holds a g_str header [len,
+// bytes..]; the resulting TOAST is a hot whose ->str lives outside the GC pool --
+// gcp's out-of-pool short-circuit leaves the pointer untouched (like the immortal
+// data-segment constants), and a finalizer munmaps it when the toast is collected
+// (mirrors io_close). The freestanding kernel needs none of this: its HHDM is
+// mapped executable, so a plain heap copy already runs (see jit/README.md), and
+// `toast` there is just that copy. Either way the idiom is (call (toast bytes) x).
 #if __STDC_HOSTED__
 #include <sys/mman.h>
 #include <unistd.h>
@@ -3907,18 +3913,19 @@ static void code_unmap(void *p) {
  munmap(base, code_maplen(base->len)); }
 #endif
 
-// (forge src) — an EXECUTABLE buf holding a copy of src's bytes (src a string or
+// (toast src) — bake src's bytes into an opaque, executable TOAST (src a string or
 // buf; non-byte or empty -> 0). On a hosted build the bytes go into the W^X code
-// arena above; on the freestanding kernel a plain heap buf (the HHDM is already
-// executable). The returned buf feeds (call ...) on either target. The bytes are
-// the caller's responsibility, exactly as for (call ...): forge only places them
-// where they can run, it does not check them.
-lvm(lvm_forge) {
+// arena above; on the freestanding kernel a plain heap copy (the HHDM is already
+// executable). A toast is a distinct opaque hot -- hotp but NOT a buf, so it can't
+// be peep/pin/blit/tally'd as data; only (call ...) runs it, on either target. The
+// bytes are the caller's responsibility: toast only places them where they can run,
+// it does not check them.
+lvm(lvm_toast) {
  word src = Sp[0];
  if (!(strp(src) || bufp(src))) return Sp[0] = putfix(0), Ip++, Continue();
  struct g_str *in = bytes_of(src);
  uintptr_t n = len(in);
- if (n == 0) return Sp[0] = putfix(0), Ip++, Continue();   // nothing to forge -> nothing
+ if (n == 0) return Sp[0] = putfix(0), Ip++, Continue();   // nothing to toast -> nothing
 #if __STDC_HOSTED__
  // The buf wrapper + finalizer node live in the heap; the g_str backing lives
  // in the arena. Have() BEFORE the mmap so a GC retry (which re-runs the nif)
@@ -3932,7 +3939,7 @@ lvm(lvm_forge) {
  if (mprotect(base, maplen, PROT_READ | PROT_EXEC))   // seal: writable -> executable
   return munmap(base, maplen), Sp[0] = putfix(0), Ip++, Continue();
  union u *k = (union u*) Hp; Hp += Width(struct g_buf) + Width(struct g_tag);
- ((struct g_buf*) k)->ap = lvm_buf;
+ ((struct g_buf*) k)->ap = lvm_toasted;   // opaque toast tag, not lvm_buf: not peep/pin-able
  ((struct g_buf*) k)->str = s;
  tagtext(k, Width(struct g_buf));
  struct g_fz *z = (struct g_fz*) Hp; Hp += Width(struct g_fz);
@@ -3947,7 +3954,7 @@ lvm(lvm_forge) {
  struct g_str *s = ini_str((struct g_str*) Hp, n); Hp += sreq;
  memcpy(txt(s), txt(bytes_of(Sp[0])), n);   // reload src: a GC in Have may have moved it
  union u *k = (union u*) Hp; Hp += breq;
- ((struct g_buf*) k)->ap = lvm_buf;
+ ((struct g_buf*) k)->ap = lvm_toasted;   // opaque toast tag, not lvm_buf
  ((struct g_buf*) k)->str = s;
  tagtext(k, Width(struct g_buf));
  return Sp[0] = word(k), Ip++, Continue();

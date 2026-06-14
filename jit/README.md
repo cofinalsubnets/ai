@@ -1,4 +1,4 @@
-# jit — the `(call ...)` trampoline and the `(forge ...)` loader
+# jit — the `(call ...)` trampoline and the `(toast ...)` loader
 
 > **The floor.** This was a larger experiment; it has been pulled back to its
 > substrate and its one finding. The native scalar/array/fold kernels and the
@@ -6,51 +6,52 @@
 > array kernels had no caller, and the one real win they revealed (reduction
 > reassociation) now lives **baked in the C builtins** `asum`/`aprod`/`amax`/`amin`,
 > multi-accumulator and portable to every target. What's left is the live surface:
-> `call`/`call2`/`forge` (nifs in `love.c`) and `jit/probe.l` (the kernel finding).
+> `call`/`call2`/`toast` (nifs in `love.c`) and `jit/probe.l` (the kernel finding).
 > The lesson, in one line: *a JIT wins only when it owns the loop, and the production
 > form of a fixed-code win is baked C unlocked by a sound algebraic law — so the
 > experiment's keeper is the finding, not the scaffold.* (`git log` for the arc.)
-> The surface that remains is now **fault-safe** on the host — a bad forged body is
+> The surface that remains is now **fault-safe** on the host — a bad toasted body is
 > a catchable love condition, not a crash (see *The fault barrier*, below).
 
-A nif that jumps into machine code stored in a `buf` and runs it natively, and a
-loader that puts the bytes somewhere they can run on either target.
+A nif that jumps into native machine code and runs it, and a loader that bakes the
+bytes into an opaque, executable handle — a **toast** — that runs on either target.
 
 ```
-(call b x)        ; jump into buf b's bytes, arg x, fixnum result
-(call2 b x y)     ; ... two args (SysV %rdi/%rsi; AArch64 x0/x1)
-(forge src)       ; an EXECUTABLE buf holding a copy of src's bytes
+(call t x)        ; jump into toast t's code, arg x, fixnum result
+(call2 t x y)     ; ... two args (SysV %rdi/%rsi; AArch64 x0/x1)
+(toast src)       ; bake src's bytes into an opaque, executable TOAST
 ```
 
-`call` jumps into the bytes of buf `b`, passing `x` as the sole argument and
+`call` jumps into the code of toast `t`, passing `x` as the sole argument and
 wrapping the returned machine word as a fixnum. The calling convention is the
 platform C ABI — SysV AMD64 puts the argument in `%rdi` and takes the result in
-`%rax`; AArch64 uses `x0` for both. The bytes inside `b` are the caller's
-responsibility, but an ill-formed body is no longer fatal on the host: the
-**fault barrier** (below) catches the hardware fault and `call` returns `0` — the
-same value a non-buf argument gives. A non-buf argument runs nothing and returns
-`0`.
+`%rax`; AArch64 uses `x0` for both. Only a **toast** is callable — a plain `buf` (or
+any non-toast) runs nothing and returns `0`. The code inside `t` is the caller's
+responsibility, but an ill-formed body is no longer fatal on the host: the **fault
+barrier** (below) catches the hardware fault and `call` returns `0`.
 
-`forge` is how you get a `call`-able buf that works on **both** targets. The
-portable idiom is `(call (forge bytes) x)`:
+`toast` bakes bytes into a callable handle that works on **both** targets; the idiom
+is `(call (toast bytes) x)`. A toast is **opaque**: it answers `hotp` like any hot
+but it is *not* a `buf` — its code can't be `peep`/`pin`/`blit`/`tally`'d as data (no
+length, no byte access); only `call` runs it. That keeps the executable region from
+masquerading as a writable byte buffer.
 
-- **Host** — the Linux malloc heap is mapped no-execute, so a raw
-  `(call <heap buf> ...)` SIGSEGVs on the jump. `forge` copies the bytes into a
-  **W^X code arena** instead: `mmap` a page-rounded region read/write, write a
-  `g_str` header + the bytes, `mprotect` it to read+execute, and never write it
-  again. Writable *xor* executable is honored throughout, so hardened systems
-  that forbid RWX still run it. The arena lives outside the GC pool — the
-  returned buf is an ordinary buf whose backing-string pointer the collector
-  leaves untouched (`gcp`'s out-of-pool short-circuit) — and a finalizer
-  `munmap`s the region when the buf is collected (mirrors `io_close`).
-- **Kernel** — the HHDM is already executable (the finding below), so `forge`
-  is just a heap-buf copy; the bytes run in place.
+- **Host** — the Linux malloc heap is mapped no-execute, so raw heap bytes can't be
+  run. `toast` copies them into a **W^X code arena**: `mmap` a page-rounded region
+  read/write, write a `g_str` header + the bytes, `mprotect` it to read+execute, and
+  never write it again. Writable *xor* executable is honored throughout, so hardened
+  systems that forbid RWX still run it. The arena lives outside the GC pool — the
+  toast's backing-string pointer the collector leaves untouched (`gcp`'s out-of-pool
+  short-circuit) — and a finalizer `munmap`s the region when the toast is collected
+  (mirrors `io_close`).
+- **Kernel** — the HHDM is already executable (the finding below), so `toast`
+  is just a heap copy; the bytes run in place.
 
-`src` may be a string or a buf; a non-byte value or an empty one forges to `0`.
+`src` may be a string or a buf; a non-byte value or an empty one toasts to `0`.
 
 ## The fault barrier — a bad body is survivable (host)
 
-Running forged bytes is the one place love can be handed code that faults the CPU.
+Running a toast's bytes is the one place love can be handed code that faults the CPU.
 That used to be a hard crash; it no longer is. On the host a signal barrier
 (`SIGSEGV`/`SIGILL`/`SIGBUS`/`SIGFPE` + `sigsetjmp`) turns a hardware fault into an
 ordinary love condition:
@@ -73,11 +74,11 @@ unrecoverable corner is a fault *mid-GC or mid-ring-mutation*, where the heap it
 is inconsistent. See `call_run` / `g_eval` / `g_eval_fault_raise` in `love.c`, and
 the compile-gated `__fault` harness (`-DG_FAULT_TEST`).
 
-Both nifs live in `love.c` — search `lvm_call` and `lvm_forge`; each is three
+Both nifs live in `love.c` — search `lvm_call` and `lvm_toast`; each is a few
 lines of wiring (a forward-decl in the `lvm_t` block, the body, one nif-table
-entry). The host arena helpers (`code_maplen`, `code_unmap`) sit just above
-`lvm_forge` under `#if __STDC_HOSTED__`, so the freestanding kernel never sees
-`mmap`.
+entry; plus `toastp` and the `lvm_toasted` tag-ap). The host arena helpers
+(`code_maplen`, `code_unmap`) sit just above `lvm_toast` under `#if __STDC_HOSTED__`,
+so the freestanding kernel never sees `mmap`.
 
 ## The finding: the kernel substrate is *just* this trampoline
 
@@ -88,24 +89,24 @@ B8 2A 00 00 00   mov eax, 42      ; imm32 little-endian
 C3               ret
 ```
 
-— then `(call b 0)` and prints the result. Run on the **kernel** target under
-qemu it returns the immediate exactly (verified at 42 and at 12345). So Limine
-maps the HHDM — which backs the kernel heap, hence every `buf` — **without the
+— then `(call (toast b) 0)` and prints the result. Run on the **kernel** target
+under qemu it returns the immediate exactly (verified at 42 and at 12345). So Limine
+maps the HHDM — which backs the kernel heap, hence every toast's copy — **without the
 NX bit**: kernel data memory is already executable. No page-table work, no
-`mprotect`: a love JIT on the kernel is just love emitting bytes into a `buf`
-and calling it.
+`mprotect`: a love JIT on the kernel is just love emitting bytes and calling a toast
+of them.
 
-The **host** is the opposite: Linux maps the malloc heap no-execute, so a raw
-`(call <heap buf> ...)` SIGSEGVs on the jump. `(forge ...)` lifts exactly that
-limitation (the W^X arena above), so `(call (forge bytes) x)` runs real bytes
-natively on an x86_64 host too, no qemu. The corpus test (`test/jit.l`) stays
-architecture-neutral — x86_64 opcodes would crash an aarch64 or wasm host — so
-it covers the guards (`non-buf → 0`, `forge` round-trips bytes into a buf) and
-not live execution; the kernel finding lives in the standalone `jit/probe.l`.
+The **host** is the opposite: Linux maps the malloc heap no-execute, so raw heap
+bytes can't be run. `toast` lifts exactly that limitation (the W^X arena above), so
+`(call (toast bytes) x)` runs real bytes natively on an x86_64 host too, no qemu. The
+corpus test (`test/jit.l`) stays architecture-neutral — x86_64 opcodes would crash an
+aarch64 or wasm host — so it covers the guards (non-callable → `0`) and the toast's
+opacity (`hotp` but no `peep`/`tally`), not live execution; the kernel finding lives
+in the standalone `jit/probe.l`.
 
 ## What the experiment found, and where it went
 
-The full version generated x86_64/SSE in love and ran it via `(call (forge …) x)`:
+The full version generated x86_64/SSE in love and ran it via `(call (toast …) x)`:
 a scalar `(\ p <arith>)` kernel, an automatic `ev`/`opfix` hook to apply it
 transparently, and array kernels (`amap`/`areduce`/…) over `z`/`r`/`c` arrays. The
 transparency was made exact (`=`-preserving via `respec`, de-Bruijn `show` intact).
@@ -146,15 +147,13 @@ qemu-system-x86_64 -m 256M -M q35 -serial stdio -display none -no-reboot \
 
 ## Caveats / TODO
 
-- **Always `forge` before you `call` on the host.** A bare `(call <heap buf> ...)`
-  of real code faults on the NX heap — now *caught* by the fault barrier (`call`
-  returns `0`) rather than crashing, but it still won't run. `forge` is the only
-  host-safe way to obtain executable bytes; the arena it returns is W^X and freed by
-  a finalizer.
-- **AArch64 cache.** `lvm_call` omits the I-cache flush AArch64 needs after `forge`
+- **Only a toast is callable.** `call` rejects a plain `buf` (→ `0`); you must
+  `toast` the bytes first. On the host that is also the only way to get executable
+  memory (the heap is NX); the W^X arena the toast wraps is freed by a finalizer.
+- **AArch64 cache.** `lvm_call` omits the I-cache flush AArch64 needs after `toast`
   writes code (`__builtin___clear_cache(base, base+len)` before the first `call`).
   Correct on x86_64 only until that is added — and on AArch64 the flush belongs in
-  `forge` (where the bytes are written), not `call`.
+  `toast` (where the bytes are written), not `call`.
 - **The contract across `call`.** The argument arrives as its *raw tagged* love word
   (`putfix A`) and the result is re-tagged (`putfix r`), so a codegen must untag at
   the boundary. Keep what crosses `call` to unboxed machine words: no allocation, no

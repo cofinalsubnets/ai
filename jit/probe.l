@@ -1,5 +1,6 @@
 ; jit/probe.l -- the RWX probe. Decides one fact: is love's data memory
-; executable? i.e. can the bytes inside a `buf` be jumped into and run?
+; executable? i.e. can the bytes of a `toast` (on the kernel, a plain heap copy)
+; be jumped into and run?
 ;
 ; It builds a buf holding six AMD64 bytes --
 ;
@@ -18,15 +19,16 @@
 ;     (hang /     clear-the-NX-bit step in the kernel's page tables before a buf
 ;      reset)     can be run. Bounded work, but a real step up.
 ;
-; REQUIRES the lvm_call nif (jit/lvm_call.c) wired into love.c first. Until then
-; `call` is a missing name and reads the zero point -- the probe is inert.
+; REQUIRES the call + toast nifs wired into love.c first. Until then `call`/`toast`
+; are missing names that read the zero point -- the probe is inert.
 ;
 ; KEEP THIS OUT OF THE GATE CORPUS: if memory is NX, (call ...) faults the whole
-; kernel, which would take `make test` down with it. Run it standalone.
+; kernel (the kernel has no signal barrier), which would take `make test` down with
+; it. Run it standalone.
 
 (: b (buf 6)
    _ (pin b 0 184)              ; B8   mov eax, imm32
    _ (pin b 1 42)               ; 2A   imm32 = 42   (bytes 2..4 stay 0 from the zeroed buf)
    _ (pin b 5 195)              ; C3   ret
-   r (call b 0)                 ; jump in; the arg is ignored by this body
+   r (call (toast b) 0)         ; bake the bytes into a toast, jump in; arg ignored
    _ (dot r))                   ; 42 on success
