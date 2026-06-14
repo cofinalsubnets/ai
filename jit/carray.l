@@ -16,6 +16,9 @@
 (: (carith e v)
    (? (symp e) (idp e v)
       (&& (fixp e) (<= 0 e)) 1                   ; non-negative int literal -> (k, 0)
+      (&& (twop e) (= 3 (tally e)) (idp (cap e) 'plex)   ; complex literal ~(re im) reads as
+          (|| (fixp (caup e)) (flop (caup e)))           ;   (plex re im) -- real-literal components
+          (|| (fixp (caup (cup e))) (flop (caup (cup e))))) 1
       (&& (twop e) (= 1 (tally e))) (carith (cap e) v)   ; peel op-core's ((e)) wrapper
       (&& (twop e) (= 3 (tally e)) (memq (cap e) '(+ - * /)))
         (&& (carith (caup e) v) (carith (caup (cup e)) v))
@@ -54,6 +57,11 @@
    (? (symp e) '(242 65 15 16 198  242 65 15 16 207)     ; x: movsd xmm0,xmm14 ; movsd xmm1,xmm15
       (fixp e) (cat (cons 72 (cons 184 (leb e 8)))       ; mov rax,imm64
                     '(242 72 15 42 192  102 15 239 201)) ; cvtsi2sd xmm0,rax ; pxor xmm1,xmm1  -> (k,0)
+      (&& (twop e) (= 3 (tally e)) (idp (cap e) 'plex))   ; complex literal (plex re im)
+        (cat (cons 72 (cons 184 (leb64 (fbits (caup e)) 8)))         ; mov rax,<re bits>
+          (cat '(102 72 15 110 192)                                  ; movq xmm0,rax  (66 48 0F 6E C0)
+           (cat (cons 72 (cons 184 (leb64 (fbits (caup (cup e))) 8)))   ; mov rax,<im bits>
+                '(102 72 15 110 200))))            ; movq xmm1,rax  (66 48 0F 6E C8)  -> (re,im)
       (&& (twop e) (= 1 (tally e))) (cemit (cap e) v)     ; peel op-core's ((e)) wrapper
       (: op (cap e) a (caup e) b (caup (cup e))
          (cat (cemit a v)                                 ; (xmm0,xmm1) = A
@@ -89,6 +97,8 @@
    dv2 (cjit '(\ x (/ x 2)))                      ; complex / real
    dvs (cjit '(\ x (/ x x)))                      ; x/x = 1 (the showcase: complex divide)
    dvm (cjit '(\ x (/ (* x x) x)))                ; x^2/x = x
+   lit (cjit '(\ x (+ x ~(0.5 1.5))))             ; COMPLEX LITERAL ~(0.5 1.5) via fbits
+   rot (cjit '(\ x (* x ~(0 1))))                 ; * i = rotate 90 (complex literal)
    _ (ck "x+x  c     " (dd  cv)   (cv + cv))
    _ (ck "x*x  c     " (sq  cv)   (cv * cv))       ; ~(1 2)^2 = ~(-3 4); ~(3 4)^2 = ~(-7 24)
    _ (ck "x-1  c     " (s1  cv)   (cv - 1))
@@ -97,4 +107,6 @@
    _ (ck "x/2  c     " (dv2 cv)   (cv / 2))        ; @(~(0.5 1) ~(1.5 2))
    _ (ck "x/x  c     " (dvs cv)   (cv / cv))       ; @(~1 ~1)
    _ (ck "x*x/x c    " (dvm cv)   ((cv * cv) / cv)) ; back to cv (up to fp)
+   _ (ck "x+~(.5 1.5)" (lit cv)   (cv + ~(0.5 1.5)))  ; complex literal add
+   _ (ck "x*i  (rot) " (rot cv)   (cv * ~(0 1)))       ; multiply by i
    _ (dot (? (peep bad 0 0) (+ (show (peep bad 0 0)) " FAILED\n") "ALL PASS\n")))

@@ -282,9 +282,16 @@ love's complex broadcast ops — the multiply and divide included (`~(1 2)² =
 out/host/love -l jit/kernel.l jit/carray.l   # x+x, x*x, x-1, x*2, x*x+1, x/2, x/x, x*x/x — ALL PASS
 ```
 
-Deferred for the float lanes: comparisons (they yield a `z` mask), and float/
-complex *literals* (`1.5` etc., which need their raw IEEE bits — a `(fbits f)` nif
-would unlock them; integer literals already convert via `cvtsi2sd`).
+**Float and complex literals** land via the `(fbits f)` nif — the raw IEEE-754 bit
+pattern of a double as an integer (a wide-int box past the fixnum tag). The codegen
+loads a constant with `mov rax, (fbits f) ; movq xmm0, rax`; bytes come from a
+bit-op extractor (`leb64`, `& / >>`) so it works on the wide box and negative
+patterns alike. So `(rjit '(\ x (* x 1.5)))`, `(\ x (* x -2.0))`, and
+`(cjit '(\ x (* x ~(0 1))))` (multiply by *i* — `~(re im)` reads as `(plex re im)`
+with real-literal components) all compile, bit-exact vs love.
+
+Still deferred for the float lanes: comparisons (they yield a `z` mask, not an
+`r`/`c` array).
 
 ## Reproducing the probe (x86_64 + qemu)
 

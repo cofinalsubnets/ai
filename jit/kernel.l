@@ -46,6 +46,9 @@
 
 ; --- little-endian n bytes of a non-negative integer ---
 (: (leb k n) (? (< n 1) () (cons (% k 256) (leb (// k 256) (- n 1)))))
+; --- ... and by BIT ops (& / >>): works on a wide-int box and any sign (for the
+; IEEE bit patterns fbits returns -- shared by the float/complex array kernels) ---
+(: (leb64 k n) (? (< n 1) () (cons (& k 255) (leb64 (>> k 8) (- n 1)))))
 
 ; --- the overflow guard appended after every arithmetic op: r8 |= OF ---
 (: guard '(65 15 144 193  69 8 200))            ; seto r9b ; or r8b,r9b

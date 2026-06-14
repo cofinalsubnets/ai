@@ -20,10 +20,12 @@
 (: (farith e v)
    (? (symp e) (idp e v)
       (&& (fixp e) (<= 0 e)) 1                   ; non-negative int literal -> cvtsi2sd
+      (flop e) 1                                 ; float literal (1.5, ...) -> via fbits
       (&& (twop e) (= 1 (tally e))) (farith (cap e) v)    ; peel op-core's ((e)) wrapper
       (&& (twop e) (= 3 (tally e)) (memq (cap e) '(+ - * /)))
         (&& (farith (caup e) v) (farith (caup (cup e)) v))
       0))
+; (leb64 -- the bit-op byte extractor for fbits patterns -- is in jit/kernel.l)
 
 ; --- combine: xmm0 (op)= xmm1 ---
 (: (fcombine op)
@@ -37,6 +39,8 @@
    (? (symp e) '(242 65 15 16 199)               ; the cell: movsd xmm0,xmm15  (F2 41 0F 10 C7)
       (fixp e) (cat (cons 72 (cons 184 (leb e 8)))   ; mov rax,imm64           (48 B8 <le64>)
                     '(242 72 15 42 192))         ; cvtsi2sd xmm0,rax           (F2 48 0F 2A C0)
+      (flop e) (cat (cons 72 (cons 184 (leb64 (fbits e) 8)))   ; mov rax,<IEEE bits>  (48 B8 <le64>)
+                    '(102 72 15 110 192))        ; movq xmm0,rax               (66 48 0F 6E C0)
       (&& (twop e) (= 1 (tally e))) (femit (cap e) v)   ; peel op-core's ((e)) wrapper
       (: op (cap e) a (caup e) b (caup (cup e))
          (cat (femit a v)                        ; xmm0 = A
@@ -68,9 +72,17 @@
    hlf (rjit '(\ x (/ x 2)))
    sqm (rjit '(\ x (- (* x x) 1)))
    inv (rjit '(\ x (/ x 0)))                      ; float /0 -> ieee-inf (no #DE)
+   sc  (rjit '(\ x (* x 1.5)))                    ; FLOAT LITERAL via fbits
+   af  (rjit '(\ x (+ x 0.25)))                   ; float literal add
+   ne  (rjit '(\ x (* x -2.0)))                   ; NEGATIVE float literal (bit pattern, any sign)
+   ln  (rjit '(\ x (+ (* x 2.5) 0.5)))            ; mixed: x*2.5 + 0.5
    _ (ck "x+x   @1.5.. " (dd  @(1.5 2.5 3.5))  (@(1.5 2.5 3.5) + @(1.5 2.5 3.5)))
    _ (ck "x*2   @1.5.. " (x2  @(1.5 2.5))      (@(1.5 2.5) * 2))
    _ (ck "x/2   @3.0.. " (hlf @(3.0 5.0))      (@(3.0 5.0) / 2))
    _ (ck "x*x-1 @2.0.. " (sqm @(2.0 3.0))      ((@(2.0 3.0) * @(2.0 3.0)) - 1))
    _ (ck "x/0   @1.0   " (inv @(1.0))          (@(1.0) / 0))      ; @(ieee-inf)
+   _ (ck "x*1.5 @2.0.. " (sc  @(2.0 4.0))      (@(2.0 4.0) * 1.5))     ; @(3.0 6.0)
+   _ (ck "x+.25 @1.0.. " (af  @(1.0 2.0))      (@(1.0 2.0) + 0.25))    ; @(1.25 2.25)
+   _ (ck "x*-2  @1.5.. " (ne  @(1.5 2.5))      (@(1.5 2.5) * -2.0))    ; @(-3.0 -5.0)
+   _ (ck "2.5x+.5 @2..  " (ln  @(2.0 4.0))     ((@(2.0 4.0) * 2.5) + 0.5)) ; @(5.5 10.5)
    _ (dot (? (peep bad 0 0) (+ (show (peep bad 0 0)) " FAILED\n") "ALL PASS\n")))
