@@ -290,8 +290,14 @@ patterns alike. So `(rjit '(\ x (* x 1.5)))`, `(\ x (* x -2.0))`, and
 `(cjit '(\ x (* x ~(0 1))))` (multiply by *i* — `~(re im)` reads as `(plex re im)`
 with real-literal components) all compile, bit-exact vs love.
 
-Still deferred for the float lanes: comparisons (they yield a `z` mask, not an
-`r`/`c` array).
+**Float comparisons** yield a `z`-mask, so they need a different output type: the
+`armapz` nif maps an `r`-array → a `z`-array with a `double→int` kernel (`comisd`
++ `setcc` → 0/1). `rjit` dispatches — a top-level comparison `(\ x (< x 2.0))`
+compiles to a z-mask kernel over `armapz`; pure float arith stays `r`→`r` over
+`armap`. Verified vs love: `(@(1.0 2.0 3.0) < 2.0)` → `@(1 0 0)` (a `z`-array).
+
+Complex comparisons are still out (`<` on complex is nil in love — only `=`
+applies, and it's componentwise; a separate case if ever wanted).
 
 ## Reproducing the probe (x86_64 + qemu)
 

@@ -51,12 +51,43 @@
              (fcombine op))))))))                ; xmm0 = (A op B)
 
 ; --- driver: (\ x <arith>) -> (\ r-array -> r-array), each cell native (SSE) ---
+; --- float comparison -> 0/1 INT in rax (for a z-mask output array). comisd sets
+; CF/ZF like an unsigned compare, so < is setb, > is seta, etc. ---
+(: (cmpc-f op)
+   (cat '(102 15 47 193)                         ; comisd xmm0,xmm1   (66 0F 2F C1)
+    (cat (? (idp op '<)  '(15 146 192)           ; setb  al  (0F 92 C0)
+            (idp op '<=) '(15 150 192)           ; setbe al  (0F 96 C0)
+            (idp op '>)  '(15 151 192)           ; seta  al  (0F 97 C0)
+            (idp op '>=) '(15 147 192)           ; setae al  (0F 93 C0)
+                         '(15 148 192))          ; sete  al  (0F 94 C0)  ('=)
+         '(15 182 192))))                        ; movzx eax,al  (0F B6 C0)
+
+; --- is body a top-level float comparison (A op B) with float-arith A, B? ---
+(: (fcmp? body v)
+   (&& (twop body) (= 3 (tally body)) (memq (cap body) '(< <= > >= =))
+       (farith (caup body) v) (farith (caup (cup body)) v)))
+
+; --- emit a comparison body: compute A,B as doubles, compare -> int in rax ---
+(: (cemit-f body v)
+   (: a (caup body) b (caup (cup body))
+      (cat (femit a v)                           ; xmm0 = A
+       (cat '(72 131 236 8  242 15 17 4 36)      ; sub rsp,8 ; movsd [rsp],xmm0  (push A)
+        (cat (femit b v)                         ; xmm0 = B
+         (cat '(242 15 16 200  242 15 16 4 36  72 131 196 8)   ; xmm1=B ; pop A
+          (cmpc-f (cap body))))))))              ; -> 0/1 int in rax
+
+; --- driver: float arith (\ x <arith>) -> (\ r-array -> r-array) via armap;
+; a top-level float comparison -> (\ r-array -> z-MASK array) via armapz. ---
 (: (rjit lam)
    (: v (caup lam) body (caup (cup lam))
-      (? !(&& (symp v) (farith body v)) lam
-         (: code (forge (l2b (cat '(242 68 15 16 248)      ; prologue: movsd xmm15,xmm0  (save cell)
-                              (cat (femit body v) '(195)))))  ; ... ; ret
-            (\ in (: out (arr r (ashape in) 0) _ (armap code in out) out))))))
+      (? !(symp v) lam
+         (fcmp? body v)                          ; comparison -> z-mask
+           (: code (forge (l2b (cat '(242 68 15 16 248) (cat (cemit-f body v) '(195)))))
+              (\ in (: out (arr z (ashape in) 0) _ (armapz code in out) out)))
+         (farith body v)                         ; float arith -> r-array
+           (: code (forge (l2b (cat '(242 68 15 16 248) (cat (femit body v) '(195)))))
+              (\ in (: out (arr r (ashape in) 0) _ (armap code in out) out)))
+         lam)))
 
 ; ============================================================================
 ; SELF-CHECK: the native float kernel must equal love's elementwise r-array ops,
@@ -85,4 +116,12 @@
    _ (ck "x+.25 @1.0.. " (af  @(1.0 2.0))      (@(1.0 2.0) + 0.25))    ; @(1.25 2.25)
    _ (ck "x*-2  @1.5.. " (ne  @(1.5 2.5))      (@(1.5 2.5) * -2.0))    ; @(-3.0 -5.0)
    _ (ck "2.5x+.5 @2..  " (ln  @(2.0 4.0))     ((@(2.0 4.0) * 2.5) + 0.5)) ; @(5.5 10.5)
+   ; --- float COMPARISONS -> z-mask (armapz) ---
+   lt  (rjit '(\ x (< x 2.0)))                    ; -> z-array of 0/1
+   ge  (rjit '(\ x (>= x 2.0)))
+   ev2 (rjit '(\ x (< (* x 0.5) 1.5)))            ; comparison over an arith subexpr
+   _ (ck "x<2   @1..3 " (lt  @(1.0 2.0 3.0))   (@(1.0 2.0 3.0) < 2.0))    ; @(1 0 0)  (z!)
+   _ (ck "x>=2  @1..3 " (ge  @(1.0 2.0 3.0))   (@(1.0 2.0 3.0) >= 2.0))   ; @(0 1 1)
+   _ (ck ".5x<1.5 @..  " (ev2 @(1.0 3.0 5.0))  ((@(1.0 3.0 5.0) * 0.5) < 1.5)) ; @(1 0 0)
+   _ (dot (+ "  (x<2 type = " (+ (show (atype (lt @(1.0 2.0)))) (+ ", want z=" (+ (show z) ")\n")))))
    _ (dot (? (peep bad 0 0) (+ (show (peep bad 0 0)) " FAILED\n") "ALL PASS\n")))
