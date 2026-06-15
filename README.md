@@ -1,6 +1,6 @@
-# love
+# ai
 
-every love expression has a value.
+every ai expression has a value.
 stackless operation, all recursion on heap, overflow safe.
 every quote below evals to 1. try them in the repl :)
 (or in your browser: [index.html](index.html) runs the same
@@ -24,9 +24,9 @@ but only the help that answers every absence with one can witness it:
 bind love and the sentence breaks.
 
 
-## love
+## ai
 
-basically, love is a synthesis of lisp haskell and apl over c
+basically, ai is a synthesis of lisp haskell and apl over c
 where every value is a total function of one argument and every
 action is as defined as generically efficient as possible.
 
@@ -34,9 +34,9 @@ action is as defined as generically efficient as possible.
 - lambdas, macros, closures, multitasking
 - freestanding bare metal kernel build
 - public domain portable C with zero dependencies
-- claude can write love like a champ no cap
+- claude can write ai like a champ no cap
 
-love has three special forms plus "operators". the forms are
+ai has three special forms plus "operators". the forms are
 - `\` lambda
 - `?` cond
 - `:` let
@@ -111,11 +111,11 @@ the spec stays green.
 - `make` build + test
 - `make repl` interactive shell
 - `make test_all` adds the freestanding kernel (qemu) + tool diffs
-- `make wasm` build the browser image (wasm/love.js, used by index.html)
-- `make hooks` install the pre-commit hook that keeps wasm/love.js fresh
-- `out/host/ai` is a symlink to `love` -- ai is love in the filesystem too
-- `out/host/love file.l` run a file
-- `echo .ev | love` print the compiler
+- `make wasm` build the browser image (wasm/ai.js, used by index.html)
+- `make hooks` install the pre-commit hook that keeps wasm/ai.js fresh
+- `out/host/love` is a symlink to `ai` -- ai is the binary; love stays the word (the theorem)
+- `out/host/ai file.l` run a file
+- `echo .ev | ai` print the compiler
 
 that last one is not a joke. `.` prints, `ev` is the self-hosted evaluator,
 and what comes out is the lambda the compiler compiled itself into -- a couple
@@ -130,7 +130,7 @@ per the law.
 
 ### cook
 
-`make`, in love. [tools/cook.l](tools/cook.l) is a small dependency-driven
+`make`, in ai. [tools/cook.l](tools/cook.l) is a small dependency-driven
 build tool -- bring an item up to date when it is missing or older than any of
 its ingredients -- driven by a `Cards.l` recipe file:
 
@@ -149,14 +149,14 @@ cook an item -- check its date, prep its ingredients, follow the recipe's
 steps, record what shipped, from the cards; the ticket names what to make
 (default: the first card, the standing check).
 
-- `love -l tools/cook.l Cards.l [ticket]` -- cook a ticket
+- `ai -l tools/cook.l Cards.l [ticket]` -- cook a ticket
 - `make -f cook.mk test` -- the make-shaped stub: bootstraps the binary, then
   forwards to cook
 - [tools/cook-example/](tools/cook-example/) is a worked C build
 
-love builds itself this way too: the root [Cards.l](Cards.l) ports the
+ai builds itself this way too: the root [Cards.l](Cards.l) ports the
 cross-cutting verbs (`test clean valg vmret bench`), delegating the C
-bootstrap to the real Makefile -- cook runs on love, so it can't build love.
+bootstrap to the real Makefile -- cook runs on ai, so it can't build ai.
 
 ### under the hood
 - one word per value: a fixnum is a tagged odd word, anything else is a heap
@@ -169,13 +169,13 @@ bootstrap to the real Makefile -- cook runs on love, so it can't build love.
   values is the enum order, and the lattice is literally the diagonal of the
   dispatch tables. `sort` is one C comparison per pair -- the total order is
   the comparator.
-- no interpreter state lives outside the heap: the book (an ordinary love
+- no interpreter state lives outside the heap: the book (an ordinary ai
   hash) carries the globals, macros, the operators table, the help function
   and the rng; C finds its own hooks by name, allocation-free. the egg pulls
   every compiler-internal name -- the book itself included -- before the
   image is born. a name not in the book is missing: reading one is a
   call for help, and helpless it reads the zero point, a nameless unit.
-- the compiler is written in love. at build time the evaluator sits on the egg
+- the compiler is written in ai. at build time the evaluator sits on the egg
   (the quoted compiler source) twice -- the C bootstrap compiles the compiler,
   which recompiles itself -- and the hatchling bakes into the binary; `born`
   records the hatch time. the same image runs on linux, bare metal

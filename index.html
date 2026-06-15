@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>love</title>
+<title>ai</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -63,7 +63,7 @@
 </head>
 <body>
 
-<h1>love</h1>
+<h1>ai</h1>
 <p>a minor lisp where every value is a total function of one argument.
 stackless, overflow-safe, generic to the bone — lisp, apl and haskell fused
 over portable public-domain C. the terminal below runs the real thing: the
@@ -177,7 +177,7 @@ source. the spec is <a href="CLAUDE.md">CLAUDE.md</a>; the readme is
 
 <footer>love is public domain free software. for bee.</footer>
 
-<script src="wasm/love.js"></script>
+<script src="wasm/ai.js"></script>
 <script>
 (async () => {
   const status = document.getElementById('status');
@@ -186,11 +186,11 @@ source. the spec is <a href="CLAUDE.md">CLAUDE.md</a>; the readme is
   const term = document.getElementById('term');
 
   const t0 = performance.now();
-  const M = await Love();
-  const init = M.cwrap('love_init', 'number', []);
-  const ev   = M.cwrap('love_eval', 'number', ['string']);
-  const optr = M.cwrap('love_out_ptr', 'number', []);
-  const olen = M.cwrap('love_out_len', 'number', []);
+  const M = await Ai();
+  const init = M.cwrap('ai_init', 'number', []);
+  const ev   = M.cwrap('ai_eval', 'number', ['string']);
+  const optr = M.cwrap('ai_out_ptr', 'number', []);
+  const olen = M.cwrap('ai_out_len', 'number', []);
   const dec = new TextDecoder();
   const drain = () => dec.decode(M.HEAPU8.subarray(optr(), optr() + olen()));
 
@@ -200,7 +200,7 @@ source. the spec is <a href="CLAUDE.md">CLAUDE.md</a>; the readme is
   ev("(: help (\\ s a b (? (eof? s) b (more? s) a (: _ (puts \"# \") _ (putx a) _ (puts \" \") _ (putx b) _ (putc 10) ()))))");
   ev("(. love-version)");
   const ver = drain();
-  status.textContent = `love up in ${(performance.now() - t0).toFixed(0)}ms ${ver}`;
+  status.textContent = `ai up in ${(performance.now() - t0).toFixed(0)}ms ${ver}`;
   // focus must not steal the scroll: arriving on an anchor (#who-wrote-this)
   // would otherwise snap back to the terminal when the image boots.
   cmd.disabled = false; cmd.focus({preventScroll: true});
