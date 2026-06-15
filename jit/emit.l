@@ -41,6 +41,8 @@
    (idivseq op d) (cat pop-r8 (cat '(72 133 192) (cat (guardz d)                 ; a->r8; test rax,rax (==0 -> deopt)
      (cat '(82 80 76 137 192 72 153 72 247 60 36)                                ; push rdx;push rax;mov rax,r8;cqo;idiv [rsp]
        (cat (? (= op '%) '(72 137 208) 0) '(72 131 196 8 90))))))                ; (% mov rax,rdx); add rsp,8; pop rdx
+   ; bitwise: a in r8, b in rax -> rax = a OP b (fixnum operands stay <=62-bit, no guard)
+   (bitseq op) (cat pop-r8 (? (= op '&) '(76 33 192) (= op '|) '(76 9 192) (= op '^) '(76 49 192) 0))  ; and/or/xor rax,r8
    ; comparison: a in r8, b in rax -> rax = (a OP b) ? 1 : 0 (0/1, no deopt)
    (setcc op) (? (= op '<) '(15 156 192) (= op '<=) '(15 158 192) (= op '>) '(15 159 192)
                  (= op '>=) '(15 157 192) (= op '=) '(15 148 192) 0)             ; setcc al
@@ -55,6 +57,7 @@
                      (twop e) (: op (cap e)  a (caup e)  b (caup (cup e))
                                  (? (memq op '(+ - *))      (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (opseq op d))))
                                     (memq op '(// %))        (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (idivseq op d))))
+                                    (memq op '(& | ^))       (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (bitseq op))))
                                     (memq op '(< <= > >= =)) (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (cmpseq op))))
                                     (= op '?) (condcode (cgv v vl a d) (cgv v vl b d) (cgv v vl (caup (cup (cup e))) d))
                                     0))
@@ -100,5 +103,9 @@
   (: md (jit '(\ x (% x 7)))  (&& (1 = (md 8)) (-1 = (md -8)) (0 = (md 14))))
   ; mid-nest deopt must leave the machine stack balanced (rsp unwind on deopt)
   (16000000000000000001 = ((jit '(\ x (+ 1 (* x x)))) 4000000000))
-  (16000000000000000003 = ((jit '(\ x (+ (+ 1 (* x x)) 2))) 4000000000)))
+  (16000000000000000003 = ((jit '(\ x (+ (+ 1 (* x x)) 2))) 4000000000))
+  ; bitwise & | ^
+  (: bt (jit '(\ x (& x 12))) (&& (8 = (bt 10)) (12 = (bt 13))))
+  (: bo (jit '(\ x (| x 1)))  (&& (3 = (bo 2)) (5 = (bo 5))))
+  (: bx (jit '(\ x (^ x 5)))  (&& (15 = (bx 10)) (0 = (bx 5)))))
  _ (puts "jit/emit: native codegen ok (arith + loop, transparent, deopt)") _ (putc 10))
