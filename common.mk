@@ -21,7 +21,7 @@ tco ?= 1
 t = $R/test/00-init.$x $R/CLAUDE.$x $(filter-out %/00-init.$x,$(sort $(wildcard $R/test/*.$x)))
 
 g_h = $(wildcard $R/*.h)
-g_c = $R/love.c $R/data.c
+g_c = $R/ai.c $R/data.c
 f_c = $(wildcard $R/font/*.c)
 c_c = $(wildcard $R/libc/*.c)
 

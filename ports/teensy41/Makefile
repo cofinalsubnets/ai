@@ -33,7 +33,7 @@ data_h = $(o)/data.h
 lib_h = $(R)/out/lib/egg.h $(R)/out/lib/prelude.h $(R)/out/lib/ev.h $(R)/out/lib/repl.h
 
 # Local arch sources (teensy41.c, main.c) stay rooted in cwd; the shared runtime
-# (love.c, data.c, libc/) carries the $(R)/ prefix. Local rule is listed first
+# (ai.c, data.c, libc/) carries the $(R)/ prefix. Local rule is listed first
 # so this main.c wins the object-name race against the top-level host main.c.
 te_local_c = $(wildcard *.c)
 te_shared_c = $(g_c) $(c_c)

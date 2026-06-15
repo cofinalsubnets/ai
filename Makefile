@@ -78,11 +78,11 @@ out/lib/tests0.h: $t
 	@cat $t | $(sed_lit) > $@
 
 # ai_version.h: the build's version-control id, surfaced in the runtime as the `ai-version`
-# global (love.c g_ini_0). VCS-AGNOSTIC: a _darcs/ repo stamps darcs-<12-hex patch hash>
+# global (ai.c g_ini_0). VCS-AGNOSTIC: a _darcs/ repo stamps darcs-<12-hex patch hash>
 # (-dirty when darcs whatsnew is non-empty), else git describe, else "unknown" -- so the
 # darcs snapshot import carries this rule verbatim and stamps itself. Regenerated every
 # make but only rewritten when the id changes, so l.o relinks on a new revision, not on
-# every build. Frontends without it on the include path fall back to "unknown" (love.c
+# every build. Frontends without it on the include path fall back to "unknown" (ai.c
 # uses __has_include).
 .PHONY: force_version
 force_version: ;
@@ -157,14 +157,14 @@ $(hdata_h): $(ho)/data.o $(love0) tools/gen_data.$x love/prelude.$x
 	@echo GEN	$@
 	@$(love0) -l love/prelude.$x tools/gen_data.$x $< -o $@
 
-# love.c/data.c -> out/host/*.o (against the generated data.h).
+# ai.c/data.c -> out/host/*.o (against the generated data.h).
 $(ho)/%.o: $(R)/%.c $(g_h) $(hdata_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -c $< -o $@
 
 # l.o carries the version string (ai_version.h); relink it when the id changes.
-$(ho)/love.o $(ho)/0/love.o: out/lib/ai_version.h
+$(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
 
 # main.c is compiled into the final l inline (G_EGG_PRE/POST assemble the lib
 # headers); depend on them so it relinks when a lib source changes.
@@ -274,7 +274,7 @@ $(kdata_h): $(k_odir)/data.o $(gen_data) | $(m)
 	@echo GEN	$@
 	@$(m) $(gen_data) $< -o $@
 
-# Shared C sources (love.c/data.c, font/, c/) + per-arch arch/$a/.
+# Shared C sources (ai.c/data.c, font/, c/) + per-arch arch/$a/.
 # Under K_TEST kmain.c #includes the baked corpus out/lib/ktests.h.
 $(k_odir)/%.o: $(R)/%.c $(k_h) $(kdata_h) out/lib/egg.h out/lib/prelude.h out/lib/ev.h out/lib/repl.h $(if $(K_TEST),out/lib/ktests.h)
 	@echo CC	$@
@@ -282,7 +282,7 @@ $(k_odir)/%.o: $(R)/%.c $(k_h) $(kdata_h) out/lib/egg.h out/lib/prelude.h out/li
 	@$(kcc) -c $< -o $@
 
 # l.o carries the version string (ai_version.h); recompile it when the id changes.
-$(k_odir)/love.o: out/lib/ai_version.h
+$(k_odir)/ai.o: out/lib/ai_version.h
 
 $(k_odir)/%.o: $(R)/%.S $(k_h)
 	@echo AS	$@
@@ -362,7 +362,7 @@ run-headless: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 # PASSES (1708/1708 in ~2.5s). Two bugs were behind the long-parked hang:
 #  (1) the cooperative scheduler deadlocked -- a task blocked in `(wait p)` was
 #      saved by yield_sw parked on the kernel's serial input fd (a stale
-#      next_wait_fd), so find_runnable never rescheduled it (fixed in love.c
+#      next_wait_fd), so find_runnable never rescheduled it (fixed in ai.c
 #      lvm_wait: clear next_wake_at/next_wait_fd before yielding);
 #  (2) five float-sqrt asserts failed because libc/math.c pow(x,0.5) used
 #      exp(0.5*log x) (drifts a few ULP) instead of the exact Newton sqrt(), and
@@ -455,7 +455,7 @@ out/host/flamegraph.svg: out/host/perf.data
 repl: host
 	@$m
 cloc:
-	cloc --by-file --force-lang=Lisp,$x love love.c ai.h data.c data.h kmain.c main.c k.h arch tools test vim
+	cloc --by-file --force-lang=Lisp,$x love ai.c ai.h data.c data.h kmain.c main.c k.h arch tools test vim
 cat: clean all test
 cata: clean all test_all
 # Full clean rebuild, every frontend, all tests, then the corpus under valgrind.

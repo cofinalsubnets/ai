@@ -5,7 +5,7 @@
 // heap objects, and its ADDRESS is the type tag: the linker pins the
 // sentinels in order in the love_data section, and g_typ recovers a kind as
 // the slot index (one shift). Applying a data value lands on its sentinel,
-// which tail-jumps through the apply matrix in love.c.
+// which tail-jumps through the apply matrix in ai.c.
 //
 // All dispatch lives in ONE shared callee, data_apply, so the sentinel
 // bodies are tiny, byte-identical tail calls. That is deliberate: the

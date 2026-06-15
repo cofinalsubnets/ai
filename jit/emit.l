@@ -2,7 +2,7 @@
 ; closure to NATIVE machine code and installs it as a TRANSPARENT applicable value.
 ; This is "ev but faster": the result applies by juxtaposition ((f x), no verb), is
 ; =/show IDENTICAL to its source, and DEOPTS to the interpreter on overflow -- so
-; native is never wrong, only faster. The C seam is `nat` (love.c): it W^X-installs
+; native is never wrong, only faster. The C seam is `nat` (ai.c): it W^X-installs
 ; the bytes and wraps them in a closure cell [code, src, code, interp, lvm_ret, 0]
 ; whose value[-1]=src (=/show) and value[1]=interp (the deopt fallback).
 ;

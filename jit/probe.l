@@ -19,7 +19,7 @@
 ;     (hang /     clear-the-NX-bit step in the kernel's page tables before a buf
 ;      reset)     can be run. Bounded work, but a real step up.
 ;
-; REQUIRES the call + toast nifs wired into love.c first. Until then `call`/`toast`
+; REQUIRES the call + toast nifs wired into ai.c first. Until then `call`/`toast`
 ; are missing names that read the zero point -- the probe is inert.
 ;
 ; KEEP THIS OUT OF THE GATE CORPUS: if memory is NX, (call ...) faults the whole
