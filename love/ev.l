@@ -190,25 +190,33 @@
    (? t (? (> n 1) (poke -1 lvm_tapn (poke 0 n j)) (poke 0 lvm_tap j))
         (? (> n 1) (p2 lvm_apn n j) (poke -1 lvm_ap j))))
 
-  ;aco is a bit complicated
-  (aco c b) (:- (: f (acr b) (\ k n (: k2 (f (co (push c 'end) k) n) _ (pop c 'end) k2)))
-   (acx k n) (: ; jump out
+  ; aco -- compile a cond (? test result .. else). standard jump-threaded shape: each
+  ; test, on false, branches (lvm_cond) to the next clause; on true, runs its result and
+  ; JUMPS to the join (the cond's continuation k). the wrapper records k on the 'join
+  ; stack for the duration; tojoin reads it (and inlines a ret/tap join over a dead jump).
+  ; a constant test (pro folds it to a quote) picks its branch outright, no code.
+  (aco c b) (:- (: f (clauses b) (\ k n (: k2 (f (co (push c 'join) k) n) _ (pop c 'join) k2)))
+   ; tojoin: after a result, jump to the join (top of 'join) -- but fuse a ret/tap/tapn
+   ; join INLINE rather than emit a jump straight to a return.
+   (tojoin k n) (:
     j (k (+ 3 n))
-    a (cap (c 'end))
+    a (cap (c 'join))
     i (peek 0 a)
     (? (| (= lvm_ret i) (= lvm_tap i)) (p2 i (peek 1 a) j)
        (= lvm_tapn i)                   (p2 i (peek 1 a) (poke -1 (peek 2 a) j))
                                          (p2 lvm_jump a j)))
-   (acr b) (?
-    (atomp b)       (kim 0)
-    (atomp (cup b)) (co (ana c (cap b)) acx)
-    (: f (ana c (cap b))
-       g (ana c (caup b))
-       h (acr (cuup b))
-       (? (= kim (pro f)) (? (peek 3 f) g h)
-        (\ x (f (\ n
-         (: k (co (push c 'alt) (h x))
-            j (g (acx k) (+ 2 n))
+   ; clauses: test/result pairs then a trailing else. a constant test folds to one
+   ; branch; else emit lvm_cond -- true runs `then` + jumps to join, false falls to `rest`.
+   (clauses b) (?
+    (atomp b)       (kim 0)                                ; no else (wev usually supplies one)
+    (atomp (cup b)) (co (ana c (cap b)) tojoin)            ; trailing else: result, then join
+    (: test (ana c (cap b))
+       then (ana c (caup b))
+       rest (clauses (cuup b))
+       (? (= kim (pro test)) (? (peek 3 test) then rest)   ; constant test -> pick a branch
+        (\ x (test (\ n
+         (: k (co (push c 'alt) (rest x))                  ; k = the false branch (the rest)
+            j (then (tojoin k) (+ 2 n))                    ; true: then, jump to join, into k
             (p2 lvm_cond (pop c 'alt) j)))))))))
 
   Z (nom 'Z)
