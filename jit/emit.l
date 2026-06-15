@@ -128,6 +128,41 @@
    (jitsum body)
     (: src `(\ n ((: (go i a) (? (< i n) (go (+ i 1) (+ a ,body)) a)) 0 0))
        (nat (emit (loopcode body 'i '+ '<)) (ev src) src))
+   ; --- N-VARIABLE loop: the general tail-recursive counted loop ------------------
+   ; (\ n ((: (go v0..vk) (? TEST (go U0..Uk) RESULT)) I0..Ik)), up to 3 loop vars in
+   ; r9/r10/r11 (RAW), the param n the tagged Sp[0] (fxv-guarded). each iteration: if
+   ; TEST, compute EVERY Uj from the OLD regs -- push all, then pop into the regs in
+   ; reverse -- so the updates read pre-update values (e.g. fib's `b` and `a+b`); else
+   ; RESULT. r9/r10/r11 survive the expr scratch (rax/r8/stack), so no save needed.
+   (reg-ld j)   (? (= j 0) '(76 137 200) (= j 1) '(76 137 208) (= j 2) '(76 137 216) 0)  ; mov rax, r9/r10/r11
+   (reg-init j) (? (= j 0) '(73 199 193) (= j 1) '(73 199 194) (= j 2) '(73 199 195) 0)  ; mov r9/r10/r11, imm32
+   (reg-pop j)  (? (= j 0) '(65 89) (= j 1) '(65 90) (= j 2) '(65 91) 0)                 ; pop r9/r10/r11
+   ; cgl: an expr over {n (the fxv'd param) ; v0..vk (raw loop-var registers)} -> rax.
+   (cgl n vars e d)
+    (? (= e n)        (fxv 0 d)                                  ; the param: guarded Sp[0] load (untag)
+       (memq e vars)  (reg-ld (argix e vars 0))                  ; a loop var: raw register
+       (intp e)       (cat '(72 184) (le8 e))                    ; movabs
+       (twop e) (: op (cap e)  a (caup e)  b (caup (cup e))
+                   (? (memq op '(+ - *))      (cat (cgl n vars a d) (cat push-rax (cat (cgl n vars b (+ d 1)) (opseq op d))))
+                      (memq op '(// %))        (cat (cgl n vars a d) (cat push-rax (cat (cgl n vars b (+ d 1)) (idivseq op d))))
+                      (memq op '(& | ^))       (cat (cgl n vars a d) (cat push-rax (cat (cgl n vars b (+ d 1)) (bitseq op))))
+                      (memq op '(< <= > >= =)) (cat (cgl n vars a d) (cat push-rax (cat (cgl n vars b (+ d 1)) (cmpseq op))))
+                      (= op '?) (condcode (cgl n vars a d) (cgl n vars b d) (cgl n vars (caup (cup (cup e))) d))
+                      0))
+       0)
+   (loopcode-n n vars updates test result inits)
+    (: pre  ((: (go j is) (? (twop is) (cat (cat (reg-init j) (le4 (cap is))) (go (+ j 1) (cup is))) 0)) 0 inits)
+       ups  ((: (go j us) (? (twop us) (cat (cat (cgl n vars (cap us) j) push-rax) (go (+ j 1) (cup us))) 0)) 0 updates)  ; push Uj at depth j
+       pops ((: (go j) (? (< j 0) 0 (cat (reg-pop j) (go (- j 1))))) (- (tally updates) 1))   ; pop reg(k-1)..reg(0)
+       ub   (cat ups pops)  Lu (tally ub)
+       tb   (cgl n vars test 0)  Lt (tally tb)
+       rb   (cgl n vars result 0)
+       top  (cat tb (cat '(72 131 248 0) (cat '(15 132) (le4 (+ Lu 5)))))   ; <test>; cmp rax,0; je end
+       back (cat '(233) (le4 (- 0 (+ (+ Lt Lu) 15))))                       ; jmp top
+       (cat pre (cat top (cat ub (cat back (cat rb epilogue))))))
+   ; (jitloop-n lam vars updates test result inits) -- a general N-var loop -> native.
+   (jitloop-n lam vars updates test result inits)
+    (nat (emit (loopcode-n (caup lam) vars updates test result inits)) (ev lam) lam)
    ; --- self-test (x86-64): native == interpreted, transparent, deopts ---------
    (isum n) ((: (go i a) (? (< i n) (go (+ i 1) (+ a (* i 7))) a)) 0 0)
    f (jit '(\ x (+ (* x 3) 1)))   g (jitsum '(* i 7))
@@ -171,6 +206,12 @@
   ((\ x y z (+ (+ x y) (* z 2))) = (jitn '(\ x y z (+ (+ x y) (* z 2)))))
   (: t4 (jitn '(\ a b c d (+ (* a b) (- c d)))) (&& (7 = (t4 2 3 7 6)) (7 = ((t4 2 3) 7 6)) (7 = ((t4 2) 3 7 6))))
   (16000000000000000005 = ((jitn '(\ x y z (+ (+ (* x x) y) z))) 4000000000 0 5))   ; deopt through a middle param
+  ; N-VARIABLE loop: iterative fib (3 loop vars i,a,b) -- native == interp, deopts at overflow
+  (: nf (jitloop-n '(\ n ((: (go i a b) (? (< i n) (go (+ i 1) b (+ a b)) a)) 0 0 1))
+                   '(i a b) '((+ i 1) b (+ a b)) '(< i n) 'a '(0 0 1))
+     fi (\ n ((: (go i a b) (? (< i n) (go (+ i 1) b (+ a b)) a)) 0 0 1))
+     (&& (55 = (nf 10)) (832040 = (nf 30)) (= (fi 30) (nf 30))                       ; fib(10)=55, fib(30)=832040
+         (4660046610375530309 = (nf 91))))                                          ; fib(91) > fixnum -> deopt -> bignum
   ; CAPTURES = partial-apply a native multi-arg; the leading param(s) are the captures.
   (: mk (jit2 '(\ n x (+ x n)))  a5 (mk 5)  a7 (mk 7)
      (&& (15 = (a5 10)) (17 = (a7 10)) ('(6 7 8) = (map a5 '(1 2 3)))                 ; native captured closure, composes

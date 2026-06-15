@@ -63,6 +63,32 @@
               (= z2 (foldinit op)))                                          ; a0 matches the op's identity (0 / 1)
        (? ok (L B I op cmp) 0))
    (njit-loop lam B cv op cmp) (nat (emit (loopcode B cv op cmp)) (base-ev lam) lam)
+   ; --- general N-VARIABLE loop: (\ n ((: (go v0..vk) (? T (go U..) R)) I0..Ik)),
+   ; up to 3 loop vars + arbitrary update exprs -- this is the shape iterative fib/tak
+   ; take (i,a,b with updates b and a+b), not just the fold skeleton above.
+   (loopinfo-n lam)
+    (: BODY (? (twop (cup lam)) (caup (cup lam)) 0)
+       S    (? (twop BODY) (cap BODY) 0)  inits (? (twop BODY) (cup BODY) 0)
+       G    (? (twop S) (caup S) 0)
+       IF   (? (&& (twop S) (twop (cup S))) (caup (cup S)) 0)
+       GO   (? (twop G) (cap G) 0)  vars (? (twop G) (cup G) 0)
+       T    (? (twop IF) (caup IF) 0)
+       THEN (? (&& (twop IF) (twop (cup IF))) (caup (cup IF)) 0)
+       R    (? (&& (twop IF) (twop (cup (cup IF)))) (caup (cup (cup IF))) 0)
+       updates (? (twop THEN) (cup THEN) 0)
+       fr   (cons (caup lam) vars)                                  ; cgl frame: {n, v0..vk}
+       ok (&& (twop lam) (= (cap lam) '\) (symp (caup lam)) (twop (cup (cup lam))) !(twop (cup (cup (cup lam))))
+              (twop BODY) (twop S) (= (cap S) ':) (twop (cup S)) !(twop (cup (cup (cup S))))   ; (: G IF)
+              (twop G) (symp GO) (twop vars) (all symp vars) (distinctp vars) !(memq GO vars)
+              (< (tally vars) 4)                                    ; <= 3 loop vars (register limit)
+              (twop IF) (= (cap IF) '?) (twop THEN) (= (cap THEN) GO)   ; (? T (go U..) R)
+              (= (tally updates) (tally vars)) (= (tally inits) (tally vars))
+              (twop T) (memq (cap T) '(< <= > >= =)) (exprn fr T)   ; TEST a comparison over {n,vars}
+              (all (\ u (exprn fr u)) updates) (exprn fr R)         ; updates + RESULT exprs over {n,vars}
+              (all intp inits))                                     ; inits are fixnum consts
+       (? ok (L vars updates T R inits) 0))
+   (njit-loop-n lam vars updates test result inits)
+    (nat (emit (loopcode-n (caup lam) vars updates test result inits)) (base-ev lam) lam)
    ; --- captured-closure CONSTRUCTOR (\ p (\ q E)): a nest of 1-arg lambdas, E over
    ; {p,q}. Compiled as the flat 2-param native (\ p q E); applying it to p yields a
    ; native CAPTURED closure -- fully transparent (= the interpreter's ((2param) p)
@@ -92,7 +118,11 @@
    (auto-ev e) (? (qual e)  (memo e njit)
                   (qualn e) (memo e jitn)
                   (qualc e) (memo e (\ l (jitn (flatc l))))
-                  (: li (loopinfo e) (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li)))))) (base-ev e))))
+                  (: li (loopinfo e)
+                     (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li))))))
+                        (: ln (loopinfo-n e)
+                           (? ln (memo e (\ l (njit-loop-n l (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))))))
+                              (base-ev e))))))
    ev auto-ev                                                  ; rebind the global: ev is now auto-native
  _ (assert
     ((\ x (+ (* x 2) 3)) = (ev '(\ x (+ (* x 2) 3))))          ; leaf: native, =-identical
@@ -119,6 +149,10 @@
     ; GENERALIZED loop -- a <= comparison: sum_{i<=n} i
     (: Q '(\ n ((: (go i a) (? (<= i n) (go (+ i 1) (+ a i)) a)) 0 0))
        g (ev Q)  (&& (lamp (loopinfo Q)) (55 = (g 10))))        ; 0+1+..+10 = 55
+    ; N-VARIABLE loop auto-detected: iterative fib (i,a,b -- updates b and a+b)
+    (: F '(\ n ((: (go i a b) (? (< i n) (go (+ i 1) b (+ a b)) a)) 0 0 1))
+       nf (ev F)  (&& (lamp (loopinfo-n F)) (832040 = (nf 30)) (= (ev F) (ev F))   ; fib(30)=832040, native+transparent
+                      (4660046610375530309 = (nf 91))))                            ; fib(91) -> deopt -> bignum
     (idp (ev L1) (ev L1))                                       ; CACHE: same source -> same native (compiled once)
     (idp (ev '(\ x (+ x 1))) (ev '(\ x (+ x 1))))
     (: ad (ev '(\ x y (+ (* x x) y))) (&& (13 = (ad 3 4)) (13 = ((ad 3) 4)) ((\ x y (+ (* x x) y)) = ad)))  ; 2-arg leaf auto-natived
