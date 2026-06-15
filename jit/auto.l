@@ -40,7 +40,7 @@
                   (&& (twop lam) (= (cap lam) '\) (twop (cup lam))
                       (all symp ps) (< 1 (tally ps)) (distinctp ps)                     ; >=2 distinct symbol params
                       (exprn ps body)))
-   (njit lam) (: v (caup lam) (nat (emit (cat (cgv v ld-x (caup (cup lam)) 0) epilogue)) (base-ev lam) lam))  ; v any param name
+   (njit lam) (: v (caup lam) (nat (emit (cat (cgv v (\ d (fxv 0 d)) (caup (cup lam)) 0) epilogue)) (base-ev lam) lam))  ; v any param name, fixnum-guarded
    ; --- loop: match the tail-recursive counted-sum skeleton, extract (B counter) ---
    (loopinfo lam)
     (: M    (caup (cup lam))                                ; lambda body

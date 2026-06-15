@@ -27,7 +27,18 @@
    ; leaks pushes and the terminator `ret` faults. deopt tail-applies interp(arg).
    (guard d)  (cat '(113 19) (cat (cat '(72 129 196) (le4 (* 8 d))) deopt))      ; jno +19; add rsp,8d; deopt
    (guardz d) (cat '(117 19) (cat (cat '(72 129 196) (le4 (* 8 d))) deopt))      ; jnz +19; add rsp,8d; deopt
-   ld-x '(72 139 1  72 209 248)   ld-i '(76 137 208)                             ; load arg (untag) / loop var i
+   ld-i '(76 137 208)                                                           ; loop var i (raw, in r10)
+   untag '(72 209 248)                                                           ; sar rax,1
+   (fetch i) (? (= i 0)        '(72 139 1)                                       ; mov rax,[rcx]       (TAGGED, no untag)
+                (< (* 8 i) 128) (cat '(72 139 65) (cons (* 8 i) 0))              ; mov rax,[rcx+disp8]
+                                (cat '(72 139 129) (le4 (* 8 i))))               ; mov rax,[rcx+disp32]
+   ; FIXNUM INPUT GUARD: native arithmetic assumes fixnums (sar/imul/idiv), so a
+   ; NON-fixnum arg (an even/heap word -- a list, mint, the zero point, ...) must DEOPT
+   ; to the bytecode body, which dispatches generically. The overflow guard only catches
+   ; a fixnum RESULT leaving range, never a bad INPUT. test al,1 (fixnum = odd); a clear
+   ; low bit (even) falls through to the deopt -- structurally a guardz (jnz over it).
+   (fxv  i d) (cat (fetch i) (cat '(168 1) (cat (guardz d)    untag)))           ; nat deopt (interp value[0])
+   (fxmn i d) (cat (fetch i) (cat '(168 1) (cat (guardz-mn d) untag)))           ; natn deopt (interp body)
    push-rax '(80)   pop-r8 '(65 88)
    epilogue (cat '(72 1 192) (cat (guard 0) (cat '(72 131 200 1) (cat '(72 137 1)   ; add rax,rax;guard;or rax,1;mov[rcx]
               (cat '(72 131 198 16) '(72 139 6  255 224))))))                    ; add rsi,16; Continue
@@ -52,7 +63,7 @@
      (cat tb (cat '(72 131 248 0)                                                ; cmp rax,0
        (cat (cat '(15 142) (le4 (+ Lt 5)))                                       ; jle else (skip then + jmp)
          (cat thb (cat (cat '(233) (le4 Le)) elb))))))                           ; then ; jmp end ; else
-   (cgv v vl e d) (? (= e v)  vl                                                 ; d = pending machine-stack pushes
+   (cgv v vl e d) (? (= e v)  (vl d)                                             ; vl = a load FN of d (leaf guards, loop counter doesn't)
                      (intp e) (cat '(72 184) (le8 e))                            ; movabs rax, n
                      (twop e) (: op (cap e)  a (caup e)  b (caup (cup e))
                                  (? (memq op '(+ - *))      (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (opseq op d))))
@@ -64,7 +75,7 @@
                      0)
    (emit l) (: b (buf (tally l)) _ ((: (go i x) (? (twop x) (: _ (pin b i (cap x)) (go (+ i 1) (cup x))) 0)) 0 l) b)
    ; (jit '(\ x E)) -- compile an arithmetic single-arg closure to native.
-   (jit lam) (: v (caup lam) (nat (emit (cat (cgv v ld-x (caup (cup lam)) 0) epilogue)) (ev lam) lam))  ; v = the param, any name (single arg at Sp[0])
+   (jit lam) (: v (caup lam) (nat (emit (cat (cgv v (\ d (fxv 0 d)) (caup (cup lam)) 0) epilogue)) (ev lam) lam))  ; v = the param (single arg at Sp[0], fixnum-guarded)
    ; --- N-ary leaves (\ p0 .. p_{n-1} E): param i loads from Sp[i]=[rcx+8i]; the deopt
    ; jmps to interp's BODY (deopt-mn, interp+16 past its lvm_cur) where the saturated
    ; args already sit -- so the deopt/epilogue/return below are all arity-INDEPENDENT
@@ -79,12 +90,8 @@
                       (= op '-) (cat pop-r8 (cat '(73 41 192) (cat (guard-mn d) '(76 137 192)))) 0)
    (idivseq-mn op d) (cat pop-r8 (cat '(72 133 192) (cat (guardz-mn d)
      (cat '(82 80 76 137 192 72 153 72 247 60 36) (cat (? (= op '%) '(72 137 208) 0) '(72 131 196 8 90))))))
-   ; param i -> Sp[i] = [rcx + 8i] (untag); param 0 is the FIRST capture when the native
-   ; is partial-applied. disp8 for i<16, disp32 beyond. argix finds a var's frame index.
-   (ld-arg i) (cat (? (= i 0)        '(72 139 1)                          ; mov rax,[rcx]
-                      (< (* 8 i) 128) (cat '(72 139 65) (cons (* 8 i) 0))  ; mov rax,[rcx+disp8]
-                                      (cat '(72 139 129) (le4 (* 8 i))))   ; mov rax,[rcx+disp32]
-                   '(72 209 248))                                         ; sar rax,1
+   ; param i -> frame index in [imps args]; loaded fixnum-guarded from Sp[i] (param 0 is
+   ; the FIRST capture when partial-applied). argix finds a var's frame index in ps.
    (argix e ps i) (? !(twop ps) 0  (= e (cap ps)) i  (argix e (cup ps) (+ i 1)))   ; param -> index
    (cgn ps e d) (? (intp e) (cat '(72 184) (le8 e))                       ; movabs rax, n
                    (twop e) (: op (cap e)  a (caup e)  b (caup (cup e))
@@ -94,7 +101,7 @@
                                   (memq op '(< <= > >= =)) (cat (cgn ps a d) (cat push-rax (cat (cgn ps b (+ d 1)) (cmpseq op))))
                                   (= op '?) (condcode (cgn ps a d) (cgn ps b d) (cgn ps (caup (cup (cup e))) d))
                                   0))
-                   (ld-arg (argix e ps 0)))                               ; else: a param var
+                   (fxmn (argix e ps 0) d))                               ; else: a param var (fixnum-guarded)
    ; (jitn '(\ p0 .. body)) -- an arity>=2 leaf -> native (natn curries to saturation).
    (jitn lam) (: ps (init (cup lam))  body (last (cup lam))
                  (natn (emit (cat (cgn ps body 0) epilogue-mn)) (ev lam) lam (tally ps)))
@@ -103,7 +110,7 @@
    ; cv the counter var (limit at Sp[0]). r9=n r10=cv r11=acc. Reusable by jitsum
    ; and by the auto loop-detector (jit/auto.l).
    (loopcode body cv)
-    (: lb   (cgv cv ld-i body 0)  Lb (tally lb)
+    (: lb   (cgv cv (\ d ld-i) body 0)  Lb (tally lb)
        pre  '(76 139 9  73 209 249  77 49 210  77 49 219)                         ; mov r9,[rcx];sar;xor r10;xor r11
        test (cat '(77 57 202) (cat '(15 141) (le4 (+ Lb 32))))                     ; cmp r10,r9 ; jge loop_end
        acc  (cat '(73 1 195) (guard 0))                                           ; add r11,rax ; guard
@@ -122,6 +129,9 @@
   ((\ x (+ (* x 3) 1)) = f)                                  ; ... and are =-IDENTICAL to their source
   !(f = (\ x (+ (* x 3) 2)))
   (f = (jit '(\ x (+ (* x 3) 1))))                           ; two natives, same source
+  ; fixnum INPUT guard: a non-fixnum arg DEOPTS (no sar/putfix corruption of a heap word)
+  (: idn (jit '(\ x x)) (&& (5 = (idn 5)) ('(1 2) = (idn '(1 2))) ('a = (idn 'a)) (idp (:) (idn (:)))))
+  (: pls (jit '(\ x (+ x 1))) (&& (6 = (pls 5)) ((+ '(1 2) 1) = (pls '(1 2)))))   ; native == interp on a non-fixnum
   (: q (jit '(\ n (+ (* n 3) 1))) (&& (31 = (q 10)) ((\ n (+ (* n 3) 1)) = q) (q = f)))  ; arity-1 leaf, non-x param (= f up to alpha)
   ('(2 4 6) = (map (jit '(\ x (+ x 1))) '(1 3 5)))           ; compose with higher-order fns
   ((isum 1000) = (g 1000))                                   ; the loop agrees with the interpreter
