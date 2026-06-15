@@ -35,12 +35,12 @@ SECTIONS
     .text : {
         *(.text .text.*)
         /* ll data self-quote sentinels: kept contiguous and in enum
-           order (love_data.NN) so g_typ() recovers a kind from an ap's
+           order (ai_data.NN) so g_typ() recovers a kind from an ap's
            slot index. Mirrors g/data.ld for the host link. */
         . = ALIGN(16);
-        __start_love_data = .;
-        KEEP(*(SORT_BY_NAME(love_data.*)))
-        __stop_love_data = .;
+        __start_ai_data = .;
+        KEEP(*(SORT_BY_NAME(ai_data.*)))
+        __stop_ai_data = .;
     } :text
 
     /* Move to the next memory page for .rodata */

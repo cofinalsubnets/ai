@@ -151,7 +151,7 @@ $(ai0): $(ai0_o) $(data_ld)
 	@mkdir -p $(dir $@)
 	@$(CC) $(g_cflags) $(ldflags) -o $@ $(ai0_o) -lm
 
-# tools/gen_data.l reflects $(ho)/data.o's love_data.NN section sizes into
+# tools/gen_data.l reflects $(ho)/data.o's ai_data.NN section sizes into
 # $(ho)/data.h, whose g_typ() shifts instead of the portable header's divides.
 $(hdata_h): $(ho)/data.o $(ai0) tools/gen_data.$x ai/prelude.$x
 	@echo GEN	$@

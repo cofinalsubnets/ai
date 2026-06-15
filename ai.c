@@ -4446,7 +4446,7 @@ static lvm(lvm_mul_rep) {
                   : Ap(lvm_intern, g); }          // interned symbol
 
 // --- apply lane (the data-value `(g x)` aps; moved here from data.c) -----
-// When a data value is applied, its sentinel (data.c, pinned in the love_data
+// When a data value is applied, its sentinel (data.c, pinned in the ai_data
 // section) tail-jumps through g_apply_mx[g_typ(Ip)][g_kind(Sp[0])] -- the static
 // kind of the applied value and the dynamic kind of the argument. Every data kind
 // has a meaningful apply (pair = eliminator, string/symbol = byte index, numeric

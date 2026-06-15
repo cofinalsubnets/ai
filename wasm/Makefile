@@ -20,7 +20,7 @@ core_o = $(g_c:../%.c=$(o)/%.o)
 objs = $(host_o) $(core_o)
 
 # inc/ holds wasm's <data.h> override (no flat code-address space, so it
-# resolves data kinds by sentinel ap rather than .love_data slot index).
+# resolves data kinds by sentinel ap rather than .ai_data slot index).
 # It must be its own include dir, NOT ".": emcc deprioritizes the compiler's
 # cwd in the <...> search path, which would let ../data.h win instead.
 CFLAGS = -std=gnu2x -Os -g0 -Dg_tco=0 \

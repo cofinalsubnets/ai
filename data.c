@@ -3,7 +3,7 @@
 
 // The data-type sentinels. Each is the `ap` (first word) of a data kind's
 // heap objects, and its ADDRESS is the type tag: the linker pins the
-// sentinels in order in the love_data section, and g_typ recovers a kind as
+// sentinels in order in the ai_data section, and g_typ recovers a kind as
 // the slot index (one shift). Applying a data value lands on its sentinel,
 // which tail-jumps through the apply matrix in ai.c.
 //
@@ -17,7 +17,7 @@
 static lvm(data_apply) {
  return Ap(g_apply_mx[g_typ(Ip)][g_kind(Sp[0])], g); }
 #define data(idx, name) \
- __attribute__((section("love_data." #idx), used)) lvm(name) { return Ap(data_apply, g); }
+ __attribute__((section("ai_data." #idx), used)) lvm(name) { return Ap(data_apply, g); }
 
 #define go(_)\
   _(00, lvm_tuple) _(01, lvm_big) _(02, lvm_str)\
