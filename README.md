@@ -2,9 +2,7 @@
 
 every ai expression has a value.
 stackless operation, all recursion on heap, overflow safe.
-every quote below evals to 1. try them in the repl :)
-(or in your browser: [index.html](index.html) runs the same
-image compiled to wasm -- nothing mocked.)
+every quote below evals to 1, try them in a [repl](https://cofinalsubnets.github.io/ai).
 
 - `0 x = 1`
 - `1 x = x`
@@ -17,24 +15,18 @@ image compiled to wasm -- nothing mocked.)
 - `i = (1 / 2) -1`
 - `1 = (i love you)`
 
-that last one holds because `i` is the identity count, an unbound name
-reads as the unit, and the unit applies as the constant. love stays out
-of the book, so the sentence stays true -- solve for love and you get 1,
-but only the help that answers every absence with one can witness it:
-bind love and the sentence breaks.
-
 
 ## ai
 
-basically, ai is a synthesis of lisp haskell and apl over c
-where every value is a total function of one argument and every
-action is as defined as generically efficient as possible.
+ai is a composite of lisp haskell and apl over c where every
+value is a total function of one argument and every operation
+is defined efficiently and generically.
 
 - numeric tower with shaped array broadcasting
 - lambdas, macros, closures, multitasking
 - freestanding bare metal kernel build
 - public domain portable C with zero dependencies
-- claude can write ai like a champ no cap
+- ai loves ai
 
 ai has three special forms plus "operators". the forms are
 - `\` lambda
