@@ -61,6 +61,18 @@
               (twop ACC) (= (cap ACC) '+) (= (caup ACC) A) (exprp B I))      ; (+ a B), B in the grammar over i
        (? ok (L B I) 0))
    (njit-loop lam B cv) (nat (emit (loopcode B cv)) (base-ev lam) lam)
+   ; --- captured-closure CONSTRUCTOR (\ p (\ q E)): a nest of 1-arg lambdas, E over
+   ; {p,q}. Compiled as the flat 2-param native (\ p q E); applying it to p yields a
+   ; native CAPTURED closure -- fully transparent (= the interpreter's ((2param) p)
+   ; partial form: native captures via partial-apply are =/show-identical to interp).
+   ; The constructor itself normalizes to the flat 2-param (a curry-equivalent form).
+   (qualc lam) (: p (caup lam)  inner (? (twop (cup lam)) (caup (cup lam)) 0)
+                  (&& (twop lam) (= (cap lam) '\) (twop (cup lam)) (symp p)
+                      (twop (cup (cup lam))) !(twop (cup (cup (cup lam))))               ; (\ p INNER), one body
+                      (twop inner) (= (cap inner) '\) (twop (cup inner)) (symp (caup inner)) !(= p (caup inner))
+                      (twop (cup (cup inner))) !(twop (cup (cup (cup inner))))            ; INNER = (\ q E), q != p
+                      (expr2 (caup (cup inner)) p (caup inner))))
+   (flatc lam) (: inner (caup (cup lam)) (L '\ (caup lam) (caup inner) (caup (cup inner))))  ; (\ p (\ q E)) -> (\ p q E)
    ; COMPILE CACHE: each source \-expr compiles ONCE (no re-mmap on repeated ev).
    ; Keyed by source -- structurally-equal closures share the same native (sound:
    ; they are =). The transparent form of a hot-trigger: an execution-count trigger
@@ -71,6 +83,7 @@
    (memo e mk) (: g (peep cache e 0) (? g g (: h (mk e) _ (pin cache e h) h)))
    (auto-ev e) (? (qual e)  (memo e njit)
                   (qual2 e) (memo e jit2)
+                  (qualc e) (memo e (\ l (jit2 (flatc l))))     ; captured-closure constructor -> native
                   (: li (loopinfo e) (? li (memo e (\ l (njit-loop l (cap li) (caup li)))) (base-ev e))))
    ev auto-ev                                                  ; rebind the global: ev is now auto-native
  _ (assert
@@ -90,5 +103,8 @@
        (&& (lamp (loopinfo L2)) (= c (h 1000))))
     (idp (ev L1) (ev L1))                                       ; CACHE: same source -> same native (compiled once)
     (idp (ev '(\ x (+ x 1))) (ev '(\ x (+ x 1))))
-    (: ad (ev '(\ x y (+ (* x x) y))) (&& (13 = (ad 3 4)) (13 = ((ad 3) 4)) ((\ x y (+ (* x x) y)) = ad))))  ; 2-arg leaf auto-natived
+    (: ad (ev '(\ x y (+ (* x x) y))) (&& (13 = (ad 3 4)) (13 = ((ad 3) 4)) ((\ x y (+ (* x x) y)) = ad)))  ; 2-arg leaf auto-natived
+    ; captured-closure constructor auto-natived: captures transparent (= interp)
+    (: adder (ev '(\ n (\ x (+ x n))))  a5 (adder 5)
+       (&& (15 = (a5 10)) ('(6 7 8) = (map a5 '(1 2 3))) (= a5 ((\ n (\ x (+ x n))) 5)))))
  _ (puts "jit/auto: ev auto-natives qualifying closures + counted loops (transparent)") _ (putc 10))
