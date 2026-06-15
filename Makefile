@@ -483,8 +483,8 @@ installs = \
   $d/lib/$n/prelude.$x \
   $d/lib/$n/ev.$x \
   $d/lib/$n/repl.$x \
-  $d/liout/lib$n.a \
-  $d/liout/lib$n.so \
+  $d/lib/lib$n.a \
+  $d/lib/lib$n.so \
   $d/include/love.h \
   $v/ftdetect/$n.vim \
   $v/syntax/$n.vim \
@@ -503,11 +503,11 @@ $d/lib/$n/%.$x: love/%.$x
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/liout/lib$n.a: out/host/lib$n.a
+$d/lib/lib$n.a: out/host/lib$n.a
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/liout/lib$n.so: out/host/lib$n.so
+$d/lib/lib$n.so: out/host/lib$n.so
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
 

@@ -4,13 +4,12 @@
 ;     out/host/love -l tools/cook.l Cards.l [ticket]
 ; the first recipe ('all) is the default ticket.
 ;
-; SCOPE: the cross-cutting verbs + the host build. two rungs are DELEGATED to the
+; SCOPE: the cross-cutting verbs + the host build. one rung is DELEGATED to the
 ; real Makefile rather than re-expressed here, on purpose:
 ;   * host -- the C bootstrap (love0 -> reflect data.h -> the love binary) is
 ;     circular for cook: building love needs love. make owns that rung; this recipe
 ;     just leans on it (and make no-ops when the binary is already current).
-;   * install -- a 50-line install -D file list; make is its source of truth.
-; everything else (test, clean, valg, vmret, bench) is the genuine command, ported.
+; everything else (test, clean, valg, vmret, bench, install) is the genuine command, ported.
 ; the kernel/wasm/qemu/repl verbs stay with make (cook's `run` captures stdout and
 ; waits, so it can't drive qemu, a tty repl, or stream a sub-make) -- cook.mk hands
 ; those straight through.
@@ -53,7 +52,29 @@
 ; --- clean ---------------------------------------------------------------------
 (recipe 'clean '() '(("rm" "-rf" "out") ("make" "-C" "wasm" "clean")))
 
-; --- install (delegated) -------------------------------------------------------
-(recipe 'install '(host) '(("make" "install")))
+; --- install (ported) ----------------------------------------------------------
+; mirror `make install`: copy the binary, libs, header, manpage and vim files
+; under $DESTDIR/$PREFIX (and $DESTDIR/$VIMPREFIX for the vim files), with the
+; Makefile's env-overridable defaults. `install -D` makes the parent dirs; -s
+; strips the binary and the shared lib. the .a/.so land in lib/ beside lib/love/.
+(recipe 'install '(host)
+   (: (getdef k dv) (: e (getenv k) (? e e dv))
+      dest (getdef "DESTDIR" (+ (getenv "HOME") "/"))
+      d (+ (+ dest "/") (getdef "PREFIX" ".local/"))        ; $(DESTDIR)/$(PREFIX)
+      vd (+ (+ dest "/") (getdef "VIMPREFIX" ".vim/"))       ; $(DESTDIR)/$(VIMPREFIX)
+      (at dir sub) (+ (+ dir "/") sub)                       ; dir/sub
+      (cp mode src dst) (L "install" "-D" "-m" mode src dst)
+      (cps mode src dst) (L "install" "-D" "-m" mode "-s" src dst)
+      (L (cps "755" "out/host/love"        (at d "bin/love"))
+         (cp  "644" "out/host/love.1"       (at d "share/man/man1/love.1"))
+         (cp  "644" "love/prelude.l"        (at d "lib/love/prelude.l"))
+         (cp  "644" "love/ev.l"             (at d "lib/love/ev.l"))
+         (cp  "644" "love/repl.l"           (at d "lib/love/repl.l"))
+         (cp  "644" "out/host/liblove.a"    (at d "lib/liblove.a"))
+         (cps "755" "out/host/liblove.so"   (at d "lib/liblove.so"))
+         (cp  "644" "love.h"                (at d "include/love.h"))
+         (cp  "644" "vim/ftdetect.vim"      (at vd "ftdetect/love.vim"))
+         (cp  "644" "vim/syntax.vim"        (at vd "syntax/love.vim"))
+         (cp  "644" "vim/ftplugin.vim"      (at vd "ftplugin/love.vim")))))
 
 (cook (ticket 0))
