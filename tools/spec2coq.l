@@ -1,13 +1,15 @@
-; spec2coq: generate Coq theorems from test/spec.l, in ai.
+; spec2coq: generate Coq from test/spec.l, in ai.
 ;
-; The first slice of the .l -> .v pipeline (see proof/spec.v, the hand-written
-; laws). Each top-level (assert ..) operand of the form (A = B) whose two sides
-; are pure CHURCH-NUMERAL applications -- a fixnum, or a list of them, e.g.
-; (3 2) or (2 3 4) -- becomes a Coq theorem  A = <app-spine B>  over the model
-; app n x = x ** n, closed by computation (vm_compute). Everything else (strings,
-; arrays, quoted data, the general laws) is SKIPPED and COUNTED, never silently
-; dropped -- the trailing comment reports coverage. Reads test/spec.l, writes Coq
-; to `out`. Run:  out/host/ai tools/spec2coq.l > proof/gen.v
+; A slice of the .l -> .v pipeline (see proof/spec.v, the hand-written laws).
+; Each top-level (assert ..) operand is run through `opfix` (the compiler's own
+; factor pass -- infix to prefix, precedence and currying resolved) and, when it
+; is an INTEGER comparison whose operands are integer-valued (church-numeral
+; applications and the integer operators + - * // % & | ^), becomes a Coq bool
+; theorem  <pred> = true  over the model app n x = x ** n, closed by computation.
+; Everything else (floats, strings, the predicates, the general laws) is SKIPPED
+; and COUNTED -- never silently dropped (the trailing comment reports coverage).
+; Modeled over Z, not nat: (3 3 3) = 3^27 would blow up unary-nat vm_compute.
+; Reads test/spec.l, writes Coq to `out`.  Run: out/host/ai tools/spec2coq.l > proof/gen.v
 
 (: (cat l) (foldl (+) "" l)                            ; join a list of strings
 
@@ -15,41 +17,63 @@
    (forms path) (: q (open path "r") e (mint 0)
                    ((: (g acc) (: r (read q e) (? (= e r) (rev acc) (g (cons r acc))))) ()))
 
-   (e1 l) (cap l)  (e3 l) (cap (cup (cup l)))           ; A and B of (A = B)
+   (e2 l) (cap (cup l))  (e3 l) (cap (cup (cup l)))     ; 2nd, 3rd of a list
+   ; exactly three elements? (STRUCTURAL twop, never `!`: '(0) nets zero)
+   (len3? x) (&& (twop x) (twop (cup x)) (twop (cup (cup x))) (! (twop (cup (cup (cup x))))))
+   ; opfix wraps an operator form one layer ((f) == f); unwrap a 1-element list
+   (unwrap r) (? (&& (twop r) (! (twop (cup r)))) (cap r) r)
+   (fix1 x) (unwrap (opfix x))
 
-   ; a pure-numeral term: a fixnum, or a list of pure-numeral terms
-   (numt? x) (? (fixp x) 1 (twop x) (&& (numt? (cap x)) (numt? (cup x))) (! x) 1 0)
+   ; an integer binary operator symbol -> its Coq function (prefix), else 0
+   (binop h) (? (idp h '+) "Z.add"  (idp h '-) "Z.sub"  (idp h '*) "Z.mul"
+                (idp h '//) "Z.quot" (idp h '%) "Z.rem"
+                (idp h '&) "Z.land"  (idp h '|) "Z.lor"  (idp h '^) "Z.lxor"  0)
 
-   ; translate a numeral term to a Coq expr: left-associated `app` spine
-   (tm x) (? (fixp x) (show x) (twop x) (spine (tm (cap x)) (cup x)) "0")
-   (spine acc rest) (? (twop rest)                      ; STRUCTURAL: '(0) nets 0, so `!` would wrongly drop it
-                       (spine (cat (L "(app " acc " " (tm (cap rest)) ")")) (cup rest))
-                       acc)
+   ; integer-valued term? a fixnum, an operator tree, or a numeral-application spine
+   (intv? x) (? (fixp x) 1
+                (twop x) (: h (cap x)
+                            (? (binop h) (&& (len3? x) (intv? (e2 x)) (intv? (e3 x)))
+                               (fixp h) (allv? x)
+                               0))
+                0)
+   (allv? l) (? (twop l) (&& (intv? (cap l)) (allv? (cup l))) (! (twop l)))
 
-   ; is f exactly a 3-element (A = B) with both sides pure-numeral?
-   (eqn? f) (&& (twop f) (twop (cup f)) (twop (cup (cup f))) (! (cup (cup (cup f))))
-                (idp (cap (cup f)) '=) (numt? (e1 f)) (numt? (e3 f)))
+   ; translate an integer-valued term to a Coq Z expression
+   (tv x) (? (fixp x) (? (< x 0) (cat (L "(" (show x) ")")) (show x))  ; parens: `Z.eqb -2` parses as subtraction
+             (: h (cap x) b (binop h)
+                (? b (cat (L "(" b " " (tv (e2 x)) " " (tv (e3 x)) ")"))   ; (Z.add a b)
+                   (spine (tv h) (cup x)))))                                ; (app .. ..) spine
+   (spine acc rest) (? (twop rest)
+                       (spine (cat (L "(app " acc " " (tv (cap rest)) ")")) (cup rest)) acc)
 
-   (thm n f) (cat (L "Theorem gen_" (show n) " : " (tm (e1 f)) " = " (tm (e3 f))
-                     ".  Proof. vm_compute. reflexivity. Qed." (string 10)))
+   ; translate a top-level comparison predicate to a Coq bool, or 0 if not translatable
+   (tp f) (? (! (twop f)) 0
+             (: h (cap f)
+                (? (! (len3? f)) 0
+                   (! (&& (intv? (e2 f)) (intv? (e3 f)))) 0
+                   (idp h '=)  (cat (L "(Z.eqb " (tv (e2 f)) " " (tv (e3 f)) ")"))
+                   (idp h '<)  (cat (L "(Z.ltb " (tv (e2 f)) " " (tv (e3 f)) ")"))
+                   (idp h '<=) (cat (L "(Z.leb " (tv (e2 f)) " " (tv (e3 f)) ")"))
+                   (idp h '>)  (cat (L "(Z.ltb " (tv (e3 f)) " " (tv (e2 f)) ")"))
+                   (idp h '>=) (cat (L "(Z.leb " (tv (e3 f)) " " (tv (e2 f)) ")"))
+                   0)))
+
+   (thm n s) (cat (L "Theorem gen_" (show n) " : " s " = true.  Proof. vm_compute. reflexivity. Qed." (string 10)))
 
    nt (tablet 0) ns (tablet 0)                          ; translated / seen counters
    (bump b) (pin b 0 (+ 1 (peep b 0 0)))
-
-   ; walk one assert's operands
    (scan ops) (? (! ops) 0
-                 (: f (cap ops) _ (bump ns)
-                    _ (? (eqn? f) (: _ (bump nt) (. (thm (peep nt 0 0) f))) 0)
+                 (: f (cap ops) _ (bump ns) s (tp (fix1 f))
+                    _ (? s (: _ (bump nt) (. (thm (peep nt 0 0) s))) 0)
                     (scan (cup ops))))
-   ; walk the top-level forms, scanning each (assert ..)
    (walk fs) (? (! fs) 0
                 (: f (cap fs)
                    _ (? (&& (twop f) (idp (cap f) 'assert)) (scan (cup f)) 0)
                    (walk (cup fs))))
 
-   _ (. "From Stdlib Require Import ZArith.")  _ (. (string 10))
+   _ (. "From Stdlib Require Import ZArith.") _ (. (string 10))
    _ (. "(* generated from test/spec.l by tools/spec2coq.l *)") _ (. (string 10))
-   _ (. "Open Scope Z_scope.") _ (. (string 10))   ; Z (binary) not nat -- (app 3 3 3) is 3^27, a unary blowup
+   _ (. "Open Scope Z_scope.") _ (. (string 10))
    _ (. "Definition app (n x : Z) : Z := Z.pow x n.") _ (. (string 10)) _ (. (string 10))
    _ (walk (forms "test/spec.l"))
    _ (. (cat (L (string 10) "(* " (show (peep nt 0 0)) " theorems generated from "
