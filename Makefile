@@ -19,7 +19,7 @@ test: test_host test_ai0
 test_all: test_host test_ai0 test_tools test_kernel test_wasm
 # ai0 bakes prelude+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prelude (c0), run the corpus, bootstrap ev.l
-# through c0, run the corpus again via the self-hosted ev. Built with -Dg_tco=0,
+# through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
 # so this also exercises the non-tail-threaded trampoline dispatch path.
 # stdin is /dev/null: the corpus reads from the baked string, not stdin, but
 # test/io.l exercises the real `in` port (a bare fgetc), which would otherwise
@@ -78,7 +78,7 @@ out/lib/tests0.h: $t
 	@cat $t | $(sed_lit) > $@
 
 # ai_version.h: the build's version-control id, surfaced in the runtime as the `ai-version`
-# global (ai.c g_ini_0). VCS-AGNOSTIC: a _darcs/ repo stamps darcs-<12-hex patch hash>
+# global (ai.c ai_ini_0). VCS-AGNOSTIC: a _darcs/ repo stamps darcs-<12-hex patch hash>
 # (-dirty when darcs whatsnew is non-empty), else git describe, else "unknown" -- so the
 # darcs snapshot import carries this rule verbatim and stamps itself. Regenerated every
 # make but only rewritten when the id changes, so l.o relinks on a new revision, not on
@@ -100,11 +100,11 @@ out/lib/ai_version.h: force_version
 # host (POSIX CLI) build -- outputs under out/host. Was host/Makefile.
 # ====================================================================
 ho = out/host
-h_o = $(g_c:$(R)/%.c=$(ho)/%.o)
+h_o = $(ai_c:$(R)/%.c=$(ho)/%.o)
 # -I$(ho) first so the generated $(ho)/data.h shadows the portable top-level data.h.
 # the host runs $(tco) (common.mk; default 1 = tail-threaded, vmret-checked);
 # ai0 below stays pinned 0, the deliberate trampoline-coverage lane.
-hcc = $(CC) $(g_cflags) -Dg_tco=$(tco) -fpic -I$(ho) -I. -Iout/lib
+hcc = $(CC) $(ai_cflags) -Dai_tco=$(tco) -fpic -I$(ho) -I. -Iout/lib
 data_ld = data.ld
 ldflags = -Wl,-T,$(data_ld)
 hdata_h = $(ho)/data.h
@@ -128,40 +128,40 @@ $(ho)/lib$n.so: $(ho)/lib$n.a $(data_ld)
 
 # The data-sentinel TU bootstraps from the portable top-level data.h (no $(hdata_h)
 # prerequisite -- that would be circular, since $(hdata_h) is reflected out of it).
-$(ho)/data.o: data.c $(g_h)
+$(ho)/data.o: data.c $(ai_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -c $< -o $@
 
 # Bootstrap interpreter, compiled against the fallback top-level data.h (no
-# -I$(ho)) + -DGL_BOOTSTRAP -Dg_tco=0 (also exercises the non-threaded trampoline
+# -I$(ho)) + -DGL_BOOTSTRAP -Dai_tco=0 (also exercises the non-threaded trampoline
 # dispatch). Runs the l build tools that generate the lcat headers, so it can't
 # depend on those; instead it #includes the sed-wrapped $(gl0_h) (cli0 + the baked
 # prelude/ev/egg/repl + the test corpus), all produced without an interpreter --
 # hence -Iout/lib. Per-object into $(ho)/0/ so ccache caches each TU.
-gl0_cc = $(CCACHE) $(CC) $(g_cflags) -DGL_BOOTSTRAP -Dg_tco=0 -I. -Iout/lib
-ai0_o = $(ho)/0/main.o $(g_c:$(R)/%.c=$(ho)/0/%.o)
-$(ho)/0/main.o: main.c $(g_h) $(gl0_h)
+gl0_cc = $(CCACHE) $(CC) $(ai_cflags) -DGL_BOOTSTRAP -Dai_tco=0 -I. -Iout/lib
+ai0_o = $(ho)/0/main.o $(ai_c:$(R)/%.c=$(ho)/0/%.o)
+$(ho)/0/main.o: main.c $(ai_h) $(gl0_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(gl0_cc) -c $< -o $@
-$(ho)/0/%.o: $(R)/%.c $(g_h)
+$(ho)/0/%.o: $(R)/%.c $(ai_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(gl0_cc) -c $< -o $@
 $(ai0): $(ai0_o) $(data_ld)
 	@echo LD	$@
 	@mkdir -p $(dir $@)
-	@$(CC) $(g_cflags) $(ldflags) -o $@ $(ai0_o) -lm
+	@$(CC) $(ai_cflags) $(ldflags) -o $@ $(ai0_o) -lm
 
 # tools/gen_data.l reflects $(ho)/data.o's ai_data.NN section sizes into
-# $(ho)/data.h, whose g_typ() shifts instead of the portable header's divides.
+# $(ho)/data.h, whose ai_typ() shifts instead of the portable header's divides.
 $(hdata_h): $(ho)/data.o $(ai0) tools/gen_data.$x ai/prelude.$x
 	@echo GEN	$@
 	@$(ai0) -l ai/prelude.$x tools/gen_data.$x $< -o $@
 
 # ai.c/data.c -> out/host/*.o (against the generated data.h).
-$(ho)/%.o: $(R)/%.c $(g_h) $(hdata_h)
+$(ho)/%.o: $(R)/%.c $(ai_h) $(hdata_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -c $< -o $@
@@ -206,9 +206,9 @@ KCC_IS_CLANG := $(shell $(KCC) --version 2>/dev/null | grep -qiw clang && echo 1
 k_arch_c = $(wildcard $(R)/arch/$a/*.c)
 k_asm = $(wildcard $(R)/arch/$a/*.asm)
 k_free_c = $R/kmain.c
-k_shared_c = $(g_c) $(f_c) $(c_c)
+k_shared_c = $(ai_c) $(f_c) $(c_c)
 k_S = $(wildcard $(R)/arch/$a/*.S)
-k_h = $(g_h) $(wildcard *.h $(R)/arch/$a/*.h)
+k_h = $(ai_h) $(wildcard *.h $(R)/arch/$a/*.h)
 
 k_odir = $(ko)/$a$(ksuf)
 
@@ -225,7 +225,7 @@ k_o = $(k_shared_o) $(k_arch_o) $(k_free_o) $(k_S_o) $(k_asm_o)
 kdata_h = $(k_odir)/data.h
 gen_data = $(R)/tools/gen_data.$x
 
-kcflags = $(g_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
+kcflags = $(ai_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
   -ffunction-sections -fdata-sections
 kldflags := -static -nostdlib --gc-sections -T $(R)/arch/$a/$a.lds -z max-page-size=0x1000
 kcppflags := \
@@ -236,13 +236,13 @@ kcppflags := \
   $(kcppflags) \
   -DLIMINE_API_REVISION=3
 ifdef K_TEST
-# Trampoline (g_tco=0): the kernel test build HANGS at g_tco=1 -- re-verified
+# Trampoline (ai_tco=0): the kernel test build HANGS at ai_tco=1 -- re-verified
 # 2026-06-11 (clean build, qemu silent before the first corpus dot, killed by
-# the gate's timeout; the host corpus is green at g_tco=1, so this is kernel-
+# the gate's timeout; the host corpus is green at ai_tco=1, so this is kernel-
 # specific -- likely the freestanding toolchain not guaranteeing the sibcall
 # the tail-threaded path leans on). ai0 + this build are the two deliberate
 # trampoline lanes; the host runs $(tco) below.
-kcppflags += -DK_TEST -Dg_tco=0
+kcppflags += -DK_TEST -Dai_tco=0
 endif
 
 ifeq ($(KCC_IS_CLANG),1)

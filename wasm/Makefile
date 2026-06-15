@@ -23,7 +23,7 @@ objs = $(host_o) $(core_o)
 # resolves data kinds by sentinel ap rather than .ai_data slot index).
 # It must be its own include dir, NOT ".": emcc deprioritizes the compiler's
 # cwd in the <...> search path, which would let ../data.h win instead.
-CFLAGS = -std=gnu2x -Os -g0 -Dg_tco=0 \
+CFLAGS = -std=gnu2x -Os -g0 -Dai_tco=0 \
   -Wall -Wno-unused-parameter -Wno-shift-negative-value \
   -fno-exceptions \
   -Iinc -I.. -I../out/lib

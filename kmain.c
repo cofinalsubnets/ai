@@ -66,7 +66,7 @@ void k_reset(void), archinit(void), fbdraw(void), serial_init(void), serial_putc
 void k_qemu_exit(int);
 #endif
 
-static g_inline void kwait(void) { asm volatile (
+static ai_inline void kwait(void) { asm volatile (
 #if defined (__x86_64__)
   "hlt"
 #elif defined (__aarch64__)
@@ -128,7 +128,7 @@ static void limine_to_kboot(void) {
 #define kb_flag_shift (kb_flag_lshift|kb_flag_rshift)
 
 // --- vfs-shaped source table ----------------------------------------------
-// k_sources[] holds per-fd vtables. The kernel's g_fd_port_vt is a thin
+// k_sources[] holds per-fd vtables. The kernel's ai_fd_port_vt is a thin
 // shim that routes each call through k_sources[fd]. NULL slots mean
 // "no method"; the dispatcher skips them (writes discard, reads return
 // EOF, ready returns false). Per-byte methods today -- P3b/later will
@@ -174,9 +174,9 @@ static struct k_source k_sources[k_sources_max] = {
 // they're identical across sources; getc/putc/flush route through
 // k_sources[fd]. Bounds-checks and NULL-guards keep misuse from
 // crashing (read-from-output-fd returns EOF; write-to-input-fd discards).
-static struct g *fd_getc(struct g *g) {
-  struct g *fc = g_core_of(g);
-  struct g_io *i = g->io;
+static struct ai *fd_getc(struct ai *g) {
+  struct ai *fc = ai_core_of(g);
+  struct ai_io *i = g->io;
   if (getfix(i->ungetc_buf) != EOF) {
     fc->b = getfix(i->ungetc_buf);
     i->ungetc_buf = putfix(EOF);
@@ -188,63 +188,63 @@ static struct g *fd_getc(struct g *g) {
   if (c < 0) { i->eof_seen = putfix(true); fc->b = EOF; }
   else fc->b = c;
   return g; }
-static struct g *fd_ungetc(struct g *g, int c) {
-  struct g *fc = g_core_of(g);
-  struct g_io *i = fc->io;
+static struct ai *fd_ungetc(struct ai *g, int c) {
+  struct ai *fc = ai_core_of(g);
+  struct ai_io *i = fc->io;
   i->ungetc_buf = putfix(c);
   i->eof_seen = putfix(false);
   return fc->b = c, g; }
-static struct g *fd_eof(struct g *g) {
-  struct g *fc = g_core_of(g);
-  struct g_io *i = fc->io;
+static struct ai *fd_eof(struct ai *g) {
+  struct ai *fc = ai_core_of(g);
+  struct ai_io *i = fc->io;
   return fc->b = (getfix(i->ungetc_buf) == EOF) && getfix(i->eof_seen), g; }
-static struct g *fd_putc(struct g *g, int c) {
+static struct ai *fd_putc(struct ai *g, int c) {
   int fd = getfix(g->io->fd);
   if (fd >= 0 && fd < k_sources_max && k_sources[fd].putc)
     k_sources[fd].putc(fd, c);
   return g; }
-static struct g *fd_flush(struct g *g) {
+static struct ai *fd_flush(struct ai *g) {
   int fd = getfix(g->io->fd);
   if (fd >= 0 && fd < k_sources_max && k_sources[fd].flush)
     k_sources[fd].flush(fd);
   return g; }
 
-struct g_io g_stdin = { .ap = lvm_port_io,
+struct ai_io ai_stdin = { .ap = lvm_port_io,
                         .fd = putfix(0), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false), };
-struct g_io g_stdout = { .ap = lvm_port_io,
+struct ai_io ai_stdout = { .ap = lvm_port_io,
                          .fd = putfix(1), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false), };
 // No separate error stream; route err to the same fd as out (the console).
-struct g_io g_stderr = { .ap = lvm_port_io,
+struct ai_io ai_stderr = { .ap = lvm_port_io,
                          .fd = putfix(1), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false), };
 
-struct g_port_vt const g_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, fd_putc, fd_flush };
+struct ai_port_vt const ai_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, fd_putc, fd_flush };
 
 // Override the weak g.c default; route close through k_sources[fd].
 // Statics (stdin/stdout) have NULL close -- nothing to release.
-void g_fd_close(int fd) {
+void ai_fd_close(int fd) {
   if (fd >= 0 && fd < k_sources_max && k_sources[fd].close)
     k_sources[fd].close(fd); }
 
-bool g_ready(int fd) {
+bool ai_ready(int fd) {
   if (fd < 0) return true;
   if (fd >= k_sources_max || !k_sources[fd].ready) return false;
   return k_sources[fd].ready(fd); }
 
 // Multi-source wait. ticks=0 means infinite. Future: program a one-shot
 // timer at the deadline instead of waking every tick.
-void g_wait_fds(int const *fds, int n, uintptr_t ticks) {
-  if (n <= 0) { g_sleep(ticks); return; }
-  if (n > g_wait_fds_max) __builtin_trap();
+void ai_wait_fds(int const *fds, int n, uintptr_t ticks) {
+  if (n <= 0) { ai_sleep(ticks); return; }
+  if (n > ai_wait_fds_max) __builtin_trap();
   uintptr_t deadline = kticks + ticks;
   for (;;) {
     if (ticks && kticks >= deadline) return;
-    for (int i = 0; i < n; i++) if (g_ready(fds[i])) return;
+    for (int i = 0; i < n; i++) if (ai_ready(fds[i])) return;
     kwait(); } }
-uintptr_t g_clock(void) { return kticks; }
+uintptr_t ai_clock(void) { return kticks; }
 
 // Pure time-wait. ticks=0 means infinite (caller is expected to pair with an
-// input wait via g_in->wait, so this should only be hit when no I/O is intended).
-void g_sleep(uintptr_t ticks) {
+// input wait via ai_in->wait, so this should only be hit when no I/O is intended).
+void ai_sleep(uintptr_t ticks) {
   uintptr_t deadline = kticks + ticks;
   for (;;) {
     if (ticks && kticks >= deadline) break;
@@ -326,7 +326,7 @@ void kb_int(const uint8_t code) {
       return; } }
 
 
-static g_inline struct mem *after(struct mem *r) {
+static ai_inline struct mem *after(struct mem *r) {
   return (struct mem*) ((uintptr_t*) r + r->len); }
 
 static void *kmallocw(uintptr_t n) {
@@ -368,7 +368,7 @@ static void kfree(void *p) {
 void *malloc(size_t n) { return kmallocw(b2w(n)); }
 void free(void *x) { return kfree(x); }
 
-static lvm(g_kreset) { return k_reset(), g; }
+static lvm(ai_kreset) { return k_reset(), g; }
 
 void fbdraw(void) {
   if (!kcb) return;                    // serial-only: no framebuffer console
@@ -429,7 +429,7 @@ static lvm(lvm_kexit) { k_qemu_exit(getfix(Sp[0])); Ip += 1; return Continue(); 
 
 
 static union u
-  nif_reset[] = {{g_kreset}},
+  nif_reset[] = {{ai_kreset}},
   nif_draw[] = {{draw}, {lvm_ret0}},
   nif_key[] = {{key}, {lvm_ret0}},
   nif_color[] = {{lvm_cur}, {.x = putfix(2)}, {color}, {lvm_ret0}},
@@ -472,7 +472,7 @@ static bool cbinit(void) {
   cb_fill(kcb, 0);
   return true; }
 
-static struct g_def defs[] = {
+static struct ai_def defs[] = {
   {"reset", (intptr_t) nif_reset},
   {"draw", (intptr_t) nif_draw},
   {"key", (intptr_t) nif_key},
@@ -521,24 +521,24 @@ void kmain(void) {
  // and the kernel runs headless on the serial console alone.
  if (meminit()) {
   if (fbinit() && cbinit()) palette_init();
-  struct g *g = g_defn(g_ini(), defs, countof(defs));
+  struct ai *g = ai_defn(ai_ini(), defs, countof(defs));
 #ifdef K_TEST
   // bind the baked corpus to the global `tests`; below it is read form-by-form
   // and run through ev at boot (no console), then qemu is quit.
-  g = g_strof(g, ktests);
-  struct g_def td[] = {{"tests", g_pop1(g)}};
-  g = g_defn(g, td, countof(td));
+  g = ai_strof(g, ktests);
+  struct ai_def td[] = {{"tests", ai_pop1(g)}};
+  g = ai_defn(g, td, countof(td));
 #endif
   // load the prelude, then run the l read-eval-print loop. its line
   // editor (in repl.l) drives the console; PS/2 keyboard and serial
   // input both arrive as ANSI escape sequences the l edev decodes.
-  struct g *r = g_evals_(g, "("
+  struct ai *r = ai_evals_(g, "("
 #include "egg.h"
- g_egg_pre
+ ai_egg_pre
 #include "prelude.h"
  " "
 #include "ev.h"
- g_egg_post
+ ai_egg_post
 #include "repl.h"
 #ifdef K_TEST
  // test build: drink the baked `tests` string (string -> charlist -> sip port)
@@ -550,8 +550,8 @@ void kmain(void) {
 #endif
   );
   // a terminal scare gets the honest face on the serial console before reset
-  if (g_code_of(r) == g_status_scare) g_scare_face_(r);
-  g_fin(r); }
+  if (ai_code_of(r) == ai_status_scare) ai_scare_face_(r);
+  ai_fin(r); }
 #ifdef K_TEST
  k_qemu_exit(0);   // corpus done with no failures -> quit qemu (exit 0)
 #endif

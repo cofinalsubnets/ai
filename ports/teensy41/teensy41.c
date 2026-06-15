@@ -62,16 +62,16 @@ const struct ivt image_vector_table = {
 // ARMv7E-M HardFault: capture the stacked exception frame so an attached SWD
 // debugger lands on a known address. CFSR/HFSR live at the SCB but the frame
 // pointer alone localises most faults (pc = the faulting instruction).
-volatile struct g_fault {
+volatile struct ai_fault {
   uint32_t r0, r1, r2, r3, r12, lr, pc, psr, sp, magic;
-} g_fault;
+} ai_fault;
 
 __attribute__((used)) void hardfault_report(uint32_t *frame) {
-  g_fault.r0  = frame[0]; g_fault.r1 = frame[1]; g_fault.r2 = frame[2];
-  g_fault.r3  = frame[3]; g_fault.r12 = frame[4]; g_fault.lr = frame[5];
-  g_fault.pc  = frame[6]; g_fault.psr = frame[7];
-  g_fault.sp  = (uint32_t)(uintptr_t) frame;
-  g_fault.magic = 0xFA017EDu;
+  ai_fault.r0  = frame[0]; ai_fault.r1 = frame[1]; ai_fault.r2 = frame[2];
+  ai_fault.r3  = frame[3]; ai_fault.r12 = frame[4]; ai_fault.lr = frame[5];
+  ai_fault.pc  = frame[6]; ai_fault.psr = frame[7];
+  ai_fault.sp  = (uint32_t)(uintptr_t) frame;
+  ai_fault.magic = 0xFA017EDu;
   for (;;) __asm volatile("bkpt 0"); }
 
 __attribute__((naked)) void isr_hardfault(void) {
@@ -143,7 +143,7 @@ void clocks_init(void) {
   REG(CCM_CSCDR1) = c;
 
   // GPT1: reset, then free-run off the 24 MHz osc with a /24 prescaler so the
-  // counter ticks at 1 MHz (1 us). g_clock() divides to milliseconds.
+  // counter ticks at 1 MHz (1 us). ai_clock() divides to milliseconds.
   REG(GPT1_CR) = GPT_CR_SWR;
   while (REG(GPT1_CR) & GPT_CR_SWR) {}
   REG(GPT1_PR) = 24u - 1u;
@@ -174,7 +174,7 @@ int serial_getc(void) {
   return REG(LPUART_DATA) & 0xff; }
 
 // --- clock: milliseconds since boot (GPT1 counts microseconds) -----------
-uintptr_t g_clock(void) { return REG(GPT1_CNT) / 1000u; }
+uintptr_t ai_clock(void) { return REG(GPT1_CNT) / 1000u; }
 
 // --- GPIO -----------------------------------------------------------------
 // Scaffold scope: GPIO2 bit operations plus the IOMUXC mux for pin 13 (the

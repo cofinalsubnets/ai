@@ -12,7 +12,7 @@ ro = out/rp2040
 rp_triple = -target thumbv6m-none-eabi -mcpu=cortex-m0plus -mthumb
 rp_cppflags = -I$(ro) -I. -Iout/lib -I$R/libc -I$R/arch/rp2040
 rp_cc = $(KCC) $(rp_triple) $(g_cflags) -nostdinc -ffreestanding -fno-lto \
-  -fno-PIC -ffunction-sections -fdata-sections -Dg_tco=0 $(rp_cppflags)
+  -fno-PIC -ffunction-sections -fdata-sections -Dai_tco=0 $(rp_cppflags)
 rp_rt := $(shell f=$$($(KCC) $(rp_triple) -print-libgcc-file-name 2>/dev/null); \
   [ -e "$$f" ] && echo "$$f" || \
   arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb -print-libgcc-file-name 2>/dev/null)

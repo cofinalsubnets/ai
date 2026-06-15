@@ -6,12 +6,12 @@
 #include <stdarg.h>
 
 #define Width(_) b2w(sizeof(_))
-#define g_core_of(g_) ((struct g*)((intptr_t)(g_)&~(sizeof(intptr_t)-1)))
-#define g_code_of(g) ((enum g_status)((intptr_t)(g)&(sizeof(intptr_t)-1)))
-#define g_ok(g) (g_code_of(g) == g_status_ok)
+#define ai_core_of(ai_) ((struct ai*)((intptr_t)(ai_)&~(sizeof(intptr_t)-1)))
+#define ai_code_of(g) ((enum ai_status)((intptr_t)(g)&(sizeof(intptr_t)-1)))
+#define ai_ok(g) (ai_code_of(g) == ai_status_ok)
 
-#define putfix(_) ((g_word)(((uintptr_t)(g_word)(_)<<1)|1))
-#define getfix(_) ((g_word)(_)>>1)
+#define putfix(_) ((ai_word)(((uintptr_t)(ai_word)(_)<<1)|1))
+#define getfix(_) ((ai_word)(_)>>1)
 
 #ifndef EOF
 #define EOF (-1)
@@ -21,34 +21,34 @@
 #define NAN (__builtin_nanf(""))
 #endif
 
-#define g_nil putfix(0)
-#define g_inline inline __attribute__((always_inline))
-#define g_noinline __attribute__((noinline))
+#define ai_nil putfix(0)
+#define ai_inline inline __attribute__((always_inline))
+#define ai_noinline __attribute__((noinline))
 // Keep a function from being identical-code-folded with another. The data
 // self-quote sentinels (flow.c) have byte-identical bodies but must keep
 // distinct addresses, since their address *is* their type tag. GCC -Os runs
 // -fipa-icf, which noipa disables; clang/lld only fold under an explicit
 // --icf=all, which no build passes.
 #if defined(__GNUC__) && !defined(__clang__)
-#define g_noicf __attribute__((noipa))
+#define ai_noicf __attribute__((noipa))
 #else
-#define g_noicf
+#define ai_noicf
 #endif
-#define g_digits "0123456789abcdefghijklmnopqrstuvwxyz"
+#define ai_digits "0123456789abcdefghijklmnopqrstuvwxyz"
 #define countof(_) (sizeof(_)/sizeof(*_))
 
-#ifndef g_tco
-#define g_tco 1
+#ifndef ai_tco
+#define ai_tco 1
 #endif
 
-#if g_tco
-#define _lvm(n, ...) struct g *n(struct g *restrict g, union u *Ip, g_word *Hp, g_word *restrict Sp, ##__VA_ARGS__)
+#if ai_tco
+#define _lvm(n, ...) struct ai *n(struct ai *restrict g, union u *Ip, ai_word *Hp, ai_word *restrict Sp, ##__VA_ARGS__)
 #define Ap(fn, g, ...) fn(g, Ip, Hp, Sp, ##__VA_ARGS__)
 #define Continue() Ap(Ip->ap, g)
 #define Pack(g) (g->ip = Ip, g->hp = Hp, g->sp = Sp)
 #define Unpack(g) (Ip = g->ip, Hp = g->hp, Sp = g->sp)
 #else
-#define _lvm(n, ...) struct g *n(struct g *restrict g, ##__VA_ARGS__)
+#define _lvm(n, ...) struct ai *n(struct ai *restrict g, ##__VA_ARGS__)
 #define Ap(fn, g, ...) fn(g, ##__VA_ARGS__)
 #define Continue() g
 #define Hp g->hp
@@ -57,47 +57,47 @@
 #define Pack(g) ((void)0)
 #define Unpack(g) ((void)0)
 #endif
-#define lvm(...) g_noinline g_noicf _lvm(__VA_ARGS__)
+#define lvm(...) ai_noinline ai_noicf _lvm(__VA_ARGS__)
 
 // ok thanks
-typedef intptr_t g_word;
+typedef intptr_t ai_word;
 
 union u;
 typedef _lvm(lvm_t);
 
 // Typed N-dim array. Rank 0 = scalar (no shape words); payload at
 // (void*)(shape + rank). Immutable.
-struct g_tuple {
+struct ai_tuple {
  lvm_t *ap;
  uintptr_t type, rank, shape[]; };
 
 // Status rides the 2 pointer tag bits, read as two flags: bit 0 is the SCARE
-// bit (something is wrong -- the raise site puts the relevant data on struct g for
+// bit (something is wrong -- the raise site puts the relevant data on struct ai for
 // the help function to read; the bare scare is oom, which has no room to say
 // more), bit 1 is the MORE bit (read control flow: more input is wanted).
 // more alone = incomplete; eof = more|scare -- the end is the scary case of
 // wanting more.
-enum g_status { g_status_ok = 0, g_status_scare = 1, g_status_more = 2, g_status_eof = 3 };
+enum ai_status { ai_status_ok = 0, ai_status_scare = 1, ai_status_more = 2, ai_status_eof = 3 };
 
 // the atom: ap, the code (an interned symbol's name hash / a mint's serial),
 // the nom (a string = interned; 0 = a mint). UNIFORM 3 words -- the l/r
-// intern-tree slots died with the tree: interning lives in struct g's
+// intern-tree slots died with the tree: interning lives in struct ai's
 // `symbols`, a weak map from name string to the canonical atom.
-struct g_atom {
+struct ai_atom {
  lvm_t *ap;
  uintptr_t code;
- struct g_str {
+ struct ai_str {
   lvm_t *ap;
   uintptr_t len;        // byte count
   char bytes[]; } *nom; };
 
-struct g {
+struct ai {
  union u {
   lvm_t *ap;
-  g_word x;
+  ai_word x;
   union u *m; } *ip;
- g_word *hp, *sp;
- union u *tasks;       // task ring head (running task's node); always non-NULL after g_ini
+ ai_word *hp, *sp;
+ union u *tasks;       // task ring head (running task's node); always non-NULL after ai_ini
  uintptr_t yield_ctr,  // ap-cycles since last cooperative yield; counts up to yield_interval (level-triggered)
            next_serial, // THE MINT STREAM: one monotonic counter every fresh identity draws
                         // from -- task pids and nom serials alike (pre-incremented).
@@ -106,40 +106,40 @@ struct g {
                         // GC-stable (code rides the copy), closing trichotomy.
            next_wake_at; // raw deadline for next yield_sw snapshot's wake_at slot; 0 = always runnable
  intptr_t next_wait_fd; // fd the task suspended on, -1 = not waiting on I/O. Installed into next yield_sw snapshot's wait_fd slot.
- g_word symbols;        // the WEAK intern map (string -> the canonical atom; see struct g_atom
+ ai_word symbols;        // the WEAK intern map (string -> the canonical atom; see struct ai_atom
                         // above): value-keyed by string content; gcg clones it untraced and
                         // sweeps it after the cheney fixpoint, so a dead atom's entry drops --
                         // dead spellings vanish. 0 only during early init.
  uintptr_t len;
- struct g *pool;
- struct g_r { g_word *x; struct g_r *n; } *root; // gc roots list
- struct g_fz { // finalizers
+ struct ai *pool;
+ struct ai_r { ai_word *x; struct ai_r *n; } *root; // gc roots list
+ struct ai_fz { // finalizers
   union u *p;
   void (*fn)(void *);
-  struct g_fz *next; } *fz;
- union { uintptr_t t0; g_word *cp; };
- void *(*malloc)(struct g*, size_t),
-      (*free)(struct g*, void*);
+  struct ai_fz *next; } *fz;
+ union { uintptr_t t0; ai_word *cp; };
+ void *(*malloc)(struct ai*, size_t),
+      (*free)(struct ai*, void*);
  uintptr_t b;
  uintptr_t n_gc, max_len, max_heap; // gc instrumentation (cycles, peak pool len, peak live heap; words)
  union {
   intptr_t v0;
   struct {
-   g_word book;   // global env map (lookup-lambda); GC-forwarded in v0..end. The
+   ai_word book;   // global env map (lookup-lambda); GC-forwarded in v0..end. The
                   // macro table is book[nil] -- no separate field.
-   g_word missing;   // the pre-interned 'missing atom: the condition tag for reading
+   ai_word missing;   // the pre-interned 'missing atom: the condition tag for reading
                   // a nom not in the book. rooted here (v0..end) so the raise
                   // path never allocates and the weak intern map keeps it.
-   g_word scare_a, scare_b; // the last bare scare's condition data, stashed at
-                  // the raise so a terminal exit can speak (g_scare_face_);
+   ai_word scare_a, scare_b; // the last bare scare's condition data, stashed at
+                  // the raise so a terminal exit can speak (ai_scare_face_);
                   // nil nil = the bare oom, which has no data. GC-traced here.
   union {
-   g_word x;
-   struct g_io {
+   ai_word x;
+   struct ai_io {
     lvm_t *ap;
-    g_word fd;
-    g_word ungetc_buf;            // pushed-back byte; putfix(EOF) = empty
-    g_word eof_seen; } *io; };
+    ai_word fd;
+    ai_word ungetc_buf;            // pushed-back byte; putfix(EOF) = empty
+    ai_word eof_seen; } *io; };
   // The C->lisp hooks (num-ap, add, mul, help, operators) live on book
   // (GC-traced, egg-baked): no slots, no key caches -- C materializes the
   // keys by name per use (sym_probe walks the intern map allocation-free;
@@ -148,22 +148,22 @@ struct g {
   }; };
  intptr_t end[]; };
 
-struct g_def { char const *n; intptr_t x; };
+struct ai_def { char const *n; intptr_t x; };
 
 // Port vtable. One shape covers both directions; unused slots in a given
 // port get noop_* stubs (defined in g.c) so dispatch needs no NULL guards.
-struct g_port_vt {
- struct g*(*getc)(struct g*),
-         *(*ungetc)(struct g*, int),
-         *(*eof)(struct g*),
-         *(*putc)(struct g*, int),
-         *(*flush)(struct g*); };
+struct ai_port_vt {
+ struct ai*(*getc)(struct ai*),
+         *(*ungetc)(struct ai*, int),
+         *(*eof)(struct ai*),
+         *(*putc)(struct ai*, int),
+         *(*flush)(struct ai*); };
 
 // only 2 tag bits on 32 bit so we can only have four of these
-enum g_status g_fin(struct g*);
+enum ai_status ai_fin(struct ai*);
 
-static g_inline size_t b2w(size_t b) {
- size_t q = b / sizeof(g_word), r = b % sizeof(g_word);
+static ai_inline size_t b2w(size_t b) {
+ size_t q = b / sizeof(ai_word), r = b % sizeof(ai_word);
  return q + (r ? 1 : 0); }
 
 lvm_t lvm_ret0, lvm_cur, lvm_port_io, lvm_help;
@@ -171,51 +171,51 @@ lvm_t lvm_ret0, lvm_cur, lvm_port_io, lvm_help;
 // Frontend-provided vtable for ports backed by real OS file descriptors.
 // Used whenever fd >= 0. Synthetic ports (fd <= -1) route through the
 // shared synth table inside g.c instead.
-extern struct g_port_vt const g_fd_port_vt;
+extern struct ai_port_vt const ai_fd_port_vt;
 
 // Frontend hook to close an OS file descriptor backing a heap port. Weak
 // default in g.c is a no-op so kernel/pd/lcat link without having to care;
-// the host overrides with close(2). Called by the finalizer that g_io_alloc
+// the host overrides with close(2). Called by the finalizer that ai_io_alloc
 // installs, so it runs when a heap port becomes unreachable.
-void g_fd_close(int fd);
+void ai_fd_close(int fd);
 
-// Heap-allocate a port for the given OS fd. Bumps Width(struct g_io) +
+// Heap-allocate a port for the given OS fd. Bumps Width(struct ai_io) +
 // ttag, fills ap/fd/ungetc_buf/eof_seen, pushes the port pointer on Sp[0],
-// and registers a finalizer that calls g_fd_close(fd) when the port is
+// and registers a finalizer that calls ai_fd_close(fd) when the port is
 // collected. fd is stored as a plain integer at the C layer and tagged on
 // the way in.
-struct g *g_io_alloc(struct g *g, int fd);
+struct ai *ai_io_alloc(struct ai *g, int fd);
 
-uintptr_t g_clock(void); // used by garbage collector
-void g_sleep(uintptr_t ticks); // per-frontend deep wait for at most `ticks`
-// g_clock() units (ticks=0 means infinite). No input wakeup; the scheduler
-// dispatches to g_wait_fds when tasks are parked on streams. Default = no-op.
+uintptr_t ai_clock(void); // used by garbage collector
+void ai_sleep(uintptr_t ticks); // per-frontend deep wait for at most `ticks`
+// ai_clock() units (ticks=0 means infinite). No input wakeup; the scheduler
+// dispatches to ai_wait_fds when tasks are parked on streams. Default = no-op.
 
-struct g
- *g_ini(void),
- *g_ini_m(void*(*)(struct g*, size_t), void(*)(struct g*,void*)),
- *g_ini_s(void*, uintptr_t),
- *g_evals_(struct g*, const char*),
- *g_defn(struct g*, struct g_def const*, uintptr_t);
+struct ai
+ *ai_ini(void),
+ *ai_ini_m(void*(*)(struct ai*, size_t), void(*)(struct ai*,void*)),
+ *ai_ini_s(void*, uintptr_t),
+ *ai_evals_(struct ai*, const char*),
+ *ai_defn(struct ai*, struct ai_def const*, uintptr_t);
 
 // the terminal scare face: print "# a b\n" (show forms) to the err port from
 // the stashed condition data and answer 1; the bare scare (nil nil -- oom,
 // which has no data) answers 0 so the frontend can report it raw.
-int g_scare_face_(struct g*);
+int ai_scare_face_(struct ai*);
 
-extern struct g_io g_stdin, g_stdout, g_stderr;
+extern struct ai_io ai_stdin, ai_stdout, ai_stderr;
 
 // Bootstrap driver (was tools/mkboot.l, now a compile-time C constructor). The
 // lib/ headers are bare C string literals (lcat output), so a frontend builds
 // the egg + double-bake bootstrap by juxtaposing them between these macros:
 //
-//   g_evals_(g, "("
+//   ai_evals_(g, "("
 //   #include "egg.h"          // (\ egg (: ...)) -- the boot driver, lcat'd
-//     g_egg_pre
+//     ai_egg_pre
 //   #include "prelude.h"
 //     " "
 //   #include "ev.h"
-//     g_egg_post
+//     ai_egg_post
 //   #include "repl.h"          // optional: REPL, compiled by the installed ev
 //   );
 //
@@ -224,15 +224,15 @@ extern struct g_io g_stdin, g_stdout, g_stderr;
 // compiler with c0, recompiles the whole corpus through itself (exercising
 // wev), and installs that as `ev`. Adjacent string-literal concatenation does
 // all the work at compile time -- no runtime allocation, freestanding-safe.
-#define g_egg_pre " '("
-#define g_egg_post ")) "
+#define ai_egg_pre " '("
+#define ai_egg_post ")) "
 
 // === internal API shared with data.c / host / free (merged from former i.h) ===
-#define g_wait_fds_max 8
+#define ai_wait_fds_max 8
 #define A(o) two(o)->a
 #define B(o) two(o)->b
-#define len(_) (((struct g_str*)(_))->len)
-#define txt(_) (((struct g_str*)(_))->bytes)
+#define len(_) (((struct ai_str*)(_))->len)
+#define txt(_) (((struct ai_str*)(_))->bytes)
 #define avail(g) ((uintptr_t)(g->sp-g->hp))
 #define num(_) ((word)(_))
 #define word(_) num(_)
@@ -241,16 +241,16 @@ extern struct g_io g_stdin, g_stdout, g_stderr;
 #define cell(_) ((union u*)(_))
 #define Have1() if (Sp == Hp) return Ap(lvm_gc, g, 1)
 #define Have(n) if (Sp < Hp + n) return Ap(lvm_gc, g, n)
-#define g_pop1(g) (*(g)->sp++)
+#define ai_pop1(g) (*(g)->sp++)
 #define op(nom, n, x) lvm(nom) { intptr_t _ = (x); *(Sp += n-1) = _; Ip++; return Continue(); }
-#define nil g_nil
-struct g_pair { lvm_t *ap; intptr_t a, b; };
+#define nil ai_nil
+struct ai_pair { lvm_t *ap; intptr_t a, b; };
 // The fundamental value kind for generic-op dispatch (enum q). KFix is the odd fixnum
 // tag; KHom is any non-data heap pointer (text/function/map). The five DATA kinds
-// (KTuple, KBig, KString, KSym, KTwo) are the ones g_typ recovers from an ap's section
+// (KTuple, KBig, KString, KSym, KTwo) are the ones ai_typ recovers from an ap's section
 // slot (data.c go() order, via the data.h lookup); an array reads as KTuple there
-// (coarse -- one array sentinel). The four KArr* kinds are NOT data sentinels: g_kind
-// alone mints them, expanding a rank>=1 tuple by its element tier (KArrZ + g_tuple_type)
+// (coarse -- one array sentinel). The four KArr* kinds are NOT data sentinels: ai_kind
+// alone mints them, expanding a rank>=1 tuple by its element tier (KArrZ + ai_tuple_type)
 // so the array tower Z/R/C/O dispatches inline with the scalar tower it mirrors
 // (KArrZ~fix, KArrR~float, KArrC~complex, KArrO~big). The diagonal is the type lattice
 // by semantics then representation: arithmetic lane [KFix..KArrO] (scalars then their
@@ -262,56 +262,56 @@ struct g_pair { lvm_t *ap; intptr_t a, b; };
 // for +/*/apply -- the rung exists for the order and the honest matrix cells).
 // KN is the matrix dimension.
 enum q { KFix, KTuple, KBig, KArrZ, KArrR, KArrC, KArrO, KString, KSym, KTwo, KMap, KHom, KN };
-#define g_data_n 5     // # of data sentinels (data.c go()); the KArr* kinds interleave, so no longer KHom-KTuple
-typedef g_word num, word;
+#define ai_data_n 5     // # of data sentinels (data.c go()); the KArr* kinds interleave, so no longer KHom-KTuple
+typedef ai_word num, word;
 // The unique empty string -- a data-segment global the GC never moves (gcp's
 // out-of-pool short-circuit). Strings are immutable, so one empty string
 // suffices and zero-length ones are never heap-allocated. (the empty SYMBOL
 // died in the one-nothing round: () reads as 0.)
-extern const struct g_str g_str_empty;
-#define EmptyString ((word) &g_str_empty)
-void g_wait_fds(int const *fds, int n, uintptr_t ticks);
-bool g_ready(int fd), g_strp(g_word);
-struct g
- *g_please(struct g*, uintptr_t),
- *g_push(struct g*, uintptr_t, ...),
- *g_strof(struct g*, const char*),
- *gxl(struct g*),
- *gxr(struct g*),
- *intern(struct g*),
- *g_reads(struct g*, struct g_io*),
- *g_read1(struct g*, struct g_io*),
- *str0(struct g*, uintptr_t);
+extern const struct ai_str ai_str_empty;
+#define EmptyString ((word) &ai_str_empty)
+void ai_wait_fds(int const *fds, int n, uintptr_t ticks);
+bool ai_ready(int fd), ai_strp(ai_word);
+struct ai
+ *ai_please(struct ai*, uintptr_t),
+ *ai_push(struct ai*, uintptr_t, ...),
+ *ai_strof(struct ai*, const char*),
+ *gxl(struct ai*),
+ *gxr(struct ai*),
+ *intern(struct ai*),
+ *ai_reads(struct ai*, struct ai_io*),
+ *ai_read1(struct ai*, struct ai_io*),
+ *str0(struct ai*, uintptr_t);
 lvm(lvm_gc, uintptr_t);
-// g_kind maps any value to its enum q: KFix for a fixnum, KHom for a non-data heap
-// pointer (text/function/map), else g_typ's data kind -- refined for a rank>=1 tuple,
+// ai_kind maps any value to its enum q: KFix for a fixnum, KHom for a non-data heap
+// pointer (text/function/map), else ai_typ's data kind -- refined for a rank>=1 tuple,
 // which expands by element tier to KArrZ..KArrO (a rank-0 box stays KTuple). Lives in
-// ai.c (it needs g_typ from the generated data.h) and is shared by data.c's apply
+// ai.c (it needs ai_typ from the generated data.h) and is shared by data.c's apply
 // sentinels. Both the `+`/`*` matrices and the apply matrix dispatch on this.
-enum q g_kind(word);
-// Apply dispatch matrix, indexed [static: the applied data kind, g_typ(Ip)][dynamic:
-// the argument kind, g_kind(Sp[0])]. The data sentinels (data.c) tail-jump through
+enum q ai_kind(word);
+// Apply dispatch matrix, indexed [static: the applied data kind, ai_typ(Ip)][dynamic:
+// the argument kind, ai_kind(Sp[0])]. The data sentinels (data.c) tail-jump through
 // it; the aps + the table itself live in ai.c. Row indexed by the full kind
-// (g_typ returns one of the five data kinds), so the first dimension is KN, not g_data_n.
-extern lvm_t *g_apply_mx[KN][KN];
+// (ai_typ returns one of the five data kinds), so the first dimension is KN, not ai_data_n.
+extern lvm_t *ai_apply_mx[KN][KN];
 extern union u const numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
 lvm_t lvm_ap, lvm_two, lvm_tuple, lvm_sym, lvm_str, lvm_big; // sentinels + ap: data.c & inline predicates
-uintptr_t hash(struct g*, word), g_tuple_bytes(struct g_tuple*);
-#define str(_) ((struct g_str*)(_))
+uintptr_t hash(struct ai*, word), ai_tuple_bytes(struct ai_tuple*);
+#define str(_) ((struct ai_str*)(_))
 #define lamp evenp
-#define two(_) ((struct g_pair*)(_))
-static g_inline bool twop(word _) { return lamp(_) && cell(_)->ap == lvm_two; }
-static g_inline void *bump(struct g *g, uintptr_t n) {
+#define two(_) ((struct ai_pair*)(_))
+static ai_inline bool twop(word _) { return lamp(_) && cell(_)->ap == lvm_two; }
+static ai_inline void *bump(struct ai *g, uintptr_t n) {
   if (avail(g) < n) __builtin_trap();
   void *x = g->hp; g->hp += n; return x; }
-static g_inline struct g_pair *ini_two(struct g_pair *w, intptr_t a, intptr_t b) {
+static ai_inline struct ai_pair *ini_two(struct ai_pair *w, intptr_t a, intptr_t b) {
  return w->ap = lvm_two, w->a = a, w->b = b, w; }
-static g_inline struct g *encode(struct g*g, enum g_status s) { return
-  (struct g*) ((uintptr_t) g | s); }
+static ai_inline struct ai *encode(struct ai*g, enum ai_status s) { return
+  (struct ai*) ((uintptr_t) g | s); }
 // Raise: to the global `help` function when installed, else raise_c (ai.c).
 // ghelp re-raises an already-tagged g's own status.
-struct g *ghelp2(struct g*, enum g_status), *ghelp(struct g*);
-static g_inline struct g *g_have(struct g *g, uintptr_t n) {
- return !g_ok(g) || avail(g) >= n ? g : g_please(g, n); }
+struct ai *ghelp2(struct ai*, enum ai_status), *ghelp(struct ai*);
+static ai_inline struct ai *ai_have(struct ai *g, uintptr_t n) {
+ return !ai_ok(g) || avail(g) >= n ? g : ai_please(g, n); }
 
 #endif

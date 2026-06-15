@@ -36,7 +36,7 @@ double strtod(char const *restrict s, char **restrict end) {
 
 int isspace(int), tolower(int);
 void *memchr(void const*, int, size_t);
-static char const digits[] = g_digits;
+static char const digits[] = ai_digits;
 
 long int strtol(const char *s, char **endptr, int base) {
  char const *p = s;

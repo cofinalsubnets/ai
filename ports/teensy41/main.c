@@ -1,7 +1,7 @@
 // Teensy 4.1 (i.MX RT1062) frontend for love -- bare metal, no Teensyduino.
 //
-// love's frontend contract (ai.h): the host defines g_clock, the
-// g_stdin/g_stdout ports, the g_fd_port_vt vtable, and the cooperative-wait
+// love's frontend contract (ai.h): the host defines ai_clock, the
+// ai_stdin/ai_stdout ports, the ai_fd_port_vt vtable, and the cooperative-wait
 // hooks. Here the console is LPUART6 on pin0(RX)/pin1(TX) at 115200 8N1,
 // reachable over a 3.3 V USB-serial adapter -- the analogue of the rp2040
 // port's UART0 console (USB CDC is a TODO, see README). The arch backend
@@ -18,33 +18,33 @@
 
 // --- cooperative waits ----------------------------------------------------
 // The host backs these with poll(2); we have only the free-running GPT timer
-// and a polled LPUART, so spin against a g_clock() deadline (ticks are ms;
+// and a polled LPUART, so spin against a ai_clock() deadline (ticks are ms;
 // ticks==0 means wait forever). No IRQs are enabled, so there is nothing to
 // WFE on -- a tight poll keeps (key)/timed sleeps re-checking readiness. Same
 // shape as the host's poll_wait, minus the kernel.
-void g_sleep(uintptr_t ms) {
+void ai_sleep(uintptr_t ms) {
   if (!ms) { for (;;) __asm volatile("wfi"); }   // infinite: park (reset to exit)
-  uintptr_t start = g_clock();
-  while (g_clock() - start < ms) __asm volatile("nop"); }
+  uintptr_t start = ai_clock();
+  while (ai_clock() - start < ms) __asm volatile("nop"); }
 
-bool g_ready(int fd) { return fd == 0 ? serial_rx_ready() : fd >= 0; }
+bool ai_ready(int fd) { return fd == 0 ? serial_rx_ready() : fd >= 0; }
 
-void g_wait_fds(int const *fds, int n, uintptr_t ms) {
-  if (n <= 0) { g_sleep(ms); return; }
-  if (n > g_wait_fds_max) __builtin_trap();
-  uintptr_t start = g_clock();
+void ai_wait_fds(int const *fds, int n, uintptr_t ms) {
+  if (n <= 0) { ai_sleep(ms); return; }
+  if (n > ai_wait_fds_max) __builtin_trap();
+  uintptr_t start = ai_clock();
   for (;;) {
-    for (int i = 0; i < n; i++) if (g_ready(fds[i])) return;
-    if (ms && g_clock() - start >= ms) return;
+    for (int i = 0; i < n; i++) if (ai_ready(fds[i])) return;
+    if (ms && ai_clock() - start >= ms) return;
     __asm volatile("nop"); } }
 
 // --- port vtable ----------------------------------------------------------
 // Both ports ride LPUART6; the fd is nominal (>= 0 so the dispatcher routes
 // here). Serial never reaches EOF, so the dispatcher's eof_seen latch never
 // trips.
-static struct g *fd_getc(struct g *g) {
-  struct g *fc = g_core_of(g);
-  struct g_io *i = fc->io;
+static struct ai *fd_getc(struct ai *g) {
+  struct ai *fc = ai_core_of(g);
+  struct ai_io *i = fc->io;
   if (getfix(i->ungetc_buf) != EOF) {
     fc->b = getfix(i->ungetc_buf);
     i->ungetc_buf = putfix(EOF);
@@ -52,30 +52,30 @@ static struct g *fd_getc(struct g *g) {
   fc->b = serial_getc();
   return g; }
 
-static struct g *fd_ungetc(struct g *g, int c) {
-  struct g *fc = g_core_of(g);
-  struct g_io *i = fc->io;
+static struct ai *fd_ungetc(struct ai *g, int c) {
+  struct ai *fc = ai_core_of(g);
+  struct ai_io *i = fc->io;
   i->ungetc_buf = putfix(c);
   i->eof_seen = putfix(false);
   return fc->b = c, g; }
 
-static struct g *fd_eof(struct g *g) {
-  struct g *fc = g_core_of(g);
-  struct g_io *i = fc->io;
+static struct ai *fd_eof(struct ai *g) {
+  struct ai *fc = ai_core_of(g);
+  struct ai_io *i = fc->io;
   return fc->b = (getfix(i->ungetc_buf) == EOF) && getfix(i->eof_seen), g; }
 
-static struct g *fd_putc(struct g *g, int c) {
+static struct ai *fd_putc(struct ai *g, int c) {
   if (c == '\n') serial_putc('\r');     // cook LF -> CRLF for terminals
   serial_putc(c);
   return g; }
 
-static struct g *fd_flush(struct g *g) { return g; }   // LPUART has no buffer here
+static struct ai *fd_flush(struct ai *g) { return g; }   // LPUART has no buffer here
 
-struct g_io g_stdin  = { .ap = lvm_port_io, .fd = putfix(0), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false) };
-struct g_io g_stdout = { .ap = lvm_port_io, .fd = putfix(1), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false) };
+struct ai_io ai_stdin  = { .ap = lvm_port_io, .fd = putfix(0), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false) };
+struct ai_io ai_stdout = { .ap = lvm_port_io, .fd = putfix(1), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false) };
 // No separate error stream; route err to the console too.
-struct g_io g_stderr = { .ap = lvm_port_io, .fd = putfix(1), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false) };
-struct g_port_vt const g_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, fd_putc, fd_flush };
+struct ai_io ai_stderr = { .ap = lvm_port_io, .fd = putfix(1), .ungetc_buf = putfix(EOF), .eof_seen = putfix(false) };
+struct ai_port_vt const ai_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, fd_putc, fd_flush };
 
 // --- GPIO builtins --------------------------------------------------------
 // (gpio_init pin)    -- claim a GPIO2 bit (pin 13 also gets its pad muxed); returns the pin.
@@ -83,17 +83,17 @@ struct g_port_vt const g_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, fd_putc, fd_
 // (gpio_put pin val) -- drive an output: val non-nil => high; returns val.
 // (gpio_get pin)     -- sample an input; returns 1 (high) or 0 (low).
 // nil is putfix(0), so getfix(arg) != 0 reads a number or nil correctly.
-static lvm(g_gpio_init) {
+static lvm(ai_gpio_init) {
   gpio_init(getfix(Sp[0]));           // leaves Sp[0] (the pin) as the result
   Ip += 1;
   return Continue(); }
 
-static lvm(g_gpio_get) {
+static lvm(ai_gpio_get) {
   Sp[0] = putfix(gpio_get(getfix(Sp[0])));
   Ip += 1;
   return Continue(); }
 
-static lvm(g_gpio_dir) {
+static lvm(ai_gpio_dir) {
   unsigned pin = getfix(Sp[0]);
   int out = getfix(Sp[1]) != 0;
   gpio_set_dir(pin, out);
@@ -102,7 +102,7 @@ static lvm(g_gpio_dir) {
   Ip += 1;
   return Continue(); }
 
-static lvm(g_gpio_put) {
+static lvm(ai_gpio_put) {
   unsigned pin = getfix(Sp[0]);
   int val = getfix(Sp[1]) != 0;
   gpio_put(pin, val);
@@ -114,12 +114,12 @@ static lvm(g_gpio_put) {
 // 1-arg nifs run their thunk directly; 2-arg nifs build a 2-slot frame with
 // lvm_cur first (mirrors the host's nif_open shape).
 static union u const
-  nif_gpio_init[] = {{g_gpio_init}, {lvm_ret0}},
-  nif_gpio_get[]  = {{g_gpio_get}, {lvm_ret0}},
-  nif_gpio_dir[]  = {{lvm_cur}, {.x = putfix(2)}, {g_gpio_dir}, {lvm_ret0}},
-  nif_gpio_put[]  = {{lvm_cur}, {.x = putfix(2)}, {g_gpio_put}, {lvm_ret0}};
+  nif_gpio_init[] = {{ai_gpio_init}, {lvm_ret0}},
+  nif_gpio_get[]  = {{ai_gpio_get}, {lvm_ret0}},
+  nif_gpio_dir[]  = {{lvm_cur}, {.x = putfix(2)}, {ai_gpio_dir}, {lvm_ret0}},
+  nif_gpio_put[]  = {{lvm_cur}, {.x = putfix(2)}, {ai_gpio_put}, {lvm_ret0}};
 
-static struct g_def defs[] = {
+static struct ai_def defs[] = {
   {"gpio_init", (intptr_t) nif_gpio_init},
   {"gpio_dir",  (intptr_t) nif_gpio_dir},
   {"gpio_put",  (intptr_t) nif_gpio_put},
@@ -137,14 +137,14 @@ static struct g_def defs[] = {
 static uint8_t pool[384 * (1 << 10)];
 
 int main(void) {
-  struct g *g = g_defn(g_ini_s(pool, sizeof pool), defs, countof(defs));
-  g = g_evals_(g, "("
+  struct ai *g = ai_defn(ai_ini_s(pool, sizeof pool), defs, countof(defs));
+  g = ai_evals_(g, "("
 #include "egg.h"
-    g_egg_pre
+    ai_egg_pre
 #include "prelude.h"
     " "
 #include "ev.h"
-    g_egg_post
+    ai_egg_post
 #include "repl.h"
     "(shell 0)");
   // The REPL only returns on a fatal error. Idle low-power afterward.

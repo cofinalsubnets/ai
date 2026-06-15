@@ -23,7 +23,7 @@ te_triple = -target thumbv7em-none-eabi -mcpu=cortex-m7 -mthumb
 te_fpu = -mfloat-abi=hard -mfpu=fpv5-d16
 te_cppflags = -I$(o) -I. -I$(R) -I$(R)/out/lib -I$(R)/libc
 te_cc = $(CCACHE) $(KCC) $(te_triple) $(te_fpu) $(g_cflags) -nostdinc -ffreestanding \
-  -fno-lto -fno-PIC -ffunction-sections -fdata-sections -Dg_tco=0 $(te_cppflags)
+  -fno-lto -fno-PIC -ffunction-sections -fdata-sections -Dai_tco=0 $(te_cppflags)
 te_rt := $(shell f=$$($(KCC) $(te_triple) $(te_fpu) -print-libgcc-file-name 2>/dev/null); \
   [ -e "$$f" ] && echo "$$f" || \
   arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb $(te_fpu) -print-libgcc-file-name 2>/dev/null)

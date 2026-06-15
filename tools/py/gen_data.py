@@ -4,7 +4,7 @@
 ll recovers a heap object's kind from its `ap`: the five self-quote sentinels
 (data.c, DATA_SENTINEL) are pinned contiguously and in enum order into the
 .ai_data section, so a kind is just a slot index into that section --
-g_typ(o) == (ap - start) / unit, unit == (stop - start) / N (see data.h).
+ai_typ(o) == (ap - start) / unit, unit == (stop - start) / N (see data.h).
 
 Both `start` and `unit` are link-time quantities, so the portable header leaves
 that as two runtime divides: one to derive `unit`, one to index by it. The
@@ -24,7 +24,7 @@ stride when the sentinels tile the section evenly (equal sizes, no inter-section
 padding). We verify that here -- unequal sizes or a size that isn't a multiple
 of the section alignment would desync the baked constant from the real layout --
 and warn if the stride isn't a power of two (the shift path is then unavailable
-and g_typ falls back to a divide-by-constant, which the compiler lowers to a
+and ai_typ falls back to a divide-by-constant, which the compiler lowers to a
 multiply rather than a hardware divide).
 
 Usage: gen_data.py <data.o> [-o data.h]   (writes stdout if no -o)
@@ -141,15 +141,15 @@ HEADER = """\
 //
 // Same contract as the portable data.h, but the sentinel stride is baked
 // in at build time (reflected out of data.o) instead of left as the link-time
-// expression (stop-start)/N. That removes both divides from g_typ: the derive-
+// expression (stop-start)/N. That removes both divides from ai_typ: the derive-
 // divide folds away (UNIT is a literal) and the index-divide %s.
 // `start` stays a link-time symbol, so only the divides go, not the subtract.
 extern char __start_ai_data[], __stop_ai_data[];
 #define G_DATA_UNIT %du   // sentinel stride in bytes, from data.o
-static g_inline bool in_data(void *a) {
+static ai_inline bool in_data(void *a) {
  return (uintptr_t) a >= (uintptr_t) __start_ai_data
      && (uintptr_t) a <  (uintptr_t) __stop_ai_data; }
-static g_inline enum q g_typ(union u *o) {
+static ai_inline enum q ai_typ(union u *o) {
  static const enum q kinds[] = { KTuple, KBig, KString, KSym, KTwo };
  return kinds[((uintptr_t) o->ap - (uintptr_t) __start_ai_data) %s]; }
 #endif
@@ -173,7 +173,7 @@ def main():
         index = ">> %d" % shift                 # /UNIT as a shift
         note = "is a shift (UNIT == 2^%d)" % shift
     else:
-        warn("data stride %d is not a power of two; g_typ will divide by a "
+        warn("data stride %d is not a power of two; ai_typ will divide by a "
              "constant (lowered to a multiply) rather than shift" % unit)
         index = "/ G_DATA_UNIT"
         note = "is a divide by the constant UNIT (lowered to a multiply)"
