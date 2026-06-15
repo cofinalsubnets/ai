@@ -21,7 +21,7 @@
   !(zev (zs "(+ 1"))                          ; an unfinished shape is nothing
   (1 = (zev (zs "1")))
   ; zevs: the stream shell -- a port is the hot charms; every form evals,
-  ; the last value is the value. the host/love0/kernel runners ARE zevs.
+  ; the last value is the value. the host/ai0/kernel runners ARE zevs.
   (42 = (zevs (sip (zs "(: zq 41) (zq + 1)"))))  ; defines land: the second form reads the first's
   !(zevs (sip (zs "")))
   (7 = (zevs (sip (zs "1 2 (3 + 4)"))))))     ; forms eval in order; the last one answers

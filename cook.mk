@@ -36,9 +36,9 @@ $(COOKED): $(LOVE)
 
 # The verbs cook can't drive (interactive / streaming / sub-make): pass through to
 # the real Makefile verbatim.
-PASSED := host love0 kernel wasm lib hooks uninstall \
+PASSED := host ai0 kernel wasm lib hooks uninstall \
           run run-hdd run-headless repl gdb disasm perf flame cloc \
-          test_all test_host test_love0 test_tools test_kernel test_wasm \
+          test_all test_host test_ai0 test_tools test_kernel test_wasm \
           cat cata catav
 .PHONY: $(PASSED)
 $(PASSED):

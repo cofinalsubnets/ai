@@ -12,7 +12,7 @@ a ?= $(shell uname -m)
 
 # g_tco for the builds that can take it: 1 = the tail-threaded VM (aps tail-jump,
 # never return -- `make vmret` verifies it per binary), 0 = the trampoline loop.
-# The host runs $(tco). PINNED ELSEWHERE: love0 stays 0 (the deliberate
+# The host runs $(tco). PINNED ELSEWHERE: ai0 stays 0 (the deliberate
 # trampoline-coverage lane) and the kernel test build stays 0 (hangs at 1 --
 # see the K_TEST block in the root Makefile).
 tco ?= 1

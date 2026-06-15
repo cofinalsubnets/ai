@@ -6,7 +6,7 @@
 ;
 ; SCOPE: the cross-cutting verbs + the host build. one rung is DELEGATED to the
 ; real Makefile rather than re-expressed here, on purpose:
-;   * host -- the C bootstrap (love0 -> reflect data.h -> the love binary) is
+;   * host -- the C bootstrap (ai0 -> reflect data.h -> the love binary) is
 ;     circular for cook: building love needs love. make owns that rung; this recipe
 ;     just leans on it (and make no-ops when the binary is already current).
 ; everything else (test, clean, valg, vmret, bench, install) is the genuine command, ported.
@@ -27,15 +27,15 @@
 (recipe 'host '() '(("make" "host")))
 
 ; --- the fast gate -------------------------------------------------------------
-; test = the host corpus + the self-hosted love0, each of which MUST print the
+; test = the host corpus + the self-hosted ai0, each of which MUST print the
 ; zz-fin "tests pass" summary -- exit 0 alone is a lie (a reader stop drops the
-; rest of the stream and still exits 0). love0 prints it TWICE (c0 then ev).
+; rest of the stream and still exits 0). ai0 prints it TWICE (c0 then ev).
 (recipe 'test '(host)
       (L (L "sh" "-c"
             (+ "o=out/host/.test_host; cat " (+ corpus
                " | out/host/love >$o 2>&1; cat $o; grep -q 'tests pass' $o")))
          '("sh" "-c"
-            "o=out/host/.test_love0; out/host/love0 </dev/null >$o 2>&1; cat $o; [ $(grep -c 'tests pass' $o) -eq 2 ]")))
+            "o=out/host/.test_ai0; out/host/ai0 </dev/null >$o 2>&1; cat $o; [ $(grep -c 'tests pass' $o) -eq 2 ]")))
 
 ; --- the corpus under valgrind -------------------------------------------------
 (recipe 'valg '(host)

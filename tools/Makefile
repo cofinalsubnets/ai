@@ -33,7 +33,7 @@ test_gen_data: | $(m)
 
 # vmret.l vs py/vmret.py over the host binary plus any kernel arch ELFs
 # present (each arch exercises a different ret matcher + the objdump choice).
-# love0 is skipped: it builds -Dg_tco=0 (trampoline), where handler rets are
+# ai0 is skipped: it builds -Dg_tco=0 (trampoline), where handler rets are
 # expected -- the vmret signal is noise there.
 test_vmret: | $(m)
 	@echo TEST vmret.l

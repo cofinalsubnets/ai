@@ -9,30 +9,30 @@ include common.mk
 CCACHE ?= $(shell command -v ccache 2>/dev/null)
 
 .PHONY: all install uninstall clean distclean hooks
-.PHONY: host kernel wasm love0
-.PHONY: test test_host test_all test_tools test_love0 test_wasm
+.PHONY: host kernel wasm ai0
+.PHONY: test test_host test_all test_tools test_ai0 test_wasm
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench
-test: test_host test_love0
+test: test_host test_ai0
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_love0 test_tools test_kernel test_wasm
-# love0 bakes prelude+ev+repl + the whole test corpus (sed headers) and self-tests
+test_all: test_host test_ai0 test_tools test_kernel test_wasm
+# ai0 bakes prelude+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prelude (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dg_tco=0,
 # so this also exercises the non-tail-threaded trampoline dispatch path.
 # stdin is /dev/null: the corpus reads from the baked string, not stdin, but
 # test/io.l exercises the real `in` port (a bare fgetc), which would otherwise
-# block on a tty (the old `cat $t | love0` fed the test stream in on stdin).
+# block on a tty (the old `cat $t | ai0` fed the test stream in on stdin).
 # Both gates require the zz-fin summary line, not just exit 0: a reader stop
 # (e.g. a stray `)` mid-corpus) silently drops the rest of the stream and
 # exits 0 without ever reaching zz-fin -- exit code alone green-lights a run
-# that only executed a prefix of the corpus. love0 must print TWO summaries
+# that only executed a prefix of the corpus. ai0 must print TWO summaries
 # (the corpus runs under both c0 and the self-hosted ev).
-test_love0: $(love0)
-	@echo TEST $(love0)
-	@$(love0) </dev/null > out/host/.test_love0.out; s=$$?; cat out/host/.test_love0.out; \
-	  [ $$s -eq 0 ] && [ `grep -c "tests pass" out/host/.test_love0.out` -eq 2 ]
+test_ai0: $(ai0)
+	@echo TEST $(ai0)
+	@$(ai0) </dev/null > out/host/.test_ai0.out; s=$$?; cat out/host/.test_ai0.out; \
+	  [ $$s -eq 0 ] && [ `grep -c "tests pass" out/host/.test_ai0.out` -eq 2 ]
 test_host: host
 	@echo TEST $m
 	@cat $t | $m > out/host/.test_host.out; s=$$?; cat out/host/.test_host.out; \
@@ -50,24 +50,24 @@ hooks:
 	@git config core.hooksPath .githooks && echo "git hooks -> .githooks (pre-commit keeps wasm/ai.js fresh)"
 
 # Static lisp headers: each ai/*.l is serialized to a C string literal in
-# out/lib/*.h by tools/lcat.l (run on the bootstrap interpreter love0). Frontends
+# out/lib/*.h by tools/lcat.l (run on the bootstrap interpreter ai0). Frontends
 # #include these and assemble the bootstrap with G_EGG_PRE/POST (ai.h).
 # Drop a .l into ai/ and it is picked up automatically -- no rule to edit.
 lib_h = $(patsubst ai/%.$x,out/lib/%.h,$(wildcard ai/*.$x))
-# love0's bootstrap headers: sed-wrapped raw source (a text->C-literal needing no
-# interpreter -- the l reader strips the ; comments at read time), since love0
+# ai0's bootstrap headers: sed-wrapped raw source (a text->C-literal needing no
+# interpreter -- the l reader strips the ; comments at read time), since ai0
 # can't lcat the very sources it is assembled from (chicken/egg). cli.l doubles as
-# love0's CLI arg handler; prelude/ev/egg/repl + the whole concatenated test corpus
-# are baked in so love0 self-tests both compilers in one run (see main.c). The final
+# ai0's CLI arg handler; prelude/ev/egg/repl + the whole concatenated test corpus
+# are baked in so ai0 self-tests both compilers in one run (see main.c). The final
 # l uses the canonicalized lcat headers from the rule below instead.
 sed_lit = sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/'
 gl0_h = out/lib/cli0.h out/lib/egg0.h out/lib/prelude0.h out/lib/ev0.h out/lib/repl0.h out/lib/tests0.h
 .PHONY: lib
 lib: $(lib_h) $(gl0_h)
-$(lib_h): out/lib/%.h: ai/%.$x $(love0) tools/lcat.$x
+$(lib_h): out/lib/%.h: ai/%.$x $(ai0) tools/lcat.$x
 	@mkdir -p out/lib
 	@echo GEN	$@
-	@$(love0) -l ai/prelude.$x tools/lcat.$x $< > $@
+	@$(ai0) -l ai/prelude.$x tools/lcat.$x $< > $@
 out/lib/%0.h: ai/%.$x
 	@mkdir -p out/lib
 	@echo GEN	$@
@@ -103,15 +103,15 @@ ho = out/host
 h_o = $(g_c:$(R)/%.c=$(ho)/%.o)
 # -I$(ho) first so the generated $(ho)/data.h shadows the portable top-level data.h.
 # the host runs $(tco) (common.mk; default 1 = tail-threaded, vmret-checked);
-# love0 below stays pinned 0, the deliberate trampoline-coverage lane.
+# ai0 below stays pinned 0, the deliberate trampoline-coverage lane.
 hcc = $(CC) $(g_cflags) -Dg_tco=$(tco) -fpic -I$(ho) -I. -Iout/lib
 data_ld = data.ld
 ldflags = -Wl,-T,$(data_ld)
 hdata_h = $(ho)/data.h
-love0 = $(ho)/love0
+ai0 = $(ho)/ai0
 
 host: $(ho)/$n $(ho)/lib$n.so $(ho)/$n.1
-love0: $(love0)
+ai0: $(ai0)
 
 $(ho)/lib$n.a: $(h_o)
 	@echo AR	$@
@@ -137,7 +137,7 @@ $(ho)/data.o: data.c $(g_h)
 # prelude/ev/egg/repl + the test corpus), all produced without an interpreter --
 # hence -Iout/lib. Per-object into $(ho)/0/ so ccache caches each TU.
 gl0_cc = $(CCACHE) $(CC) $(g_cflags) -DGL_BOOTSTRAP -Dg_tco=0 -I. -Iout/lib
-love0_o = $(ho)/0/main.o $(g_c:$(R)/%.c=$(ho)/0/%.o)
+ai0_o = $(ho)/0/main.o $(g_c:$(R)/%.c=$(ho)/0/%.o)
 $(ho)/0/main.o: main.c $(g_h) $(gl0_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
@@ -146,16 +146,16 @@ $(ho)/0/%.o: $(R)/%.c $(g_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(gl0_cc) -c $< -o $@
-$(love0): $(love0_o) $(data_ld)
+$(ai0): $(ai0_o) $(data_ld)
 	@echo LD	$@
 	@mkdir -p $(dir $@)
-	@$(CC) $(g_cflags) $(ldflags) -o $@ $(love0_o) -lm
+	@$(CC) $(g_cflags) $(ldflags) -o $@ $(ai0_o) -lm
 
 # tools/gen_data.l reflects $(ho)/data.o's love_data.NN section sizes into
 # $(ho)/data.h, whose g_typ() shifts instead of the portable header's divides.
-$(hdata_h): $(ho)/data.o $(love0) tools/gen_data.$x ai/prelude.$x
+$(hdata_h): $(ho)/data.o $(ai0) tools/gen_data.$x ai/prelude.$x
 	@echo GEN	$@
-	@$(love0) -l ai/prelude.$x tools/gen_data.$x $< -o $@
+	@$(ai0) -l ai/prelude.$x tools/gen_data.$x $< -o $@
 
 # ai.c/data.c -> out/host/*.o (against the generated data.h).
 $(ho)/%.o: $(R)/%.c $(g_h) $(hdata_h)
@@ -237,7 +237,7 @@ ifdef K_TEST
 # 2026-06-11 (clean build, qemu silent before the first corpus dot, killed by
 # the gate's timeout; the host corpus is green at g_tco=1, so this is kernel-
 # specific -- likely the freestanding toolchain not guaranteeing the sibcall
-# the tail-threaded path leans on). love0 + this build are the two deliberate
+# the tail-threaded path leans on). ai0 + this build are the two deliberate
 # trampoline lanes; the host runs $(tco) below.
 kcppflags += -DK_TEST -Dg_tco=0
 endif
@@ -374,7 +374,7 @@ run-headless: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 # printing the usual summary over the serial console, then quits qemu (the `exit`
 # nif -> isa-debug-exit). tools/ktest.l (run on
 # the host l) boots it under qemu headless, captures the serial output, and checks
-# it. So this exercises the freestanding kernel the way test_host/test_love0 exercise
+# it. So this exercises the freestanding kernel the way test_host/test_ai0 exercise
 # the host. x86_64 only (qemu + isa-debug-exit); a no-op on other hosts.
 #
 # Drop from the kernel corpus: io.l (host file open) and run.l (subprocess/getenv)
@@ -385,9 +385,9 @@ kt = $(filter-out %/io.l %/run.l %/math.l %/bell.l,$t)
 out/lib/ktests.$x: $(kt) $(R)/Makefile
 	@mkdir -p out/lib
 	@cat $(kt) > $@
-out/lib/ktests.h: out/lib/ktests.$x $(love0) tools/lcatv.$x ai/prelude.$x
+out/lib/ktests.h: out/lib/ktests.$x $(ai0) tools/lcatv.$x ai/prelude.$x
 	@echo GEN	$@
-	@$(love0) -l ai/prelude.$x tools/lcatv.$x out/lib/ktests.$x > $@
+	@$(ai0) -l ai/prelude.$x tools/lcatv.$x out/lib/ktests.$x > $@
 .PHONY: test_kernel
 ifeq ($a,x86_64)
 test_kernel: host $(R)/tools/ktest.$x
@@ -401,7 +401,7 @@ endif
 
 # --- wasm headless test (wired into test_all; emcc + node) -----------------
 # Build ai.js and run the SAME $t corpus through it under node -- a third
-# runtime after the host and love0, exercising wasm's <data.h> override
+# runtime after the host and ai0, exercising wasm's <data.h> override
 # (sentinel-ap data kinds, no flat code-address space). The harness evals the
 # whole corpus in one ai_eval and greps the drained output for the zz-fin
 # summary, exactly as test_host greps `cat $t | love`. No-op when emcc or node

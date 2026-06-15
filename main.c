@@ -291,10 +291,10 @@ static union u const
 // region: the baked lisp text plus a `boot` entry that main tail-calls after
 // the universal setup (argv pins + the host nif defs above).
 #ifdef GL_BOOTSTRAP
-// love0: the CLI driver is the sed-wrapped raw text (it can't lcat its own arg
+// ai0: the CLI driver is the sed-wrapped raw text (it can't lcat its own arg
 // ap). Self-test: the whole test corpus, baked in (sed-wrapped), run
 // twice -- once compiled by the C bootstrap compiler (c0), once by the
-// self-hosted ev installed from ev.l -- so one love0 invocation exercises both
+// self-hosted ev installed from ev.l -- so one ai0 invocation exercises both
 // compilers (and -Dg_tco=0 makes it the trampoline path). s2cldef installs
 // s2cl (string -> charlist); runner drinks the baked corpus (the global
 // `tests`) through zevs (repl.l), whose `(ev 'ev r)` indirection late-binds
@@ -333,7 +333,7 @@ static struct g *boot(struct g *g, bool argp) {
   return g_evals_(g, runner); }                      // pass 2: corpus via the self-hosted ev
 
 #else
-// the full love: raw terminal mode for the interactive REPL (love0 never needs
+// the full love: raw terminal mode for the interactive REPL (ai0 never needs
 // it -- a build tool / self-test is non-interactive); the CLI driver is the
 // canonicalized lcat header; `rel` is the non-tty stdin runner.
 static struct termios saved_termios;

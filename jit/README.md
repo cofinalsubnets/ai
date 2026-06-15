@@ -146,9 +146,9 @@ substrate above.
 ## Reproducing the probe (x86_64 + qemu)
 
 ```sh
-make host                                  # builds love0 + the bake tools
+make host                                  # builds ai0 + the bake tools
 cp jit/probe.l out/lib/ktests.l            # make the probe the whole K_TEST corpus
-out/host/love0 -l ai/prelude.l tools/lcatv.l out/lib/ktests.l > out/lib/ktests.h
+out/host/ai0 -l ai/prelude.l tools/lcatv.l out/lib/ktests.l > out/lib/ktests.h
 touch out/lib/ktests.l out/lib/ktests.h
 make -s K_TEST=1 out/free/love-x86_64-test.iso
 qemu-system-x86_64 -m 256M -M q35 -serial stdio -display none -no-reboot \
