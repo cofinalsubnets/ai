@@ -137,7 +137,7 @@ lvm_t lvm_kcall,
  lvm_fputbn, lvm_read, lvm_dot,
  // Step 5a -- typed multi-rank arrays (kernel/arr.c). lvm_vbin is the shared
  // elementwise/broadcast engine the arith/compare slow lanes divert into.
- lvm_arr, lvm_arank, lvm_alen, lvm_ashape, lvm_atype,
+ lvm_arr, lvm_ajot, lvm_arank, lvm_alen, lvm_ashape, lvm_atype,
  lvm_asum, lvm_aprod, lvm_amax, lvm_amin, lvm_aall, lvm_inner, lvm_outer,
  lvm_packp, lvm_bigp, lvm_widep, lvm_arrp, lvm_intf, lvm_lamp, lvm_hotp,
  lvm_absent, lvm_absent2;   // safe defaults for the frontend nifs (exit/open/..)
@@ -609,6 +609,7 @@ lvm_t lvm_fault;
  _(nif_re, "re", s1(lvm_re)) _(nif_im, "im", s1(lvm_im)) _(nif_conj, "conj", s1(lvm_conj))\
  _(nif_abs, "abs", s1(lvm_abs)) _(nif_arg, "arg", s1(lvm_carg))\
  _(nif_arr, "arr", s3(lvm_arr))\
+ _(nif_ajot, "ajot", s1(lvm_ajot))\
  _(nif_arank, "arank", s1(lvm_arank))\
  _(nif_alen, "alen", s1(lvm_alen)) _(nif_ashape, "ashape", s1(lvm_ashape))\
  _(nif_atype, "atype", s1(lvm_atype))\
@@ -5390,6 +5391,22 @@ lvm(lvm_arr) {
   else tuple_put_int(v, i, fixp(e) ? (intptr_t) getfix(e)
                        : flop(e) ? (intptr_t) flo_get(e) : box_get(e)); }
  return Sp[2] = word(v), Sp += 2, Ip++, Continue(); }
+
+// (ajot n) -- a z-array of the first n charms, 0..n-1, filled in C (no cons
+// spine): the array twin of `jot`. n<0 or non-fixnum -> nil. This is the baked
+// range constructor, so (asum (ajot n)) reduces a range end to end in C.
+lvm(lvm_ajot) {
+ word nx = Sp[0];
+ if (!fixp(nx) || getfix(nx) < 0) return Sp[0] = nil, Ip++, Continue();
+ uintptr_t n = (uintptr_t) getfix(nx);
+ uintptr_t bytes = sizeof(struct g_tuple) + 1 * sizeof(word) + n * g_T[g_Z];
+ Have(b2w(bytes));
+ struct g_tuple *v = (struct g_tuple*) Hp;
+ Hp += b2w(bytes);
+ ini_tuple(v, g_Z, 1);
+ v->shape[0] = n;
+ for (uintptr_t i = 0; i < n; i++) tuple_put_int(v, i, (intptr_t) i);
+ return Sp[0] = word(v), Ip++, Continue(); }
 
 // --- accessors -------------------------------------------------------------
 // rank / element-type code as fixnums; nil for a non-tuple. Both 0 for a scalar box.

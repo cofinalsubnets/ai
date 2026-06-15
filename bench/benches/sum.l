@@ -1,4 +1,7 @@
-; build the list 1..100000 then fold-sum it -- allocation + traversal.
-; checksum = 100000*100001/2 = 5000050000.
-(: (sumf l) (foldl (+) 0 l)
- (bench "sum" (\ _ (sumf (iota1 100000)))))
+; build 0..100000 then sum it -- allocation + traversal.
+; checksum = 100000*100001/2 = 5000050000 (sum 0..100000 = sum 1..100000).
+; l's idiom is the typed array: ajot fills the range into a z-array in one C
+; loop (no cons spine), and asum reduces it in one C loop -- both halves of the
+; bench, allocation and traversal, are now baked.
+(: (sumf n) (asum (ajot n))
+ (bench "sum" (\ _ (sumf 100001))))

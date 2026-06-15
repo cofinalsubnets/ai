@@ -1,4 +1,4 @@
-; love -- a small lisp where every value is an auto-curried function of one argument.
+; love -- a lisp-surfaced, fully-curried language over a tiny generic C core.
 ; a portable C runtime (love.c + love.h) plus a self-hosting compiler written in love
 ; (the love/{prelude,ev,repl}.l layers). source is .l; the host binary is `love`. see README.md.
 ;
@@ -277,7 +277,9 @@
 
 ; --- arrays --- (arr type shape vals) is THE typed constructor: vals 0 zero-fills, a list
 ; fills row-major; (array shape elem..) infers the type and curries; @(..) is a rank-1
-; literal. arank/alen/ashape/atype; peep (out of bounds -> the default). + - * // < =
+; literal; (ajot n) is jot's array twin -- the z-array '(0 .. n-1) filled in one C loop,
+; no cons spine, so (asum (ajot n)) reduces a range end to end in C.
+; arank/alen/ashape/atype; peep (out of bounds -> the default). + - * // < =
 ; broadcast numpy-style to the widest type
 ; (compare -> a z mask); `/` promotes the whole result to r the moment any element divides
 ; inexactly. reduce with asum aprod amax amin aall (a conjunction); CONTRACT with inner
@@ -295,6 +297,7 @@
  (3 = (peep (arr z '(2 2) '(1 2 3 4)) '(1 0) -1)) (@(11 22 33) = @(1 2 3) + @(10 20 30))
  (@(2 4 6) = @(1 2 3) * 2) (r = (atype ((arr z '(2) 0) + 1.5))) (z = (atype ((arr z '(3) 0) < 1)))
  (60 = (asum @(10 20 30))) (30 = (amax @(10 30 20))) (5 = (asum 5)) (aall (1 < 2))
+ (@(0 1 2) = (ajot 3)) (z = (atype (ajot 3))) !(ajot 0) !(ajot -1) (4950 = (asum (ajot 100)))   ; ajot: jot's range as a z-array
  (aall (@(2.0 3.0) = ((/ 1 2) @(4.0 9.0)))) (@(3.5 5.5) = @(7 11) / 2) (@(3 5) = (// @(7 11) 2))
  (@(4 6) = @(8 12) / 2) !(arr z '(3) 0) ("@(10 20 30)" = (show @(10 20 30)))
  (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3) 0)
