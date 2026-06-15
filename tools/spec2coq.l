@@ -46,10 +46,15 @@
    (spine acc rest) (? (twop rest)
                        (spine (cat (L "(app " acc " " (tv (cap rest)) ")")) (cup rest)) acc)
 
-   ; translate a top-level comparison predicate to a Coq bool, or 0 if not translatable
+   ; translate a top-level predicate to a Coq bool, or 0 if not translatable.
+   ; `!` factors to `nilp`: (nilp x) is the bit "x is nothing" (x <= 0 for integers);
+   ; (nilp (nilp x)) is `!!x`, x truthy -- the negation of the inner bit.
    (tp f) (? (! (twop f)) 0
              (: h (cap f)
-                (? (! (len3? f)) 0
+                (? (idp h 'nilp) (: a (e2 f)
+                                   (? (intv? a) (cat (L "(Z.leb " (tv a) " 0)"))
+                                      (: p (tp a) (? p (cat (L "(negb " p ")")) 0))))
+                   (! (len3? f)) 0
                    (! (&& (intv? (e2 f)) (intv? (e3 f)))) 0
                    (idp h '=)  (cat (L "(Z.eqb " (tv (e2 f)) " " (tv (e3 f)) ")"))
                    (idp h '<)  (cat (L "(Z.ltb " (tv (e2 f)) " " (tv (e3 f)) ")"))
