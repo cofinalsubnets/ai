@@ -213,7 +213,7 @@
 
   Z (nom 'Z)
   ; recursive-fn ref: bake `quote code` if the closure is built, else `quote 0`
-  ; + a backpatch site `(lfd . cell)` on the scope for l3 to resolve.
+  ; + a backpatch site `(lfd . cell)` on the scope for link to resolve.
   (qsite site k n) (: cell (poke -1 0 (k (+ 2 n)))
                       _ (poke 2 cell site)
                     (poke -1 lvm_quote cell))
@@ -277,78 +277,90 @@
    hk (peep book 'natjit 0)
    (cons (? hk (hk e s a) e) (d 'imp)))
 
-  ; let expression analyzer (the most complicated one)
+  ; --- let analyzer (the hard one) -- letrec* over (: name def .. body). three phases:
+  ;   collect  -- the bindings into source-order (name . def) pairs, and the body form
+  ;   closures -- analyze each lambda def to a closure, then PROPAGATE captures among
+  ;               mutually-recursive closures to a fixpoint (a sibling's captures flow in)
+  ;   link     -- emit each binding, backpatch recursive refs, apply the body
+  ; boxing (the letrec* capture-by-location rewrite) already happened in wev (boxfix), so
+  ; the defs compile directly. q = a child scope holding the let's lambdas + backpatch sites.
   (ale c a b) (?
    (atomp b) (ana c a)
-   (:- (l1 0 a (cap b) (cup b))
+   (:- (collect 0 a (cap b) (cup b))
     q (sco c (c 'arg) (c 'imp))
-    (set_cdr p x) (: _ (poke 2 x p) x) ; :[ weh
+    ; set-tail: overwrite pair p's tail (cell offset 2, the cup) in place; return x.
+    (set-tail p x) (: _ (poke 2 x p) x)
 
-   ; l1 collects bindings into a source-order (name . def) pair-list; boxing already
-   ; happened in wev (boxfix), so l2 compiles the bindings directly.
-   (l1 prs n d rest) (:
-     nd (dsug n d)
-    (? (atomp rest)       (l2 (rev (cons nd prs)) (cap nd)   1)
-       (atomp (cup rest)) (l2 (rev (cons nd prs)) (cap rest) 0)
-                          (l1 (cons nd prs) (cap rest) (caup rest) (cuup rest))))
+   ; collect: gather (name . def) pairs in source order. the body is the trailing odd
+   ; form; even = a body-LESS let (its last value is the result, top-level names defglob).
+   (collect prs n d rest) (: nd (dsug n d)
+    (? (atomp rest)       (closures (rev (cons nd prs)) (cap nd)   1)   ; body-less: the last NAME is the body
+       (atomp (cup rest)) (closures (rev (cons nd prs)) (cap rest) 0)   ; a trailing body form
+                          (collect (cons nd prs) (cap rest) (caup rest) (cuup rest))))
 
-   (l2 prs body even) (:- (cl 0 l l l)
+   (closures prs body even) (:- (propagate 0 l l l)
     s (c 'stk)
     _ (push c 'stk 0)
-    (jj a ps) (?
+    ; split: a lambda def -> a closure via ala (paired with its name); a non-lambda
+    ; binding -> just a stack slot. builds the stack layout [names..] in source order.
+    (split a ps) (?
      (atomp ps) a
      (nilp (lambp (cuap ps)))
-      (:
-      _ (push c 'stk (caap ps))
-      (jj a (cup ps)))
+      (: _ (push c 'stk (caap ps))
+       (split a (cup ps)))
      (: k (caap ps)
         v (ala q 0 (cuuap ps))
         a2 (cons (cons k v) a)
       _ (push c 'stk k)
-      (jj a2 (cup ps))))
-    l (jj 0 prs)
+      (split a2 (cup ps))))
+    l (split 0 prs)
     _ (pin c 'stk s)
-    (cl n l k1 k2) (?
+    ; propagate: if closure k1 references sibling k2, k2 must ALSO capture k1's imports
+    ; (mutual recursion). sweep all ordered pairs, pouring k1's vars into k2 (addv); a
+    ; sweep that adds any var (n > 0) repeats, until a full pass is stable (the fixpoint).
+    (propagate n l k1 k2) (?
      (&& k1 k2 !(= k1 k2) (memq (caap k1) (cuuap k2)))
-      (>>= n (cuuap k1) (: (kk n v)
-       (? (nilp v) (cl n l k1 (cup k2))
+      (>>= n (cuuap k1) (: (addv n v)
+       (? (nilp v) (propagate n l k1 (cup k2))
         (: var (cap v)
            vars (cuuap k2)
            n2 (? (memq var vars) n
-              (: _ (set_cdr (cuap k2) (cons var vars))
+              (: _ (set-tail (cuap k2) (cons var vars))
                (+ 1 n)))
-           (kk n2 (cup v))))))
-     k2 (cl n l k1 (cup k2))
-     k1 (cl n l (cup k1) l)
-     n (cl 0 l l l)
-     (l3 prs body even
-      (: j (map cap l)
-         (q x) (cons (cap x) (cons (caup x) (foldl (flip ldel) (cuup x) j)))
-       (map q l)))))
+           (addv n2 (cup v))))))
+     k2 (propagate n l k1 (cup k2))
+     k1 (propagate n l (cup k1) l)
+     n (propagate 0 l l l)                                    ; a pass added vars -> sweep again
+     (link prs body even                                      ; stable: drop the let's own names from
+      (: j (map cap l)                                        ; each capture set (locals, not imports)
+         (dropj x) (cons (cap x) (cons (caup x) (foldl (flip ldel) (cuup x) j)))
+       (map dropj l)))))
 
-   (l3 prs body even lams) (:
-    (lnk nds) (? (atomp nds) id
+   (link prs body even lams) (:
+    ; weave: emit the binding defs left-to-right. a lambda def is RE-analyzed with its
+    ; final import set (and backpatched in); a top-level body-less let's name is defglob'd.
+    (weave nds) (? (atomp nds) id
      (: nd (cap nds) n (cap nd) d (cup nd)
-        d (?- d (lambp d) (: qa (assq (cap nd) lams)
-                             x (ala q (cuup qa) (cup d))
-                           (set_cdr qa x)))
+        d (?- d (lambp d) (: cls (assq (cap nd) lams)
+                             x (ala q (cuup cls) (cup d))
+                           (set-tail cls x)))
         f (ana c d)
         g (?- id (&& even (nilp (c 'par))) (em2 lvm_defglob n))
         _ (push c 'stk n)
-        h (lnk (cup nds))
+        h (weave (cup nds))
         (\ x (f (g (h x))))))
     _ (pin q 'lam lams)
     s (c 'stk)
     _ (push c 'stk 0)
     ; clear stale first-build closures so a ref hit during the rebuild defers to a
-    ; backpatch site; the import sets (BB) are kept.
+    ; backpatch site; the import sets are kept.
     _ (each lams (\ e (poke 1 0 (cup e))))
-    g (lnk prs)
+    g (weave prs)
     ; closures final -> backpatch each recorded recursive-fn ref with its text.
     _ (each (q 'sites) (\ s (poke 0 (caup (cap s)) (cup s))))
     _ (pin q 'sites 0)
     _ (pin c 'stk s)
-    ; body-lambda analyzed AFTER inits (it takes bindings as args; never makes sites)
+    ; body-lambda analyzed AFTER inits (it takes the bindings as args; never makes sites)
     f (ana c (cons '\ (cat (rev (map cap prs)) (list body))))
     h (kap (tally prs))
     _ (pin c 'stk s)
