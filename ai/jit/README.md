@@ -9,10 +9,10 @@
 >   applicable native closure. Cell `[code, src, code, interp, lvm_ret, 0]`, value at
 >   the 3rd word, so `value[-1]`=src (`fn_src`/printer/`salpha` → `=`/`show` see the
 >   source) and `value[1]`=interp (the deopt fallback). W^X arena with a finalizer.
-> - **`jit/emit.l`** — a love-level **x86-64 emitter**: compiles `(\ x E)` arithmetic
+> - **`ai/jit/emit.l`** — a love-level **x86-64 emitter**: compiles `(\ x E)` arithmetic
 >   and a counted-sum loop `(\ n Σ_{i<n} body)` to native, with a `jno`+inline-deopt
 >   guard on every `+`/`-`/`*` and on `putfix` (its `add rax,rax` overflow flag is
->   exactly the 62-bit fixnum boundary). x86-64 only; load with `-l jit/emit.l`.
+>   exactly the 62-bit fixnum boundary). x86-64 only; load with `-l ai/jit/emit.l`.
 >
 > This realizes the law the earlier experiment found — *a JIT wins only when it owns
 > the loop* — concretely: the counted-loop emitter owns the iteration end to end
@@ -22,7 +22,7 @@
 > hook*: `ev` installing native for hot regions transparently, after which `nat` goes
 > internal (mopped like `boxfix`/`wev`) and there is no user-facing verb at all.
 >
-> **The leaf substrate** below — `call`/`call2`/`toast` (nifs) + `jit/probe.l` (the
+> **The leaf substrate** below — `call`/`call2`/`toast` (nifs) + `ai/jit/probe.l` (the
 > kernel finding) — predates `nat`: a *leaf* trampoline (word→word, an opaque handle
 > you `call`) the convention-following `nat` supersedes. It stays as the fault-safe
 > machine-code substrate and the kernel-RWX probe. The earlier scalar/array/fold
@@ -98,7 +98,7 @@ so the freestanding kernel never sees `mmap`.
 
 ## The finding: the kernel substrate is *just* this trampoline
 
-`jit/probe.l` builds a buf holding six AMD64 bytes —
+`ai/jit/probe.l` builds a buf holding six AMD64 bytes —
 
 ```
 B8 2A 00 00 00   mov eax, 42      ; imm32 little-endian
@@ -118,7 +118,7 @@ bytes can't be run. `toast` lifts exactly that limitation (the W^X arena above),
 corpus test (`test/jit.l`) stays architecture-neutral — x86_64 opcodes would crash an
 aarch64 or wasm host — so it covers the guards (non-callable → `0`) and the toast's
 opacity (`hotp` but no `peep`/`tally`), not live execution; the kernel finding lives
-in the standalone `jit/probe.l`.
+in the standalone `ai/jit/probe.l`.
 
 ## What the experiment found, and where it went
 
@@ -147,7 +147,7 @@ substrate above.
 
 ```sh
 make host                                  # builds ai0 + the bake tools
-cp jit/probe.l out/lib/ktests.l            # make the probe the whole K_TEST corpus
+cp ai/jit/probe.l out/lib/ktests.l            # make the probe the whole K_TEST corpus
 out/host/ai0 -l ai/prelude.l tools/lcatv.l out/lib/ktests.l > out/lib/ktests.h
 touch out/lib/ktests.l out/lib/ktests.h
 make -s K_TEST=1 out/free/love-x86_64-test.iso

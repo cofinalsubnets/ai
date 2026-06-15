@@ -1,4 +1,4 @@
-; jit/probe.l -- the RWX probe. Decides one fact: is love's data memory
+; ai/jit/probe.l -- the RWX probe. Decides one fact: is love's data memory
 ; executable? i.e. can the bytes of a `toast` (on the kernel, a plain heap copy)
 ; be jumped into and run?
 ;
