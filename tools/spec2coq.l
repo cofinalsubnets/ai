@@ -1,14 +1,20 @@
 ; spec2coq: generate Coq from test/spec.l, in ai.
 ;
-; A slice of the .l -> .v pipeline (see rocq/spec.v, the hand-written laws).
-; Each top-level (assert ..) operand is run through `opfix` (the compiler's own
-; factor pass -- infix to prefix, precedence and currying resolved) and, when it
-; is an INTEGER comparison whose operands are integer-valued (church-numeral
-; applications and the integer operators + - * // % & | ^), becomes a Coq bool
-; theorem  <pred> = true  over the model app n x = x ** n, closed by computation.
-; Everything else (floats, strings, the predicates, the general laws) is SKIPPED
-; and COUNTED -- never silently dropped (the trailing comment reports coverage).
-; Modeled over Z, not nat: (3 3 3) = 3^27 would blow up unary-nat vm_compute.
+; The GENERATED half of the verification (see rocq/spec.v for the hand-written
+; LAWS -- the half a generator structurally can't do). Each top-level (assert ..)
+; operand is `opfix`-factored (infix -> prefix) and translated to a Coq theorem
+; closed by vm_compute, over two models that together cover every EXACT, computable
+; domain in the corpus:
+;   * COMPUTATIONAL (Z / list Z / assoc lists) for value equalities: church
+;     numerals (app), the integer algebra (+ - * // % & | ^, comparisons), nilp /
+;     sat / abs / gcd, lists / strings / arrays (asum/amax/.., ajot), array-valued
+;     = (broadcast / append / repeat), hashes & peep.
+;   * a KIND lattice (value tags) for the type predicates (fixp/twop/strp/..) and
+;     the band order (number < string < symbol < product < map).
+; Left to the hand-written laws: the float/complex tier (not vm_compute-able, the
+; honest misses) and the universally-quantified LAWS. Untranslatable asserts are
+; SKIPPED and COUNTED -- never silently dropped (the trailing comment reports it).
+; Z not nat: (3 3 3) = 3^27 would blow up unary-nat vm_compute.
 ; Reads test/spec.l, writes Coq to `out`.  Run: out/host/ai tools/spec2coq.l > rocq/gen.v
 
 (: (cat l) (foldl (+) "" l)                            ; join a list of strings

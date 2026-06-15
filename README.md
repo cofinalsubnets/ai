@@ -24,8 +24,7 @@ so directly an endomorphism of the value space, which forms
 a monoid under composition. all
 operators are implemented efficiently and generically
 with safe, visible and intuitive idiomatic failure modes.
-a verified specification demonstrates no undefined behavior
-up to <a href="test/uu.l">`but_seriously_the_world_explodes`</a>.
+an undefined operation just acts like 0, subject to `0 0 x = x`.
 no individual operator assumes full control of the global
 environment. all recursion is on heap and any recursive operator
 may be limited by integers, which act transparently as iterators.
