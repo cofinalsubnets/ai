@@ -138,8 +138,8 @@ and what comes out is the lambda the compiler compiled itself into -- a couple
 kilobytes of the whole back end.
 
 the shell survives its mistakes: with no help of your own installed it
-provides one, so any condition prints `# a b` -- `# missing undefined-name`,
-`# apcap 3000000` -- answers the zero point, and the session keeps going. multiline
+provides one, so any condition prints `;; a b` -- `;; missing undefined-name`,
+`;; apcap 3000000` -- answers the zero point, and the session keeps going. multiline
 entry continues while a shape is open; enter cashes any complete buffer;
 history is a normal shell's. scripts and files stay helpless (terminal),
 per the law.

@@ -400,8 +400,8 @@ int main(int argc, char const **argv) {
     g = boot(g, argp); }
   switch (ai_code_of(g)) {
    default: break;
-   case ai_status_scare:               // the honest face: "# a b" when the scare
+   case ai_status_scare:               // the honest face: ";; a b" when the scare
     if (!ai_scare_face_(g))            // said something; bare (no data) = oom
-     fprintf(stderr, "# oom@len=%ld\n", (long) ai_core_of(g)->len);
+     fprintf(stderr, ";; oom@len=%ld\n", (long) ai_core_of(g)->len);
     break; }
   return ai_fin(g); }

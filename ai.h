@@ -198,7 +198,7 @@ struct ai
  *ai_evals_(struct ai*, const char*),
  *ai_defn(struct ai*, struct ai_def const*, uintptr_t);
 
-// the terminal scare face: print "# a b\n" (show forms) to the err port from
+// the terminal scare face: print ";; a b\n" (show forms) to the err port from
 // the stashed condition data and answer 1; the bare scare (nil nil -- oom,
 // which has no data) answers 0 so the frontend can report it raw.
 int ai_scare_face_(struct ai*);

@@ -2546,14 +2546,14 @@ static struct ai*gzputs(struct ai*g, char const *s) {
  return g; }
 
 // the terminal scare face (declared in ai.h): an helpless scare's stashed
-// condition data prints as "# a b" -- the shell help's face -- to the err
+// condition data prints as ";; a b" -- the shell help's face -- to the err
 // port; the bare scare (nil nil) is oom, which has no data: answer 0 and let
 // the frontend report it raw. best-effort: a failure mid-print just stops.
 int ai_scare_face_(struct ai *g) {
  struct ai *c = ai_core_of(g);
  if (!c || (nilp(c->scare_a) && nilp(c->scare_b))) return 0;
  c->io = &ai_stderr;
- struct ai *h = gzputs(c, "# ");   // gfputx may GC and MOVE the core: re-derive
+ struct ai *h = gzputs(c, ";; ");  // gfputx may GC and MOVE the core: re-derive
  if (ai_ok(h)) h = gfputx(h, &ai_stderr, ai_core_of(h)->scare_a);
  if (ai_ok(h)) h = gzputc(h, ' ');
  if (ai_ok(h)) h = gfputx(h, &ai_stderr, ai_core_of(h)->scare_b);

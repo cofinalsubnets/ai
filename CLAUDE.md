@@ -29,7 +29,7 @@
 ; * a corpus test that spawns must (wait p) its task: an orphan stalls the kernel runner.
 ; * the repl reads each LINE as one expression (1 = 1 answers 1); files read forms. the
 ;   interactive shell installs a default help when none is present (repl.l shell-help):
-;   a scare prints `# a b` and answers the zero point, so the session survives every raise and a
+;   a scare prints `;; a b` and answers the zero point, so the session survives every raise and a
 ;   missing name or apcap is VISIBLE; the more bits keep the read protocol (port back when
 ;   incomplete, sentinel at eof). file mode stays helpless -- terminal, per the law.
 ; * python \b-sweeps treat - as a boundary: kebab names with capital segments mangle.
@@ -444,13 +444,13 @@ $"ab" + 2            ; 197     a sigil at one binds tightest: (+ ($ "ab") 2)
 ; more -> the port back) and answers the zero point on a bare scare, the fromempty the
 ; introductions (scare, missing) never named -- from any condition, a value. a policy
 ; that runs out of cases delegates to it ((\ s a b (? (mine? a) .. (welp s a b)))), and
-; the shell's default help is welp WITH A FACE (it prints `# a b` first, then welps).
+; the shell's default help is welp WITH A FACE (it prints `;; a b` first, then welps).
 ; help is present the way
 ; everything is present: by its net ((: help 0) uninstalls). (scare a b) raises
 ; deliberately -- the scare bit set unconditionally, and the help's result comes back
-; as its value (no help installed -> terminal: the exit face prints `# a b`, show
+; as its value (no help installed -> terminal: the exit face prints `;; a b`, show
 ; forms, from the condition data stashed at the raise -- the bare data-less scare,
-; oom, prints # oom@len instead). see test/help.l. a nom not
+; oom, prints ;; oom@len instead). see test/help.l. a nom not
 ; in the `book` (the global table) is MISSING -- a call for help: reading one raises
 ; (scare 'missing nom) under an installed help (the help's result is the value); helpless
 ; it reads the zero point -- a nameless unit. the read happens where the code says it does:

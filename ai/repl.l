@@ -319,7 +319,7 @@
      (: zp (:)
         (\ s a b (? (eof? s) b (more? s) a zp)))
 
-   ; the shell's default help: a bare scare prints its condition -- # a b --
+   ; the shell's default help: a bare scare prints its condition -- ;; a b --
    ; with an honest face, then welps to the point so the session survives
    ; every raise (the answer must be a unit: a number would exponentiate under
    ; a numeral). every other status -- the more bits -- welps straight through,
@@ -327,7 +327,7 @@
    ; terminal and wears the oom banner.)
    shell-help
      (\ s a b
-        (? (scare? s) (: _ (puts "# ") _ (putx a) _ (puts " ") _ (putx b) _ (putc 10) (welp s a b))
+        (? (scare? s) (: _ (puts ";; ") _ (putx a) _ (puts " ") _ (putx b) _ (putc 10) (welp s a b))
            (welp s a b)))
 
    ; the interactive entry: install shell-help IF no help is present (the

@@ -12,7 +12,7 @@
     max-width: 52em; margin: 0 auto; padding: 2em 1em 4em;
   }
   h1 { font-size: 2.2em; font-weight: normal; letter-spacing: .04em; }
-  h1::after { content: " ♥"; color: ##8EAB12; }
+  h1::before { content: "💙 ";}
   h2 { font-size: 1.1em; font-weight: normal; color: #8b93a3;
        margin: 2.2em 0 .6em; border-bottom: 1px solid #232733; padding-bottom: .3em; }
   /* section headers are their own anchors: still headers to the eye,
@@ -85,7 +85,7 @@ an open paren continues to the next line; up and down walk history. errors print
 </p>
 <p class="dim"><code>(i love you)</code> is 1: <code>i</code> applies as the identity
 count, an unbound name reads as nothing, and nothing applies as the constant — the
-terminal shows the receipt, <span class="cnd"># missing love</span>. <code>+"love"</code>
+terminal shows the receipt, <span class="cnd">;; missing love</span>. <code>+"love"</code>
 is its net — every value here has a measure, and <code>+</code> turned inward is the
 true sum. and <code>.ev</code> is not a joke: it prints the compiler the compiler
 compiled itself into.</p>
@@ -144,9 +144,9 @@ source. the spec is <a href="CLAUDE.md">CLAUDE.md</a>; the readme is
   const drain = () => dec.decode(M.HEAPU8.subarray(optr(), optr() + olen()));
 
   if (init() !== 0) { status.textContent = 'the image failed to boot.'; return; }
-  // the shell's default help: a condition prints "# a b" and answers (), so
+  // the shell's default help: a condition prints ";; a b" and answers (), so
   // the session survives every raise -- the same law as the native shell.
-  ev("(: help (\\ s a b (? (eof? s) b (more? s) a (: _ (puts \"# \") _ (putx a) _ (puts \" \") _ (putx b) _ (putc 10) ()))))");
+  ev("(: help (\\ s a b (? (eof? s) b (more? s) a (: _ (puts \";; \") _ (putx a) _ (puts \" \") _ (putx b) _ (putc 10) ()))))");
   ev("(. ai-version)");
   const ver = drain();
   status.textContent = `ai up in ${(performance.now() - t0).toFixed(0)}ms ${ver}`;
