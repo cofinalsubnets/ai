@@ -189,11 +189,23 @@
   (iap c b) (: op (cap b) as (cup b)                       ; (iop op . args) -> inline the vm op
    (? (atomp (cup as)) (co (ana c (cap as)) (em1 op))      ; one arg
       (: s (c 'stk) k (apr2l c as) _ (pin c 'stk s) (co k (em1 op))))) ; n-ary, r2l args
+  ; falook: walk the scope chain for head's fixed arity, recorded by ale in each
+  ; enclosing let's 'far map. > 0 = a multi-arg lambda sibling of that arity; 0 = a
+  ; binding of that name that is NOT an n-ary-callable fixed-arity lambda (a value, a
+  ; single-arg lambda, or a rebind) -- it SHADOWS outer fars, so stop; -1 = not bound
+  ; in this scope, keep walking. So a saturated call to a letrec lambda sibling can take
+  ; the one-shot n-ary apply (apn/tapn) instead of currying, the same as a book global.
+  (falook c h) (?- 0 c
+   (: far (c 'far) a (? (mapp far) (peep far h -1) -1)
+    (? (< 0 a) a (= -1 a) (falook (c 'par) h) 0)))
   ; apxh: (apx nary head . args) -> apply. nary -> r2l arg eval + a single n-ary apply;
   ; else l2r 1-ary chain. kap detects tail vs non-tail by peeking the continuation.
+  ; n-ary fires for a book-global multi-arg fn (fold/napof set nary) OR a saturated call
+  ; to a letrec lambda sibling of matching arity (falook -- locals fold can't see).
   (apxh c b) (: nary (cap b) head (caup b) args (cuup b)
+              n2 (? nary 1 (&& (symp head) (: a (falook c head) (&& (< 1 a) (= (tally args) a)))))
               f (ana c head) s (c 'stk) _ (push c 'stk 0)
-              g (? nary (co (apr2l c args) (kap (tally args))) (apl2r c args))
+              g (? n2 (co (apr2l c args) (kap (tally args))) (apl2r c args))
               _ (pin c 'stk s)
             (co f g))
   (app c a b) (: f (ana c a)
@@ -328,6 +340,17 @@
    (closures prs body even) (:- (propagate 0 l l l)
     s (c 'stk)
     _ (push c 'stk 0)
+    ; far: {name -> arity} for the lambda siblings, SYNTACTIC (binder count off the
+    ; \-expr), so it's stable through the backpatch rebuild that zeroes closure cells.
+    ; only fixed-arity multi-arg lambdas (arity > 1) carry an arity; a value binding, a
+    ; single-arg lambda, or a name bound twice (a rebind -- sequence law) pins 0 so a
+    ; call to it stays l2r. Pinned on q BEFORE split, so every body analysis (and weave's
+    ; re-analysis, also under q) sees it via falook.
+    (farof ps t) (?- t (twop ps)
+     (: pr (cap ps) k (cap pr) d (cup pr)
+        a (? (&& (= -1 (peep t k -1)) (lambp d)) (- (tally (cup d)) 1) 0)
+      (farof (cup ps) (pin t k (? (< 1 a) a 0)))))
+    _ (pin q 'far (farof prs (tablet 0)))
     ; split: a lambda def -> a closure via ala (paired with its name); a non-lambda
     ; binding -> just a stack slot. builds the stack layout [names..] in source order.
     (split a ps) (?
