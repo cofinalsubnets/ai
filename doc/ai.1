@@ -46,7 +46,7 @@ interactive read-eval-print loop when standard input is a terminal, and
 otherwise reads and evaluates standard input to end of file.
 .SH OPTIONS
 .TP
-.BI \-l " lib"
+.BI \-r " lib"
 Load
 .I lib
 (read-eval it to end of file) before processing the remaining arguments. May be
@@ -73,7 +73,7 @@ Load a library, then run a script:
 .PP
 .RS
 .EX
-ai \-l lib.l prog.l
+ai \-r lib.l prog.l
 .EE
 .RE
 .PP
