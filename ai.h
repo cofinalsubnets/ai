@@ -125,10 +125,11 @@ struct ai {
   void (*fn)(void *);
   struct ai_fz *next; } *fz;
  union { uintptr_t t0; ai_word *cp; };
- void *(*malloc)(struct ai*, size_t),
-      (*free)(struct ai*, void*);
+ void *(*alloc)(struct ai*, void*, size_t);  // alloc(g,p,n): n>0 reserve n bytes (p ignored), n==0 free p; -> block or NULL
  uintptr_t b;
- uintptr_t n_gc, max_len, max_heap; // gc instrumentation (cycles, peak pool len, peak live heap; words)
+#ifdef AI_STAT
+ uintptr_t n_gc, max_len, max_heap; // gc instrumentation (cycles, peak pool len, peak live heap; words) -- build -DAI_STAT to keep them; off, the core is 3 words leaner and gauge reports 0 for them
+#endif
  union {
   intptr_t v0;
   struct {
@@ -200,7 +201,7 @@ void ai_sleep(uintptr_t ticks); // per-frontend deep wait for at most `ticks`
 
 struct ai
  *ai_ini(void),
- *ai_ini_m(void*(*)(struct ai*, size_t), void(*)(struct ai*,void*)),
+ *ai_ini_m(void*(*)(struct ai*, void*, size_t)),
  *ai_ini_s(void*, uintptr_t),
  *ai_evals_(struct ai*, const char*),
  *ai_defn(struct ai*, struct ai_def const*, uintptr_t);

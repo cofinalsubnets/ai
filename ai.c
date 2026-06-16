@@ -654,7 +654,7 @@ enum ai_status ai_fin(struct ai *g) {
  enum ai_status s = ai_code_of(g);
  if ((g = ai_core_of(g))) {
    for (struct ai_fz *fz = g->fz; fz; fz->fn(fz->p), fz = fz->next); // run finalizers
-   g->free(g, g->pool); }
+   g->alloc(g, g->pool, 0); }
  return s; }
 
 struct ai *ai_defn(struct ai*g, struct ai_def const*defs, uintptr_t n) {
@@ -720,10 +720,10 @@ char const *ai_nif_name(intptr_t x) {
  for (uintptr_t i = 0; i < countof(def1); i++) if (def1[i].x == x) return def1[i].n;
  return 0; }
 
-static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*ma)(struct ai*, size_t), void (*fr)(struct ai*, void*)) {
+static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, void*, size_t)) {
  memset(g, 0, sizeof(struct ai));
  g->ap = lvm_sym;                      // () IS the core: its first word is an ap (a nameless point; no code/nom to read)
- g->len = len0, g->pool = (void*) g, g->malloc = ma, g->free = fr;
+ g->len = len0, g->pool = (void*) g, g->alloc = al;
  g->scare_a = g->scare_b = nil;        // v0..end is GC-walked: raw 0 is not a value
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = ai_clock();
  // book + macro maps (lookup-lambdas) then the main task text.
@@ -777,21 +777,19 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*ma)(struct ai*, 
  }
  return g; }
 
-struct ai *ai_ini_m(void *(*ma)(struct ai*, size_t), void (*fr)(struct ai*, void*)) {
+struct ai *ai_ini_m(void *(*al)(struct ai*, void*, size_t)) {
  uintptr_t const len0 = 1 << 10;
- struct ai *g = ma(NULL, 2 * len0 * sizeof(word));
- return g == NULL ? encode(g, ai_status_scare) : ai_ini_0(g, len0, ma, fr); }
+ struct ai *g = al(NULL, NULL, 2 * len0 * sizeof(word));
+ return g == NULL ? encode(g, ai_status_scare) : ai_ini_0(g, len0, al); }
 
-static void *ai_no_malloc(struct ai*g, uintptr_t n) { return NULL; }
-static void ai_no_free(struct ai*g, void *p) { }
+static void *ai_static_alloc(struct ai*g, void *p, size_t n) { (void) g, (void) p, (void) n; return NULL; }  // fixed arena: no malloc/free
 struct ai *ai_ini_s(void *mem, uintptr_t nbytes) {
  uintptr_t len0 = nbytes / (2 * sizeof(word));
  return len0 <= Width(struct ai) ? encode(mem, ai_status_scare) :
-   ai_ini_0(mem, len0, ai_no_malloc, ai_no_free); }
+   ai_ini_0(mem, len0, ai_static_alloc); }
 
-static void *ai_libc_malloc(struct ai*g, size_t n) { return malloc(n); }
-static void ai_libc_free(struct ai*g, void *x) { free(x); }
-struct ai *ai_ini(void) { return ai_ini_m(ai_libc_malloc, ai_libc_free); }
+static void *ai_libc_alloc(struct ai*g, void *p, size_t n) { (void) g; return n ? malloc(n) : (free(p), NULL); }
+struct ai *ai_ini(void) { return ai_ini_m(ai_libc_alloc); }
 
 // ============================================================================
 // stack
@@ -944,8 +942,10 @@ static ai_noinline struct ai *gcg(struct ai*h, struct ai *p1, uintptr_t len1, st
  // fixpoint the same way.
  h->symbols = symbols_rebuild(h, g);
  run_finalizers(h);
+#ifdef AI_STAT
  if (h->len > h->max_len) h->max_len = h->len;                                       // instrumentation: peak pool len
  { uintptr_t heap = h->hp - h->end; if (heap > h->max_heap) h->max_heap = heap; }    // peak live (compacted) heap
+#endif
  return h; }
 
 
@@ -957,7 +957,9 @@ ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
  // find alternate pool
  struct ai *h = off_pool(g);
  g = gcg(h, g->pool, g->len, g);
+#ifdef AI_STAT
  g->n_gc += 1; // instrumentation: count one gc cycle per please
+#endif
  uintptr_t const
   v_lo = 4,
   v_hi = v_lo * v_lo,
@@ -984,11 +986,11 @@ ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
   while (len1 > 2 * req && v > v_hi);
  else return g->t0 = t2, g; // else right size -> all done
  return // allocate a new pool with target size
-  !(h = g->malloc(g, len1 * 2 * sizeof(word))) ? // if malloc fails but pool is big enough
+  !(h = g->alloc(g, NULL, len1 * 2 * sizeof(word))) ? // if malloc fails but pool is big enough
    (g->scare_a = g->scare_b = nil, // oom is the bare scare: clear any stale stash
     encode(g, req <= len0 ? ai_status_ok : ai_status_scare)) : // we can still report success
   (h = gcg(h, h, len1, g),
-   g->free(g, g->pool),
+   g->alloc(g, g->pool, 0),
    h->t0 = ai_clock(),
    h); }
 
@@ -3533,9 +3535,15 @@ lvm(lvm_gauge) {
  ini_two(si + 1, putfix(g->len), word(si + 2));
  ini_two(si + 2, putfix(Hp - ptr(g)), word(si + 3));
  ini_two(si + 3, putfix(ptr(g) + g->len - Sp), word(si + 4));
+#ifdef AI_STAT
  ini_two(si + 4, putfix(g->n_gc), word(si + 5));               // gc cycles
  ini_two(si + 5, putfix(g->max_len), word(si + 6));            // peak pool len (words)
  ini_two(si + 6, putfix(g->max_heap), nil);                    // peak live heap (words)
+#else
+ ini_two(si + 4, putfix(0), word(si + 5));                     // gc instrumentation gated off (-DAI_STAT to keep it)
+ ini_two(si + 5, putfix(0), word(si + 6));
+ ini_two(si + 6, putfix(0), nil);
+#endif
  Ip += 1;
  return Continue(); }
 
