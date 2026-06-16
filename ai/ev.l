@@ -173,7 +173,14 @@
            (napof v (cup x)) (cons apx (cons 1 x))
            (cons apx (cons 0 x))))))
    (wx x 0))
-  (ana c x) (? (symp x)  (ava c x)
+  ; a bare symbol is a variable reference -- EXCEPT the zero point, which reads as a
+  ; symp literal (the `()` a (\ _ ()) / failed parse / (L 'x) tail evaluates to).
+  ; routing it to ava treats it as a free var and captures it as a SPURIOUS import:
+  ; it inflates a closure's arity by one with no matching value applied at the ref
+  ; site -> an under-saturated partial (silently wrong). it is a constant. the test is
+  ; idp-the-zero-point, NOT nilp: boxfix's cell names are FRESH nameless mints (also
+  ; nilp) bound and referenced as real variables, so they must still reach ava.
+  (ana c x) (? (&& (symp x) (! (idp x ())))  (ava c x)
                    (atomp x) (kim x)
                    (: a (cap x) b (cup x) (?
                     (atomp b) (ana c a)

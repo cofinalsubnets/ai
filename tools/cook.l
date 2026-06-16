@@ -517,7 +517,7 @@
                 (= k 'rule)   (? on (loop rest (flushr cur rules) (mkrule c) cond)
                                     (loop rest (flushr cur rules) 0 cond))
                 (= k 'assign) (: _ (? on (do-assign as (r1 c) (r2 c) (r3 c)) 0) (loop rest (flushr cur rules) 0 cond))
-                (= k 'inc)    (? on (: more (catmap (\ ip (map classify (lines (uncont (slurp-of ip))))) (split-ws (expand (r1 c) as 0)))
+                (= k 'inc)    (? on (: more (catmap file-lines (split-ws (expand (r1 c) as 0)))
                                        (loop (cat more rest) (flushr cur rules) 0 cond))
                                     (loop rest (flushr cur rules) 0 cond))
                 ; conditionals thread `cur` (do NOT flush): a top-level rule is
@@ -532,9 +532,9 @@
                 (loop rest (flushr cur rules) 0 cond)))))
     cls 0 0 0)
 
-   ; read a file whole (for `include`); the read-and-classify is inlined at the one
-   ; `inc` call site as a fresh lambda rather than a named sibling helper here.
+   ; read a file whole (for `include`), then split it into classified lines.
    (slurp-of path) (: q (open path "r") (? q (slurp q) (: _ (fputs err (+ "cook: cannot read " path)) _ (fputc err 10) (exit 1))))
+   (file-lines ip) (map classify (lines (uncont (slurp-of ip))))
 
    ; seed make's builtin defaults (overridable by the Makefile).
    (seed-defaults as)
