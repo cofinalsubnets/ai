@@ -2410,6 +2410,28 @@ lvm(lvm_pin) { Sp[0] = putfix(ai_pin(g, Sp[0])); Ip += 1; return Continue(); }
 // ============================================================================
 // io
 // ============================================================================
+// THE ATOMIC-EDGE CONTRACT (an io_* function owns the io buffer slot).
+// A `to` string sink (struct to) GROWS its backing ai_str via str0 -> a GC, so
+// EVERY zputc to a show-string sink is a relocation point. The contract for the
+// whole io_* family: an io op that spans more than one zputc must PARK its heap
+// operand (ai_push -> g->sp) and RE-READ it across each write -- never hold a raw
+// pointer over an edge. Audited 2026-06-16, the family holds it without exception:
+//   * structural printers park + re-read: ioput_str/_sym/_two/_map/_big/_arr
+//     (e.g. ioput_two re-reads A/B(g->sp[0]) after every byte; ioput_map snapshots
+//     k/v into a fresh list under the seen-list cycle guard).
+//   * to_putc itself re-derives o = g->io (GC-traced) and copy-then-swaps the
+//     grown buffer, so the swap is atomic across its own str0 GC.
+//   * scalar decompositions (re/im, float) are read to C locals BEFORE any zputc
+//     (ioput_tuple_scalar_complex, ioput_carr_elem).
+//   * pure C-data emitters hold no heap operand, so need no park: ioputcs/ioputn/
+//     ioprintf (integer + char formats only -- no %s).
+//   * lvm edges Pack/Unpack and re-read bytes each step (lvm_dot/_fputs/_fputc),
+//     zflush at the close; a scare mid-print stops cleanly (ai_ok gates).
+//   * the reader half is symmetric: ioread1op/ioparse keep the partial parse in
+//     parked sp slots and re-read the growing buffer (grbufg/str0) after each GC.
+// The lam_* lambda-canonicalization helpers are PURE (no io, no buffer): they
+// cannot open an edge, and lam_canon reserves its cells up front (alloc-free
+// rebuild), so even ioput_fn_body -> lam_canon keeps the surrounding op atomic.
 static ai_inline bool iop(word x) { return lamp(x) && cell(x)->ap == lvm_port_io; }
 static ai_inline struct ai_port_vt const *port_vt(word fd_tagged) {
  intptr_t fd = getfix(fd_tagged);
