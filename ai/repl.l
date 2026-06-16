@@ -205,7 +205,7 @@
         _ (? (< 0 col) (do (putc 27) (putc 91) (putn col) (putc 67)) 0)
         (fflush out))
 
-   ps1 ";;; "
+   ps1 "> "
 
    ; print the prompt, then dispatch events until ^D or until enter
    ; at end-of-buffer with the buffer fully parsed. enter always
@@ -286,7 +286,7 @@
    (do_eval v)
      (: pid (spawn ev v)
         (poll _)
-          (? (done? pid) (: r (wait pid) _ (puts ";; ") _ (putx r) -1)   ; the answer, faced -- reads as a comment
+          (? (done? pid) (: r (wait pid) _ (putx r) -1)   ; the answer
              (key? 0)    (: c (getc 0)
                             (? (= c 3) (do (puts "^C") (hush pid) -1)
                                (poll 0)))
@@ -337,6 +337,7 @@
    ; keep the helpless (terminal) law.
    (shell _)
      (: _ (? (ev (\ help)) 0 (ev (list (\ :) (\ help) shell-help)))
+        _ (puts (";; ai " + ai-version + "\n"))
         (repl 0 0)))
 
 ; charms: the global character construction -- the LAZY charlist. a charm is

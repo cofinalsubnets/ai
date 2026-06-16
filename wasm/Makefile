@@ -23,7 +23,7 @@ objs = $(host_o) $(core_o)
 # resolves data kinds by sentinel ap rather than .ai_data slot index).
 # It must be its own include dir, NOT ".": emcc deprioritizes the compiler's
 # cwd in the <...> search path, which would let ../data.h win instead.
-CFLAGS = -std=gnu2x -Os -g0 -Dai_tco=0 \
+CFLAGS = -std=gnu2x -O2 -g0 -Dai_tco=0 \
   -Wall -Wno-unused-parameter -Wno-shift-negative-value \
   -fno-exceptions \
   -Iinc -I.. -I../out/lib
@@ -43,8 +43,14 @@ all: ai.js
 ../out/lib/egg.h: ../ai/egg.l
 ../out/lib/prel.h: ../ai/prel.l
 ../out/lib/ev.h: ../ai/ev.l
-../out/lib/egg.h ../out/lib/prel.h ../out/lib/ev.h:
+../out/lib/egg.h ../out/lib/prel.h ../out/lib/ev.h ../out/lib/ai_version.h:
 	$(MAKE) -C .. out/lib/$(notdir $@)
+
+# ai.o bakes the version string (ai_version.h, via ai.c's __has_include), so
+# regenerate it through the parent (force_version) and recompile ai.o when the
+# id changes -- mirrors the host build's l.o relink. Without this the browser
+# banner (ai-version) drifts to whatever revision ai.o was last built at.
+$(o)/ai.o: ../out/lib/ai_version.h
 
 # Link step: emcc's link is multi-input, so ccache can't cache it -- use
 # bare $(EMCC). EMFLAGS (MODULARIZE, exports, memory) only apply here.

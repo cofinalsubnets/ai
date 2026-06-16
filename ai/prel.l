@@ -1,3 +1,4 @@
+;;; FIXME squeeze out of this file into ev etc
 ; prel.l -- ai prel: data + function + macro definitions.
 (: id 1
    (co f g x) (f (g x))
