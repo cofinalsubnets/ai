@@ -3,7 +3,6 @@
 ;;; FIXME move ev support functions to ev where possible
 ; prel.l -- ai prel: data + function + macro definitions.
 (: id 1
-   (co f g x) (f (g x))
    (const x _) x
    (flip f x y) (f y x))
 (: macros (peep book 0 0))
@@ -14,7 +13,9 @@
    i ~(0 1) ;; FIXME up top
    z 0 r 1 c 2 o 3 ;; FIXME upcase
    non nilp  ;;; FIXME keep nilp alias but standardize on non                                   ; the normal name; !$x reads "non sat x"
+   (unip x) (= x (cap x))
    (atomp x) (nilp (twop x))
+   (co f g) (\ x (f (g x)))
    caap (co cap cap) caup (co cap cup) ;; FIXME emit pure code -- combine like operations and metaprogram a concrete thread for each definition
    cuap (co cup cap) cuup (co cup cup))
 ; array element-kind codes (enum g_tuple_type), named for the tier spine:
