@@ -46,7 +46,7 @@ syn keyword AiMacro && \|\| :- ?- >>= <=<
 
 " Constants: booleans (1/0), the tier-spine array element-kind codes, e pi i
 syn keyword AiConst true false e pi tau i ieee-inf ieee-nan
-syn keyword AiConst z r c o
+syn keyword AiConst Z R C O
 
 " Quoted atoms: 'foo   (' is one-operand \ = quote)
 syn match AiAtomMark "'"

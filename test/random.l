@@ -23,7 +23,7 @@
  (= 4 (alen (rng-seed 1)))
  (= 1 (arank (rng-seed 1)))
  (= (atype (rng-seed 0)) (atype (rng-seed 1)))  ; a seed's limb type is stable...
- (? w64 (= z (atype (rng-seed 1))) 1)      ; ...a Z (word-int) array on a 64-bit word (a C array on wasm)
+ (? w64 (= Z (atype (rng-seed 1))) 1)      ; ...a Z (word-int) array on a 64-bit word (a C array on wasm)
  (= 4 (alen (rng-get 0)))                  ; the global is a valid state tuple too
 
  ; --- determinism: same seed -> same sequence (global and functional) ---
@@ -63,8 +63,8 @@
 
  ; --- invalid state -> nil (rng-set / functional draws validate) ---
  (nilp (rng-set 5))
- (nilp (rng-set (arr z '(3) 0)))           ; wrong length
- (nilp (rng-set (arr r '(4) 0)))           ; wrong element type
+ (nilp (rng-set (arr Z '(3) 0)))           ; wrong length
+ (nilp (rng-set (arr R '(4) 0)))           ; wrong element type
  (nilp (rand-next 5))
  (nilp (randf-next 0))
 

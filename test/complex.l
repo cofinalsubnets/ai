@@ -109,16 +109,16 @@
 ; `get` returns a ~(re im) box; + - * / broadcast in the complex domain; `=` ->
 ; a 0/1 mask, the orderings -> nil; asum/aprod fold complex; aall/aany lift the
 ; 0+0i-is-falsy rule. (body-less `:` -> ca-* leak to global, reused in roundtrip.l)
-(: ca-z (arr c '(3) 0)                             ; zero-filled: three 0+0i
-   ca-v (arr c '(2) (L ~(1 2) ~(3 4)))        ; explicit packed pair
+(: ca-z (arr C '(3) 0)                             ; zero-filled: three 0+0i
+   ca-v (arr C '(2) (L ~(1 2) ~(3 4)))        ; explicit packed pair
    ca-a (array 3 ~(1 1) ~(2 2) ~(3 3))        ; `array` infers c from its args
    ca-r @(~(1 0) ~(0 1))                       ; `@` reader infers c too
    ca-m (array '(2 2) ~(1 0) ~(0 1) ~(2 0) ~(0 2)))  ; rank-2 complex
 
 (assert
  ; --- construction / type / shape ---
- (= 2 c)   (= c (atype ca-v))   (= c (atype ca-z))   (= c (atype ca-a))
- (= c (atype ca-r))   (= c (atype ca-m))
+ (= 2 C)   (= C (atype ca-v))   (= C (atype ca-z))   (= C (atype ca-a))
+ (= C (atype ca-r))   (= C (atype ca-m))
  (= 1 (arank ca-v))   (= 2 (alen ca-v))
  (= 2 (arank ca-m))   (= 4 (alen ca-m))
 
@@ -129,8 +129,8 @@
 
  ; --- elementwise broadcast: array (op) array ---
  (= ~(2 4) (peep (+ ca-v ca-v) 0 0))             ; (1+2i)+(1+2i) elementwise
- (aall (= ca-v (+ ca-v (arr c '(2) 0))))           ; + the zero array is identity
- (= ~(-5 10) (peep (* (arr c '(2) (L ~(1 1) ~(1 2))) ca-v) 1 0))  ; (1+2i)(3+4i)
+ (aall (= ca-v (+ ca-v (arr C '(2) 0))))           ; + the zero array is identity
+ (= ~(-5 10) (peep (* (arr C '(2) (L ~(1 1) ~(1 2))) ca-v) 1 0))  ; (1+2i)(3+4i)
  (= ~(1 2) (peep (/ (* ca-v ca-v) ca-v) 0 0))    ; (z*z)/z = z
 
  ; --- scalar broadcast: complex scalar (op) array, both orders ---
@@ -145,7 +145,7 @@
 
  ; --- `=` over complex arrays -> a 0/1 mask; orderings/% -> nil ---
  (= 1 (peep (= ca-v ca-v) 0 0))
- (= 0 (peep (= ca-v (arr c '(2) (L ~(9 9) ~(3 4)))) 0 0))
+ (= 0 (peep (= ca-v (arr C '(2) (L ~(9 9) ~(3 4)))) 0 0))
  (aall (= ca-v ca-v))
  (nilp (< ca-v ca-v))   (nilp (> ca-v ca-v))   (nilp (% ca-v ca-v))
 
@@ -157,12 +157,12 @@
 
  ; --- aall/aany lift the 0+0i-is-falsy rule ---
  (aall ca-v)
- (nilp (aall (arr c '(2) (L ~(0 0) ~(1 1)))))   ; a 0+0i element fails aall
- (sat (arr c '(2) (L ~(0 0) ~(1 1))))          ; the element sum ~(1 1) sorts positive
+ (nilp (aall (arr C '(2) (L ~(0 0) ~(1 1)))))   ; a 0+0i element fails aall
+ (sat (arr C '(2) (L ~(0 0) ~(1 1))))          ; the element sum ~(1 1) sorts positive
  (nilp (sat ca-z))
 
  ; --- abs of a complex array = the flat L2 norm over every (re, im) ---
- (= 5.0 (abs (arr c '(1) (L ~(3 4)))))          ; |3+4i| = 5
+ (= 5.0 (abs (arr C '(1) (L ~(3 4)))))          ; |3+4i| = 5
  (close ((/ 1 2) 30) (abs ca-v))                     ; sqrt(1+4+9+16)
 
  ; --- pin / nilp: the invariant (nilp x) == (= 0 (pin x)) holds here too ---

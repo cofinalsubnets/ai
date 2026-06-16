@@ -294,7 +294,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 (asum @(10 20 30))       ; 60
 (iota 3)                 ; @(0 1 2)      the z-array 0..n-1
 (inner @(1 2 3) @(4 5 6)); 32            +.x dot product
-(asum (arr z '(0) 0))    ; 0             empty reduction = the monoid unit
+(asum (arr Z '(0) 0))    ; 0             empty reduction = the monoid unit
 
 ; --- products & lists --- cons builds the product (the cartesian kind, classically the
 ; pair); cap and cup are its two projections -- the matched pair the string diagrams bend,

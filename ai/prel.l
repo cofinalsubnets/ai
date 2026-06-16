@@ -11,15 +11,15 @@
    e 2.718281828459045                          ; Euler's number; exp is (\ x (x e))
    true 1 false 0
    i ~(0 1) ;; FIXME up top
-   z 0 r 1 c 2 o 3 ;; FIXME upcase
+   Z 0 R 1 C 2 O 3                              ; array element-kind codes (the tier spine)
    non nilp  ;;; FIXME keep nilp alias but standardize on non                                   ; the normal name; !$x reads "non sat x"
    (unip x) (= x (cap x))
    (atomp x) (nilp (twop x))
    (co f g) (\ x (f (g x)))
    caap (co cap cap) caup (co cap cup) ;; FIXME emit pure code -- combine like operations and metaprogram a concrete thread for each definition
    cuap (co cup cap) cuup (co cup cup))
-; array element-kind codes (enum g_tuple_type), named for the tier spine:
-; z integers, r reals, c packed complex, o objects -- one word per element.
+; array element-kind codes (enum g_vec_type), named for the tier spine:
+; Z integers, R reals, C packed complex, O objects -- one word per element.
 ; the imaginary unit: complex values are written e.g. (+ 2 (* 3 i))
 ; the bare ~ digraph (~x, ~ not before `(`) reads as (conj x): conj LIFTS now, so
 ; it IS the monadic wave -- a real r -> ~(r 0), a complex z -> ~(re -im), an
@@ -468,7 +468,7 @@
 (: uq (\ x x))                                               ; stray ,x evaluates x
 
 ; --- array element-type inference + shape coercion (shared by `tuple` and `array`).
-; a-type: the element type code, the highest of {z=0 < r=1 < c=2 < o=3} present
+; a-type: the element type code, the highest of {Z=0 < R=1 < C=2 < O=3} present
 ; in a list of values -- a box still fits z; a complex value lifts to a packed
 ; (re,im) `c` array; only a value past the real numeric tower (bignum, symbol,
 ; string, nested array, …) lifts the whole array to an object (o) array.
@@ -479,7 +479,7 @@
 ; means rank-1 length 3, (array ~(3 4) …) length 5).
 (: (a-rank x) (? (flop x) 1 (| (fixp x) (widep x)) 0 (comp x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
-   (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) z (= k 1) r (= k 2) c o))
+   (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) Z (= k 1) R (= k 2) C O))
    (a-dim d) (? (twop d) (tally d) (sat d))
    (a-shape s) (? (twop s) (map a-dim s) (L (a-dim s))))
 

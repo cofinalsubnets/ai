@@ -144,7 +144,7 @@
 ; fz-arrpair draws two z vectors of the same random length so elementwise ops line up.
 (: fz-arrpair (fz-bind (fz-int 1 6) (\ n (\ st
     (: a ((fz-rep n fz-elem) st) b ((fz-rep n fz-elem) (cup a))
-       (cons (L (arr z (L n) (cap a)) (arr z (L n) (cap b))) (cup b)))))))
+       (cons (L (arr Z (L n) (cap a)) (arr Z (L n) (cap b))) (cup b)))))))
 (assert
  (fz-ok 250 40 fz-arrpair (\ v (aall (= (+ (cap v) (caup v)) (+ (caup v) (cap v))))))  ; + commutes
  (fz-ok 250 41 fz-arrpair (\ v (aall (= (* (cap v) (caup v)) (* (caup v) (cap v))))))  ; * commutes
