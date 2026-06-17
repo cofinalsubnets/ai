@@ -28,7 +28,7 @@ syn keyword AiFunc nump intp powg num-ap numfn randint net prod neg recip frac b
 syn keyword AiFunc chainp strp symp mapp lamp hotp packp bigp widep arrp comp flop fixp nilp non atomp unip gemp crestp
 syn keyword AiFunc arr array arank alen ashape atype asum aprod amax amin aall iota
 syn keyword AiFunc a-rank a-shape a-type a-dim
-syn keyword AiFunc string slice intern nom mint tally slurp show sip pad page
+syn keyword AiFunc string snip intern nom mint tally slurp show sip pad page
 syn keyword AiFunc tablet keys dig sat non peep pin pull buf blit missing
 syn keyword AiFunc spin peek poke seek trim
 syn keyword AiFunc fgetc fungetc feof fputc fputs fputbn fputx fflush read

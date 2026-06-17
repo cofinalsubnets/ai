@@ -24,10 +24,12 @@
   (= 3 (tally (+ "ab" 0)))  (= 0 ((+ "ab" 0) 2))
   (= 0 (+ 0 0))
 
-  ; slice: an empty slice collapses to 0 (no string object is built)
-  (= 0 (slice "abc" 1 1))
-  (= 0 (slice "" 0 5))
-  (= 0 (slice 0 0 5))
+  ; snip: an empty string snip returns "" -- a string snip yields a STRING, the
+  ; closest form of nothing for this kind, not the bare floor (0). only a non-string
+  ; input (no string witness to preserve) gives 0.
+  (= "" (snip "abc" 1 1))   (strp (snip "abc" 1 1))
+  (= "" (snip "" 0 5))
+  (= 0 (snip 0 0 5))
 
   ; get: indexing the empty string returns the default
   (= 99 (peep "" 0 99))

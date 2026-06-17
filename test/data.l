@@ -34,7 +34,7 @@
      (= (* 2 (sat t)) (ln (lll t))))))
 
 (:
- (stripPrefix p s) (? (= p (slice s 0 (tally p))) (slice s (tally p) (tally s)))
+ (stripPrefix p s) (? (= p (snip s 0 (tally p))) (snip s (tally p) (tally s)))
  (lit l y n s) ((\ ss (? ss (y ss (hook l 0)) (n s))) (stripPrefix l s))
  (drop p y) (p (\ s _ (y s 0)))
  (opt p y _) (p y (\ s (y s 0)))
@@ -46,8 +46,8 @@
   (= "xx" (+ "x" "x"))
   (= "xx" (+ "" "xx"))
   (= 4 (tally "slen"))
-  (= "bidden" (slice "forbidden planet" 3 9))
-  (= "all of it" (slice "all of it" -9 100))
+  (= "bidden" (snip "forbidden planet" 3 9))
+  (= "all of it" (snip "all of it" -9 100))
   ; applying a string indexes it: a byte 0..255, or 1 when out of range --
   ; matching the empty string, where ("" k) is Church-numeral k**0 == 1
   (= 104 ("hi" 0))                          ; 'h'

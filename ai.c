@@ -117,7 +117,7 @@ lvm_t lvm_kcall,
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
  // the arithmetic lane the scalar arith slow paths divert into.
  lvm_cplx, lvm_Cp, lvm_re, lvm_im, lvm_conj, lvm_abs, lvm_carg,
- lvm_bxor,  lvm_bsr,    lvm_bsl,    lvm_slice,
+ lvm_bxor,  lvm_bsr,    lvm_bsl,    lvm_snip,
  lvm_hook,   lvm_car,  lvm_cdr,    lvm_puts,
  lvm_getc,  lvm_string, lvm_lt,     lvm_le,   lvm_eq,     lvm_same, lvm_gt,  lvm_ge,
  lvm_sort,  lvm_tally,
@@ -620,7 +620,7 @@ lvm_t lvm_fault;
  _(nif_band, "&", s2(lvm_band)) _(nif_bor, "|", s2(lvm_bor)) _(nif_bxor, "^", s2(lvm_bxor))\
  _(nif_hook, "hook", s2(lvm_hook)) _(nif_car, "cap", s1(lvm_car)) _(nif_cdr, "cup", s1(lvm_cdr))\
  _(nif_sort, "sort", s1(lvm_sort)) _(nif_tally, "tally", s1(lvm_tally)) \
- _(nif_slice, "slice", s3(lvm_slice)) \
+ _(nif_snip, "snip", s3(lvm_snip)) \
  _(nif_read, "read", s2(lvm_read))\
  _(nif_string, "string", s1(lvm_string))\
  _(nif_intern, "intern", s1(lvm_intern)) _(nif_mint, "mint", s1(lvm_mint))\
@@ -3903,7 +3903,7 @@ struct ai *ai_strof(struct ai *g, char const *cs) {
  return g; }
 
 op11(lvm_strp, strp(Sp[0]) ? putcharm(1) : nil)
-lvm(lvm_slice) {
+lvm(lvm_snip) {
  if (!strp(Sp[0])) Sp[2] = nil;
  else {
   struct ai_str *s = str(Sp[0]), *t;
@@ -3911,15 +3911,16 @@ lvm(lvm_slice) {
            j = oddp(Sp[2]) ? getcharm(Sp[2]) : 0;
   i = max(i, 0), i = min(i, (word) len(s));
   j = max(j, i), j = min(j, (word) len(s));
-  if (i == j) Sp[2] = nil;
-  else {
-   size_t req = str_type_width + b2w(j - i);
-   Have(req);
-   t = (struct ai_str*) Hp;
-   Hp += req;
-   ini_str(t, j - i);
-   memcpy(txt(t), txt(s) + i, j - i);
-   Sp[2] = (word) t; } }
+  // An empty range (i == j) builds a 0-length string "" -- a string snip returns a
+  // STRING, the closest form of nothing for this kind, not the bare floor (fixnum 0).
+  size_t req = str_type_width + b2w(j - i);
+  Have(req);
+  s = str(Sp[0]);                                // re-read post-Have (GC may have moved it)
+  t = (struct ai_str*) Hp;
+  Hp += req;
+  ini_str(t, j - i);
+  memcpy(txt(t), txt(s) + i, j - i);
+  Sp[2] = (word) t; }
  return Ip += 1, Sp += 2, Continue(); }
 
 

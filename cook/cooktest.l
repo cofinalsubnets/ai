@@ -24,7 +24,7 @@
    (mk l) (? (chainp l) (+ (cap l) (+ "\n" (mk (cup l)))) "")
    ; does string s contain the substring sub?
    (has s sub) ((: (g i) (? (> (+ i (tally sub)) (tally s)) 0
-                            (? (= sub (slice s i (+ i (tally sub)))) 1 (g (+ 1 i))))) 0)
+                            (? (= sub (snip s i (+ i (tally sub)))) 1 (g (+ 1 i))))) 0)
 
    (write-file path content) (: q (open path "w") _ (fputs q content) (close q))
    (sh cmd) (run (L "sh" "-c" cmd))

@@ -28,7 +28,7 @@
    (skip-nonws s i) (? (< i (tally s)) (? (ws?  (peep s i 0)) i (skip-nonws s (+ i 1))) i)
    ; one past the last non-ws char (0 if the line is all whitespace).
    (trim-end s) ((: (f i e) (? (< i (tally s)) (f (+ i 1) (? (ws? (peep s i 0)) e (+ i 1))) e)) 0 0)
-   (prefix? p s) (= p (slice s 0 (tally p)))
+   (prefix? p s) (= p (snip s 0 (tally p)))
    (dash? a) (&& (< 0 (tally a)) (= 45 (peep a 0 0))))
 
 ; --- line classifiers (the three vmret.py regexes, by hand) -----------
@@ -44,7 +44,7 @@
                      (? (&& (>= e (+ k 4))                 ; room for "<x>:"
                             (&& (= 58 (peep line (- e 1) 0)) ; ':' at end
                                 (= 62 (peep line (- e 2) 0)))) ; '>' before it
-                        (slice line (+ k 1) (- e 2))         ; the (.+) name
+                        (snip line (+ k 1) (- e 2))         ; the (.+) name
                         0))
                   0))))))
 
@@ -55,7 +55,7 @@
       (? (&& (> j i) (= 58 (peep line j 0)))               ; hexrun then ':'
          (: k (skip-ws line (+ j 1))
             (? (> k (+ j 1))                                ; need >=1 ws after ':'
-               (hook (slice line i j) (slice line k (tally line)))
+               (hook (snip line i j) (snip line k (tally line)))
                0))
          0)))
 
@@ -66,7 +66,7 @@
        (: ts (skip-ws text i)
           (? (< ts (tally text))
              (: te (skip-nonws text ts)
-                w  (slice text ts te)
+                w  (snip text ts te)
                 (? (any (\ p (= p w)) PREFIXES) (f te) w))
              "")))
     0))
@@ -76,15 +76,15 @@
 ; (iret/eret never match).
 (: (lower? s i) (? (< i (tally s)) (: c (peep s i 0) (? (&& (>= c 97) (<= c 122)) (lower? s (+ i 1)) 0)) 1)
    (ret-tail? r) (&& (prefix? "ret" r) (lower? r 3))
-   (retx?  m) (|| (ret-tail? m) (&& (= 108 (peep m 0 0)) (ret-tail? (slice m 1 (tally m)))))
+   (retx?  m) (|| (ret-tail? m) (&& (= 108 (peep m 0 0)) (ret-tail? (snip m 1 (tally m)))))
    (reta?  m) (|| (= m "ret") (|| (= m "retaa") (= m "retab"))))
 
 ; --- split a string on '\n' into a list of lines ---------------------
 (: (lines s)
    ((: (f start i)
        (? (< i (tally s))
-          (? (= 10 (peep s i 0)) (hook (slice s start i) (f (+ i 1) (+ i 1))) (f start (+ i 1)))
-          (? (< start i) (L (slice s start i)) 0)))
+          (? (= 10 (peep s i 0)) (hook (snip s start i) (f (+ i 1) (+ i 1))) (f start (+ i 1)))
+          (? (< start i) (L (snip s start i)) 0)))
     0 0))
 
 ; --- ELF64 symbol sizes: bound each function to its real extent -------
@@ -107,7 +107,7 @@
    BIG (* 4294967296 4294967296)                          ; 2^64: above any real address
    (parse-header-addr line)                               ; the <addr> before <name>:, as an int
      (: i (skip-ws line 0) j (skip-hex line i)
-        (? (= j i) 0 (hex->int (slice line i j))))
+        (? (= j i) 0 (hex->int (snip line i j))))
    (u8  d i) (peep d i 0)                                  ; little-endian fixed-width readers
    (u16 d i) (| (u8  d i) (<< (u8  d (+ i 1)) 8))
    (u32 d i) (| (u16 d i) (<< (u16 d (+ i 2)) 16))
@@ -161,7 +161,7 @@
     ls 0 0 BIG 0 0 0))
 
 ; --- report helpers --------------------------------------------------
-(: (basename p) ((: (f i last) (? (< i (tally p)) (f (+ i 1) (? (= 47 (peep p i 0)) (+ i 1) last)) (slice p last (tally p)))) 0 0)
+(: (basename p) ((: (f i last) (? (< i (tally p)) (f (+ i 1) (? (= 47 (peep p i 0)) (+ i 1) last)) (snip p last (tally p)))) 0 0)
    (spaces n)    (? (< 0 n) (+ " " (spaces (- n 1))) "")
    (str< a b)    ((: (f i) (? (>= i (tally a)) (< (tally a) (tally b))
                             (? (>= i (tally b)) 0

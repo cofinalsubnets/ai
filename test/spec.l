@@ -182,7 +182,7 @@
 ; --- strings, symbols & mints --- a symbol is interned; (mint 0) adjoins a fresh nameless POINT
 ; (materially empty, applies const-1); a NOM is (name . mint); () IS THE CORE -- the one
 ; true nothing (serial-0 mint, printed ()), DISTINCT from 0 and "" though all net 0;
-; absence reads it; `$` clamps the net measure, `tally` counts; slice/+/string.
+; absence reads it; `$` clamps the net measure, `tally` counts; snip/+/string.
 (assert
  (() = (:)) (symp ()) !(0 = ()) !(idp 0 '()) (0 = (intern "")) (0 = $()) !() !!$'x
  ("()" = (show ()))
@@ -198,8 +198,8 @@
     (&& (1 = (t a)) (2 = (t b)) (2 = $t)))      ; same-name noms are distinct map keys
  (97 = ("abc" 0)) (294 = $"abc") (3 = (tally "abc")) (4 = $3.9) (0 = $-3.9) (7 = $@(3 4)) (5 = (abs -5)) (5.0 = (abs @(3 4)))
  !(string 0) !!(string 1)                        ; a NUL nets nothing: the chain of nothings reaches the bytes
- !(slice (+ "a" 0) 1 2) (97 = $(+ "a" 0))        ; ... an all-NUL text IS nothing, and the NUL byte appends for free
- ("bidden" = (slice "forbidden planet" 3 9)) ("abcd" = (+ "ab" "cd")) (1 = ("hi" 9))
+ !(snip (+ "a" 0) 1 2) (97 = $(+ "a" 0))        ; ... an all-NUL text IS nothing, and the NUL byte appends for free
+ ("bidden" = (snip "forbidden planet" 3 9)) ("abcd" = (+ "ab" "cd")) (1 = ("hi" 9))
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))
  ("\"a\\nb\"" = (show "a\nb")) ("(mint 0)" = (show (mint 0))))
 

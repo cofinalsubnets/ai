@@ -10,7 +10,7 @@
    (has? s t) (< -1 (idx s t))
    (bol s i)  (? (< i 1) 0 (? (= 10 (peep s (- i 1) 0)) i (bol s (- i 1))))
    (eol s i)  (? (>= i (tally s)) i (? (= 10 (peep s i 0)) i (eol s (+ 1 i))))
-   (lineof s t) (: i (idx s t) (? (< i 0) "" (slice s (bol s i) (eol s i)))))
+   (lineof s t) (: i (idx s t) (? (< i 0) "" (snip s (bol s i) (eol s i)))))
 
 (: a    (cup argv)
    iso  (cap a)

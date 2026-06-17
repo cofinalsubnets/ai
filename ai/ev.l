@@ -41,7 +41,7 @@
             hook cap cup caap caup cuap cuup
             dig lidx assq memq last rev cat
             fixp symp chainp mapp lamp strp nilp flop comp atomp
-            slice string
+            snip string
             re im conj arg real wave
             sin cos log pow))
    pureset (foldl (\ t s (: v (book s) (? v (pin t v 1) t))) (tablet 0) names)

@@ -342,7 +342,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; max(0, ceil(net)): a string's CHARM SUM, a symbol's spelling sum, a number's own value
 ; ($-3.9 = 0), a list's or array's element sum -- so $ and abs diverge ((abs -5) = 5 but
 ; $-5 = 0, and $@(3 4) = 7 where (abs @(3 4)) is the norm 5). the count is tally.
-; slice takes a half-open slice; + concatenates ("" is the identity; scat is gone); string
+; snip takes a half-open snip; + concatenates ("" is the identity; scat is gone); string
 ; coerces; \n escapes.
 ; demo:
 ()                   ; 0           nothing's plain spelling; (intern "") ; 0

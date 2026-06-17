@@ -288,7 +288,7 @@
       _ (pin HELPC () 0)
       r))
 
-; --- UniMath Foundations PartA, the core slice: every name is the original.
+; --- UniMath Foundations PartA, the core snip: every name is the original.
 (assert
  (defn 'idfun '(pi T UU (pi x T T)) '(lam T (lam x x)))
  (defn 'funcomp

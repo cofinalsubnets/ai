@@ -208,14 +208,14 @@
    ; -- the combinators --
    eps (\ s y n (y s 0))
    (lit l) (\ s y n
-      (? (&& (<= (tally l) (tally s)) (= l (slice s 0 (tally l))))
-         (y (slice s (tally l) (tally s)) (L l)) (n s)))
+      (? (&& (<= (tally l) (tally s)) (= l (snip s 0 (tally l))))
+         (y (snip s (tally l) (tally s)) (L l)) (n s)))
    (one p) (\ s y n
       (? (&& (< 0 (tally s)) (p (s 0)))
-         (y (slice s 1 (tally s)) (L (s 0))) (n s)))
+         (y (snip s 1 (tally s)) (L (s 0))) (n s)))
    (span p) (\ s y n
       (: i ((: (g j) (? (&& (< j (tally s)) (p (s j))) (g (+ 1 j)) j)) 0)
-         (y (slice s i (tally s)) (L (slice s 0 i)))))
+         (y (snip s i (tally s)) (L (snip s 0 i)))))
    (alt a b) (\ s y n (a s y (\ _ (b s y n))))
    (seq a b) (\ s y n (a s (\ s1 p1 (b s1 (\ s2 p2 (y s2 (cat p1 p2))) n)) n))
    (seqs l) (foldr seq eps l)
@@ -235,16 +235,16 @@
    (notcolon c) (&& (! (chws c)) (! (= c 58)))
    (anyc c)     1
    (ltrim s) (: i ((: (g j) (? (&& (< j (tally s)) (chws (s j))) (g (+ 1 j)) j)) 0)
-               (slice s i (tally s)))
+               (snip s i (tally s)))
    (rtrim s) (: i ((: (g j) (? (&& (< 0 j) (chws (s (- j 1)))) (g (- j 1)) j)) (tally s))
-               (slice s 0 i))
+               (snip s 0 i))
    (trim s)  (rtrim (ltrim s))
    (findc s i ch) (? (>= i (tally s)) i (? (= (s i) ch) i (findc s (+ 1 i) ch)))
    (split-ws s)
    ((: (g i st acc)
-       (? (>= i (tally s)) (rev (? (< st i) (hook (slice s st i) acc) acc))
+       (? (>= i (tally s)) (rev (? (< st i) (hook (snip s st i) acc) acc))
           (? (chws (s i))
-             (g (+ 1 i) (+ 1 i) (? (< st i) (hook (slice s st i) acc) acc))
+             (g (+ 1 i) (+ 1 i) (? (< st i) (hook (snip s st i) acc) acc))
              (g (+ 1 i) st acc))))
     0 0 0)
 
@@ -257,20 +257,20 @@
     0 "")
    (lines s)
    ((: (g i st acc)
-       (? (>= i (tally s)) (rev (hook (slice s st i) acc))
-          (? (= (s i) 10) (g (+ 1 i) (+ 1 i) (hook (slice s st i) acc))
+       (? (>= i (tally s)) (rev (hook (snip s st i) acc))
+          (? (= (s i) 10) (g (+ 1 i) (+ 1 i) (hook (snip s st i) acc))
              (g (+ 1 i) st acc))))
     0 0 0)
 
    ; -- string utilities for the make layer --
    (findc-ws s i) (? (>= i (tally s)) i (? (chws (s i)) i (findc-ws s (+ 1 i))))
-   (first-word s) (slice s 0 (findc-ws s 0))
-   (after-word s) (ltrim (slice s (findc-ws s 0) (tally s)))
+   (first-word s) (snip s 0 (findc-ws s 0))
+   (after-word s) (ltrim (snip s (findc-ws s 0) (tally s)))
    (nth l i d) (? (chainp l) (? (= 0 i) (cap l) (nth (cup l) (- i 1) d)) d)
    (lastl l) (? (chainp (cup l)) (lastl (cup l)) (cap l))
-   ; an empty slice (start>=end) yields the zero point 0, not "" -- and (+ 0 str)
-   ; prepends a NUL byte (the byte law). `sub` is the empty-safe slice: "" for empty.
-   (sub s a b) (? (< a b) (slice s a b) "")
+   ; an empty snip (start>=end) yields the zero point 0, not "" -- and (+ 0 str)
+   ; prepends a NUL byte (the byte law). `sub` is the empty-safe snip: "" for empty.
+   (sub s a b) (? (< a b) (snip s a b) "")
    ; strip a make comment (an unescaped #) from a NON-recipe line; \# is a literal #.
    (strip-comment l)
    ((: (g i acc)
@@ -287,11 +287,11 @@
    ; static-pattern colon).
    (splittop s ch)
    ((: (g i depth st acc)
-       (? (>= i (tally s)) (rev (hook (slice s st i) acc))
+       (? (>= i (tally s)) (rev (hook (snip s st i) acc))
           (: c (s i)
              (? (|| (= c 40) (= c 123)) (g (+ 1 i) (+ 1 depth) st acc)
                 (|| (= c 41) (= c 125)) (g (+ 1 i) (- depth 1) st acc)
-                (&& (= c ch) (= depth 0)) (g (+ 1 i) depth (+ 1 i) (hook (slice s st i) acc))
+                (&& (= c ch) (= depth 0)) (g (+ 1 i) depth (+ 1 i) (hook (snip s st i) acc))
                 (g (+ 1 i) depth st acc)))))
     0 0 0 0)
 
@@ -313,8 +313,8 @@
    ((: (g i sil ign)
        (? (&& (< i (tally s)) (|| (chws (s i)) (|| (= (s i) 64) (|| (= (s i) 45) (= (s i) 43)))))
           (g (+ 1 i) (|| sil (= (s i) 64)) (|| ign (= (s i) 45)))
-          (hook sil (hook ign (slice s i (tally s)))))) 0 0 0)
-   (recipe-parse l) (parse-mods (slice l 1 (tally l)))   ; drop the leading tab, then the modifier run
+          (hook sil (hook ign (snip s i (tally s)))))) 0 0 0)
+   (recipe-parse l) (parse-mods (snip l 1 (tally l)))   ; drop the leading tab, then the modifier run
    (classify l)
    (? (recipep l) (L 'recipe (recipe-parse l))
       (: t (strip-comment l) tt (trim t)
@@ -365,10 +365,10 @@
    (pmatch pat s)
    (: pi (findc pat 0 37)
       (? (>= pi (tally pat)) (? (= pat s) (L "") ())
-         (: pre (slice pat 0 pi) suf (slice pat (+ 1 pi) (tally pat))
+         (: pre (snip pat 0 pi) suf (snip pat (+ 1 pi) (tally pat))
             lp (tally pre) ls (tally suf) ls2 (tally s)
-            (? (&& (>= ls2 (+ lp ls)) (&& (= pre (slice s 0 lp)) (= suf (slice s (- ls2 ls) ls2))))
-               (L (slice s lp (- ls2 ls))) ()))))
+            (? (&& (>= ls2 (+ lp ls)) (&& (= pre (snip s 0 lp)) (= suf (snip s (- ls2 ls) ls2))))
+               (L (snip s lp (- ls2 ls))) ()))))
    (haspct t) (< (findc t 0 37) (tally t))
    (matchany pats w) (any (\ p (chainp (pmatch p w))) pats)
 
@@ -381,7 +381,7 @@
       (join " " (map (\ w (patsub frm to w)) (split-ws v))))
 
    ; -- function helpers --
-   (chomp s) ((: (g i) (? (&& (< 0 i) (= (s (- i 1)) 10)) (g (- i 1)) (slice s 0 i))) (tally s))
+   (chomp s) ((: (g i) (? (&& (< 0 i) (= (s (- i 1)) 10)) (g (- i 1)) (snip s 0 i))) (tally s))
    (nl->sp s) ((: (g i acc) (? (>= i (tally s)) acc (g (+ 1 i) (+ acc (? (= (s i) 10) 32 (s i)))))) 0 "")
    (fn-shell cmd) (: r (run (L "sh" "-c" cmd)) (? (chainp r) (nl->sp (chomp (cup r))) ""))
    ; $(wildcard): shell out so glob + no-match (nullglob via [ -e ]) are POSIX.
@@ -444,8 +444,8 @@
    ; ($(VAR:from=to)), or a plain variable ($(VAR)).
    (eval-group body as d)
    (: sp (findws body)
-      (? (&& (< sp (tally body)) (funcp (slice body 0 sp)))
-         (apply-func (slice body 0 sp) (ltrim (slice body (+ 1 sp) (tally body))) as d)
+      (? (&& (< sp (tally body)) (funcp (snip body 0 sp)))
+         (apply-func (snip body 0 sp) (ltrim (snip body (+ 1 sp) (tally body))) as d)
          (: eb (expand body as (+ 1 d)) ci (findc eb 0 58)
             (? (< ci (tally eb)) (subst-ref eb as d) (expand (peep as eb "") as (+ 1 d))))))
 
@@ -460,10 +460,10 @@
                 (: nx (s (+ 1 i))
                    (? (|| (= nx 40) (= nx 123))
                       (: close (? (= nx 40) 41 125) j (findclose s (+ 2 i) nx close)
-                         (g (+ 1 j) (+ acc (eval-group (slice s (+ 2 i) j) as d))))
+                         (g (+ 1 j) (+ acc (eval-group (snip s (+ 2 i) j) as d))))
                       (= nx 36) (g (+ 2 i) (+ acc 36))
                       (|| (namech nx) (|| (= nx 64) (|| (= nx 60) (|| (= nx 94) (= nx 42)))))
-                      (g (+ 2 i) (+ acc (expand (peep as (slice s (+ 1 i) (+ 2 i)) "") as (+ 1 d))))
+                      (g (+ 2 i) (+ acc (expand (peep as (snip s (+ 1 i) (+ 2 i)) "") as (+ 1 d))))
                       (g (+ 1 i) (+ acc (s i)))))
                 (g (+ 1 i) (+ acc (s i))))))
        0 ""))
@@ -481,11 +481,11 @@
                           (\ _ (sh-line (cap raw) (cap (cup raw)) cmd))))) raws))
 
    ; -- conditionals & assignment ops over the variable table `as` --
-   (unquote-str s) (? (&& (>= (tally s) 2) (|| (= (s 0) 34) (= (s 0) 39))) (slice s 1 (- (tally s) 1)) s)
+   (unquote-str s) (? (&& (>= (tally s) 2) (|| (= (s 0) 34) (= (s 0) 39))) (snip s 1 (- (tally s) 1)) s)
    (cond-args rest)            ; ifeq/ifneq REST -> (arg1 . arg2)
    (: t (trim rest)
       (? (&& (< 0 (tally t)) (= (t 0) 40))
-         (: cl (findclose t 1 40 41) parts (splittop (slice t 1 cl) 44)
+         (: cl (findclose t 1 40 41) parts (splittop (snip t 1 cl) 44)
             (hook (? (chainp parts) (cap parts) "") (? (chainp (cup parts)) (cap (cup parts)) "")))
          (: ws (map unquote-str (split-ws t))
             (hook (? (chainp ws) (cap ws) "") (? (chainp (cup ws)) (cap (cup ws)) "")))))
@@ -642,8 +642,8 @@
 
    ; is a recipe-file path named like a Makefile? then cook reads it as one.
    (mk-lastslash p) ((: (g j) (? (< 0 j) (? (= (p (- j 1)) 47) j (g (- j 1))) 0)) (tally p))
-   (mk-base p) (slice p (mk-lastslash p) (tally p))
-   (mk-ends p suf) (: ls (tally suf) lp (tally p) (&& (<= ls lp) (= suf (slice p (- lp ls) lp))))
+   (mk-base p) (snip p (mk-lastslash p) (tally p))
+   (mk-ends p suf) (: ls (tally suf) lp (tally p) (&& (<= ls lp) (= suf (snip p (- lp ls) lp))))
    (makefilep p) (: b (mk-base p)
       (|| (= b "Makefile") (|| (= b "makefile") (|| (= b "GNUmakefile") (mk-ends p ".mk")))))
 

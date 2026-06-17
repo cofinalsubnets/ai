@@ -193,7 +193,7 @@
  (poke -1 (peek 0 in) (poke -1 -4 (poke -1 -1 (poke -1 0 (poke 4 cl (spin 5))))))
  (pad _)
   (poke -1 (peek 0 in) (poke -1 -2 (poke -1 -1 (poke -1 0 (poke -1 "  " (poke 5 0 (spin 6)))))))
- (page o) (slice (peek 4 o) 0 (peek 5 o))
+ (page o) (snip (peek 4 o) 0 (peek 5 o))
  (slurp i) (: (rl i) (: c (fgetc i) (? (= c -1) 0 (hook c (rl i)))) (string (rl i)))  ; (pre-opfix: no ! here)
  (show x) (: o (pad 0) _ (fputx o x) (page o)))
 ; help status readers. a global `help` function is called as (help s a b):
@@ -280,7 +280,7 @@
    ; longest prefix of nm[i..n) that is a table key -> (len . entry), or 0
    (op-long nm i n)
     ((: (go k) (? (< k 1) 0
-                  (: e (op-ent (intern (slice nm i (+ i k))))
+                  (: e (op-ent (intern (snip nm i (+ i k))))
                      (? (chainp e) (hook k e) (go (- k 1))))))
      (- n i))
    ; factor symbol s -> a list of (name . arity) entries, or 0
@@ -302,7 +302,7 @@
    ; prefix lane -- $ ! . and live pins alike), so the table stays dynamic.
    (mono-long nm i n)
     ((: (go k) (? (< k 1) 0
-                  (: s (intern (slice nm i (+ i k)))
+                  (: s (intern (snip nm i (+ i k)))
                      e (monadics s)
                      (? (symp e) (hook k e)
                         (: o (op-ent s)
