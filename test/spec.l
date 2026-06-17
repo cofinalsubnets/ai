@@ -159,7 +159,7 @@
  (@(4 6) = @(8 12) / 2) !(arr Z '(3) 0) ("@(10 20 30)" = (show @(10 20 30)))
  (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3) 0)
  (0 = (asum (arr Z '(0) 0))) (1 = (aprod (arr Z '(0) 0))) (aall (arr Z '(0) 0))
- ("(array '(0))" = (show (arr Z '(0) 0))) (0 = (alen ((arr Z '(0) 0) + 1)))
+ ("@()" = (show (arr Z '(0) 0))) (0 = (alen ((arr Z '(0) 0) + 1)))
  (32 = (inner @(1 2 3) @(4 5 6))) (Z = (atype (outer @(1 2) @(3 4))))   ; +.x dot ; o.x outer
  (: M (inner (arr Z '(2 3) '(1 2 3 4 5 6)) (arr Z '(3 2) '(7 8 9 10 11 12)))  ; 2x2 matmul
     (&& ('(2 2) = (ashape M)) (154 = (peep M '(1 1) 0)))) !(inner @(1 2 3) @(1 2)))
@@ -203,12 +203,12 @@
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))
  ("\"a\\nb\"" = (show "a\nb")) ("(mint 0)" = (show (mint 0))))
 
-; --- hashes --- #(k v ..)/(hash ..) build, (tablet 0) the empty hash; #x boxes a datum
-; (#() = #0, the box of nothing); accessors collection-first peep/pin/pull; (t k) == (peep t k 0);
-; `missing` is the conditioned read; a hash is MUTABLE, so `=` on hashes is identity.
+; --- hashes --- #(k v ..)/(hash ..) build, (tablet 0) the empty hash; #() = the EMPTY
+; MAP (the reader emits (tablet 0); () is the zero-point, distinct from 0); #x boxes a datum;
+; accessors collection-first peep/pin/pull; (t k) == (peep t k 0); `missing` the conditioned read.
 (assert
  (: b #0 (&& (tabp b) (1 = $b) (0 = (peep b 0 9)) (: _ (pin b 0 7) (7 = (b 0)))))
- (tabp #()) (1 = $#()) !!#()                     ; #() IS #0: the box of nothing, present
+ (tabp #()) (0 = $#()) !#()                      ; #() is the empty map: 0 keys, falsy
  (: t #(1 10 2 20) (&& (20 = (peep t 2 0)) (20 = (t 2)) (99 = (peep t 9 99))))
  (10 = (missing #(1 10) 1)) (idp (:) (missing (tablet 0) 'k)) (0 = (missing #(1 0) 1))   ; missing: the conditioned read; presence beats value
  (50 = (peep (pin (tablet 0) 5 50) 5 0)) (: t #(1 10 2 20) _ (pull t 1 0) (1 = $t))
@@ -216,6 +216,19 @@
  ('(1 2) = (sort (keys #(1 10 2 20)))) ((dig 'k) = (dig 'k)) (tabp (tablet 0)) !(tabp 5)
  !(#(1 10) = #(1 10)) (: t #(1 10) (t = t))      ; mutable -> identity =
  (40 = (: t #(1 10) _ (t <- 4 40) (t -> 4 0))))  ; the infix accessors
+
+; --- the EMPTY SPELLINGS (the nothing surface) --- each kind's empty by its sigil: () the
+; chain (the zero-point, DISTINCT from the number 0), "" the string, @() the array, #() the
+; map, ~(0 0) the zero complex, (buf 0) the buffer -- all net 0 -> blue -> false. spelled via
+; 0/() too: @()/#() are the EMPTIES (the reader emits (iota 0)/(tablet 0)); @0/#0 wrap the
+; VALUE 0 (a 1-cell -> the scalar 0, a box). every nothing is a MASK; () the bare-ish floor.
+(assert
+ !() !0 !"" !@() !#() !~(0 0) !(buf 0)           ; every empty is false (blue)
+ (nilp ()) (nilp 0) !(= () 0) !(idp () 0)        ; () (zero-point) and 0 (number) are DISTINCT, both nothing
+ ("@()" = (show @())) (1 = (arank @())) (0 = (alen @())) (Z = (atype @()))  ; @() the empty array, round-trips
+ (tabp #()) (0 = $#()) ("(tablet 0)" = (show #()))   ; #() the empty map
+ (0 = @0) (nilp (arank @0))                      ; @0 wraps the VALUE 0 -> the scalar 0 (a 1-cell demotes)
+ (tabp #0) (1 = $#0) !!#0)                       ; #0 wraps the VALUE 0 -> a box (present)
 
 ; --- buffers --- (buf n) mutable zeroed bytes; peep/pin a byte 0..255; `$` nets the charms
 ; (a zeroed buf is nothing); blit; identity equality.

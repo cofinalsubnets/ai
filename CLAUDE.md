@@ -6,9 +6,11 @@
 ; this file is the NARRATIVE: the prose spec, my working notes, and runnable demonstrations --
 ; CLAUDE.md is my context file. the EXECUTABLE spec -- every claim below, assert-backed on
 ; every target -- lives in test/spec.l, a real test in the corpus (`make test` keeps it green).
-; when in doubt, this file EXPLAINS and test/spec.l PROVES; either way the way to settle a
-; doubt is to PROBE THE BINARY -- never trust a prior over a one-line experiment. the demos
-; here show results inline (`expr ; value`); spec.l asserts them.
+; the core laws are ALSO machine-checked, axiom-free, in rocq/spec.v (Rocq/Coq), wired into
+; `make test` as test_proof (+ test_gen, an auto-generated rocq/gen.v from tools/spec2coq.l).
+; when in doubt, this file EXPLAINS, test/spec.l PROVES (by assertion), and rocq/spec.v PROVES
+; (by machine-checked theorem); either way the way to settle a doubt is to PROBE THE BINARY --
+; never trust a prior over a one-line experiment. the demos show results inline (`expr ; value`).
 
 ; --- how to work here (read this first) ---
 ; * `make test` is the gate: host + the self-hosted bootstrap ai0, BOTH required to print

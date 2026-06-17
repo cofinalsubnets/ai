@@ -148,6 +148,12 @@ Proof. reflexivity. Qed.
 Theorem unit_is_const_one : forall a, vapp Pt a = Num 1.
 Proof. reflexivity. Qed.
 
+(* the nothing surface: () (the zero-point Pt) is DISTINCT from the number 0 (Num 0) --
+   a mask of nothing is a FACE, not the bare value. Both are nothing by net (the V model
+   below: Vnil and Vnum 0 both net 0); they are distinct VALUES wearing different masks. *)
+Theorem unit_neq_zero : Pt <> Num 0.
+Proof. discriminate. Qed.
+
 (* ============================================================ *)
 (* totality: no undefined behavior, up to explosion of world    *)
 (* ============================================================ *)
@@ -204,6 +210,13 @@ Qed.
 (* the saturation law: $ is nonnegative; it keeps the positive and clamps the rest *)
 Theorem sat_nonneg : forall v, 0 <= sat v.                Proof. intro v. unfold sat. lia. Qed.
 Theorem sat_keeps   : forall v, 0 < net v -> sat v = net v. Proof. intros v H. unfold sat. lia. Qed.
+
+(* the nothing surface, by net: every mask of nothing nets 0 (blue/false). The empty chain
+   () (Vnil) and the number 0 (Vnum 0) are DISTINCT values yet both nilp -- masks of one
+   nothing, not the same value. (spec.l: !() !0, !(= () 0).) *)
+Theorem nil_nothing  : nilp Vnil = true.        Proof. reflexivity. Qed.
+Theorem zero_nothing : nilp (Vnum 0) = true.    Proof. reflexivity. Qed.
+Theorem nil_neq_zero : Vnil <> Vnum 0.          Proof. discriminate. Qed.
 Theorem sat_clamps  : forall v, net v <= 0 -> sat v = 0.    Proof. intros v H. unfold sat. lia. Qed.
 
 (* the COLORS, by the order-sign of the net: green nonneg, red neg, blue the floor *)

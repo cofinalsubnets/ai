@@ -20,22 +20,23 @@
  (= (dig '(1 2)) (dig '(1 2))))
 
 ; #(…) reader macro: splices a list operand into (hash …), wraps an atom as (hash x) --
-; a BOX, #() included (() is 0, so #() IS #0). hashes print as #(…), the empty map as (tablet 0).
+; a BOX. #() reads to the EMPTY MAP directly: the reader emits (tablet 0) -- () is the
+; zero-point, distinct from 0. hashes print as #(…), the empty map as (tablet 0).
 (: ht #(1 100 2 200 3 300))
 (assert
  (tabp ht)
  (= 100 (peep ht 1 0))
  (= 300 (peep ht 3 0))
  (tabp (tablet 0))                              ; the empty hash
- !(tablet 0) !!#()                              ; (tablet 0) is empty; #() is the 0-box, present
+ !(tablet 0) !#()                               ; both the empty map (falsy); #() reads to (tablet 0)
  (= 50 (peep (pin (tablet 0) 5 50) 5 0))                ; the empty hash is mutable
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (keys #(1 10 2 20 3 30))))   ; splice builds all entries
- (= "#(0 ())" (show #()))
+ (= "(tablet 0)" (show #()))                    ; #() is the empty map
  (= "#(1 \"hi\")" (show #(1 "hi"))))
 
 ; # on a NON-LIST datum boxes it: #x = #(0 x), a fresh mutable hash pinning x
-; at 0 -- and () IS 0 (one nothing), so #() = #0: the # law has no empty
-; exception; the empty hash is (tablet 0).
+; at 0 (the number) -- distinct from #() the empty map, since () (the zero-point)
+; is NOT 0. the reader emits (tablet 0) for #() directly (the # empty exception).
 (: bx #0)
 (assert
  (tabp #0) !!#0 (= 1 $#0)                       ; a box is a nonempty 1-entry hash

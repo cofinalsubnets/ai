@@ -2783,15 +2783,14 @@ static struct ai *ioput_arr_elem(struct ai *g, uintptr_t i, uintptr_t type, uint
 static struct ai *ioput_arr(struct ai *g, uintptr_t off) {
  struct ai_vec *v = vec(g->sp[0]);
  uintptr_t rank = v->rank, type = v->type, nelem = vec_nelem(v);
- if (rank == 1 && nelem) {                             // terse rank-1: @(…)
+ if (rank == 1) {                                      // terse rank-1: @(…), empty -> @()
   g = ioputc(g, '@'); g = ioputc(g, '(');
   for (uintptr_t i = 0; ai_ok(g) && i < nelem; i++) {
    if (i) g = ioputc(g, ' ');
    g = ioput_arr_elem(g, i, type, off); }
   return ai_ok(g) ? ioputc(g, ')') : g; }
- // rank>=2 -- and the EMPTY rank-1, which has no @ spelling: (array '(0))
- // reads back to the empty array (a-type of no elements infers z, the same
- // re-inference loss every surface form accepts).
+ // rank>=2: (array '(shape) elem …) -- @ has no shape spelling yet (a-type of the
+ // printed elements re-infers the element type, the loss every surface form accepts).
  g = ioprintf(g, "(array '(");                         // (array '(shape) elem …)
  for (uintptr_t i = 0; ai_ok(g) && i < rank; i++) {
   if (i) g = ioputc(g, ' ');
@@ -3474,10 +3473,24 @@ static struct ai *ioparse(struct ai *g, bool multi) {
     g->sp[1] = g->sp[0], g->sp++;
     return g; }
    if (symp(A(g->sp[1]))) {                            // reader-macro wrap, pop the wrap frame
-    if (splicesym(A(g->sp[1])) &&
+    bool emptyd = g->sp[0] == (word) ai_core_of(g);     // datum is the () zero-point (NOT the number 0)
+    // @()/#() -> the DIRECT one-arg empty-collection nif, (iota 0) / (tablet 0). A one-arg nif
+    // call is ai0-safe; a ZERO-ARG macro (tuple)/(hash) is NOT expanded by the self-hosted wev,
+    // so @()->( tuple)->(ltuple (list)) would strand a macro value on ai0. The nif sidesteps it.
+    char const *empty_ctor = !emptyd ? 0
+                           : hashsym(A(g->sp[1])) ? "tablet"          // #() -> empty map
+                           : symeq(A(g->sp[1]), "tuple", 5) ? "iota"  // @() -> empty z-array
+                           : 0;
+    if (empty_ctor) {
+     g->sp[0] = putcharm(0);                            // the ignored arg (0; the pervasive convention)
+     g = gxr(ai_push(g, 1, nil));                       // (0 . nil)
+     if (ai_ok(g)) g = intern(ai_strof(g, empty_ctor)); // push the ctor symbol
+     g = gxl(g);                                        // (ctor . (0)) = (ctor 0)
+     if (ai_ok(g)) g->sp[1] = B(g->sp[1]); }
+    else if (splicesym(A(g->sp[1])) &&
         (chainp(g->sp[0]) ||
-         (nilp(g->sp[0]) && !hashsym(A(g->sp[1]))))) { // @()/@0 splice empty; #()/#0 wrap (a box)
-     g = gxl(ai_push(g, 1, A(g->sp[1])));               // #(k v …)/@(e …)/@() : splice -> (sym . d)
+         (emptyd && !hashsym(A(g->sp[1]))))) {          // #(k v …)/@(e …); empty wave/list still splice
+     g = gxl(ai_push(g, 1, A(g->sp[1])));               // splice -> (sym . d)
      if (ai_ok(g)) g->sp[1] = B(g->sp[1]); }
     else {                                             // 'x `x ,x  #x %atom/@atom -> (wrapsym d)
      g = gxr(ai_push(g, 1, nil));                       // (d . nil)

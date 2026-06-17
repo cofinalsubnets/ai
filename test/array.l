@@ -169,7 +169,7 @@
 ; their monoid UNITS: the floor appears as the values of empty reductions.
 (: e (arr Z '(0) 0)
  (assert
-  ("(array '(0))" = (show e)) ('(0) = (ashape e)) (1 = (arank e)) (0 = (alen e))
+  ("@()" = (show e)) ('(0) = (ashape e)) (1 = (arank e)) (0 = (alen e))   ; empty rank-1 prints @()
   (0 = (asum e)) (1 = (aprod e)) (aall e)        ; the units: empty sum 0, empty product 1, empty conjunction true
   !e (0 = $e)                                    ; an empty nets nothing
   (0 = (alen (e + e))) (0 = (alen (e * 2))) (0 = (alen (1 + e)))
@@ -179,5 +179,5 @@
   (0 = (alen ((arr Z '(1) '(5)) + e)))           ; a 1-axis broadcasts to 0, not 1
   (-1 = (peep e 0 -1))                           ; out of bounds -> the default
   ('(0 3) = (ashape ((arr R '(0 3) 0) + 1)))     ; rank-2 empties keep their shape
-  (: rt (ev '(array '(0)))                       ; the printed form reads back
+  (: rt @()                                      ; the printed form (@()) reads back
      (&& (0 = (alen rt)) ('(0) = (ashape rt)) (Z = (atype rt))))))
