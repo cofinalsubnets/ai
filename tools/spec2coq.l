@@ -122,7 +122,7 @@
    (tkq q) (? (symp q) "Vsym" (chainp q) "Vpair" (fixp q) "Vz" "Vbot")   ; the quoted datum's kind
    (kpred h) (? (idp h 'fixp) "fixp" (idp h 'flop) "flop" (idp h 'comp) "comp"
                 (idp h 'strp) "strp" (idp h 'symp) "symp" (idp h 'chainp) "chainp"
-                (idp h 'mapp) "mapp" (idp h 'arrp) "arrp" (idp h 'nump) "nump"
+                (idp h 'tabp) "tabp" (idp h 'arrp) "arrp" (idp h 'nump) "nump"
                 (idp h 'intp) "intp" (idp h 'atomp) "atomp" (idp h 'packp) "packp"
                 (idp h 'lamp) "lamp" 0)
    ; cross-kind ORDER: number<string<symbol<chain<map by band; same band stays value/lex
@@ -206,7 +206,7 @@
      "Definition strp  v := match v with Vstr => true | _ => false end." (string 10)
      "Definition symp  v := match v with Vsym => true | _ => false end." (string 10)
      "Definition chainp  v := match v with Vpair=> true | _ => false end." (string 10)
-     "Definition mapp  v := match v with Vmap => true | _ => false end." (string 10)
+     "Definition tabp  v := match v with Vmap => true | _ => false end." (string 10)
      "Definition arrp  v := match v with Varr => true | _ => false end." (string 10)
      "Definition intp  v := match v with Vz   => true | _ => false end." (string 10)
      "Definition nump  v := match v with Vz|Vflo|Vcx|Varr => true | _ => false end." (string 10)

@@ -40,7 +40,7 @@
             idp gcd modpow inc dec abs
             hook cap cup caap caup cuap cuup
             dig lidx assq memq last rev cat
-            fixp symp chainp mapp lamp strp nilp flop comp atomp
+            fixp symp chainp tabp lamp strp nilp flop comp atomp
             snip string
             re im conj arg real wave
             sin cos log pow))
@@ -203,7 +203,7 @@
   ; in this scope, keep walking. So a saturated call to a letrec lambda sibling can take
   ; the one-shot n-ary apply (apn/tapn) instead of currying, the same as a book global.
   (falook c h) (?- 0 c
-   (: far (c 'far) a (? (mapp far) (peep far h -1) -1)
+   (: far (c 'far) a (? (tabp far) (peep far h -1) -1)
     (? (< 0 a) a (= -1 a) (falook (c 'par) h) 0)))
   ; apxh: (apx nary head . args) -> apply. nary -> r2l arg eval + a single n-ary apply;
   ; else l2r 1-ary chain. kap detects tail vs non-tail by peeking the continuation.

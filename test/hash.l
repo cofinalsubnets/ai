@@ -2,7 +2,7 @@
 (: t (hash 1 100 2 200 3 300))
 (assert
  ; the constructor builds a working hash
- (mapp t) (nilp (mapp 5)) (nilp (mapp '(1 2)))   ; mapp: only maps, not fixnums/lists
+ (tabp t) (nilp (tabp 5)) (nilp (tabp '(1 2)))   ; tabp: only maps, not fixnums/lists
  (lamp t) (lamp cap) (nilp (lamp 5)) (nilp (lamp 0))  ; lamp: any heap object, not a fixnum/nil
  (= 100 (peep t 1 0))
  (= 200 (peep t 2 0))
@@ -23,10 +23,10 @@
 ; a BOX, #() included (() is 0, so #() IS #0). hashes print as #(…), the empty map as (tablet 0).
 (: ht #(1 100 2 200 3 300))
 (assert
- (mapp ht)
+ (tabp ht)
  (= 100 (peep ht 1 0))
  (= 300 (peep ht 3 0))
- (mapp (tablet 0))                              ; the empty hash
+ (tabp (tablet 0))                              ; the empty hash
  !(tablet 0) !!#()                              ; (tablet 0) is empty; #() is the 0-box, present
  (= 50 (peep (pin (tablet 0) 5 50) 5 0))                ; the empty hash is mutable
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (keys #(1 10 2 20 3 30))))   ; splice builds all entries
@@ -38,7 +38,7 @@
 ; exception; the empty hash is (tablet 0).
 (: bx #0)
 (assert
- (mapp #0) !!#0 (= 1 $#0)                       ; a box is a nonempty 1-entry hash
+ (tabp #0) !!#0 (= 1 $#0)                       ; a box is a nonempty 1-entry hash
  (= 0 (peep bx 0 9))                            ; the boxed value sits at key 0 (the number, not the empty)
  (= 9 (: _ (pin bx 0 9) (peep bx 0 0)))         ; ... and is mutable in place
  (= 5 (peep #5 0 0)) (= "s" (peep #"s" 0 0))    ; any scalar boxes (at key 0)

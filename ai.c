@@ -112,7 +112,7 @@ lvm_t lvm_kcall,
  lvm_putn, lvm_gauge,    lvm_clock,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_intern, lvm_chainp,
  lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_call, lvm_call2, lvm_toast, lvm_toasted,
- lvm_fixp,  lvm_symp,   lvm_strp,   lvm_mapp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
+ lvm_fixp,  lvm_symp,   lvm_strp,   lvm_tabp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
  lvm_sin, lvm_cos, lvm_log, lvm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not nifs
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
  // the arithmetic lane the scalar arith slow paths divert into.
@@ -197,7 +197,7 @@ static ai_inline bool toastp(word _) { return lamp(_) && cell(_)->ap == lvm_toas
 // out-of-pool address gcp leaves untouched, never a legal key and never read as
 // a terminator. (m k) looks k up (nil if absent) through lvm_map_lookup.
 static lvm_t lvm_map_lookup, lvm_map_data;
-static ai_inline bool mapp(word _) { return lamp(_) && cell(_)->ap == lvm_map_lookup; }
+static ai_inline bool tabp(word _) { return lamp(_) && cell(_)->ap == lvm_map_lookup; }
 static const word ai_map_gap_cell = 0;
 #define map_gap ((word) &ai_map_gap_cell)
 #define map_min_cap 4
@@ -335,7 +335,7 @@ static struct ai_zn ai_net(struct ai *, word);         // fwd: aggregates sum th
 static ai_inline bool ai_nilp(struct ai *g, word x) {
   if (x == nil || x == EmptyString) return true;
   if (charmp(x)) return getcharm(x) < 0;                 // 0 is nil (caught above); negatives false
-  if (mapp(x)) return map_len(x) == 0;
+  if (tabp(x)) return map_len(x) == 0;
   if (bigp(x)) return ((struct ai_big*) x)->slen < 0; // a negative bignum is false
   if (symp(x)) return pin_sym(g, x) == 0;            // empty/anonymous symbol name (or the core) -> nil (pin lockstep)
   if (chainp(x) || packp(x) || flop(x) || widep(x) || Cp(x) || strp(x) || bufp(x))
@@ -650,7 +650,7 @@ lvm_t lvm_fault;
  _(nif_aall, "aall", s1(lvm_aall)) _(nif_inner, "inner", s2(lvm_inner)) _(nif_outer, "outer", s2(lvm_outer))\
  _(nif_packp, "packp", s1(lvm_packp)) _(nif_bigp, "bigp", s1(lvm_bigp)) _(nif_widep, "widep", s1(lvm_widep))\
  _(nif_arrp, "arrp", s1(lvm_arrp)) _(nif_intf, "int", s1(lvm_intf))\
- _(nif_symp, "symp", s1(lvm_symp)) _(nif_mapp, "mapp", s1(lvm_mapp)) _(nif_fixp, "fixp", s1(lvm_fixp))\
+ _(nif_symp, "symp", s1(lvm_symp)) _(nif_tabp, "tabp", s1(lvm_tabp)) _(nif_fixp, "fixp", s1(lvm_fixp))\
  _(nif_lamp, "lamp", s1(lvm_lamp)) _(nif_hotp, "hotp", s1(lvm_hotp))\
  _(nif_nilp, "nilp", s1(lvm_nilp)) _(nif_ev, "ev", s1(lvm_eval))\
  _(nif_callk, "call-cc", s1(lvm_callk)) _(nif_scare, "scare", s2(lvm_scare))\
@@ -1962,7 +1962,7 @@ lvm(lvm_index) {
 // pre-fill is a miss, the binding-site nom the payload. distinct from peep,
 // whose caller names what absence means.
 lvm(lvm_missing) {
- word v = mapp(Sp[0]) ? ai_mapget(g, word(no_entry), Sp[1], Sp[0]) : word(no_entry);
+ word v = tabp(Sp[0]) ? ai_mapget(g, word(no_entry), Sp[1], Sp[0]) : word(no_entry);
  if (v != word(no_entry)) return
   Sp[1] = v,
   Sp++,
@@ -2430,7 +2430,7 @@ static struct ai_zn ai_net(struct ai *g, word x) {
   if (bufp(x)) { struct ai_str *b = buf_str(x); ai_flo_t t = 0;   // hot chars: Σ charms, like a string
     for (uintptr_t i = 0; i < b->len; i++) t += (uint8_t) b->bytes[i];
     return zn(t, 0); }
-  if (mapp(x)) return zn((ai_flo_t) map_len(x), 0);              // table: key count
+  if (tabp(x)) return zn((ai_flo_t) map_len(x), 0);              // table: key count
   if (!datp(x)) return zn(1, 0);                                // opaque but present (fn / port): truthy
   switch (typ(x)) {
     default: return zn(1, 0);                                   // unknown present data kind -> truthy
@@ -3038,7 +3038,7 @@ static struct ai *ioput_fn_body(struct ai *g, word x, uintptr_t off) {
 
 static ai_noinline struct ai *ioputx(struct ai *g, intptr_t x, uintptr_t off) {
  if (charmp(x)) return ioprintf(g, "%d", getcharm(x));
- if (!datp(x)) return mapp(x) ? ioput_map(g, x, off) : ioput_fn(g, x, off);
+ if (!datp(x)) return tabp(x) ? ioput_map(g, x, off) : ioput_fn(g, x, off);
  // Maps are the only mutable/self-referential value, and ioput_map guards its
  // own recursion (the seen list); the data kinds below are acyclic.
  switch (typ(x)) {
@@ -3617,7 +3617,7 @@ lvm(lvm_key) {
  return Continue(); }
 
 // ============================================================================
-// map (lookup-lambda backed by an open-addressed text; see mapp comment)
+// map (lookup-lambda backed by an open-addressed text; see tabp comment)
 // ============================================================================
 // backing is internal -- only ever reached from a header[1], never applied as a
 // l value; its ap behaves-as-1 like lvm_buf should it ever be (it won't).
@@ -3721,7 +3721,7 @@ static lvm(lvm_map_lookup) {
  word v = ai_mapget(g, nil, Sp[0], (word) Ip);
  return Ip = cell(*++Sp), *Sp = v, Continue(); }
 
-op11(lvm_mapp, mapp(Sp[0]) ? putcharm(1) : nil)
+op11(lvm_tabp, tabp(Sp[0]) ? putcharm(1) : nil)
 // (lamp x): is x lit -- wired to a hot, a heap pointer, not a fixnum? true for every
 // present non-fixnum value -- chains, symbols, strings, vecs, maps, texts.
 op11(lvm_lamp, lamp(Sp[0]) ? putcharm(1) : nil)
@@ -3739,7 +3739,7 @@ lvm(lvm_peep) {                                // (peep coll key default): colle
   struct ai_str *s = buf_str(x);
   if (charmp(k) && (n = getcharm(k)) >= 0 && n < (word) len(s))
    z = putcharm((unsigned char) txt(s)[n]); }
- else if (mapp(x)) z = ai_mapget(g, z, k, x);     // map lookup (not a data sentinel)
+ else if (tabp(x)) z = ai_mapget(g, z, k, x);     // map lookup (not a data sentinel)
  else if (lamp(x) && datp(x)) switch (typ(x)) {
   default: break;                               // KSym is not indexable
   case KFlo:                                    // a rank-0 scalar float: a nil key derefs to itself
@@ -3795,7 +3795,7 @@ lvm(lvm_peep) {                                // (peep coll key default): colle
 // silent no-op, matching the misuse convention of the other byte ops.
 lvm(lvm_put) {
  word x = Sp[0], n;                              // coll
- if (mapp(x)) {
+ if (tabp(x)) {
   Sp[0] = Sp[1], Sp[1] = Sp[2], Sp[2] = x;       // ai_mapput wants (sp0,sp1,sp2)=(key,val,coll)
   Pack(g);
   if (!ai_ok(g = ai_mapput(g))) return ghelp(g);
@@ -3812,14 +3812,14 @@ lvm(lvm_put) {
 // dance. A non-map coll yields default (silent misuse).
 lvm(lvm_pull) {
  word coll = Sp[0], v = Sp[2];                   // default
- if (mapp(coll)) {
+ if (tabp(coll)) {
   v = ai_mapget(g, Sp[2], Sp[1], coll);           // value, or default if absent
   ai_mapdel(g, coll, Sp[1], Sp[2]); }             // remove in place (no-op if absent)
  return Sp[2] = v, Sp += 2, Ip += 1, Continue(); }
 
 lvm(lvm_keys) {
  intptr_t list = nil;
- if (mapp(Sp[0])) {
+ if (tabp(Sp[0])) {
   uintptr_t cap = map_cap(Sp[0]), n = map_len(Sp[0]);
   Have(n * Width(struct ai_chain));
   struct ai_chain *chains = (struct ai_chain*) Hp;
@@ -4514,7 +4514,7 @@ static lvm(lvm_0) {                             // unsupported mix (array <-> st
 // Exported (not inline) so data.c's apply sentinels share it.
 enum q ai_kind(word x) {
  if (charmp(x)) return KCharm;
- if (!datp(x)) return mapp(x) ? KMap : KTop;
+ if (!datp(x)) return tabp(x) ? KMap : KTop;
  enum q k = typ(x);
  if (k != KVec) return k;
  return (enum q) (KArrZ + vec(x)->type); }
@@ -6058,7 +6058,7 @@ lvm(lvm_tally) {
  word l = Sp[0]; intptr_t n = 0;
  if (strp(l)) n = (intptr_t) len(l);
  else if (bufp(l)) n = (intptr_t) len(buf_str(l));
- else if (mapp(l)) n = (intptr_t) map_len(l);
+ else if (tabp(l)) n = (intptr_t) map_len(l);
  else if (arrp(l)) n = (intptr_t) vec_nelem(vec(l));
  else if (symp(l)) n = (l != (word) ai_core_of(g) && sym(l)->nom) ? (intptr_t) len(sym(l)->nom) : 0;  // the core: nameless -> 0 charms
  else while (chainp(l)) n++, l = B(l);
@@ -6822,7 +6822,7 @@ lvm(lvm_abs) {
   if (v->type == ai_C) { ai_flo_t *fp = vec_data(v); for (i = 0; i < 2*n; i++) s += fp[i] * fp[i]; }
   else for (i = 0; i < n; i++) { ai_flo_t e = vec_get_flo(v, i); s += e * e; }
   Have(box_req); emit_flo(ai_sqrt(s)); return Sp[0] = _res, Ip++, Continue(); }
- if (mapp(a)) {                                       // table: its key count (so (int (abs t)) == (len t))
+ if (tabp(a)) {                                       // table: its key count (so (int (abs t)) == (len t))
   Have(box_req); emit_int((intptr_t) map_len(a)); return Sp[0] = _res, Ip++, Continue(); }
  return Sp[0] = nil, Ip++, Continue(); }
 

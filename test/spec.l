@@ -56,10 +56,10 @@
  !(crestp 5) !(crestp '(1 2))                             ; a scalar / a list is not a crest
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
 
-; --- types & predicates --- storage: fixp bigp widep flop comp arrp strp symp chainp mapp;
+; --- types & predicates --- storage: fixp bigp widep flop comp arrp strp symp chainp tabp;
 ; derived nump intp atomp; lamp = presence (any heap value); hotp names the buf/port zoo.
 (assert
- (fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (lamp cap) (mapp #(1 2))
+ (fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (lamp cap) (tabp #(1 2))
  (bigp (100 2)) ((? w64 widep bigp) (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (packp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
  (hotp (buf 4)) (hotp out) (hotp (sip '(104)))   ; the hot zoo, named
@@ -207,13 +207,13 @@
 ; (#() = #0, the box of nothing); accessors collection-first peep/pin/pull; (t k) == (peep t k 0);
 ; `missing` is the conditioned read; a hash is MUTABLE, so `=` on hashes is identity.
 (assert
- (: b #0 (&& (mapp b) (1 = $b) (0 = (peep b 0 9)) (: _ (pin b 0 7) (7 = (b 0)))))
- (mapp #()) (1 = $#()) !!#()                     ; #() IS #0: the box of nothing, present
+ (: b #0 (&& (tabp b) (1 = $b) (0 = (peep b 0 9)) (: _ (pin b 0 7) (7 = (b 0)))))
+ (tabp #()) (1 = $#()) !!#()                     ; #() IS #0: the box of nothing, present
  (: t #(1 10 2 20) (&& (20 = (peep t 2 0)) (20 = (t 2)) (99 = (peep t 9 99))))
  (10 = (missing #(1 10) 1)) (idp (:) (missing (tablet 0) 'k)) (0 = (missing #(1 0) 1))   ; missing: the conditioned read; presence beats value
  (50 = (peep (pin (tablet 0) 5 50) 5 0)) (: t #(1 10 2 20) _ (pull t 1 0) (1 = $t))
  (: t #(1 10 2 20) v (pull t 2 0) (&& (20 = v) (1 = $t) (99 = (peep t 2 99)) (-1 = (pull t 9 -1))))  ; pull: value or default, removes the key
- ('(1 2) = (sort (keys #(1 10 2 20)))) ((dig 'k) = (dig 'k)) (mapp (tablet 0)) !(mapp 5)
+ ('(1 2) = (sort (keys #(1 10 2 20)))) ((dig 'k) = (dig 'k)) (tabp (tablet 0)) !(tabp 5)
  !(#(1 10) = #(1 10)) (: t #(1 10) (t = t))      ; mutable -> identity =
  (40 = (: t #(1 10) _ (t <- 4 40) (t -> 4 0))))  ; the infix accessors
 
@@ -247,7 +247,7 @@
  (20 = (#(1 10 2 20) -> 2 0)) (7 = (((tablet 0) <- 'k 7) 'k)) (9 = ((tablet 0) -> 'k 9))
  (12 = (foldl (+) 0 '(3 4 5)))
  (: t operators
-    (&& (mapp t) (2 = (t '+)) (3 = (t '?)) (2 = (t '%))
+    (&& (tabp t) (2 = (t '+)) (3 = (t '?)) (2 = (t '%))
         ((hook 'sat 1) = (t '$)) ((hook 'nilp 1) = (t '!))
         ((hook 'pin 3) = (t '<-)) ((hook 'peep 3) = (t '->)))))
 
@@ -267,7 +267,7 @@
  (42 = (: p (spawn (\ x (do (yield 0) (x + 1))) 41) (wait p))) (0 = (wait 99999)) (done? 99999)
  !(sleep 0) (4 = (alen (rng-seed 1))) ((rand 10) < 10) (flop (randf 0))
  (scare? 1) !(scare? 3) (eof? 3) !(eof? 2) (more? 2) !(more? 3) (lamp scare)
- (mapp apcap) (1048576 = (apcap 0))              ; the count ceiling, a tunable box
+ (tabp apcap) (1048576 = (apcap 0))              ; the count ceiling, a tunable box
  (idp (:) not-in-the-book) !not-in-the-book      ; a missing name reads the zero point: a nom not in the book
  (: st (rng-seed 7) ((cap (rand-next st)) = (cap (rand-next st)))))
 

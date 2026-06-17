@@ -139,7 +139,7 @@ $@(3 4)              ; 7
 ; first word dispatches. the storage predicates:
 ;   fixp bigp widep  -- the integer reps (fixnum, bignum, wide int)
 ;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `packp`
-;   strp symp chainp mapp  -- string, symbol, chain, map
+;   strp symp chainp tabp  -- string, symbol, chain, map
 ; derived: `nump` (any number: fix/wide/big/float/complex/array), `intp` (any integer), `atomp`
 ; (anything but a chain). `i` is ~(0 1). `lamp` is PRESENCE, not a band: every heap
 ; value answers it (anything wired to a hot -- lit -- everything but a fixnum), chains and
@@ -149,7 +149,7 @@ $@(3 4)              ; 7
 ; task is referenced by a fixnum id, not a handle object. `!` (nilp) and `done?` are
 ; truth/task tests, not type tests.
 ; demo:
-(fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (mapp #(1 2))   ; the storage predicates
+(fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (tabp #(1 2))   ; the storage predicates
 (nump i) (intp (62 2)) (atomp 'x)                            ; derived
 (lamp "s") (lamp '(1)) !(lamp 5)                             ; lamp = presence (any heap value)
 (hotp (buf 4)) (hotp out) !(hotp cap)                        ; the hot zoo: buf/port only
@@ -366,7 +366,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; (dig k) digests any key to a fixnum. a hash is MUTABLE, so `=` on hashes is
 ; identity (like buffers); infix, the accessors are (t <- k v) and (t -> k d).
 ; demo:
-(mapp #())                   ; true   #() IS #0, the box of nothing (present)
+(tabp #())                   ; true   #() IS #0, the box of nothing (present)
 $#(1 10 2 20)                ; 2      $ is the key count
 (peep #(1 10 2 20) 2 0)      ; 20
 (#(1 10 2 20) 2)             ; 20     a map is a lookup function: (t k) == (peep t k 0)
