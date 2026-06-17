@@ -168,7 +168,7 @@ lvm(lvm_obin, int);
 char const *ai_nif_name(intptr_t);
 #define vec(_) ((struct ai_vec*)(_))
 #define charmp oddp
-#define sym(_) ((struct ai_atom*)(_))
+#define sym(_) ((struct ai_mint*)(_))
 // mintp: a bare POINT -- the KMint object (the old symbol atom, now nameless only:
 // () and the fresh mints). A named symbol is no longer an atom but the interned
 // CHAIN (name . mint); nomp recognizes EITHER -- a bare point or a named one -- so
@@ -328,13 +328,6 @@ static ai_inline void vec_put_obj(struct ai_vec *v, uintptr_t i, word x) {
 // every MINT (the nameless fresh point: materially empty, a DISTINCT NOTHING)
 // nets 0 -> falsy; so does an all-NUL spelling: a string of nothings is
 // nothing, in or out of a symbol.
-static ai_inline intptr_t pin_sym(struct ai *g, word x) {
-  if (x == (word) ai_core_of(g)) return 0;  // () is the core: a nameless point, no spelling -> net 0 (its atom slots are live VM state, never read)
-  struct ai_str *nm = ((struct ai_atom*) x)->nom;
-  if (!nm) return 0;
-  intptr_t t = 0;
-  for (uintptr_t i = 0; i < nm->len; i++) t += (uint8_t) nm->bytes[i];
-  return t; }
 static ai_inline struct ai_str *add_name(struct ai *g, word x);   // a named sym (name . mint) -> its name string, else 0
 struct ai_zn { ai_flo_t re, im; };                     // the net: a complex value
 static ai_inline struct ai_zn zn(ai_flo_t re, ai_flo_t im) {
@@ -520,11 +513,8 @@ static ai_inline union u *clip(struct ai *g, union u *k) {
 
 
 
-static ai_inline struct ai_atom *ini_missing(struct ai_atom *y, uintptr_t code) {
- return y->ap = lvm_sym, y->nom = 0, y->code = code, y; }
-
-static ai_inline struct ai_atom *ini_sym(struct ai_atom *y, struct ai_str *nom, uintptr_t code) {
- return y->ap = lvm_sym, y->nom = nom, y->code = code, y; }
+static ai_inline struct ai_mint *ini_missing(struct ai_mint *y, uintptr_t code) {
+ return y->ap = lvm_sym, y->code = code, y; }
 
 static ai_inline struct ai_str *ini_str(struct ai_str *s, uintptr_t len) {
  return s->ap = lvm_str, s->len = len, s; }
@@ -906,7 +896,7 @@ static ai_inline void evac_cplx(struct ai*g, word const*const p0, word const*con
  g->cp += cplx_req; }
 
 static ai_inline void evac_sym(struct ai*g, word const*const p0, word const*const t0) {
- g->cp += Width(struct ai_atom); }              // uniform 3 words; copy_sym forwarded the nom
+ g->cp += Width(struct ai_mint); }              // uniform 2 words; copy_sym forwards the serial
 
 static ai_inline void evac_text(struct ai *g, word const *const p0, word const*const t0) {
   // terminator payloads point into the new pool (the copied object's home);
@@ -1090,10 +1080,10 @@ static ai_inline word copy_cplx(struct ai*g, struct ai_cplx *src, word const *co
 
 // atoms copy like any object (the nom string forwards normally); interning
 // maintenance moved WHOLLY to the post-fixpoint table sweep (symbols_sweep).
-static ai_inline word copy_sym(struct ai*g, struct ai_atom *src, word const *const p0, word const*const t0) {
- struct ai_atom *dst = bump(g, Width(struct ai_atom));
- if (!src->nom) ini_missing(dst, src->code);      // a mint: the serial rides
- else ini_sym(dst, (struct ai_str*) gcp(g, word(src->nom), p0, t0), src->code);
+static ai_inline word copy_sym(struct ai*g, struct ai_mint *src, word const *const p0, word const*const t0) {
+ struct ai_mint *dst = bump(g, Width(struct ai_mint));
+ (void) p0, (void) t0;                            // a mint carries no name to forward now
+ ini_missing(dst, src->code);                     // just the serial rides
  return word(src->ap = (lvm_t*) dst); }
 
 static ai_inline word copy_data(struct ai *g, union u *src, word const *const p0, word const *const t0) {
@@ -1137,7 +1127,7 @@ static ai_noinline intptr_t gcp(struct ai *g, word x, word const *p0, word const
 static ai_inline struct ai *pushl(struct ai*g) { return intern(ai_strof(g, "\\")); }
 static struct ai *c0(struct ai *g, lvm_t *y);
 static struct ai *ai_eval(struct ai *g);
-static struct ai_atom *sym_probe(struct ai *g, char const *nm, uintptr_t n);
+static struct ai_mint *sym_probe(struct ai *g, char const *nm, uintptr_t n);
 
 // function state using this type
 struct env {
@@ -1208,7 +1198,7 @@ static ai_noinline struct ai *c0(struct ai *g, lvm_t *y) {
  // skipped, which also terminates the recursion through ai_eval.
  { word x0 = g->sp[0];
    if (chainp(x0) && (!lamp(A(x0)) || datp(A(x0)))) {
-    struct ai_atom *os = sym_probe(ai_core_of(g), "opfix", 5);
+    struct ai_mint *os = sym_probe(ai_core_of(g), "opfix", 5);
     word of = os ? ai_mapget(ai_core_of(g), 0, word(os), ai_core_of(g)->book) : 0;
     if (of && lamp(of)) {
      g = ai_eval(gxr(gxl(gxl(pushq(gxl(ai_push(g, 4, x0, nil, nil, of)))))));
@@ -1784,7 +1774,7 @@ ai_noinline struct ai *ai_evals_(struct ai*g, char const*s) {
 // intern_checked, but never interning or allocating. A miss means the name was
 // never read, so no global by that name was ever defined.
 uintptr_t hash(struct ai*, intptr_t);
-static struct ai_atom *sym_probe(struct ai *g, char const *nm, uintptr_t n) {
+static struct ai_mint *sym_probe(struct ai *g, char const *nm, uintptr_t n) {
  word m = g->symbols;
  if (!m) return 0;
  uintptr_t h = mix;                            // the KString content hash, over the C bytes
@@ -1801,7 +1791,7 @@ static struct ai_atom *sym_probe(struct ai *g, char const *nm, uintptr_t n) {
 // the key by name. Scare loud if undefined: a prel-ordering contract
 // violation. Probe + mapget are reads, so no Have in the tail-jump callers.
 static ai_inline ai_word resolve_hot(struct ai *g, char const *nm, uintptr_t n) {
- struct ai_atom *y = sym_probe(g, nm, n);
+ struct ai_mint *y = sym_probe(g, nm, n);
  ai_word cur = y ? ai_mapget(g, nil, word(y), g->book) : nil;
  if (!lamp(cur)) __builtin_trap();
  return cur; }
@@ -1864,7 +1854,7 @@ static struct ai *ai_raise(struct ai *c, enum ai_status s, word a, word b,
                          union u const *K) {
  if (s == ai_status_scare) c->scare_a = a, c->scare_b = b; // for the exit face
  if (c->book) {
-  struct ai_atom *ts = sym_probe(c, "help", 4);
+  struct ai_mint *ts = sym_probe(c, "help", 4);
   word h = ts ? ai_mapget(c, nil, word(ts), c->book) : nil;
   if (!ai_nilp(c, h) && avail(c) >= 5) {
    word *sp = c->sp -= 5;          // [s h a b K | raise site data ..]
@@ -1955,7 +1945,7 @@ lvm(lvm_index) {
   Ip += 2,
   Continue();
  Have(8);                          // [resume a b] + ai_raise's 5 words
- struct ai_atom *ts = sym_probe(g, "help", 4);
+ struct ai_mint *ts = sym_probe(g, "help", 4);
  word h = ts ? ai_mapget(g, nil, word(ts), g->book) : nil;
  if (ai_nilp(g, h)) return
   *--Sp = (word) ai_core_of(g),
@@ -1980,7 +1970,7 @@ lvm(lvm_missing) {
   Ip++,
   Continue();
  Have(8);                          // [resume a b] + ai_raise's 5 words
- struct ai_atom *ts = sym_probe(g, "help", 4);
+ struct ai_mint *ts = sym_probe(g, "help", 4);
  word h = ts ? ai_mapget(g, nil, word(ts), g->book) : nil;
  if (ai_nilp(g, h)) return
   Sp[1] = (word) ai_core_of(g),
@@ -4280,9 +4270,9 @@ lvm(lvm_intern) {
 // the named-uninterned atom species is gone, the McCarthy restoration's first
 // half. mints still answer nomp (a nameless atom), so they bind as gensyms.
 lvm(lvm_mint) {
- Have(Width(struct ai_atom));
- struct ai_atom *y = (struct ai_atom*) Hp;
- Hp += Width(struct ai_atom);                   // atoms are uniform: ap, code, nom
+ Have(Width(struct ai_mint));
+ struct ai_mint *y = (struct ai_mint*) Hp;
+ Hp += Width(struct ai_mint);                   // mints are uniform: ap, code
  ini_missing(y, ++g->next_serial);
  return
   Sp[0] = word(y),
@@ -4294,7 +4284,7 @@ struct ai *intern(struct ai*g) {
   g->sp[0] = intern_checked(g, (struct ai_str*) g->sp[0]);
  return g; }
 
-// avail must be >= Width(struct ai_atom) when this is called.
+// avail must be >= Width(struct ai_mint) when this is called.
 // how much a fresh intern may bump: the atom, plus -- when the table sits at
 // the load factor -- the doubled backing it rehashes into. callers reserve
 // this BEFORE intern_checked so the insert below never allocates (and so the
@@ -4303,7 +4293,7 @@ uintptr_t intern_reserve(struct ai *g) {
  word m = g->symbols;
  uintptr_t extra = m && (map_len(m) + 1) * 4 >= map_cap(m) * 3 ? 4 + 4 * map_cap(m) : 0;
  // a named symbol is now the chain (name . mint): a bare mint atom + the chain cell.
- return Width(struct ai_atom) + Width(struct ai_chain) + extra; }
+ return Width(struct ai_mint) + Width(struct ai_chain) + extra; }
 
 // intern: probe the WEAK intern map by string content (string hash + content
 // equality -- the same value-keyed probe every map uses); a miss mints the
@@ -4329,7 +4319,7 @@ ai_noinline word intern_checked(struct ai *g, struct ai_str *b) {
   nb[1].x = putcharm(nlen);
   cell(m)[1].x = (word) nb;                              // swap backing; header identity stable
   i = map_probe(g, m, word(b), &found); }
- struct ai_atom *mt = ini_missing(bump(g, Width(struct ai_atom)), ++g->next_serial);
+ struct ai_mint *mt = ini_missing(bump(g, Width(struct ai_mint)), ++g->next_serial);
  struct ai_chain *y = bump(g, Width(struct ai_chain));
  ini_chain(y, word(b), word(mt));                        // (name . mint)
  word *slots = map_slots(m);
@@ -4525,7 +4515,7 @@ static ai_inline struct ai_str *add_name(struct ai *g, word x) {   // symbol -> 
 static ai_inline int stringrank(struct ai *g, word x) {    // STR 0 / USYM 1 / ISYM|NUM 2
  if (strp(x)) return 0;
  if (x == (word) ai_core_of(g)) return 1;               // the core is a nameless point: an uninterned (fresh) symbol
- if (nomp(x)) return word(sym(x)->nom) ? 2 : 1;
+ if (nomp(x)) return chainp(x) ? 2 : 1;            // a named nom is a (name . mint) chain; a bare mint is not
  return 2; }
 static ai_inline uintptr_t stringlen(struct ai *g, word x) {  // bytes x contributes to a concat
  if (strp(x)) return len(x);

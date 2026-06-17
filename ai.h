@@ -82,14 +82,17 @@ enum ai_status { ai_status_ok = 0, ai_status_scare = 1, ai_status_more = 2, ai_s
 // the atom: ap, the code (an interned symbol's name hash / a mint's serial),
 // the nom (a string = interned; 0 = a mint). UNIFORM 3 words -- the l/r
 // intern-tree slots died with the tree: interning lives in struct ai's
-// `symbols`, a weak map from name string to the canonical atom.
-struct ai_atom {
+// `symbols`, a weak map from name string to the canonical mint chain.
+struct ai_str {
  lvm_t *ap;
- uintptr_t code;
- struct ai_str {
-  lvm_t *ap;
-  uintptr_t len;        // byte count
-  char bytes[]; } *nom; };
+ uintptr_t len;        // byte count
+ char bytes[]; };
+// a mint: a bare nameless point -- just the hot and its serial. Named syms are
+// the (name . mint) chains now, so a mint carries NO name (the old `nom` field
+// is gone; nothing ever set it post-collapse).
+struct ai_mint {
+ lvm_t *ap;
+ uintptr_t code; };
 
 struct ai {
  // () IS the core: its FIRST WORD is an ap (lvm_sym, set in ai_ini), enough to make
@@ -113,7 +116,7 @@ struct ai {
                         // GC-stable (code rides the copy), closing trichotomy.
            next_wake_at; // raw deadline for next yield_sw snapshot's wake_at slot; 0 = always runnable
  intptr_t next_wait_fd; // fd the task suspended on, -1 = not waiting on I/O. Installed into next yield_sw snapshot's wait_fd slot.
- ai_word symbols;        // the WEAK intern map (string -> the canonical atom; see struct ai_atom
+ ai_word symbols;        // the WEAK intern map (string -> the canonical atom; see struct ai_mint
                         // above): value-keyed by string content; gcg clones it untraced and
                         // sweeps it after the cheney fixpoint, so a dead atom's entry drops --
                         // dead spellings vanish. 0 only during early init.
