@@ -103,6 +103,6 @@
  (>= 3.0 3)
 
  ; --- comparison is a TOTAL ORDER over all values: a number sorts below any
- ;     string (number < string < sym < pair < lambda); full lattice in matrix.l ---
+ ;     string (number < string < sym < chain < lambda); full lattice in matrix.l ---
  (< 1 "a")
  !(< "a" 1))

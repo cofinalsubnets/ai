@@ -9,7 +9,7 @@
          (= 'asdf (intern 'asdf))           ; ...identity on any non-string arg
          !(= 'asdf (nom "asdf"))         ; a nom is a PAIR (name . mint): never the interned symbol
          !(= (nom "asdf") (nom "asdf")) ; ...nor another nom (the mint inside differs)
-         (= "asdf" (cap (nom "asdf")))  ; the name is the pair's cap -- the explicit bridge
+         (= "asdf" (cap (nom "asdf")))  ; the name is the chain's cap -- the explicit bridge
          (= "asdf" (cap (nom 'asdf)))   ; ...same for a symbol arg (string'd on the way in)
          (= "asdf" (string 'asdf))))
 (:
@@ -30,12 +30,12 @@
  (assert
     (= 2 (sat t))
     (= 2 (ln (keys t)))
-    (: (lll t) (foldl (\ l k (cons k (cons (Get k) l))) 0 (keys t))
+    (: (lll t) (foldl (\ l k (hook k (hook (Get k) l))) 0 (keys t))
      (= (* 2 (sat t)) (ln (lll t))))))
 
 (:
  (stripPrefix p s) (? (= p (slice s 0 (tally p))) (slice s (tally p) (tally s)))
- (lit l y n s) ((\ ss (? ss (y ss (cons l 0)) (n s))) (stripPrefix l s))
+ (lit l y n s) ((\ ss (? ss (y ss (hook l 0)) (n s))) (stripPrefix l s))
  (drop p y) (p (\ s _ (y s 0)))
  (opt p y _) (p y (\ s (y s 0)))
  (cats a b y n) (a (\ s l (b (\ s m (y s (cat l m))) n s)) n)
@@ -59,9 +59,9 @@
   (= (peep "vaporeon" 3 0) ("vaporeon" 3))   ; identical to get with a 0 default
   (= "eon" (stripPrefix "vapor" "vaporeon"))
  (= '("eon" "vapor")
-  (lit "vapor" cons 0 "vaporeon"))
+  (lit "vapor" hook 0 "vaporeon"))
  (= '("rrq" "R")
-  (alt (lit "r") (lit "R") cons 0 "Rrrq"))
+  (alt (lit "r") (lit "R") hook 0 "Rrrq"))
  (= '("q" "R" "r" "r")
-  (rep (alt (lit "r") (lit "R")) cons 0 "Rrrq"))))
+  (rep (alt (lit "r") (lit "R")) hook 0 "Rrrq"))))
 

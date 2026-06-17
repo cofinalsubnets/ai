@@ -11,7 +11,7 @@
 ; pin/peep on it is a no-op; defglob writes g->book directly) to the program's view
 ; (program . args); cmdline keeps the full list. cli.l is compiled by c0 BEFORE -l loads
 ; prel, so the always-run path (pre/load1/rdev) uses only nifs/special-forms, NOT prel
-; fns (twop not atomp; |, the bitwise-or nif, not the || macro).
+; fns (chainp not atomp; |, the bitwise-or nif, not the || macro).
 (: (rdev q) ((: (go e q) (: r (read q e) (? (= e r) 0 (: _ (ev 'ev r) (go e q))))) (mint 0) q)
    (load1 p) (: q (open p "r")
       (? q (rdev q) (: _ (fputs err (+ "ai: cannot open " p)) (exit 1))))
@@ -25,16 +25,16 @@
               (+ "  -h, --help        print this help and exit\n"
               (+ "  --                end of options; the rest are files\n"
                  "with no program (no -e, no FILE), read-eval stdin to EOF.")))))))
-   (need h t) (? (twop t) 0 (: _ (fputs err (+ "ai: " (+ h " needs an argument"))) (exit 2)))
-   (pre a) (? (twop a)                              ; -> (kind . rest): 'eval code.args / 'file prog.args / 'stdin
+   (need h t) (? (chainp t) 0 (: _ (fputs err (+ "ai: " (+ h " needs an argument"))) (exit 2)))
+   (pre a) (? (chainp a)                              ; -> (kind . rest): 'eval code.args / 'file prog.args / 'stdin
     (: h (cap a) t (cup a) (?
      (| (= h "-l") (= h "--load"))    (: _ (need h t) _ (load1 (cap t)) (pre (cup t)))
      (| (= h "-v") (= h "--version")) (version 0)
      (| (= h "-h") (= h "--help"))    (usage 0)
-     (| (= h "-e") (= h "--eval"))    (: _ (need h t) (cons 'eval t))
-     (= h "--")                        (? (twop t) (cons 'file t) (cons 'stdin 0))
-     (cons 'file a)))                  ; a positional file is the program
-    (cons 'stdin 0)))
+     (| (= h "-e") (= h "--eval"))    (: _ (need h t) (hook 'eval t))
+     (= h "--")                        (? (chainp t) (hook 'file t) (hook 'stdin 0))
+     (hook 'file a)))                  ; a positional file is the program
+    (hook 'stdin 0)))
 (: parsed (pre (cup argv)))                         ; runs -l preloads + -v/-h; returns the program kind
 (: argv (? (= (cap parsed) 'eval) (cup (cup parsed)) (cup parsed)))  ; DEFGLOB: rebind argv to the program's view
 (? (= (cap parsed) 'eval) (eval1 (caup parsed))     ; run the program: -e code / a file / stdin

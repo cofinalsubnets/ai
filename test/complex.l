@@ -110,7 +110,7 @@
 ; a 0/1 mask, the orderings -> nil; asum/aprod fold complex; aall/aany lift the
 ; 0+0i-is-falsy rule. (body-less `:` -> ca-* leak to global, reused in roundtrip.l)
 (: ca-z (arr C '(3) 0)                             ; zero-filled: three 0+0i
-   ca-v (arr C '(2) (L ~(1 2) ~(3 4)))        ; explicit packed pair
+   ca-v (arr C '(2) (L ~(1 2) ~(3 4)))        ; explicit packed chain
    ca-a (array 3 ~(1 1) ~(2 2) ~(3 3))        ; `array` infers c from its args
    ca-r @(~(1 0) ~(0 1))                       ; `@` reader infers c too
    ca-m (array '(2 2) ~(1 0) ~(0 1) ~(2 0) ~(0 2)))  ; rank-2 complex

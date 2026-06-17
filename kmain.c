@@ -242,7 +242,7 @@ void ai_wait_fds(int const *fds, int n, uintptr_t ticks) {
     kwait(); } }
 uintptr_t ai_clock(void) { return kticks; }
 
-// Pure time-wait. ticks=0 means infinite (caller is expected to pair with an
+// Pure time-wait. ticks=0 means infinite (caller is expected to chain with an
 // input wait via ai_in->wait, so this should only be hit when no I/O is intended).
 void ai_sleep(uintptr_t ticks) {
   uintptr_t deadline = kticks + ticks;
@@ -544,7 +544,7 @@ void kmain(void) {
  // test build: drink the baked `tests` string (string -> charlist -> sip port)
  // through zevs (repl.l) -- the same stream shell as the host's stdin runner.
  // zz-fin.l prints the summary and (exit 1)s on failure.
- "(zevs (sip ((: (g i) (? (< i (tally tests)) (cons (peep tests i 0) (g (+ 1 i))))) 0)))"
+ "(zevs (sip ((: (g i) (? (< i (tally tests)) (hook (peep tests i 0) (g (+ 1 i))))) 0)))"
 #else
  "(shell 0)"
 #endif

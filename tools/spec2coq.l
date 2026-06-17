@@ -9,7 +9,7 @@
 ;     numerals (app), the integer algebra (+ - * // % & | ^, comparisons), nilp /
 ;     sat / abs / gcd, lists / strings / arrays (asum/amax/.., iota), array-valued
 ;     = (broadcast / append / repeat), hashes & peep.
-;   * a KIND lattice (value tags) for the type predicates (fixp/twop/strp/..) and
+;   * a KIND lattice (value tags) for the type predicates (fixp/chainp/strp/..) and
 ;     the band order (number < string < symbol < product < map).
 ; Left to the hand-written laws: the float/complex tier (not vm_compute-able, the
 ; honest misses) and the universally-quantified LAWS. Untranslatable asserts are
@@ -21,13 +21,13 @@
 
    ; read a file's top-level forms as DATA (the reader strips ; comments)
    (forms path) (: q (open path "r") e (mint 0)
-                   ((: (g acc) (: r (read q e) (? (= e r) (rev acc) (g (cons r acc))))) ()))
+                   ((: (g acc) (: r (read q e) (? (= e r) (rev acc) (g (hook r acc))))) ()))
 
    (e2 l) (cap (cup l))  (e3 l) (cap (cup (cup l)))  (e4 l) (cap (cup (cup (cup l))))  ; 2nd 3rd 4th
-   ; exactly three elements? (STRUCTURAL twop, never `!`: '(0) nets zero)
-   (len3? x) (&& (twop x) (twop (cup x)) (twop (cup (cup x))) (! (twop (cup (cup (cup x))))))
+   ; exactly three elements? (STRUCTURAL chainp, never `!`: '(0) nets zero)
+   (len3? x) (&& (chainp x) (chainp (cup x)) (chainp (cup (cup x))) (! (chainp (cup (cup (cup x))))))
    ; opfix wraps an operator form one layer ((f) == f); unwrap a 1-element list
-   (unwrap r) (? (&& (twop r) (! (twop (cup r)))) (cap r) r)
+   (unwrap r) (? (&& (chainp r) (! (chainp (cup r)))) (cap r) r)
    (fix1 x) (unwrap (opfix x))
 
    ; an integer binary operator symbol -> its Coq function (prefix), else 0
@@ -35,34 +35,34 @@
                 (idp h '//) "Z.quot" (idp h '%) "Z.rem"  (idp h 'gcd) "Z.gcd"
                 (idp h '&) "Z.land"  (idp h '|) "Z.lor"  (idp h '^) "Z.lxor"  0)
    bs (intern "\\")                                     ; the quote symbol \ (for '(..) z-list data)
-   (zlist? l) (? (twop l) (&& (fixp (cap l)) (zlist? (cup l))) (idp l ()))  ; PROPER fixnum list (ends in (), not any atom)
-   (qlist? x) (&& (twop x) (idp (cap x) bs) (un2? x) (zlist? (e2 x)))  ; '(1 2 3): \ + a z-list, EXACTLY 2 (a lambda is 3+)
-   (arrv? x)  (&& (twop x) (idp (cap x) 'tuple) (zlist? (cup x)))      ; @(1 2 3) = (tuple 1 2 3): a z-array
-   (iotav? x) (&& (twop x) (idp (cap x) 'iota) (un2? x) (intv? (e2 x)))  ; (iota n): the z-array 0..n-1
-   (un2? x) (&& (twop (cup x)) (! (twop (cup (cup x))))) ; a 2-element (op arg) form
+   (zlist? l) (? (chainp l) (&& (fixp (cap l)) (zlist? (cup l))) (idp l ()))  ; PROPER fixnum list (ends in (), not any atom)
+   (qlist? x) (&& (chainp x) (idp (cap x) bs) (un2? x) (zlist? (e2 x)))  ; '(1 2 3): \ + a z-list, EXACTLY 2 (a lambda is 3+)
+   (arrv? x)  (&& (chainp x) (idp (cap x) 'tuple) (zlist? (cup x)))      ; @(1 2 3) = (tuple 1 2 3): a z-array
+   (iotav? x) (&& (chainp x) (idp (cap x) 'iota) (un2? x) (intv? (e2 x)))  ; (iota n): the z-array 0..n-1
+   (un2? x) (&& (chainp (cup x)) (! (chainp (cup (cup x))))) ; a 2-element (op arg) form
    ; the KIND of a collection value -- arrays BROADCAST elementwise, lists APPEND
    (arr? x) (| (arrv? x) (| (iotav? x)
-              (&& (twop x) (len3? x) (: h (cap x)
+              (&& (chainp x) (len3? x) (: h (cap x)
                  (? (idp h '+) (&& (arr? (e2 x)) (arr? (e3 x)))
                     (| (idp h '*) (idp h '//)) (&& (arr? (e2 x)) (intv? (e3 x))) 0)))))
    (lst? x) (| (qlist? x) (| (strp x)
-              (&& (twop x) (len3? x) (: h (cap x)
+              (&& (chainp x) (len3? x) (: h (cap x)
                  (? (idp h '+) (&& (| (lst? (e2 x)) (intv? (e2 x))) (lst? (e3 x)))  ; append / scalar prepend
                     (idp h '*) (&& (lst? (e2 x)) (intv? (e3 x))) 0)))))             ; repeat
    (listv? x) (| (arr? x) (lst? x))                     ; any collection value
    ; the list reducers: net/asum -> sum, tally/alen -> count, amax/amin/aprod
    (lop? h) (| (idp h 'net) (| (idp h 'asum) (| (idp h 'tally) (| (idp h 'alen)
               (| (idp h 'amax) (| (idp h 'amin) (idp h 'aprod)))))))
-   ; a hash literal #(k v ..) = (hash k v ..): an assoc list of fixnum pairs (EVEN count)
-   (even? l) (? (twop l) (! (even? (cup l))) 1)
-   (hashv? x) (&& (twop x) (idp (cap x) 'hash) (zlist? (cup x)) (even? (cup x)))
-   (len4? x) (&& (twop x) (twop (cup x)) (twop (cup (cup x)))
-                 (twop (cup (cup (cup x)))) (! (twop (cup (cup (cup (cup x)))))))
-   (pairs l) (? (&& (twop l) (twop (cup l)))
-               (cat (L "(" (tv (cap l)) ", " (tv (e2 l)) ")" (? (twop (cup (cup l))) ";" "") (pairs (cup (cup l))))) "")
-   (th x) (cat (L "[" (pairs (cup x)) "]"))             ; #(1 10 2 20) -> [(1, 10);(2, 20)]
+   ; a hash literal #(k v ..) = (hash k v ..): an assoc list of fixnum chains (EVEN count)
+   (even? l) (? (chainp l) (! (even? (cup l))) 1)
+   (hashv? x) (&& (chainp x) (idp (cap x) 'hash) (zlist? (cup x)) (even? (cup x)))
+   (len4? x) (&& (chainp x) (chainp (cup x)) (chainp (cup (cup x)))
+                 (chainp (cup (cup (cup x)))) (! (chainp (cup (cup (cup (cup x)))))))
+   (chains l) (? (&& (chainp l) (chainp (cup l)))
+               (cat (L "(" (tv (cap l)) ", " (tv (e2 l)) ")" (? (chainp (cup (cup l))) ";" "") (chains (cup (cup l))))) "")
+   (th x) (cat (L "[" (chains (cup x)) "]"))             ; #(1 10 2 20) -> [(1, 10);(2, 20)]
    ; translate a collection value to a Coq `list Z`
-   (joinl l) (? (twop l) (cat (L (tv (cap l)) (? (twop (cup l)) ";" "") (joinl (cup l)))) "")
+   (joinl l) (? (chainp l) (cat (L (tv (cap l)) (? (chainp (cup l)) ";" "") (joinl (cup l)))) "")
    (joinb s i) (? (< i (tally s)) (cat (L (show (s i)) (? (< (+ 1 i) (tally s)) ";" "") (joinb s (+ 1 i)))) "")
    (tl x) (? (qlist? x)  (cat (L "[" (joinl (e2 x)) "]"))
              (arrv? x)   (cat (L "[" (joinl (cup x)) "]"))    ; tuple: the elements are the cup
@@ -78,7 +78,7 @@
 
    ; integer-valued term? a fixnum, an operator tree, or a numeral-application spine
    (intv? x) (? (fixp x) 1
-                (twop x) (: h (cap x)
+                (chainp x) (: h (cap x)
                             (? (binop h)     (&& (len3? x) (intv? (e2 x)) (intv? (e3 x)))
                                (idp h 'sat)   (&& (un2? x) (| (intv? (e2 x)) (| (listv? (e2 x)) (hashv? (e2 x)))))
                                (idp h 'peep)  (&& (len4? x) (| (hashv? (e2 x)) (listv? (e2 x))) (intv? (e3 x)) (intv? (e4 x)))
@@ -88,7 +88,7 @@
                                (fixp h) (allv? x)
                                0))
                 0)
-   (allv? l) (? (twop l) (&& (intv? (cap l)) (allv? (cup l))) (! (twop l)))
+   (allv? l) (? (chainp l) (&& (intv? (cap l)) (allv? (cup l))) (! (chainp l)))
 
    ; translate an integer-valued term to a Coq Z expression
    (tv x) (? (fixp x) (? (< x 0) (cat (L "(" (show x) ")")) (show x))  ; parens: `Z.eqb -2` parses as subtraction
@@ -107,21 +107,21 @@
                                      (cat (L "(nth (Z.to_nat " (tv (e3 x)) ") " (tl (e2 x)) " " (tv (e4 x)) ")")))  ; hash lookup / array index
                    (hashv? h)     (cat (L "(hget " (th h) " " (tv (e2 x)) " 0)"))  ; (#(..) k) -- lookup, default 0
                    (spine (tv h) (cup x)))))                                ; (app .. ..) spine
-   (spine acc rest) (? (twop rest)
+   (spine acc rest) (? (chainp rest)
                        (spine (cat (L "(app " acc " " (tv (cap rest)) ")")) (cup rest)) acc)
 
    ; the KIND tag of a literal (syntactic) for the type predicates; "Vbot" if untaggable
    (tk x) (? (intv? x) "Vz"  (flop x) "Vflo"  (strp x) "Vstr"  (idp x 'i) "Vcx"
-             (twop x) (: h (cap x)
+             (chainp x) (: h (cap x)
                         (? (idp h bs) (tkq (e2 x))                     ; '(..) or 'x
                            (idp h 'wave) "Vcx"                         ; ~(re im)
                            (idp h 'hash) "Vmap"                        ; #(..)
                            (| (idp h 'tuple) (idp h 'iota)) "Varr"     ; @(..) / (iota n)
                            "Vbot"))
              "Vbot")
-   (tkq q) (? (symp q) "Vsym" (twop q) "Vpair" (fixp q) "Vz" "Vbot")   ; the quoted datum's kind
+   (tkq q) (? (symp q) "Vsym" (chainp q) "Vpair" (fixp q) "Vz" "Vbot")   ; the quoted datum's kind
    (kpred h) (? (idp h 'fixp) "fixp" (idp h 'flop) "flop" (idp h 'comp) "comp"
-                (idp h 'strp) "strp" (idp h 'symp) "symp" (idp h 'twop) "twop"
+                (idp h 'strp) "strp" (idp h 'symp) "symp" (idp h 'chainp) "chainp"
                 (idp h 'mapp) "mapp" (idp h 'arrp) "arrp" (idp h 'nump) "nump"
                 (idp h 'intp) "intp" (idp h 'atomp) "atomp" (idp h 'packp) "packp"
                 (idp h 'lamp) "lamp" 0)
@@ -140,13 +140,13 @@
    ; translate a top-level predicate to a Coq bool, or 0 if not translatable.
    ; `!` factors to `nilp`: (nilp x) is the bit "x is nothing" (x <= 0 for integers);
    ; (nilp (nilp x)) is `!!x`, x truthy -- the negation of the inner bit.
-   (tp f) (? (! (twop f)) 0
+   (tp f) (? (! (chainp f)) 0
              (: h (cap f)
                 (? (idp h 'nilp) (: a (e2 f)
                                    (? (intv? a)  (cat (L "(Z.leb " (tv a) " 0)"))
                                       (listv? a) (cat (L "(Z.leb (asum " (tl a) ") 0)"))  ; !list: net <= 0
                                       (: p (tp a) (? p (cat (L "(negb " p ")")) 0))))
-                   (kpred h)  (: t (tk (e2 f)) (? (= t "Vbot") 0 (cat (L "(" (kpred h) " " t ")"))))  ; (fixp 5), (twop '(..))..
+                   (kpred h)  (: t (tk (e2 f)) (? (= t "Vbot") 0 (cat (L "(" (kpred h) " " t ")"))))  ; (fixp 5), (chainp '(..))..
                    (! (len3? f)) 0
                    (idp h '=) (? (&& (intv? (e2 f)) (intv? (e3 f)))   (cat (L "(Z.eqb " (tv (e2 f)) " " (tv (e3 f)) ")"))
                                  (&& (listv? (e2 f)) (listv? (e3 f))) (cat (L "(leqb " (tl (e2 f)) " " (tl (e3 f)) ")"))  ; list/array =
@@ -171,7 +171,7 @@
                     (scan (cup ops))))
    (walk fs) (? (! fs) 0
                 (: f (cap fs)
-                   _ (? (&& (twop f) (idp (cap f) 'assert)) (scan (cup f)) 0)
+                   _ (? (&& (chainp f) (idp (cap f) 'assert)) (scan (cup f)) 0)
                    (walk (cup fs))))
 
    _ (. (cat (L
@@ -205,7 +205,7 @@
      "Definition comp  v := match v with Vcx  => true | _ => false end." (string 10)
      "Definition strp  v := match v with Vstr => true | _ => false end." (string 10)
      "Definition symp  v := match v with Vsym => true | _ => false end." (string 10)
-     "Definition twop  v := match v with Vpair=> true | _ => false end." (string 10)
+     "Definition chainp  v := match v with Vpair=> true | _ => false end." (string 10)
      "Definition mapp  v := match v with Vmap => true | _ => false end." (string 10)
      "Definition arrp  v := match v with Varr => true | _ => false end." (string 10)
      "Definition intp  v := match v with Vz   => true | _ => false end." (string 10)

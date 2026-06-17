@@ -29,7 +29,7 @@
 ; and the buffer becomes a new entry, so the original survives.
 (: m (nom 0) eofsym (nom 0)
 
-   (revcat a b) (foldl (flip cons) b a)
+   (revcat a b) (foldl (flip hook) b a)
 
    ; parse a charlist as ONE expression: the line is implicitly parenthesized,
    ; so `x y z` reads as (x y z) -- a single application -- and infix works at
@@ -37,7 +37,7 @@
    ; by (f) == f. returns m if the input ends inside an unfinished shape
    ; (an unclosed paren or string), 0 for a blank line, else a one-form list.
    (parseall cl)
-     (: p (sip (cons 40 (cat cl (L 41))))
+     (: p (sip (hook 40 (cat cl (L 41))))
         r (read p eofsym)
         (? (= r p)      m                  ; ends inside an unfinished form
            (= r eofsym) 0                  ; unreachable: the wrap always closes
@@ -48,21 +48,21 @@
 
    ; intersperse a list of charlists with newlines, in order
    (joinln ls)
-     (? (twop ls)
-        (? (twop (cup ls))
-           (cat (cap ls) (cons 10 (joinln (cup ls))))
+     (? (chainp ls)
+        (? (chainp (cup ls))
+           (cat (cap ls) (hook 10 (joinln (cup ls))))
            (cap ls))
         0)
 
    ; flatten the editor state into one charlist suitable for parseall
    (flatten u l r d)
-     (joinln (revcat u (cons (revcat l r) d)))
+     (joinln (revcat u (hook (revcat l r) d)))
 
    ; walk xs forward taking n chars into acc (reversed); when done
    ; call k with (rev (take n xs)) and (drop n xs). stops cleanly at
    ; end-of-xs even if n exceeds the list length.
    (splitat k acc n xs)
-     (? (&& (twop xs) (< 0 n)) (splitat k (cons (cap xs) acc) (- n 1) (cup xs))
+     (? (&& (chainp xs) (< 0 n)) (splitat k (hook (cap xs) acc) (- n 1) (cup xs))
         (k acc xs))
 
    ; map non-printables to space; otherwise pass through
@@ -75,20 +75,20 @@
    ; the next line on. up/down preserve column, clamped to the
    ; destination line's length.
    (edleft k u l r d)
-     (? (twop l) (k u (cup l) (cons (cap l) r) d)
-        (twop u) (k (cup u) (rev (cap u)) 0 (cons (revcat l r) d))
+     (? (chainp l) (k u (cup l) (hook (cap l) r) d)
+        (chainp u) (k (cup u) (rev (cap u)) 0 (hook (revcat l r) d))
         (k u l r d))
    (edright k u l r d)
-     (? (twop r) (k u (cons (cap r) l) (cup r) d)
-        (twop d) (k (cons (revcat l r) u) 0 (cap d) (cup d))
+     (? (chainp r) (k u (hook (cap r) l) (cup r) d)
+        (chainp d) (k (hook (revcat l r) u) 0 (cap d) (cup d))
         (k u l r d))
    (edbsp k u l r d)
-     (? (twop l) (k u (cup l) r d)
-        (twop u) (k (cup u) (rev (cap u)) r d)
+     (? (chainp l) (k u (cup l) r d)
+        (chainp u) (k (cup u) (rev (cap u)) r d)
         (k u l r d))
    (eddel k u l r d)
-     (? (twop r) (k u l (cup r) d)
-        (twop d) (k u l (cap d) (cup d))
+     (? (chainp r) (k u l (cup r) d)
+        (chainp d) (k u l (cap d) (cup d))
         (k u l r d))
    (edhome k u l r d) (k u 0 (revcat l r) d)
    (edend  k u l r d) (k u (revcat r l) 0 d)
@@ -96,36 +96,36 @@
    ; the topmost line / end of the bottommost line. on a single-line
    ; buffer they degenerate to edhome / edend.
    (edtop k u l r d)
-     (? (twop u) (: ru (rev u)
-                  (k 0 0 (cap ru) (cat (cup ru) (cons (revcat l r) d))))
+     (? (chainp u) (: ru (rev u)
+                  (k 0 0 (cap ru) (cat (cup ru) (hook (revcat l r) d))))
         (k u 0 (revcat l r) d))
    (edbot k u l r d)
-     (? (twop d) (: rd (rev d)
-                  (k (cat (cup rd) (cons (revcat l r) u)) (revcat (cap rd) 0) 0 0))
+     (? (chainp d) (: rd (rev d)
+                  (k (cat (cup rd) (hook (revcat l r) u)) (revcat (cap rd) 0) 0 0))
         (k u (revcat r l) 0 d))
    (edup k u l r d)
-     (? (twop u) (splitat (\ lz rr (k (cup u) lz rr (cons (revcat l r) d)))
+     (? (chainp u) (splitat (\ lz rr (k (cup u) lz rr (hook (revcat l r) d)))
                           0 (tally l) (cap u))
         (k u l r d))
    (eddown k u l r d)
-     (? (twop d) (splitat (\ lz rr (k (cons (revcat l r) u) lz rr (cup d)))
+     (? (chainp d) (splitat (\ lz rr (k (hook (revcat l r) u) lz rr (cup d)))
                           0 (tally l) (cap d))
         (k u l r d))
 
    ; --- history zipper ---
 
    ; pack the buffer's four halves into one slot for history storage.
-   (mkframe u l r d) (cons u (cons l (cons r d)))
+   (mkframe u l r d) (hook u (hook l (hook r d)))
 
    ; if cur holds a pristine recall, restore it at its slot in hu;
    ; called before any mutating edit so the original survives.
-   (detach hu cur) (? (twop cur) (cons cur hu) hu)
+   (detach hu cur) (? (chainp cur) (hook cur hu) hu)
 
    ; predicates over the buffer used by the history navigation rules
    ; below: empty buffers don't get pushed during normal nav, and
    ; off-the-end nav only pushes when the buffer parses to a value.
    (emptybuf u l r d) (&& (nilp u) (nilp l) (nilp r) (nilp d))
-   (parses u l r d)   (twop (parseall (flatten u l r d)))
+   (parses u l r d)   (chainp (parseall (flatten u l r d)))
 
    ; up/down through the history zipper. on a normal pop, push the
    ; current buffer onto the other side (skipping if empty); if the
@@ -133,21 +133,21 @@
    ; non-nil) and the buffer parses, push and scroll into a fresh
    ; empty line.
    (uphist k u l r d hu hd cur)
-     (? (twop hu)
+     (? (chainp hu)
         (: e (cap hu)
-           nhd (? (emptybuf u l r d) hd (cons (mkframe u l r d) hd))
+           nhd (? (emptybuf u l r d) hd (hook (mkframe u l r d) hd))
            (k (cap e) (cap (cup e)) (cap (cup (cup e))) (cup (cup (cup e))) (cup hu) nhd e))
-        (&& (twop cur) (parses u l r d))
-        (: nhd (cons (mkframe u l r d) hd)
+        (&& (chainp cur) (parses u l r d))
+        (: nhd (hook (mkframe u l r d) hd)
            (k 0 0 0 0 hu nhd 0))
         (k u l r d hu hd cur))
    (downhist k u l r d hu hd cur)
-     (? (twop hd)
+     (? (chainp hd)
         (: e (cap hd)
-           nhu (? (emptybuf u l r d) hu (cons (mkframe u l r d) hu))
+           nhu (? (emptybuf u l r d) hu (hook (mkframe u l r d) hu))
            (k (cap e) (cap (cup e)) (cap (cup (cup e))) (cup (cup (cup e))) nhu (cup hd) e))
-        (&& (twop cur) (parses u l r d))
-        (: nhu (cons (mkframe u l r d) hu)
+        (&& (chainp cur) (parses u l r d))
+        (: nhu (hook (mkframe u l r d) hu)
            (k 0 0 0 0 nhu hd 0))
         (k u l r d hu hd cur))
 
@@ -199,7 +199,7 @@
         _ (each (revcat l r) prc)
         _ (each d (\ ln (do (putc 10) (each ln prc))))
         ld (tally d)
-        col (+ (? (twop u) 0 pl) (tally l))
+        col (+ (? (chainp u) 0 pl) (tally l))
         _ (? (< 0 ld) (do (putc 27) (putc 91) (putn ld) (putc 65)) 0)
         _ (putc 13)
         _ (? (< 0 col) (do (putc 27) (putc 91) (putn col) (putc 67)) 0)
@@ -248,22 +248,22 @@
                 ; detach at the first edit), capped at 100 entries.
                 (= c 10) (: vs (parseall (flatten u l r d))
                             (? (= vs m)
-                               (loop npra (cons (rev l) u) 0 r d (detach hu cur) hd 0)
-                               (: _ (? (twop d) (: _ (putc 27) _ (putc 91) _ (putn (tally d)) (putc 66)) 0)
+                               (loop npra (hook (rev l) u) 0 r d (detach hu cur) hd 0)
+                               (: _ (? (chainp d) (: _ (putc 27) _ (putc 91) _ (putn (tally d)) (putc 66)) 0)
                                   _ (putc 10)
                                   nhu (? (nilp vs) (revcat hd (detach hu cur))
-                                         (take 100 (cons (mkframe u l r d) (revcat hd (detach hu cur)))))
-                                  (cons vs (cons nhu 0)))))
-                (< 0 c)  (loop npra u (cons c l) r d (detach hu cur) hd 0)
+                                         (take 100 (hook (mkframe u l r d) (revcat hd (detach hu cur)))))
+                                  (hook vs (hook nhu 0)))))
+                (< 0 c)  (loop npra u (hook c l) r d (detach hu cur) hd 0)
                 (= c -1) (edleft  kloop u l r d)
                 (= c -2) (edright kloop u l r d)
                 (= c -3) (edbsp   kedit u l r d)
                 (= c -4) (eddel   kedit u l r d)
                 (= c -5) (edhome  kloop u l r d)
                 (= c -6) (edend   kloop u l r d)
-                (= c -8) (? (twop u) (edup    kloop u l r d)
+                (= c -8) (? (chainp u) (edup    kloop u l r d)
                             (uphist   khist u l r d hu hd cur))
-                (= c -9) (? (twop d) (eddown  kloop u l r d)
+                (= c -9) (? (chainp d) (eddown  kloop u l r d)
                             (downhist khist u l r d hu hd cur))
                 (= c -10) (edtop kloop u l r d)
                 (= c -11) (edbot kloop u l r d)
@@ -345,25 +345,25 @@
 ; 0); a CHARMS is the colist: (cap cs) is a charm, (cup cs) is a top, and
 ; the tail forced with the empty -- ((cup cs) ()) -- types as charms + 0,
 ; the coproduct, 0 the end (the floor as the nil injection). consumers
-; dispatch on KIND: twop is a cell, anything else the end. `charms` is also
+; dispatch on KIND: chainp is a cell, anything else the end. `charms` is also
 ; the canonical lift into the construction: chars lift cell by cell, a port
 ; (the HOT charms) pulls one byte per force (-1 ends it), charms pass
 ; through, the end lifts to itself. charms->chars realizes a finite charms.
-; NB the cell test dispatches on the TAIL's kind -- a pair or nil is chars,
+; NB the cell test dispatches on the TAIL's kind -- a chain or nil is chars,
 ; anything else is taken as the forcing top. (lamp is no use here: it is
-; hot-based and answers true for every heap value, pairs included -- the
+; hot-based and answers true for every heap value, chains included -- the
 ; lamp-spans-bands pin.)
 (: (charms s)
-   (? (twop s) (: t (cup s)
-                  (? (twop t) (cons (cap s) (\ u (charms t)))   ; chars: lift, lazy tail
-                     (nilp t) (cons (cap s) (\ u ()))           ; the last chars cell
+   (? (chainp s) (: t (cup s)
+                  (? (chainp t) (hook (cap s) (\ u (charms t)))   ; chars: lift, lazy tail
+                     (nilp t) (hook (cap s) (\ u ()))           ; the last chars cell
                      s))                                        ; a top tail: charms already
       (hotp s) (: c (fgetc s)                                ; a port is the hot charms
-                     (? (= c -1) () (cons c (\ u (charms s)))))
+                     (? (= c -1) () (hook c (\ u (charms s)))))
       ())
    (charms->chars s)
    (: cs (charms s)
-      (? (twop cs) (cons (cap cs) (charms->chars ((cup cs) ()))) 0)))
+      (? (chainp cs) (hook (cap cs) (charms->chars ((cup cs) ()))) 0)))
 ; zev: charms -> top, the reverse shell of the compiler -- the lane every
 ; shell ultimately feeds into. takes the global construction (anything the
 ; `charms` lift takes: chars, a port, charms proper), reads ONE form from it

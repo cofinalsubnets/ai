@@ -18,9 +18,9 @@
 ; ai/glaze/auto.l's counted-loop path. Load AFTER ai/glaze/emit.l (uses cgn/emit/nat/natn/epilogue/
 ; epilogue-mn). x86-64 only.
 (: (exprn ps e) (? (memq e ps) 1  (intp e) 1                          ; var in frame | int literal
-                   (twop e) (: op (cap e)
+                   (chainp e) (: op (cap e)
                                (? (memq op '(+ - * // % & | ^ < <= > >= =)) (&& (exprn ps (caup e)) (exprn ps (caup (cup e))))
-                                  (= op '?) (&& (twop (cup (cup (cup e)))) !(twop (cup (cup (cup (cup e)))))
+                                  (= op '?) (&& (chainp (cup (cup (cup e)))) !(chainp (cup (cup (cup (cup e)))))
                                                (exprn ps (caup e)) (exprn ps (caup (cup e))) (exprn ps (caup (cup (cup e)))))
                                   0))
                    0)
@@ -30,7 +30,7 @@
    ; surface body. compile body over ps; deopt -> e. non-qualifying -> e unchanged.
    (natjit e s a)
     (: ps (init (cup s))  body (last (cup s))
-       (? (&& (twop s) (twop (cup (cup s))) (exprn ps body))         ; >=1 param, a body, leaf grammar
+       (? (&& (chainp s) (chainp (cup (cup s))) (exprn ps body))         ; >=1 param, a body, leaf grammar
           (: _ (pin fires 0 (+ 1 (peep fires 0 0)))
              (? (= a 1) (nat  (emit (cat (cgv (cap ps) (\ d (fxv 0 d)) body 0) epilogue))    e s)  ; arity 1 -> nat (deopt to e value[0])
                         (natn (emit (cat (cgn ps body 0) epilogue-mn)) e s a))) ; arity>=2 -> natn (deopt to e body)

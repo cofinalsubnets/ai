@@ -266,10 +266,10 @@ extern struct ai_io ai_stdin, ai_stdout, ai_stderr;
 #define ai_pop1(g) (*(g)->sp++)
 #define op(nom, n, x) lvm(nom) { intptr_t _ = (x); *(Sp += n-1) = _; Ip++; return Continue(); }
 #define nil ai_nil
-struct ai_pair { lvm_t *ap; intptr_t a, b; };
+struct ai_chain { lvm_t *ap; intptr_t a, b; };
 // The fundamental value kind for generic-op dispatch (enum q). KCharm is the odd fixnum
 // tag; KTop is any non-data heap pointer (text/function/map). The five DATA kinds
-// (KVec, KBig, KString, KSym, KTwo) are the ones ai_typ recovers from an ap's section
+// (KVec, KBig, KString, KSym, KChain) are the ones ai_typ recovers from an ap's section
 // slot (data.c go() order, via the data.h lookup); every vec reads as KVec there
 // (coarse -- one sentinel for scalar boxes and arrays alike). The SEVEN non-sentinel
 // numeric kinds are minted by ai_kind alone, refining a KVec by rank: a rank-0 box to
@@ -278,14 +278,14 @@ struct ai_pair { lvm_t *ap; intptr_t a, b; };
 // self-netting fixed-width numbers) and the array tower it mirrors both dispatch inline
 // (KArrZ~int, KArrR~float, KArrC~complex, KArrO~object). The diagonal is the type lattice
 // by semantics then representation: arithmetic lane [KCharm..KArrO] (scalars then their
-// array counterparts), sequence/concat lane [KString..KTwo], then map, text last --
+// array counterparts), sequence/concat lane [KString..KChain], then map, text last --
 // so each dyadic lane is one contiguous range, `max` is the within-lane promotion join,
-// and the lone undefined seam (arith <-> seq) is the KArrO|KString boundary. two (pair)
+// and the lone undefined seam (arith <-> seq) is the KArrO|KString boundary. two (chain)
 // caps the sequence lane; KMap is the map's own rung just under KTop, so the total
-// order's pair < map < lambda is the enum order itself (a map is still a lookup lambda
+// order's chain < map < lambda is the enum order itself (a map is still a lookup lambda
 // for +/*/apply -- the rung exists for the order and the honest matrix cells).
 // KN is the matrix dimension.
-enum q { KCharm, KWide, KFlo, KCplx, KBig, KVec, KArrZ, KArrR, KArrC, KArrO, KString, KSym, KTwo, KMap, KTop, KN };
+enum q { KCharm, KWide, KFlo, KCplx, KBig, KVec, KArrZ, KArrR, KArrC, KArrO, KString, KSym, KChain, KMap, KTop, KN };
 #define ai_data_n 8     // # of data sentinels (data.c go()); the KArr* kinds interleave, so no longer KTop-KVec
 typedef ai_word num, word;
 // The unique empty string -- a data-segment global the GC never moves (gcp's
@@ -319,17 +319,17 @@ enum q ai_kind(word);
 // (ai_typ returns one of the five data kinds), so the first dimension is KN, not ai_data_n.
 extern lvm_t *ai_apply_mx[KN][KN];
 extern union u const numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
-lvm_t lvm_ap, lvm_two, lvm_vec, lvm_sym, lvm_str, lvm_big, lvm_flo, lvm_wide, lvm_cbox; // sentinels + ap: data.c & inline predicates
+lvm_t lvm_ap, lvm_chain, lvm_vec, lvm_sym, lvm_str, lvm_big, lvm_flo, lvm_wide, lvm_cbox; // sentinels + ap: data.c & inline predicates
 uintptr_t hash(struct ai*, word), ai_vec_bytes(struct ai_vec*);
 #define str(_) ((struct ai_str*)(_))
 #define lamp evenp
-#define two(_) ((struct ai_pair*)(_))
-static ai_inline bool twop(word _) { return lamp(_) && cell(_)->ap == lvm_two; }
+#define two(_) ((struct ai_chain*)(_))
+static ai_inline bool chainp(word _) { return lamp(_) && cell(_)->ap == lvm_chain; }
 static ai_inline void *bump(struct ai *g, uintptr_t n) {
   if (avail(g) < n) __builtin_trap();
   void *x = g->hp; g->hp += n; return x; }
-static ai_inline struct ai_pair *ini_two(struct ai_pair *w, intptr_t a, intptr_t b) {
- return w->ap = lvm_two, w->a = a, w->b = b, w; }
+static ai_inline struct ai_chain *ini_chain(struct ai_chain *w, intptr_t a, intptr_t b) {
+ return w->ap = lvm_chain, w->a = a, w->b = b, w; }
 static ai_inline struct ai *encode(struct ai*g, enum ai_status s) { return
   (struct ai*) ((uintptr_t) g | s); }
 // Raise: to the global `help` function when installed, else raise_c (ai.c).

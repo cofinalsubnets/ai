@@ -2,7 +2,7 @@
 ; l's generic dyadic ops are NxN ap matrices indexed by the kind lattice
 ; (l.h enum q): KCharm | KWide KFlo KCplx (the lean scalar-gem boxes) | KBig |
 ; KVec (the coarse array sentinel; ai_kind refines it away) | KArrZ KArrR KArrC
-; KArrO (the array tower) | KString KSym | KTwo(pair) | KTop.
+; KArrO (the array tower) | KString KSym | KChain(chain) | KTop.
 ; A monadic op is that matrix's diagonal. Three matrices are explicit tables in
 ; l.c -- g_add_mx (+), g_mul_mx (*), g_apply_mx (apply); the rest (- / %
 ; < <= = >= >) are lane aps that refine the same lattice internally. This
@@ -27,7 +27,7 @@
    mx-str "ab"                           ; KString
    mx-sym 'ef                            ; KSym (interned)
    mx-usy $cd                            ; KSym (uninterned)
-   mx-lst '(1 2)                         ; KTwo (pair / list)
+   mx-lst '(1 2)                         ; KChain (chain / list)
    mx-fn  (+ 1)                          ; KTop (nif partial application)
    mx-map (pin (pin (tablet 0) 1 10) 2 20)) ; KTop (a map is a lookup-lambda)
 
@@ -38,12 +38,12 @@
 ; uniform today (a hook for later), so we vary it to pin that. Non-data applies
 ; (fixnum numeral, lambda/nif, map, opaque handle) take their own paths.
 (assert
- ; --- row KTwo: a pair IS its own Church eliminator, (p f) == (f (A p) (B p)).
+ ; --- row KChain: a chain IS its own Church eliminator, (p f) == (f (A p) (B p)).
  ;     This row had no test before -- a sentinel mis-route would silently break
  ;     it (and it shares the failure mode that bit string/sym apply). ---
  (= '(1 (2)) ('(1 2) (\ a b (L a b))))        ; f sees car=1, cdr='(2)
  (= '(1 (2 3)) ('(1 2 3) (\ a b (L a b))))    ; longer cdr passed whole
- (= '(1 2) ((cons 1 2) (\ a b (L a b))))         ; improper pair: cdr=2 (a fixnum), raw
+ (= '(1 2) ((hook 1 2) (\ a b (L a b))))         ; improper chain: cdr=2 (a fixnum), raw
  (= '(1 2) ('(1 2) (+)))                        ; arg = a nif: (+ 1 '(2)) = (1 2)
  (= '(1 2 3) ('(1 2 3) (+)))                    ; (+ 1 '(2 3))
  (nilp ('(1) (\ a b b)))                      ; cdr of (1) is nil -> 0
@@ -87,7 +87,7 @@
 ; `+` matrix (g_add_mx): the FINE within-category cells symadd.l folds together
 ; ============================================================================
 ; addn lane (numeric tower & arrays): the matrix routes here for any arith x
-; arith pair; the lane then refines by representation. Each rep pairing:
+; arith chain; the lane then refines by representation. Each rep pairing:
 (assert
  ; --- scalar tower: fix / float / wide int / bignum / complex, every mix ---
  (= 7 (+ 5 2))                                ; fix + fix (overflow-free fast path)
@@ -132,7 +132,7 @@
  (nilp (+ @(1 2) "ab"))   (nilp (+ "ab" @(1 2)))   (nilp (+ @(1 2) 'ef))
  (nilp (+ mx-big "ab"))                       ; bignum: out of byte range -> nil
 
- ; --- add_seq lane: a list anywhere (pair wins over text & number) ---
+ ; --- add_seq lane: a list anywhere (chain wins over text & number) ---
  (= '(1 2 3 4) (+ '(1 2) '(3 4)))             ; list + list
  (= '(5 1 2) (+ 5 '(1 2)))   (= '(1 2 5) (+ '(1 2) 5))   ; num <-> list
  (= '("ab" 1 2) (+ "ab" '(1 2)))              ; str <-> list (str is one element)
@@ -209,8 +209,8 @@
 
  ; === ordered comparison (< <= > >=): a TOTAL ORDER over all values. Cross-kind =
  ; the enum q type lattice (the order the matrix DIAGONAL encodes), fixnum/number
- ; low -> lambda high: number < string < symbol < pair < lambda. Within a kind:
- ; numbers by value, text/sym lexicographic, pairs recursive, lambdas by repr hash.
+ ; low -> lambda high: number < string < symbol < chain < lambda. Within a kind:
+ ; numbers by value, text/sym lexicographic, chains recursive, lambdas by repr hash.
  ; An array operand is the exception -> elementwise mask (never the scalar order).
  ; `> >=` are `< <=` with operands reversed (a > b == b < a).
  ; --- within NUMBER: the whole tower orders by value (reps interleave) ---
@@ -227,10 +227,10 @@
  ; --- within PAIR: recursive lexicographic; a shorter prefix sorts first ---
  (< '(1 2) '(1 3))   (< '(1) '(1 2))   (< '(1 2) '(2))
  !(< '(1 2) '(1 2))   (<= '(1 2) '(1 2))
- ; --- CROSS-kind = the type lattice (number < string < symbol < pair < lambda) ---
+ ; --- CROSS-kind = the type lattice (number < string < symbol < chain < lambda) ---
  (< 1 "a")   (< "a" 'a)   (< 'a '(0))   (< '(0) inc)
  (< 1.5 "")   (< (100 2) 'z)   (< ~(1 1) "x")      ; ANY number < ANY string
- !(< "a" 1)   !(< '(0) 'z)                        ; ...and the reverses are false (pair > sym)
+ !(< "a" 1)   !(< '(0) 'z)                        ; ...and the reverses are false (chain > sym)
  ; --- LAMBDA is the top class; within it, ordered by representation hash ---
  (< 5 inc)   (> inc '(0))   (< "z" inc)                ; everything sorts below a lambda
  !(< inc inc)   (<= inc inc)   (>= inc inc)         ; reflexive: a lambda equals itself

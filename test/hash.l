@@ -42,7 +42,7 @@
  (= 0 (peep bx 0 9))                            ; the boxed value sits at key 0 (the number, not the empty)
  (= 9 (: _ (pin bx 0 9) (peep bx 0 0)))         ; ... and is mutable in place
  (= 5 (peep #5 0 0)) (= "s" (peep #"s" 0 0))    ; any scalar boxes (at key 0)
- (= 'a (peep (hash 'a) 0 0))                   ; (NB #'a SPLICES -- a quote form is a pair)
+ (= 'a (peep (hash 'a) 0 0))                   ; (NB #'a SPLICES -- a quote form is a chain)
  (= "#(0 5)" (show #5))                      ; a box prints as #(0 v), reads back
  (= 7 (peep #(1 2 7) 0 0))                      ; an odd trailing operand lands in the box slot (key 0)
  (= 2 (peep #(1 2 7) 1 0)))

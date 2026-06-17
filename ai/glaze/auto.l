@@ -18,26 +18,26 @@
    ; the emitter's expression grammar over var v: var | int | arith | cmp | (? t a b)
    (exprp e v) (? (= e v)   1
                   (intp e)  1
-                  (twop e)  (: op (cap e)
+                  (chainp e)  (: op (cap e)
                                (? (memq op '(+ - * // % & | ^ < <= > >= =)) (&& (exprp (caup e) v) (exprp (caup (cup e)) v))
-                                  (= op '?) (&& (twop (cup (cup (cup e)))) !(twop (cup (cup (cup (cup e)))))   ; exactly 3 operands
+                                  (= op '?) (&& (chainp (cup (cup (cup e)))) !(chainp (cup (cup (cup (cup e)))))   ; exactly 3 operands
                                                (exprp (caup e) v) (exprp (caup (cup e)) v) (exprp (caup (cup (cup e))) v))
                                   0))
                   0)
    ; --- leaf: (\ x E) ---
-   (qual lam) (&& (twop lam) (= (cap lam) '\) (twop (cup lam)) (symp (caup lam))                ; (\ v E), v any symbol
-                  (twop (cup (cup lam))) !(twop (cup (cup (cup lam)))) (exprp (caup (cup lam)) (caup lam)))
+   (qual lam) (&& (chainp lam) (= (cap lam) '\) (chainp (cup lam)) (symp (caup lam))                ; (\ v E), v any symbol
+                  (chainp (cup (cup lam))) !(chainp (cup (cup (cup lam)))) (exprp (caup (cup lam)) (caup lam)))
    ; --- arity-N leaf: (\ p0 .. p_{n-1} E), E over the params (any distinct symbols) ---
    (exprn ps e) (? (memq e ps) 1  (intp e) 1
-                   (twop e) (: op (cap e)
+                   (chainp e) (: op (cap e)
                                (? (memq op '(+ - * // % & | ^ < <= > >= =)) (&& (exprn ps (caup e)) (exprn ps (caup (cup e))))
-                                  (= op '?) (&& (twop (cup (cup (cup e)))) !(twop (cup (cup (cup (cup e)))))
+                                  (= op '?) (&& (chainp (cup (cup (cup e)))) !(chainp (cup (cup (cup (cup e)))))
                                                (exprn ps (caup e)) (exprn ps (caup (cup e))) (exprn ps (caup (cup (cup e)))))
                                   0))
                    0)
-   (distinctp l) (? !(twop l) 1  (memq (cap l) (cup l)) 0  (distinctp (cup l)))        ; no repeated param
-   (qualn lam) (: ps (? (twop (cup lam)) (init (cup lam)) 0)  body (? (twop (cup lam)) (last (cup lam)) 0)
-                  (&& (twop lam) (= (cap lam) '\) (twop (cup lam))
+   (distinctp l) (? !(chainp l) 1  (memq (cap l) (cup l)) 0  (distinctp (cup l)))        ; no repeated param
+   (qualn lam) (: ps (? (chainp (cup lam)) (init (cup lam)) 0)  body (? (chainp (cup lam)) (last (cup lam)) 0)
+                  (&& (chainp lam) (= (cap lam) '\) (chainp (cup lam))
                       (all symp ps) (< 1 (tally ps)) (distinctp ps)                     ; >=2 distinct symbol params
                       (exprn ps body)))
    (njit lam) (: v (caup lam) (nat (emit (cat (cgv v (\ d (fxv 0 d)) (caup (cup lam)) 0) epilogue)) (base-ev lam) lam))  ; v any param name, fixnum-guarded
@@ -50,16 +50,16 @@
        T    (caup IF) THEN (caup (cup IF)) ELS (caup (cup (cup IF)))   ; (? T THEN ELS)
        STEP (caup THEN) ACC (caup (cup THEN))               ; THEN = (go STEP ACC)
        B    (caup (cup ACC))                                ; ACC = (op a B)
-       op   (? (twop ACC) (cap ACC) 0)  cmp (? (twop T) (cap T) 0)   ; the fold op + the loop-test comparison
-       ok (&& (twop lam) (= (cap lam) '\) (symp (caup lam))                  ; (\ N ..)
-              (twop (cup (cup lam))) !(twop (cup (cup (cup lam))))           ; one body
-              (twop M) (= z1 0) !(twop (cup (cup (cup M))))                  ; (S 0 a0)
-              (twop S) (= (cap S) ':) (symp GO) (symp I) (symp A) !(= I A)   ; (: (go i a) IF)
-              (twop IF) (= (cap IF) '?) (= ELS A)                            ; (? .. .. a)
-              (twop T) (memq cmp '(< <= > >= =)) (= (caup T) I) (= (caup (cup T)) (caup lam))  ; (cmp i n)
+       op   (? (chainp ACC) (cap ACC) 0)  cmp (? (chainp T) (cap T) 0)   ; the fold op + the loop-test comparison
+       ok (&& (chainp lam) (= (cap lam) '\) (symp (caup lam))                  ; (\ N ..)
+              (chainp (cup (cup lam))) !(chainp (cup (cup (cup lam))))           ; one body
+              (chainp M) (= z1 0) !(chainp (cup (cup (cup M))))                  ; (S 0 a0)
+              (chainp S) (= (cap S) ':) (symp GO) (symp I) (symp A) !(= I A)   ; (: (go i a) IF)
+              (chainp IF) (= (cap IF) '?) (= ELS A)                            ; (? .. .. a)
+              (chainp T) (memq cmp '(< <= > >= =)) (= (caup T) I) (= (caup (cup T)) (caup lam))  ; (cmp i n)
               (= (cap THEN) GO)                                              ; (go ..)
-              (twop STEP) (= (cap STEP) '+) (= (caup STEP) I) (= (caup (cup STEP)) 1)  ; (+ i 1)
-              (twop ACC) (memq op '(+ *)) (= (caup ACC) A) (exprp B I)       ; (op a B), op in {+,*}, B over i
+              (chainp STEP) (= (cap STEP) '+) (= (caup STEP) I) (= (caup (cup STEP)) 1)  ; (+ i 1)
+              (chainp ACC) (memq op '(+ *)) (= (caup ACC) A) (exprp B I)       ; (op a B), op in {+,*}, B over i
               (= z2 (foldinit op)))                                          ; a0 matches the op's identity (0 / 1)
        (? ok (L B I op cmp) 0))
    (njit-loop lam B cv op cmp) (nat (emit (loopcode B cv op cmp)) (base-ev lam) lam)
@@ -67,23 +67,23 @@
    ; up to 3 loop vars + arbitrary update exprs -- this is the shape iterative fib/tak
    ; take (i,a,b with updates b and a+b), not just the fold skeleton above.
    (loopinfo-n lam)
-    (: BODY (? (twop (cup lam)) (caup (cup lam)) 0)
-       S    (? (twop BODY) (cap BODY) 0)  inits (? (twop BODY) (cup BODY) 0)
-       G    (? (twop S) (caup S) 0)
-       IF   (? (&& (twop S) (twop (cup S))) (caup (cup S)) 0)
-       GO   (? (twop G) (cap G) 0)  vars (? (twop G) (cup G) 0)
-       T    (? (twop IF) (caup IF) 0)
-       THEN (? (&& (twop IF) (twop (cup IF))) (caup (cup IF)) 0)
-       R    (? (&& (twop IF) (twop (cup (cup IF)))) (caup (cup (cup IF))) 0)
-       updates (? (twop THEN) (cup THEN) 0)
-       fr   (cons (caup lam) vars)                                  ; cgl frame: {n, v0..vk}
-       ok (&& (twop lam) (= (cap lam) '\) (symp (caup lam)) (twop (cup (cup lam))) !(twop (cup (cup (cup lam))))
-              (twop BODY) (twop S) (= (cap S) ':) (twop (cup S)) !(twop (cup (cup (cup S))))   ; (: G IF)
-              (twop G) (symp GO) (twop vars) (all symp vars) (distinctp vars) !(memq GO vars)
+    (: BODY (? (chainp (cup lam)) (caup (cup lam)) 0)
+       S    (? (chainp BODY) (cap BODY) 0)  inits (? (chainp BODY) (cup BODY) 0)
+       G    (? (chainp S) (caup S) 0)
+       IF   (? (&& (chainp S) (chainp (cup S))) (caup (cup S)) 0)
+       GO   (? (chainp G) (cap G) 0)  vars (? (chainp G) (cup G) 0)
+       T    (? (chainp IF) (caup IF) 0)
+       THEN (? (&& (chainp IF) (chainp (cup IF))) (caup (cup IF)) 0)
+       R    (? (&& (chainp IF) (chainp (cup (cup IF)))) (caup (cup (cup IF))) 0)
+       updates (? (chainp THEN) (cup THEN) 0)
+       fr   (hook (caup lam) vars)                                  ; cgl frame: {n, v0..vk}
+       ok (&& (chainp lam) (= (cap lam) '\) (symp (caup lam)) (chainp (cup (cup lam))) !(chainp (cup (cup (cup lam))))
+              (chainp BODY) (chainp S) (= (cap S) ':) (chainp (cup S)) !(chainp (cup (cup (cup S))))   ; (: G IF)
+              (chainp G) (symp GO) (chainp vars) (all symp vars) (distinctp vars) !(memq GO vars)
               (< (tally vars) 4)                                    ; <= 3 loop vars (register limit)
-              (twop IF) (= (cap IF) '?) (twop THEN) (= (cap THEN) GO)   ; (? T (go U..) R)
+              (chainp IF) (= (cap IF) '?) (chainp THEN) (= (cap THEN) GO)   ; (? T (go U..) R)
               (= (tally updates) (tally vars)) (= (tally inits) (tally vars))
-              (twop T) (memq (cap T) '(< <= > >= =)) (exprn fr T)   ; TEST a comparison over {n,vars}
+              (chainp T) (memq (cap T) '(< <= > >= =)) (exprn fr T)   ; TEST a comparison over {n,vars}
               (all (\ u (exprn fr u)) updates) (exprn fr R)         ; updates + RESULT exprs over {n,vars}
               (all intp inits))                                     ; inits are fixnum consts
        (? ok (L vars updates T R inits) 0))
@@ -94,11 +94,11 @@
    ; native CAPTURED closure -- fully transparent (= the interpreter's ((2param) p)
    ; partial form: native captures via partial-apply are =/show-identical to interp).
    ; The constructor itself normalizes to the flat 2-param (a curry-equivalent form).
-   (qualc lam) (: p (caup lam)  inner (? (twop (cup lam)) (caup (cup lam)) 0)
-                  (&& (twop lam) (= (cap lam) '\) (twop (cup lam)) (symp p)
-                      (twop (cup (cup lam))) !(twop (cup (cup (cup lam))))               ; (\ p INNER), one body
-                      (twop inner) (= (cap inner) '\) (twop (cup inner)) (symp (caup inner)) !(= p (caup inner))
-                      (twop (cup (cup inner))) !(twop (cup (cup (cup inner))))            ; INNER = (\ q E), q != p
+   (qualc lam) (: p (caup lam)  inner (? (chainp (cup lam)) (caup (cup lam)) 0)
+                  (&& (chainp lam) (= (cap lam) '\) (chainp (cup lam)) (symp p)
+                      (chainp (cup (cup lam))) !(chainp (cup (cup (cup lam))))               ; (\ p INNER), one body
+                      (chainp inner) (= (cap inner) '\) (chainp (cup inner)) (symp (caup inner)) !(= p (caup inner))
+                      (chainp (cup (cup inner))) !(chainp (cup (cup (cup inner))))            ; INNER = (\ q E), q != p
                       (exprn (L p (caup inner)) (caup (cup inner)))))
    (flatc lam) (: inner (caup (cup lam)) (L '\ (caup lam) (caup inner) (caup (cup inner))))  ; (\ p (\ q E)) -> (\ p q E)
    ; COMPILE CACHE: each source \-expr compiles ONCE (no re-mmap on repeated ev).

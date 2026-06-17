@@ -178,7 +178,7 @@ ai_noinline static struct ai *host_run(struct ai *g, ai_word argv) {
  // pass 1: validate every element is a string; size the arg-byte blob.
  intptr_t argc = 0;
  uintptr_t total = 0;
- for (ai_word p = argv; twop(p); p = B(p)) {
+ for (ai_word p = argv; chainp(p); p = B(p)) {
   if (!ai_strp(A(p))) return ai_push(g, 1, putcharm(-1));   // misuse
   argc++, total += len(A(p)) + 1; }                       // +1 for the NUL
  if (!argc) return ai_push(g, 1, putcharm(-1));            // empty argv
@@ -192,7 +192,7 @@ ai_noinline static struct ai *host_run(struct ai *g, ai_word argv) {
  char **cav = (char**) g->hp;                             // at Hp: aligned
  char *blob = (char*) (g->hp + (argc + 1));               // whole words after
  { uintptr_t off = 0; intptr_t i = 0;
-   for (ai_word p = argv; twop(p); p = B(p), i++) {         // re-walk post-ai_have
+   for (ai_word p = argv; chainp(p); p = B(p), i++) {         // re-walk post-ai_have
     struct ai_str *s = str(A(p));
     memcpy(blob + off, txt(s), len(s));
     blob[off + len(s)] = 0;
@@ -243,8 +243,8 @@ ai_noinline static struct ai *host_run(struct ai *g, ai_word argv) {
    else g->sp[0] = EmptyString;                             // empty output -> the singleton
    int status = WIFEXITED(st) ? WEXITSTATUS(st)
               : WIFSIGNALED(st) ? 128 + WTERMSIG(st) : -1;
-   if (!ai_ok(g = ai_have(g, Width(struct ai_pair)))) return g;
-   struct ai_pair *w = ini_two((struct ai_pair*) bump(g, Width(struct ai_pair)),
+   if (!ai_ok(g = ai_have(g, Width(struct ai_chain)))) return g;
+   struct ai_chain *w = ini_chain((struct ai_chain*) bump(g, Width(struct ai_chain)),
                               putcharm(status), g->sp[0]);
    g->sp[0] = word(w); }                                  // [(status.output), argv]
  return g; }
@@ -307,7 +307,7 @@ static char const tests0[] =
 #include "tests0.h"
  ;
 static char const
- s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (tally s)) (cons (peep s i 0) (g (+ 1 i))))) 0))",
+ s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (tally s)) (hook (peep s i 0) (g (+ 1 i))))) 0))",
  runner[] = "(zevs (sip (s2cl tests)))";   // the stream shell (repl.l) drinks the baked corpus
 
 // With args, run the build tool (lcat / gen_data) through the CLI driver.

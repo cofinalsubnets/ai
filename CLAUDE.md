@@ -139,17 +139,17 @@ $@(3 4)              ; 7
 ; first word dispatches. the storage predicates:
 ;   fixp bigp widep  -- the integer reps (fixnum, bignum, wide int)
 ;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `packp`
-;   strp symp twop mapp  -- string, symbol, product, map
+;   strp symp chainp mapp  -- string, symbol, product, map
 ; derived: `nump` (any number: fix/wide/big/float/complex/array), `intp` (any integer), `atomp`
 ; (anything but a product). `i` is ~(0 1). `lamp` is PRESENCE, not a band: every heap
-; value answers it (anything wired to a hot -- lit -- everything but a fixnum), pairs and
+; value answers it (anything wired to a hot -- lit -- everything but a fixnum), chains and
 ; strings included, so lamp SPANS the bands. the top band itself needs no predicate:
 ; under the slogan is-it-top is vacuous -- you may as well ask 0. the opaque hots
 ; (buf/port) answer `hotp`, the refinement that names the zoo (every hot is a lamp); a
 ; task is referenced by a fixnum id, not a handle object. `!` (nilp) and `done?` are
 ; truth/task tests, not type tests.
 ; demo:
-(fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (mapp #(1 2))   ; the storage predicates
+(fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (mapp #(1 2))   ; the storage predicates
 (nump i) (intp (62 2)) (atomp 'x)                            ; derived
 (lamp "s") (lamp '(1)) !(lamp 5)                             ; lamp = presence (any heap value)
 (hotp (buf 4)) (hotp out) !(hotp cap)                        ; the hot zoo: buf/port only
@@ -188,7 +188,7 @@ $@(3 4)              ; 7
 3 = 3.0              ; true    = bridges the numeric tower
 1 < 1.5              ; true
 "a" < 'x             ; true    number < string < symbol < product < map < top
-#(1 10) < cap        ; true    the map rung: pair < map < top
+#(1 10) < cap        ; true    the map rung: chain < map < top
 (idp 'a 'a)          ; true    idp is identity; !(idp '(1) '(1))
 
 ; --- comparing functions --- `=` on two functions is alpha + structural: their source \-exprs
@@ -275,7 +275,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; --- arrays --- (arr type shape vals) is THE typed constructor: vals 0 zero-fills, a list
 ; fills row-major; (array shape elem..) infers the type and curries; @(..) is a rank-1
 ; literal; (iota n) is jot's array twin -- the z-array '(0 .. n-1) filled in one C loop,
-; no cons spine, so (asum (iota n)) reduces a range end to end in C.
+; no hook spine, so (asum (iota n)) reduces a range end to end in C.
 ; a ONE-CELL array DEMOTES to its lone scalar gem -- a rank-0 (empty-shape) array, a
 ; rank-1-len-1 like @(5), or a 1x1 contraction IS the value (so @(5) = 5, (arr R '(1)
 ; '(3.5)) = 3.5, (iota 1) = 0): an array exists only at tally >= 2. there is thus NO
@@ -302,7 +302,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 (inner @(1 2 3) @(4 5 6)); 32            +.x dot product
 (asum (arr Z '(0) 0))    ; 0             empty reduction = the monoid unit
 
-; --- products & lists --- cons builds the product (the cartesian kind, classically the
+; --- products & lists --- hook builds the product (the cartesian kind, the chain, classically the
 ; pair); cap and cup are its two projections -- the matched pair the string diagrams bend,
 ; cap the head and cup the rest, each the other's mirror (no cap: you have reached the end
 ; of the list); caap caup .. cuuup are the compounds, read right to left like their classic
@@ -322,7 +322,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; --- strings, symbols & mints --- a symbol is interned ('x): one canonical atom per
 ; spelling. a MINT ((mint 0), arg ignored) adjoins a fresh POINT to the value space:
 ; nameless, materially empty ($mint = 0, false), applying as every unit does (const-1),
-; identity its only property -- the unforgeable thing. a NOM is the literal pair of a
+; identity its only property -- the unforgeable thing. a NOM is the literal chain of a
 ; name string and a mint -- (nom "x") = ("x" . fresh point) -- McCarthy's symbol
 ; restored as the product it always was (the named-uninterned atom species is gone).
 ; `()` reads as 0 -- nothing's plain spelling -- and (intern "") is 0: the empty
@@ -334,7 +334,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; from the one mint stream (task pids draw from it too): symbols order by name first
 ; (mints below every named symbol), then by serial -- creation order -- so the total
 ; order is TOTAL, GC-stable; the
-; serial is also the mint's hash. noms inherit all of it through the pair: product
+; serial is also the mint's hash. noms inherit all of it through the chain: product
 ; order = (name lex, then mint), structural = stays identity-sharp (the mint inside),
 ; distinct map keys for free. SYMBOLS HAVE NO STRING ALGEBRA (+/* nil, apply const-1);
 ; intern and string are the explicit bridge, and a nom's name is (cap nom).
@@ -517,7 +517,7 @@ not-in-the-book      ; ()        a missing name reads the zero point (helpless)
 ; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
 ; lives on inside the compiler's closures), the repl sentinels, every hot lvm_* pointer,
 ; and finally the `book` itself. compiled references were folded, so only the names die.
-; names the printer, the reader, or an expander EMITS (uq ltuple cons pin
+; names the printer, the reader, or an expander EMITS (uq ltuple hook pin
 ; tablet mono ..) stay, as do the
 ; C-resolved hooks (num-ap add mul help) and the repl's test-driven editor surface.
 ; demo:

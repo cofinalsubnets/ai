@@ -42,7 +42,7 @@
  !'(() ()) !'(0 0) !'((0) (())) (0 = $'(() () ()))  ; a product of nothings is nothing, recursively
  !'(-5) !@(-3 -4) !'(-2 1) !!'(0 1)              ; negatives net <= 0 at every rank; -2+1 < 0 < 0+1
  (3 = $'(1 () 2)) (6 = $'(1 2 3)) (7 = $@(3 4))  ; $ sums the nets, then clamps once
- (1 = $(cons 1 2)) !(cons 0 2)                   ; the SPINE carries the measure: a dotted tail is not an element
+ (1 = $(hook 1 2)) !(hook 0 2)                   ; the SPINE carries the measure: a dotted tail is not an element
  (8 = $(L ~(3 4) ~(-3 4))) !(L ~(0 5) -1)        ; phases sum as vectors; the order signs the TOTAL, once
  (1 = $#0) !!#0                                  ; ... but a box stays truthy: maps count keys
  (1 = $'(1)) (0 = $'(0)) (0 = $0) (-1 = +'(-2 1))  ; the COLORS by net-sign: '(1) green, '(0)/0 blue, '(-2 1) red
@@ -56,10 +56,10 @@
  !(crestp 5) !(crestp '(1 2))                             ; a scalar / a list is not a crest
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
 
-; --- types & predicates --- storage: fixp bigp widep flop comp arrp strp symp twop mapp;
+; --- types & predicates --- storage: fixp bigp widep flop comp arrp strp symp chainp mapp;
 ; derived nump intp atomp; lamp = presence (any heap value); hotp names the buf/port zoo.
 (assert
- (fixp 5) (twop '(1 2)) (strp "hi") (symp 'x) (lamp cap) (mapp #(1 2))
+ (fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (lamp cap) (mapp #(1 2))
  (bigp (100 2)) ((? w64 widep bigp) (62 2)) (flop 1.5) (comp i) (arrp @(1 2 3)) (packp 1.5)
  (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
  (hotp (buf 4)) (hotp out) (hotp (sip '(104)))   ; the hot zoo, named
@@ -87,7 +87,7 @@
 (assert
  (3 = 3.0) !(3 = 4) (1 < 1.5) (3.0 >= 3) (idp 'a 'a) !(idp '(1) '(1))
  (1 < "a") ("a" < 'x) ('x < '(0)) !("a" < 1)
- ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10)))   ; the map rung: pair < map < top
+ ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10)))   ; the map rung: chain < map < top
 
 ; --- comparing functions --- `=` on functions is alpha + structural (binders by position,
 ; free vars by name, captures pairwise); eta/beta not bridged; 1 = (\ x x), 0 = (\ _ 1).
@@ -164,11 +164,11 @@
  (: M (inner (arr Z '(2 3) '(1 2 3 4 5 6)) (arr Z '(3 2) '(7 8 9 10 11 12)))  ; 2x2 matmul
     (&& ('(2 2) = (ashape M)) (154 = (peep M '(1 1) 0)))) !(inner @(1 2 3) @(1 2)))
 
-; --- products & lists --- cons builds the product; cap/cup the two projections (caap..cuuup
+; --- products & lists --- hook builds the product; cap/cup the two projections (caap..cuuup
 ; the compounds); sort/msort by the total order; (jot n) the first n charms; the higher-order
 ; functions live in the prel.
 (assert
- (1 = (cap '(1 2 3))) ('(2 3) = (cup '(1 2 3))) (3 = (caup '(2 3 4))) ('(1 2) = (cons 1 (cons 2 0)))
+ (1 = (cap '(1 2 3))) ('(2 3) = (cup '(1 2 3))) (3 = (caup '(2 3 4))) ('(1 2) = (hook 1 (hook 2 0)))
  !(cap 0) ('x = (cap 'x)) !(cup 'x)              ; no cap at the end of the list; an atom is its own cap
  ('(0 1 2) = (jot 3)) !(jot 0) (3 = $(jot 3)) ; jot: the first n charms; the empty count is nothing
  ('(2 3 4) = (map inc '(1 2 3))) (24 = (foldl (*) 1 '(1 2 3 4))) (6 = (foldr (+) 0 '(1 2 3)))
@@ -190,8 +190,8 @@
  (symp (mint 0)) (0 = $(mint 0)) !(mint 0)       ; the fresh point: a nameless atom, materially empty
  (1 = ((mint 0) 5)) (1 = ('xyz 1))               ; units apply const-1; the name index is gone
  !((mint 0) = (mint 0)) (: m (mint 0) (&& (m = m) (idp m m)))  ; distinct always; itself only
- (twop (nom 'x)) ("x" = (cap (nom 'x)))          ; a nom is the pair; the name is its cap
- (: a (nom 'x) b (nom 'x) (&& (a < b) !(b < a) !(a = b)))   ; pair lex inherits the serial order
+ (chainp (nom 'x)) ("x" = (cap (nom 'x)))          ; a nom is the chain; the name is its cap
+ (: a (nom 'x) b (nom 'x) (&& (a < b) !(b < a) !(a = b)))   ; chain lex inherits the serial order
  ((mint 0) < (nom 'x))                           ; cross-kind: the point (symbol band) below the product
  (0 < (mint 0))                                  ; nothing is a number: every point sits above it
  (: a (nom 'k) b (nom 'k) t (tablet 0) _ (pin t a 1) _ (pin t b 2)
@@ -248,8 +248,8 @@
  (12 = (foldl (+) 0 '(3 4 5)))
  (: t operators
     (&& (mapp t) (2 = (t '+)) (3 = (t '?)) (2 = (t '%))
-        ((cons 'sat 1) = (t '$)) ((cons 'nilp 1) = (t '!))
-        ((cons 'pin 3) = (t '<-)) ((cons 'peep 3) = (t '->)))))
+        ((hook 'sat 1) = (t '$)) ((hook 'nilp 1) = (t '!))
+        ((hook 'pin 3) = (t '<-)) ((hook 'peep 3) = (t '->)))))
 
 ; --- macros --- a macro maps an arg list to code; install with `::`. the prel ships
 ; do/let/if/cond/quote, && and || (short-circuiting), L/list, tuple/map/array, :- and ?-, >>= <=<.

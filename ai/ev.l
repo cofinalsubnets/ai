@@ -15,32 +15,32 @@
 (: wevs (:
    lvm_cur  (peek 0 (+))
    lvm_ret0 (peek 1 cap)
-   (cval e) (? (symp e) (cons 0 0)               ; (const? . value): 1 head iff a literal
-               (atomp e) (cons 1 e)
-               (&& (= (cap e) '\) (atomp (cuup e))) (cons 1 (caup e))
-               (cons 0 0))
+   (cval e) (? (symp e) (hook 0 0)               ; (const? . value): 1 head iff a literal
+               (atomp e) (hook 1 e)
+               (&& (= (cap e) '\) (atomp (cuup e))) (hook 1 (caup e))
+               (hook 0 0))
    (bake v) (? (fixp v) v (list '\ v))           ; value -> source: fixnum bare else quote
    ; (op . arity) iff v is a nif. `idp` (identity) not `=`: a non-nif global may peep to
    ; a word that looks like a heap pointer, which `=`/eql would deref and crash on.
-   (opof v) (? (idp lvm_ret0 (peek 1 v)) (cons (peek 0 v) 1)
-               (&& (idp lvm_cur (peek 0 v)) (idp lvm_ret0 (peek 3 v))) (cons (peek 2 v) (peek 1 v))
+   (opof v) (? (idp lvm_ret0 (peek 1 v)) (hook (peek 0 v) 1)
+               (&& (idp lvm_cur (peek 0 v)) (idp lvm_ret0 (peek 3 v))) (hook (peek 2 v) (peek 1 v))
                0)
    (hgen v op ar pure x) (: as (cup x) n (tally as)
     (go hv a) (? (atomp a) (bake hv)             ; all args constant -> fold
      (: cv (cval (cap a))
       (? (&& pure (cap cv)) (go (hv (cup cv)) (cup a))
-         (? (&& op (= n ar)) (cons iop (cons op as))           ; matching-arity nif -> inline
-            (&& (< 1 ar) (= n ar)) (cons apx (cons 1 x))       ; multi-arg fn -> n-ary apply
-            (cons apx (cons 0 x))))))                          ; generic l2r apply
+         (? (&& op (= n ar)) (hook iop (hook op as))           ; matching-arity nif -> inline
+            (&& (< 1 ar) (= n ar)) (hook apx (hook 1 x))       ; multi-arg fn -> n-ary apply
+            (hook apx (hook 0 x))))))                          ; generic l2r apply
     (go v as))
    ; the operator symbols are quoted one by one -- bare mid-list they would
    ; capture their left neighbor when this file compiles (the opfix pass).
    names (cat (L '+ '- '* '/ '% '& '| '< '<= '= '>= '>)
           '(// << >> ^
             idp gcd modpow inc dec abs
-            cons cap cup caap caup cuap cuup
+            hook cap cup caap caup cuap cuup
             dig lidx assq memq last rev cat
-            fixp symp twop mapp lamp strp nilp flop comp atomp
+            fixp symp chainp mapp lamp strp nilp flop comp atomp
             slice string
             re im conj arg real wave
             sin cos log pow))
@@ -132,14 +132,14 @@
     (: h (cap x) (?
      (= h '\) (? (atomp (cuup x)) x                          ; quote
                 (: r (lp x)
-                   lam (cons '\ (cat (cap r) (list (wx (cup r) (cat (cap r) bnd)))))
-                   _ (push c 'src (cons (cup lam) x))         ; tagged-body -> surface src for ala
+                   lam (hook '\ (cat (cap r) (list (wx (cup r) (cat (cap r) bnd)))))
+                   _ (push c 'src (hook (cup lam) x))         ; tagged-body -> surface src for ala
                    lam))
      (= h ':) (? (atomp (cup x)) ':                      ; (:) = the head read -- (f)==f at zero operands, a missing name (c0 agrees)
-                 (atomp (cuup x)) (cons ': (list (wx (caup x) bnd)))
-                 (cons ': (wxl (boxfix (cup x)) bnd)))   ; boxfix = letrec* capture-by-location source rewrite, post-macroexpand
+                 (atomp (cuup x)) (hook ': (list (wx (caup x) bnd)))
+                 (hook ': (wxl (boxfix (cup x)) bnd)))   ; boxfix = letrec* capture-by-location source rewrite, post-macroexpand
      (= h '?) (? (atomp (cup x)) '?                      ; (?) likewise: the empty form is the head's value
-                 (cons '? (wxc (cup x) bnd)))
+                 (hook '? (wxc (cup x) bnd)))
      (: m (? (symp h) (macros h) 0)                     ; macro head? expand, then re-walk
       (? m (wx (m (cup x)) bnd)
          (fold (map (\ e (wx e bnd)) x) bnd))))))
@@ -148,17 +148,17 @@
     (atomp bs) bs
     (atomp (cup bs)) (list (wx (cap bs) bnd))
     (: nd (dsug (cap bs) (caup bs))               ; desugar (f a..) so wx's \ adds params to bnd
-     (cons (cap nd) (cons (wx (cup nd) bnd) (wxb (cuup bs) bnd)))))
+     (hook (cap nd) (hook (wx (cup nd) bnd) (wxb (cuup bs) bnd)))))
    (wxc bs bnd) (?                                ; cond clauses (ant con ant con ... else)
     (atomp bs) (list 0)                           ; clauses ran out: supply the implicit 0 else
     (atomp (cup bs)) (list (wx (cap bs) bnd))
     ; peephole: a FINAL (nilp e) test flips its branches, dropping the wrapper --
     ; (.. (nilp e) con else) == (.. e else con), since the cond tests g_false(e), == nilp(e).
-    (&& (twop (cuup bs)) (atomp (cup (cuup bs)))                  ; bs is exactly (ant con else)
-        (twop (cap bs)) (= (cap (cap bs)) 'nilp)
-        (twop (cup (cap bs))) (atomp (cuup (cap bs))) (nilp (memq (cap (cap bs)) bnd)))
-     (cons (wx (caup (cap bs)) bnd) (cons (wx (cap (cuup bs)) bnd) (list (wx (caup bs) bnd))))
-    (cons (wx (cap bs) bnd) (cons (wx (caup bs) bnd) (wxc (cuup bs) bnd))))
+    (&& (chainp (cuup bs)) (atomp (cup (cuup bs)))                  ; bs is exactly (ant con else)
+        (chainp (cap bs)) (= (cap (cap bs)) 'nilp)
+        (chainp (cup (cap bs))) (atomp (cuup (cap bs))) (nilp (memq (cap (cap bs)) bnd)))
+     (hook (wx (caup (cap bs)) bnd) (hook (wx (cap (cuup bs)) bnd) (list (wx (caup bs) bnd))))
+    (hook (wx (cap bs) bnd) (hook (wx (caup bs) bnd) (wxc (cuup bs) bnd))))
    ; napof: v is a non-nif multi-arg fn whose arity matches the n>1 call args -> n-ary apply.
    ; `idp`-safe peeps (a non-fn value never matches lvm_cur); mirrors app's old `fa`/`na`.
    (napof v args) (? (fixp v) 0
@@ -167,11 +167,11 @@
    ; node (apx nary head . args) carrying the n-ary-vs-l2r strategy (1 = n-ary, 0 = l2r).
    (fold x bnd) (: h (cap x)
     (? (atomp (cup x)) x                          ; (f) single element -> ana's (atomp b) handles
-       (|| (nilp (symp h)) (memq h bnd)) (cons apx (cons 0 x))   ; local/computed head
+       (|| (nilp (symp h)) (memq h bnd)) (hook apx (hook 0 x))   ; local/computed head
        (: v (book h) hd (wevs v)
         (? hd (hd x)
-           (napof v (cup x)) (cons apx (cons 1 x))
-           (cons apx (cons 0 x))))))
+           (napof v (cup x)) (hook apx (hook 1 x))
+           (hook apx (hook 0 x))))))
    (wx x 0))
   ; a bare symbol is a variable reference -- EXCEPT the zero point, which reads as a
   ; symp literal (the `()` a (\ _ ()) / failed parse / (L 'x) tail evaluates to).
@@ -191,7 +191,7 @@
                     (= a apx) (apxh c b)
                     (: m (macros a)
                      (? m (ana c (m b)) (app c a b))))))
-  (push c k x) (: _ (pin c k (cons x (c k))) x)
+  (push c k x) (: _ (pin c k (hook x (c k))) x)
   (pop c k) (: x (c k) _ (pin c k (cup x)) (cap x))
   (iap c b) (: op (cap b) as (cup b)                       ; (iop op . args) -> inline the vm op
    (? (atomp (cup as)) (co (ana c (cap as)) (em1 op))      ; one arg
@@ -219,9 +219,9 @@
                s (c 'stk) _ (push c 'stk 0)
                g (apl2r c b) _ (pin c 'stk s)
              (co f g))
- (apl2r c b) (?- id (twop b) (: f (ana c (cap b)) g (apl2r c (cup b))
+ (apl2r c b) (?- id (chainp b) (: f (ana c (cap b)) g (apl2r c (cup b))
                     (co f (co (kap 1) g))))
- (apr2l c b) (?- id (twop b) (: g (apr2l c (cup b)) f (ana c (cap b)) _ (push c 'stk 0) (co g f)))
+ (apr2l c b) (?- id (chainp b) (: g (apr2l c (cup b)) f (ana c (cap b)) _ (push c 'stk 0) (co g f)))
  (kap n k m)
   (: j (k (+ 2 m))
    t (= (peek 0 j) lvm_ret)                              ; peep the continuation for ret -> tail
@@ -265,8 +265,8 @@
                     (poke -1 lvm_quote cell))
   (lz c lfd scope)(: code (caup lfd)
                    p (? code (em2 lvm_quote code)
-                        (: site (cons lfd 0)
-                           _ (pin scope 'sites (cons site (scope 'sites)))
+                        (: site (hook lfd 0)
+                           _ (pin scope 'sites (hook site (scope 'sites)))
                          (qsite site)))
                    _ (push c 'stk 0)
                    q (apl2r c (cuup lfd))
@@ -275,7 +275,7 @@
   ; variable expression analyzer
   (ava c x)
    (: lfd (assq x (c 'lam))
-    (? (twop lfd) (lz c lfd c)
+    (? (chainp lfd) (lz c lfd c)
        (: s (c 'stk)
           (stki d) (lidx x (cat (d 'imp) (d 'arg)))
           (q i j m) (karg (+ i (stki c)) j m)
@@ -290,7 +290,7 @@
          (: _ (? (c 'par) (push c 'imp x))
           (em2 lvm_index x))))
     (: lfd (assq x (d 'lam))
-     (? (twop lfd) (lz c lfd d)
+     (? (chainp lfd) (lz c lfd d)
         (: s (d 'stk)
            (stki d) (lidx x (cat (d 'imp) (d 'arg)))
            (q i j m) (karg (+ i (stki c)) j m)
@@ -311,7 +311,7 @@
    ; (frame is [imps args]) so a closure prints as ,((\ y x …) capturedvals) and
    ; round-trips through read+eval.
    os (assq exp ((rootc c) 'src))
-   s (cons '\ (cat (d 'imp) (? (twop os) (cuup os) exp)))
+   s (hook '\ (cat (d 'imp) (? (chainp os) (cuup os) exp)))
    _ (poke -1 s e)                                  ; value[-1] = source \-expr
    _ (trim (seek -1 e))                             ; tag head spans [src .. body]; value stays e
    ; native-creation hook (dormant unless book['natjit] is installed -- opt-in, x86-64):
@@ -321,36 +321,36 @@
    ; idp-distinct (fresh per ala call), macro-safe (s is the surface, pre-tag). dormant
    ; -> peep gives 0 -> e unchanged, so the egg/bootstrap is untouched.
    hk (peep book 'natjit 0)
-   (cons (? hk (hk e s a) e) (d 'imp)))
+   (hook (? hk (hk e s a) e) (d 'imp)))
 
   ; --- let analyzer (the hard one) -- letrec* over (: name def .. body). three phases:
-  ;   collect  -- the bindings into source-order (name . def) pairs, and the body form
+  ;   collect  -- the bindings into source-order (name . def) chains, and the body form
   ;   closures -- analyze each lambda def to a closure, then PROPAGATE captures among
   ;               mutually-recursive closures to a fixpoint (a sibling's captures flow in)
   ;   link     -- emit each binding, backpatch recursive refs, apply the body
   ; boxing (the letrec* capture-by-location rewrite) already happened in wev (boxfix), so
   ; the defs compile directly. q = a child scope holding the let's lambdas + backpatch sites.
-  ; the phases run IN SEQUENCE (the :- body, last): collect the pairs (pure), pin the
+  ; the phases run IN SEQUENCE (the :- body, last): collect the chains (pure), pin the
   ; sibling arity map, build+propagate the closures, then link (emit + backpatch + body).
   (ale c a b) (?
    (atomp b) (ana c a)
    (:- (link (cap cb) (caup cb) (cuup cb) (closures (cap cb)))
     q (sco c (c 'arg) (c 'imp))
-    ; set-tail: overwrite pair p's tail (cell offset 2, the cup) in place; return x.
+    ; set-tail: overwrite chain p's tail (cell offset 2, the cup) in place; return x.
     (set-tail p x) (: _ (poke 2 x p) x)
-    ; collect: gather (name . def) pairs in source order -> (prs body . even). the body is
+    ; collect: gather (name . def) chains in source order -> (prs body . even). the body is
     ; the trailing odd form; even = a body-LESS let (last value is result, names defglob).
     (collect prs n d rest) (: nd (dsug n d)
-     (? (atomp rest)       (cons (rev (cons nd prs)) (cons (cap nd)   1))   ; body-less: last NAME is the body
-        (atomp (cup rest)) (cons (rev (cons nd prs)) (cons (cap rest) 0))   ; a trailing body form
-                           (collect (cons nd prs) (cap rest) (caup rest) (cuup rest))))
+     (? (atomp rest)       (hook (rev (hook nd prs)) (hook (cap nd)   1))   ; body-less: last NAME is the body
+        (atomp (cup rest)) (hook (rev (hook nd prs)) (hook (cap rest) 0))   ; a trailing body form
+                           (collect (hook nd prs) (cap rest) (caup rest) (cuup rest))))
     cb (collect 0 a (cap b) (cup b))
     ; far: {name -> arity} for the lambda siblings, SYNTACTIC (binder count off the \-expr),
     ; stable through the backpatch rebuild that zeroes closure cells. only fixed-arity
     ; multi-arg lambdas (arity > 1) carry one; a value binding, single-arg lambda, or a
     ; rebound name (sequence law) pins 0 -> the call stays l2r. Pinned BEFORE the closures
     ; analyze their bodies (and weave's re-analysis, also under q), so falook sees it.
-    (farof ps t) (?- t (twop ps)
+    (farof ps t) (?- t (chainp ps)
      (: pr (cap ps) k (cap pr) d (cup pr)
         a (? (&& (= -1 (peep t k -1)) (lambp d)) (- (tally (cup d)) 1) 0)
       (farof (cup ps) (pin t k (? (< 1 a) a 0)))))
@@ -369,7 +369,7 @@
         (split a (cup ps)))
       (: k (caap ps)
          v (ala q 0 (cuuap ps))
-         a2 (cons (cons k v) a)
+         a2 (hook (hook k v) a)
        _ (push c 'stk k)
        (split a2 (cup ps))))
      l (split 0 prs)
@@ -384,14 +384,14 @@
          (: var (cap v)
             vars (cuuap k2)
             n2 (? (memq var vars) n
-               (: _ (set-tail (cuap k2) (cons var vars))
+               (: _ (set-tail (cuap k2) (hook var vars))
                 (+ 1 n)))
             (addv n2 (cup v))))))
       k2 (propagate n l k1 (cup k2))
       k1 (propagate n l (cup k1) l)
       n (propagate 0 l l l)                                    ; a pass added vars -> sweep again
       (: j (map cap l)                                         ; stable: drop the let's own names
-         (dropj x) (cons (cap x) (cons (caup x) (foldl (flip ldel) (cuup x) j)))
+         (dropj x) (hook (cap x) (hook (caup x) (foldl (flip ldel) (cuup x) j)))
        (map dropj l))))
 
    (link prs body even lams) (:
@@ -419,7 +419,7 @@
     _ (pin q 'sites 0)
     _ (pin c 'stk s)
     ; body-lambda analyzed AFTER inits (it takes the bindings as args; never makes sites)
-    f (ana c (cons '\ (cat (rev (map cap prs)) (list body))))
+    f (ana c (hook '\ (cat (rev (map cap prs)) (list body))))
     h (kap (tally prs))
     _ (pin c 'stk s)
     (\ x (f (g (h x))))))))

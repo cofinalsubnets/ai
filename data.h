@@ -21,7 +21,7 @@ static ai_inline bool in_data(void *a) {
  uintptr_t p = (uintptr_t) a;
  return p == (uintptr_t) lvm_vec || p == (uintptr_t) lvm_big
      || p == (uintptr_t) lvm_str   || p == (uintptr_t) lvm_sym
-     || p == (uintptr_t) lvm_two || p == (uintptr_t) lvm_flo
+     || p == (uintptr_t) lvm_chain || p == (uintptr_t) lvm_flo
      || p == (uintptr_t) lvm_wide || p == (uintptr_t) lvm_cbox; }
 static ai_inline enum q ai_typ(union u *o) {
  uintptr_t ap = (uintptr_t) o->ap;
@@ -32,14 +32,14 @@ static ai_inline enum q ai_typ(union u *o) {
       : ap == (uintptr_t) lvm_flo   ? KFlo
       : ap == (uintptr_t) lvm_wide  ? KWide
       : ap == (uintptr_t) lvm_cbox  ? KCplx
-      :                               KTwo; }
+      :                               KChain; }
 #else
 extern char __start_ai_data[], __stop_ai_data[];
 static ai_inline bool in_data(void *a) {
  return (uintptr_t) a >= (uintptr_t) __start_ai_data
      && (uintptr_t) a <  (uintptr_t) __stop_ai_data; }
 static ai_inline enum q ai_typ(union u *o) {
- static const enum q slot_kind[ai_data_n] = { KVec, KBig, KString, KSym, KTwo, KFlo, KWide, KCplx };
+ static const enum q slot_kind[ai_data_n] = { KVec, KBig, KString, KSym, KChain, KFlo, KWide, KCplx };
  // span = (N-1)*stride + last_body (the last sentinel has no trailing pad), so
  // span/N FLOORS below the true stride and over-counts the high slots (it broke
  // at N=8). ROUND UP: ceil(span/N) lands in ((N-1)/N*stride, stride], the exact

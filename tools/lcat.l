@@ -13,12 +13,12 @@
 ; yet change the parse). Spaces inside a string literal are data and never touched.
 ; Surviving bytes are C-escaped.
 
-(: (s2cl s) ((: (g i) (? (< i (tally s)) (cons (peep s i 0) (g (+ 1 i))))) 0)  ; string -> charlist
+(: (s2cl s) ((: (g i) (? (< i (tally s)) (hook (peep s i 0) (g (+ 1 i))))) 0)  ; string -> charlist
    ; the datums readable from s (stop on the eof sentinel or an incomplete form,
    ; which read signals by returning the port itself) -- the full forms, compared
    ; STRUCTURALLY, not just counted: a re-tokenization can preserve the count yet
    ; change the parse (name'(a b) and name '(a b) both read two datums).
-   (datums s) ((: (g p e a) (: r (read p e) (? (| (= e r) (= p r)) (rev a) (g p e (cons r a)))))
+   (datums s) ((: (g p e a) (: r (read p e) (? (| (= e r) (= p r)) (rev a) (g p e (hook r a)))))
                (sip (s2cl s)) (nom 0) 0)
    ; the next complete form of a charlist, re-shown; 0 if none reads cleanly.
    (form1 cs) (: e (nom 0) p (sip cs) r (read p e) (? (| (idp r e) (idp r p)) 0 (show r)))
@@ -51,7 +51,7 @@
    ; just today's. the opb? clause still keeps an operator-then-datum space:
    ; the probe reads in isolation (head position, fusion off) but the run is
    ; monadic mid-list.
-   (redundant? ctx cs) (? (&& (twop ctx) (opb? (cap ctx)) (dstart? (cap cs))) 0
+   (redundant? ctx cs) (? (&& (chainp ctx) (opb? (cap ctx)) (dstart? (cap cs))) 0
                           (: lt (string (rev ctx)) rt (form1 cs)
                              (? rt (= (datums (+ lt rt)) (datums (+ (+ lt " ") rt))) 0)))
    ; emit one byte to out, C-escaped for the string literal.
@@ -72,7 +72,7 @@
    ; ctx = bytes since the last hard boundary (reversed); instr = inside a "..."
    ; literal (where \ escapes).
    _ ((: (g cs ctx instr)
-        (? (twop cs)
+        (? (chainp cs)
            (: c (cap cs)
               (? instr
                  (? (= c 92) (: _ (eb c) _ (eb (cap (cup cs))) (g (cup (cup cs)) 0 1))
@@ -82,7 +82,7 @@
                        (g (cup cs) ctx 0)                 ; drop the space; ctx keeps accruing
                        (: _ (eb c) (g (cup cs) 0 0)))     ; keep it: a real boundary
                     (: _ (eb c)
-                       (g (cup cs) (? (hardb c) 0 (cons c ctx)) (= c 34))))))))
+                       (g (cup cs) (? (hardb c) 0 (hook c ctx)) (= c 34))))))))
         (s2cl acc) 0 0)
    _ (fputc out 34)                                      ; closing "
    (fputc out 10))

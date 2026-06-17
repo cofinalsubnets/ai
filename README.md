@@ -187,7 +187,7 @@ curated cross-cutting verbs (`test clean valg vmret bench install`).
 - every operation is generic, dispatched on a value's kind through NxN tables
   (`+` `*` apply); the kind enum is the type lattice, the total order over all
   values is the enum order, and the lattice is literally the diagonal of the
-  dispatch tables. `sort` is one C comparison per pair -- the total order is
+  dispatch tables. `sort` is one C comparison per chain -- the total order is
   the comparator.
 - no interpreter state lives outside the heap: the book (an ordinary ai
   hash) carries the globals, macros, the operators table, the help function

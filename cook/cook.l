@@ -45,10 +45,10 @@
    pgen (tablet 0)         ; a 1-cell box: a pattern-rule resolver (item -> a card | 0), installed by the Makefile importer (() until then)
 
    ; string -> charlist, so a captured stat string can be read as a port.
-   (s2cl s) ((: (g i) (? (< i (tally s)) (cons (peep s i 0) (g (+ 1 i))))) 0)
+   (s2cl s) ((: (g i) (? (< i (tally s)) (hook (peep s i 0) (g (+ 1 i))))) 0)
 
    ; "a b c" from ("a" "b" "c"); "" from the empty list.
-   (join sep l) (? (twop l) (foldl (\ a x (+ a (+ sep x))) (cap l) (cup l)) "")
+   (join sep l) (? (chainp l) (foldl (\ a x (+ a (+ sep x))) (cap l) (cup l)) "")
 
    ; register one card, MERGING with any prior card for the same item: ingredients
    ; and order-only prereqs accumulate, and a later NON-EMPTY recipe wins (as make
@@ -59,10 +59,10 @@
    (reg item ing oo steps)
    (: prev (peep cards item ())
       (? prev
-         (pin cards item (cons (cat (cap prev) ing)
-                               (cons (cat (cap (cup prev)) oo)
-                                     (? (twop steps) steps (cup (cup prev))))))
-         (: _ (pin cards item (cons ing (cons oo steps)))
+         (pin cards item (hook (cat (cap prev) ing)
+                               (hook (cat (cap (cup prev)) oo)
+                                     (? (chainp steps) steps (cup (cup prev))))))
+         (: _ (pin cards item (hook ing (hook oo steps)))
              _ (? (peep check 0 0) 0 (pin check 0 item)) item)))
    ; the public Cookfile API: (recipe item ingredients steps) -- no order-only prereqs.
    (recipe item ingredients steps) (reg item ingredients 0 steps)
@@ -75,7 +75,7 @@
    (date item)
    (? (symp item) ()
       (: r (run (L "sh" "-c" "stat -c %.Y \"$0\" 2>/dev/null" item))   ; %.Y: nanosecond float; stderr silenced (a miss is normal)
-         (? (&& (twop r) (= 0 (cap r))) (read (sip (s2cl (cup r))) ()) ()))))
+         (? (&& (chainp r) (= 0 (cap r))) (read (sip (s2cl (cup r))) ()) ()))))
 
 ; --- prepping an item up to date ---------------------------------------------
 ; one cook call carries two books: `done` memoizes each item's settled age so a
@@ -91,15 +91,15 @@
       ; the card: an explicit recipe wins outright; otherwise a pattern rule may
       ; synthesize one (merging any explicit "prereqs only" card), else the explicit
       ; prereq-only card, else nothing (a source leaf).
-      ; presence is tested with `twop` (a card is a pair), never net-truthiness:
+      ; presence is tested with `chainp` (a card is a chain), never net-truthiness:
       ; a card of all-empty parts -- (() ()) -- nets 0 (blue), so (? card ..) would
       ; wrongly read it absent. A phony aggregate with no prereqs is exactly that.
       (: exr (peep cards item 'none)
-         ex (? (twop exr) exr 0)
+         ex (? (chainp exr) exr 0)
          f (peep pgen 0 ())
-         r (? (&& ex (twop (cup (cup ex)))) ex
-              (: g (? f (f item) 0) (? (twop g) g ex)))
-         (? (twop r)
+         r (? (&& ex (chainp (cup (cup ex)))) ex
+              (: g (? f (f item) 0) (? (chainp g) g ex)))
+         (? (chainp r)
             ; item has a card: prep every prerequisite up to date, then decide.
             (: ingredients (cap r) orderonly (cap (cup r)) steps (cup (cup r))
                _ (each ingredients (\ d (prep d done shipped)))
@@ -114,7 +114,7 @@
                ; no-op rebuild must not force dependents.
                _ (? stale (: _ (recur item steps)
                              nw (date item)
-                             (? (&& (twop steps) (? (! ta0) (? nw 1 0) (? nw (nw > ta0) 0)))
+                             (? (&& (chainp steps) (? (! ta0) (? nw 1 0) (? nw (nw > ta0) 0)))
                                 (pin shipped item 1) 0)) 0)
                age (date item)
                _ (pin done item age)
@@ -131,7 +131,7 @@
 
    ; one step. a list is an argv (a subprocess); any other lamp is a thunk.
    (step1 step)
-   (? (twop step) (shell step)
+   (? (chainp step) (shell step)
       (lamp step) (step 0)
       0)
 
@@ -139,7 +139,7 @@
    (shell step)
    (: _ (puts (+ "  " (join " " step))) _ (putc 10)
        r (run step)
-       (? (twop r)
+       (? (chainp r)
           (: _ (puts (cup r))
              (? (= 0 (cap r)) 0
                 (: _ (fputs err (+ "cook: command failed (exit " (+ (show (cap r)) ")")))
@@ -154,10 +154,10 @@
    (sh-line silent ignore cmd)
    (: _ (? silent 0 (: _ (puts cmd) (putc 10)))
        r (run (L "sh" "-c" cmd))
-       ec (? (twop r) (cap r) -1)
-       _ (? (twop r) (puts (cup r)) 0)
+       ec (? (chainp r) (cap r) -1)
+       _ (? (chainp r) (puts (cup r)) 0)
        (? (= 0 ec) 0
-          (! (twop r)) (: _ (fputs err (+ "cook: cannot run " cmd)) _ (fputc err 10) (exit 1))
+          (! (chainp r)) (: _ (fputs err (+ "cook: cannot run " cmd)) _ (fputc err 10) (exit 1))
           ignore (: _ (fputs err (+ "cook: " (+ cmd (+ " (exit " (+ (show ec) ", ignored)"))))) (fputc err 10))
           (: _ (fputs err (+ "cook: command failed (exit " (+ (show ec) ")"))) _ (fputc err 10) (exit 1)))))
 
@@ -175,7 +175,7 @@
    ; the ticket to build: the last command-line word, when it names a recipe (as the
    ; bare string, for a file item, or interned, for a phony symbol), else the
    ; DEFAULT -- the first recipe declared. (argv still holds the WHOLE invocation here
-   ; -- the Cards file and any -l pair included -- so a trailing word that is no item
+   ; -- the Cards file and any -l chain included -- so a trailing word that is no item
    ; falls through to the default. the arg is ignored; (ticket 0) reads it all live.)
    (ticket _) (: a (last argv) d (peep check 0 ())
                (? (peep cards a 0) a
@@ -242,9 +242,9 @@
    (findc s i ch) (? (>= i (tally s)) i (? (= (s i) ch) i (findc s (+ 1 i) ch)))
    (split-ws s)
    ((: (g i st acc)
-       (? (>= i (tally s)) (rev (? (< st i) (cons (slice s st i) acc) acc))
+       (? (>= i (tally s)) (rev (? (< st i) (hook (slice s st i) acc) acc))
           (? (chws (s i))
-             (g (+ 1 i) (+ 1 i) (? (< st i) (cons (slice s st i) acc) acc))
+             (g (+ 1 i) (+ 1 i) (? (< st i) (hook (slice s st i) acc) acc))
              (g (+ 1 i) st acc))))
     0 0 0)
 
@@ -257,8 +257,8 @@
     0 "")
    (lines s)
    ((: (g i st acc)
-       (? (>= i (tally s)) (rev (cons (slice s st i) acc))
-          (? (= (s i) 10) (g (+ 1 i) (+ 1 i) (cons (slice s st i) acc))
+       (? (>= i (tally s)) (rev (hook (slice s st i) acc))
+          (? (= (s i) 10) (g (+ 1 i) (+ 1 i) (hook (slice s st i) acc))
              (g (+ 1 i) st acc))))
     0 0 0)
 
@@ -266,8 +266,8 @@
    (findc-ws s i) (? (>= i (tally s)) i (? (chws (s i)) i (findc-ws s (+ 1 i))))
    (first-word s) (slice s 0 (findc-ws s 0))
    (after-word s) (ltrim (slice s (findc-ws s 0) (tally s)))
-   (nth l i d) (? (twop l) (? (= 0 i) (cap l) (nth (cup l) (- i 1) d)) d)
-   (lastl l) (? (twop (cup l)) (lastl (cup l)) (cap l))
+   (nth l i d) (? (chainp l) (? (= 0 i) (cap l) (nth (cup l) (- i 1) d)) d)
+   (lastl l) (? (chainp (cup l)) (lastl (cup l)) (cap l))
    ; an empty slice (start>=end) yields the zero point 0, not "" -- and (+ 0 str)
    ; prepends a NUL byte (the byte law). `sub` is the empty-safe slice: "" for empty.
    (sub s a b) (? (< a b) (slice s a b) "")
@@ -287,11 +287,11 @@
    ; static-pattern colon).
    (splittop s ch)
    ((: (g i depth st acc)
-       (? (>= i (tally s)) (rev (cons (slice s st i) acc))
+       (? (>= i (tally s)) (rev (hook (slice s st i) acc))
           (: c (s i)
              (? (|| (= c 40) (= c 123)) (g (+ 1 i) (+ 1 depth) st acc)
                 (|| (= c 41) (= c 125)) (g (+ 1 i) (- depth 1) st acc)
-                (&& (= c ch) (= depth 0)) (g (+ 1 i) depth (+ 1 i) (cons (slice s st i) acc))
+                (&& (= c ch) (= depth 0)) (g (+ 1 i) depth (+ 1 i) (hook (slice s st i) acc))
                 (g (+ 1 i) depth st acc)))))
     0 0 0 0)
 
@@ -313,7 +313,7 @@
    ((: (g i sil ign)
        (? (&& (< i (tally s)) (|| (chws (s i)) (|| (= (s i) 64) (|| (= (s i) 45) (= (s i) 43)))))
           (g (+ 1 i) (|| sil (= (s i) 64)) (|| ign (= (s i) 45)))
-          (cons sil (cons ign (slice s i (tally s)))))) 0 0 0)
+          (hook sil (hook ign (slice s i (tally s)))))) 0 0 0)
    (recipe-parse l) (parse-mods (slice l 1 (tally l)))   ; drop the leading tab, then the modifier run
    (classify l)
    (? (recipep l) (L 'recipe (recipe-parse l))
@@ -329,8 +329,8 @@
                   (= w "ifndef") (L 'ifndef rest)
                   (= w "else") (L 'else rest)
                   (= w "endif") (L 'endif)
-                  (: a (parse assignP t) (? (twop a) (cons 'assign a)
-                     (: r (parse ruleP t) (? (twop r) (cons 'rule r) (L 'skip))))))))))
+                  (: a (parse assignP t) (? (chainp a) (hook 'assign a)
+                     (: r (parse ruleP t) (? (chainp r) (hook 'rule r) (L 'skip))))))))))
 
    ; -- nested-paren-aware variable expansion + make functions --
    ; the index of the ) that matches the ( just opened, counting nested $(..).
@@ -370,7 +370,7 @@
             (? (&& (>= ls2 (+ lp ls)) (&& (= pre (slice s 0 lp)) (= suf (slice s (- ls2 ls) ls2))))
                (L (slice s lp (- ls2 ls))) ()))))
    (haspct t) (< (findc t 0 37) (tally t))
-   (matchany pats w) (any (\ p (twop (pmatch p w))) pats)
+   (matchany pats w) (any (\ p (chainp (pmatch p w))) pats)
 
    (subst-ref eb as d)         ; VAR:from=to (already inner-expanded)
    (: ci (findc eb 0 58) nm (sub eb 0 ci)                    ; 58 = :
@@ -383,10 +383,10 @@
    ; -- function helpers --
    (chomp s) ((: (g i) (? (&& (< 0 i) (= (s (- i 1)) 10)) (g (- i 1)) (slice s 0 i))) (tally s))
    (nl->sp s) ((: (g i acc) (? (>= i (tally s)) acc (g (+ 1 i) (+ acc (? (= (s i) 10) 32 (s i)))))) 0 "")
-   (fn-shell cmd) (: r (run (L "sh" "-c" cmd)) (? (twop r) (nl->sp (chomp (cup r))) ""))
+   (fn-shell cmd) (: r (run (L "sh" "-c" cmd)) (? (chainp r) (nl->sp (chomp (cup r))) ""))
    ; $(wildcard): shell out so glob + no-match (nullglob via [ -e ]) are POSIX.
    (globsh pat) (: r (run (L "sh" "-c" "set +f; for f in $0; do [ -e \"$f\" ] && printf '%s ' \"$f\"; done" pat))
-                   (? (twop r) (split-ws (cup r)) 0))
+                   (? (chainp r) (split-ws (cup r)) 0))
    (fdir w) (: k (mk-lastslash w) (? (< 0 k) (sub w 0 k) "./"))
    (fnotdir w) (sub w (mk-lastslash w) (tally w))
    (flastdot w) (: sl (mk-lastslash w)
@@ -394,8 +394,8 @@
    (fbase w) (: dot (flastdot w) (? (< dot (tally w)) (sub w 0 dot) w))
    (fsuf w)  (: dot (flastdot w) (? (< dot (tally w)) (sub w dot (tally w)) ""))
    (fabs w) (? (&& (< 0 (tally w)) (= (w 0) 47)) w
-              (: r (run (L "sh" "-c" "pwd")) (? (twop r) (+ (chomp (cup r)) (+ "/" w)) w)))
-   (dedup l) (? (twop l) (? (twop (cup l)) (? (= (cap l) (cap (cup l))) (dedup (cup l)) (cons (cap l) (dedup (cup l)))) l) l)
+              (: r (run (L "sh" "-c" "pwd")) (? (chainp r) (+ (chomp (cup r)) (+ "/" w)) w)))
+   (dedup l) (? (chainp l) (? (chainp (cup l)) (? (= (cap l) (cap (cup l))) (dedup (cup l)) (hook (cap l) (dedup (cup l)))) l) l)
    (sortu l) (dedup (sort l))
    (strrep frm to s)
    (? (= 0 (tally frm)) s
@@ -404,8 +404,8 @@
              (? (= frm (sub s i (+ i (tally frm)))) (g (+ i (tally frm)) (+ acc to))
                 (g (+ 1 i) (+ acc (s i))))))
        0 ""))
-   (fn-or args as d)  ((: (g l) (? (twop l) (: v (expand (cap l) as (+ 1 d)) (? (< 0 (tally (trim v))) v (g (cup l)))) "")) args)
-   (fn-and args as d) ((: (g l last) (? (twop l) (: v (expand (cap l) as (+ 1 d)) (? (< 0 (tally (trim v))) (g (cup l) v) "")) last)) args "")
+   (fn-or args as d)  ((: (g l) (? (chainp l) (: v (expand (cap l) as (+ 1 d)) (? (< 0 (tally (trim v))) v (g (cup l)))) "")) args)
+   (fn-and args as d) ((: (g l last) (? (chainp l) (: v (expand (cap l) as (+ 1 d)) (? (< 0 (tally (trim v))) (g (cup l) v) "")) last)) args "")
    funcnames '("shell" "wildcard" "dir" "notdir" "basename" "suffix" "patsubst"
                "subst" "filter" "filter-out" "sort" "strip" "if" "or" "and"
                "addprefix" "addsuffix" "firstword" "lastword" "word" "words"
@@ -430,8 +430,8 @@
          (= nm "filter-out")(: a (argl 0) (join " " (filter (\ w (! (matchany (split-ws (nth a 0 "")) w))) (split-ws (nth a 1 "")))))
          (= nm "addprefix") (: a (argl 0) (join " " (map (\ w (+ (nth a 0 "") w)) (split-ws (nth a 1 "")))))
          (= nm "addsuffix") (: a (argl 0) (join " " (map (\ w (+ w (nth a 0 ""))) (split-ws (nth a 1 "")))))
-         (= nm "firstword") (: ws (split-ws (ex1 at)) (? (twop ws) (cap ws) ""))
-         (= nm "lastword")  (: ws (split-ws (ex1 at)) (? (twop ws) (lastl ws) ""))
+         (= nm "firstword") (: ws (split-ws (ex1 at)) (? (chainp ws) (cap ws) ""))
+         (= nm "lastword")  (: ws (split-ws (ex1 at)) (? (chainp ws) (lastl ws) ""))
          (= nm "word")      (: a (argl 0) ws (split-ws (nth a 1 "")) n (read (sip (s2cl (trim (nth a 0 "")))) 0) (nth ws (- n 1) ""))
          (= nm "words")     (show (tally (split-ws (ex1 at))))
          (= nm "if")        (: a (rawl 0) c (trim (ex1 (nth a 0 ""))) (? (< 0 (tally c)) (ex1 (nth a 1 "")) (ex1 (nth a 2 ""))))
@@ -474,7 +474,7 @@
    ; point, and get re-pinned per item) and close over the expanded command in a
    ; thunk that runs it make-style via sh-line, carrying the @/- flags.
    (expand-steps raws t pr stem as)
-   (: _ (pin as "@" t) _ (pin as "<" (? (twop pr) (cap pr) ""))
+   (: _ (pin as "@" t) _ (pin as "<" (? (chainp pr) (cap pr) ""))
        _ (pin as "^" (join " " pr)) _ (pin as "*" stem)
        (map (\ raw (: cmd (expand (cup (cup raw)) as 0)
                        (? (peep emitp 0 0) (L "sh" "-c" cmd)
@@ -486,9 +486,9 @@
    (: t (trim rest)
       (? (&& (< 0 (tally t)) (= (t 0) 40))
          (: cl (findclose t 1 40 41) parts (splittop (slice t 1 cl) 44)
-            (cons (? (twop parts) (cap parts) "") (? (twop (cup parts)) (cap (cup parts)) "")))
+            (hook (? (chainp parts) (cap parts) "") (? (chainp (cup parts)) (cap (cup parts)) "")))
          (: ws (map unquote-str (split-ws t))
-            (cons (? (twop ws) (cap ws) "") (? (twop (cup ws)) (cap (cup ws)) "")))))
+            (hook (? (chainp ws) (cap ws) "") (? (chainp (cup ws)) (cap (cup ws)) "")))))
    (eval-ifeq rest as) (: a (cond-args rest) (= (trim (expand (cap a) as 0)) (trim (expand (cup a) as 0))))
    (eval-ifdef rest as) (< 0 (tally (expand (peep as (trim (expand rest as 0)) "") as 0)))
    (do-assign as nm op val)
@@ -504,20 +504,20 @@
    ; stack is a list of frames (pon taken active); `on` is the top frame's active
    ; (1 when there is no frame). include splices the named files' lines inline.
    (r1 c) (cap (cup c)) (r2 c) (cap (cup (cup c))) (r3 c) (cap (cup (cup (cup c))))
-   (addstep cur st) (cons (cap cur) (cons (cap (cup cur)) (cons st (cup (cup cur)))))
-   (finalize cur) (cons (cap cur) (cons (cap (cup cur)) (rev (cup (cup cur)))))
-   (flushr cur rules) (? cur (cons (finalize cur) rules) rules)
+   (addstep cur st) (hook (cap cur) (hook (cap (cup cur)) (hook st (cup (cup cur)))))
+   (finalize cur) (hook (cap cur) (hook (cap (cup cur)) (rev (cup (cup cur)))))
+   (flushr cur rules) (? cur (hook (finalize cur) rules) rules)
    (mkrule c)                  ; -> (TGTS-text PREREQS-text . STEPS-rev); split off an inline ; recipe
    (: prr (r2 c) sc (splittop prr 59)
-      inl (? (&& (twop (cup sc)) (< 0 (tally (trim (cap (cup sc)))))) (L (parse-mods (trim (cap (cup sc))))) 0)
-      (cons (r1 c) (cons (cap sc) inl)))
-   (condon cond) (? (twop cond) (cap (cup (cup (cap cond)))) 1)
-   (push-cond cond pon active) (cons (L pon active active) cond)
+      inl (? (&& (chainp (cup sc)) (< 0 (tally (trim (cap (cup sc)))))) (L (parse-mods (trim (cap (cup sc))))) 0)
+      (hook (r1 c) (hook (cap sc) inl)))
+   (condon cond) (? (chainp cond) (cap (cup (cup (cap cond)))) 1)
+   (push-cond cond pon active) (hook (L pon active active) cond)
    (else-cond cond) (: f (cap cond) pon (cap f) taken (cap (cup f)) na (&& pon (! taken))
-                       (cons (L pon (|| taken na) na) (cup cond)))
+                       (hook (L pon (|| taken na) na) (cup cond)))
    (build cls as)
    ((: (loop cs rules cur cond)
-       (? (! (twop cs)) (rev (flushr cur rules))
+       (? (! (chainp cs)) (rev (flushr cur rules))
           (: c (cap cs) k (cap c) rest (cup cs) on (condon cond)
              (? (= k 'recipe) (loop rest rules (? (&& on cur) (addstep cur (r1 c)) cur) cond)
                 (= k 'rule)   (? on (loop rest (flushr cur rules) (mkrule c) cond)
@@ -548,8 +548,8 @@
        _ (pin as "MAKE" "make") _ (pin as "AR" "ar") _ (pin as "RM" "rm -f") as)
 
    ; split a prereq word list at a `|` into (normal . order-only).
-   (splitbar ws) ((: (g l acc) (? (! (twop l)) (cons (rev acc) 0)
-                       (? (= (cap l) "|") (cons (rev acc) (cup l)) (g (cup l) (cons (cap l) acc))))) ws 0)
+   (splitbar ws) ((: (g l acc) (? (! (chainp l)) (hook (rev acc) 0)
+                       (? (= (cap l) "|") (hook (rev acc) (cup l)) (g (cup l) (hook (cap l) acc))))) ws 0)
 
    ; parse a Makefile and REGISTER its rules. .PHONY members become phony SYMBOLS;
    ; every other item a file STRING. A rule line is one of: a STATIC pattern rule
@@ -569,25 +569,25 @@
               tgts (expand-words (L tgtstext) as)
               (? (any (\ t (&& (< 0 (tally t)) (= (t 0) 46))) tgts) 0    ; drop .PHONY / .SUFFIXES / ...
                  (: cp (splittop prtext 58)
-                    (? (twop (cup cp))
+                    (? (chainp (cup cp))
                        ; static pattern rule
                        (: tpat (cap (expand-words (L (cap cp)) as)) ppats (expand-words (L (cap (cup cp))) as)
                           (each tgts (\ t (: m (pmatch tpat t)
-                             (? (twop m) (: stem (cap m) ping (map (\ pp (stemsub pp stem)) ppats)
+                             (? (chainp m) (: stem (cap m) ping (map (\ pp (stemsub pp stem)) ppats)
                                             (reg (mk-item t) (map mk-item ping) 0 (expand-steps raws (mk-item t) ping stem as))) 0)))))
                        ; implicit pattern rule, or normal rule
                        (: sb (splitbar (expand-words (L prtext) as)) prs (cap sb) oos (cup sb)
                           (? (any haspct tgts)
-                             (each tgts (\ t (? (haspct t) (pin patbox 0 (cons (L t prs oos raws) (peep patbox 0 0))) 0)))
+                             (each tgts (\ t (? (haspct t) (pin patbox 0 (hook (L t prs oos raws) (peep patbox 0 0))) 0)))
                              (each tgts (\ t (reg (mk-item t) (map mk-item prs) (map mk-item oos)
                                                   (expand-steps raws (mk-item t) prs "" as))))))))))))
       patlist (peep patbox 0 0)
-      (psrc p item) (: stem (cap (pmatch (cap p) item)) prs (cap (cup p)) (? (twop prs) (stemsub (cap prs) stem) ""))
+      (psrc p item) (: stem (cap (pmatch (cap p) item)) prs (cap (cup p)) (? (chainp prs) (stemsub (cap prs) stem) ""))
       (best-of ms item)        ; prefer a pattern whose stem-source exists, then the shortest stem
-      (: ok (filter (\ p (exists? (psrc p item))) ms) cand (? (twop ok) ok ms)
+      (: ok (filter (\ p (exists? (psrc p item))) ms) cand (? (chainp ok) ok ms)
          (foldl (\ b p (? (! b) p (? (< (tally (cap (pmatch (cap p) item))) (tally (cap (pmatch (cap b) item)))) p b))) 0 cand))
       (resolve item)           ; synthesize a card from the best matching pattern rule (merging an explicit prereq-only card)
-      (: ms (filter (\ p (twop (pmatch (cap p) item))) patlist) best (best-of ms item)
+      (: ms (filter (\ p (chainp (pmatch (cap p) item))) patlist) best (best-of ms item)
          (? best
             (: stem (cap (pmatch (cap best) item))
                ping (map (\ pp (stemsub pp stem)) (cap (cup best)))
@@ -595,7 +595,7 @@
                ex (peep cards item ())
                allp (? ex (cat (map mk-item ping) (cap ex)) (map mk-item ping))
                oo   (? ex (cat (map mk-item poo) (cap (cup ex))) (map mk-item poo))
-               (cons allp (cons oo (expand-steps (cap (cup (cup (cup best)))) item ping stem as))))
+               (hook allp (hook oo (expand-steps (cap (cup (cup (cup best)))) item ping stem as))))
             0))
       (pin pgen 0 resolve))
 
@@ -607,11 +607,11 @@
    ; exactly as prep does, and print each as a (recipe ..) / (reg ..) form. A
    ; pattern-only target with no card prints nothing (a source leaf).
    (qshow x) (+ "'" (show x))                ; a quoted datum literal: 'all, '("a" b)
-   (estep steps) (? (twop steps) (qshow steps) "0")
+   (estep steps) (? (chainp steps) (qshow steps) "0")
    (emit-line item ings oo steps)
-   (: row (? (twop oo)
-             (L "(reg" (qshow item) (qshow (? (twop ings) ings 0)) (qshow oo) (estep steps))
-             (L "(recipe" (qshow item) (qshow (? (twop ings) ings 0)) (estep steps)))
+   (: row (? (chainp oo)
+             (L "(reg" (qshow item) (qshow (? (chainp ings) ings 0)) (qshow oo) (estep steps))
+             (L "(recipe" (qshow item) (qshow (? (chainp ings) ings 0)) (estep steps)))
       _ (puts (join " " row)) _ (puts ")") (putc 10))
    ; pre-order walk; `seen` (a tablet) keeps a shared prerequisite to one card.
    ; the card lookup mirrors prep: an explicit recipe wins, else a pattern rule.
@@ -619,11 +619,11 @@
    (? (peep seen item 0) 0
       (: _ (pin seen item 1)
          exr (peep cards item 'none)
-         ex (? (twop exr) exr 0)
+         ex (? (chainp exr) exr 0)
          f (peep pgen 0 ())
-         r (? (&& ex (twop (cup (cup ex)))) ex
-              (: g (? f (f item) 0) (? (twop g) g ex)))
-         (? (twop r)
+         r (? (&& ex (chainp (cup (cup ex)))) ex
+              (: g (? f (f item) 0) (? (chainp g) g ex)))
+         (? (chainp r)
             (: ings (cap r) oo (cap (cup r)) steps (cup (cup r))
                _ (emit-line item ings oo steps)
                _ (each ings (\ d (emit-walk d seen)))
@@ -648,15 +648,15 @@
       (|| (= b "Makefile") (|| (= b "makefile") (|| (= b "GNUmakefile") (mk-ends p ".mk")))))
 
    ; the build file may be named explicitly (the first original-argv word that is
-   ; not the program head or a -l pair) or DISCOVERED in the cwd. We cannot call
+   ; not the program head or a -l chain) or DISCOVERED in the cwd. We cannot call
    ; cli.l's strip-l to find the explicit one -- it would re-load this file.
-   (mk-args a) ((: (g x) (? (! (twop x)) 0
-                  (? (= (cap x) "-l") (g (cup (cup x))) (cons (cap x) (g (cup x)))))) (cup a))
+   (mk-args a) ((: (g x) (? (! (chainp x)) 0
+                  (? (= (cap x) "-l") (g (cup (cup x))) (hook (cap x) (g (cup x)))))) (cup a))
    (exists? p) (: q (open p "r") (? q 1 0))     ; a one-shot probe (the fd dies with the process)
    ; discovery precedence: a Makefile wins over a Cookfile, which wins over a
    ; legacy Cards.l (cook's old recipe-file name; read as a Cookfile, being love
    ; source). (a dummy param: a nullary (f) would be \ with one operand = quote.)
-   (discover _) ((: (g ps) (? (twop ps) (? (exists? (cap ps)) (cap ps) (g (cup ps))) 0))
+   (discover _) ((: (g ps) (? (chainp ps) (? (exists? (cap ps)) (cap ps) (g (cup ps))) 0))
                '("Makefile" "Cookfile" "Cards.l"))
 
    ; -- the dispatch (this form's body) --
@@ -672,7 +672,7 @@
    (: af0 (mk-args argv)
       emit? (any (\ w (= w "--emit")) af0)
       af (filter (\ w (! (= w "--emit"))) af0)
-      file (? (&& (twop af) (exists? (cap af))) (cap af) (discover 0))
+      file (? (&& (chainp af) (exists? (cap af))) (cap af) (discover 0))
       (? emit?
          (: _ (? file 0 (: _ (fputs err "cook: --emit needs a Makefile") _ (fputc err 10) (exit 1)))
              q (open file "r")
@@ -686,6 +686,6 @@
                  (: _ (register-makefile (slurp q)) (cook (ticket 0)))
                  ((: (g e) (: r (read q e) (? (= e r) 0 (: _ (ev 'ev r) (g e))))) (mint 0)))
             (exit 0))
-         (twop af)
+         (chainp af)
          (: _ (fputs err "cook: no Makefile, Cookfile or Cards.l found") _ (fputc err 10) (exit 1))
          0)))

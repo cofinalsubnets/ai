@@ -7,7 +7,7 @@
 ;                         captured stdout as one string;
 ;   a positive fixnum  -- the OS errno -- when the program couldn't be spawned;
 ;   a negative fixnum  -- our-side misuse (empty argv / a non-string element).
-; So `twop` is the success/failure discriminator. stderr is inherited, not
+; So `chainp` is the success/failure discriminator. stderr is inherited, not
 ; captured. (getenv name) -> string, or nil when unset.
 ;
 ; These children are chosen so none reads stdin: under the test harness the
@@ -16,8 +16,8 @@
 ; run/getenv are host-only (subprocess + environment); the browser shim has
 ; neither, so skip the whole file there (w64 = the hosted builds).
 (? w64 (assert
-  ; --- ran successfully: a pair, exit 0, and (here) no output ---
-  (twop (run (L "true")))
+  ; --- ran successfully: a chain, exit 0, and (here) no output ---
+  (chainp (run (L "true")))
   (= 0 (cap (run (L "true"))))
   (= 0 (sat (cup (run (L "true")))))            ; `true` writes nothing
 
@@ -30,7 +30,7 @@
   ; --- multiple args are marshalled in order, with no shell in between ---
   (: r (run (L "printf" "%s-%s" "ab" "cd")) (= "ab-cd" (cup r)))
 
-  ; --- a program that can't be spawned -> positive errno fixnum, NOT a pair ---
+  ; --- a program that can't be spawned -> positive errno fixnum, NOT a chain ---
   (: r (run (L "/no/such/prog-xyzzy")) (&& (fixp r) (< 0 r)))   ; abs path: ENOENT
   (: r (run (L "no-such-prog-xyzzy"))  (&& (fixp r) (< 0 r)))   ; PATH miss: ENOENT
 

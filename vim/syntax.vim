@@ -15,7 +15,7 @@ syn iskeyword @,33,37,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
 syn keyword AiForm : ? \\
 
 " Built-in functions (C nifs) + prel functions
-syn keyword AiFunc cons cap cup caap caup cuap cuup
+syn keyword AiFunc hook cap cup caap caup cuap cuup
 syn keyword AiFunc caaap caaup cauap cauup cuaap cuaup cuuap cuuup
 syn keyword AiFunc id co const flip
 syn keyword AiFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
@@ -25,7 +25,7 @@ syn keyword AiFunc << >> & \| ^
 syn keyword AiFunc pin pull peep tablet mint gauge
 syn keyword AiFunc sin cos log pow re im conj arg wave
 syn keyword AiFunc nump intp powg num-ap numfn randint net prod neg recip frac bit
-syn keyword AiFunc twop strp symp mapp lamp hotp packp bigp widep arrp comp flop fixp nilp non atomp unip gemp crestp
+syn keyword AiFunc chainp strp symp mapp lamp hotp packp bigp widep arrp comp flop fixp nilp non atomp unip gemp crestp
 syn keyword AiFunc arr array arank alen ashape atype asum aprod amax amin aall iota
 syn keyword AiFunc a-rank a-shape a-type a-dim
 syn keyword AiFunc string slice intern nom mint tally slurp show sip pad page

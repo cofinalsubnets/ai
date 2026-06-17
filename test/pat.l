@@ -4,20 +4,20 @@
     (&& (= '\ (cap p)) (atomp (cuup p))) (= (caup p)) ; one-operand \ is quote: literal match
   (: p1 (pat2pred (cap p))
      p2 (pat2pred (cup p))
-   (\ x (? (twop x) (? (p1 (cap x)) (p2 (cup x)))))))
+   (\ x (? (chainp x) (? (p1 (cap x)) (p2 (cup x)))))))
  (pat2x p b) (:
   t (tablet 0)
 
   (ff q p) (?
    (symp p) (pin t p q)
-   (twop p) (: _ (ff (co cap q) (cap p))
+   (chainp p) (: _ (ff (co cap q) (cap p))
                 (ff (co cup q) (cup p))))
   _ (ff id p)
   ks (keys t)
 
-  lam (cons '\ (cat ks (list b)))
+  lam (hook '\ (cat ks (list b)))
   y (nom 0)
-  (ev (list '\ y (cons lam (map (\ k (list (peep t k 0) y)) ks)))))
+  (ev (list '\ y (hook lam (map (\ k (list (peep t k 0) y)) ks)))))
 
  (pmatch x1 x2 f) (:
  p (pat2pred x1)

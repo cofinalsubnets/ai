@@ -14,7 +14,7 @@
    Z 0 R 1 C 2 O 3                              ; array element-kind codes (the tier spine)
    non nilp  ;;; FIXME keep nilp alias but standardize on non                                   ; the normal name; !$x reads "non sat x"
    (unip x) (= x (cap x))
-   (atomp x) (nilp (twop x))
+   (atomp x) (nilp (chainp x))
    (co f g) (\ x (f (g x)))
    (names _ ) (keys book)
    caap (co cap cap) caup (co cap cup) ;; FIXME emit pure code -- combine like operations and metaprogram a concrete thread for each definition
@@ -25,12 +25,12 @@
 ; the bare ~ digraph (~x, ~ not before `(`) reads as (conj x): conj LIFTS now, so
 ; it IS the monadic wave -- a real r -> ~(r 0), a complex z -> ~(re -im), an
 ; involution. the 2-operand ~(a b) splices into (wave a b), the C constructor.
-; a NOM is the literal pair of a name string and a MINT (the nameless fresh
+; a NOM is the literal chain of a name string and a MINT (the nameless fresh
 ; point the mint nif adjoins; identity its only property, $mint = 0). the old
 ; named-uninterned atom species is gone -- McCarthy's symbol, restored as the
 ; product it always was. (nom 0) (any non-text arg) is the bare mint.
-(: (nom n) (? (strp n) (cons n (mint 0)) ;; FIXME hook
-              (symp n) (cons (string n) (mint 0))
+(: (nom n) (? (strp n) (hook n (mint 0)) ;; FIXME hook
+              (symp n) (hook (string n) (mint 0))
               (mint 0)))
 ; integer power (b ** k) is just numeral application: (k b) == b**k. The squaring
 ; algorithm lives in `ipow`, local to the num-ap block below, so there is no `**`.
@@ -39,12 +39,12 @@
                                  (? (= 0 (% k 2)) h2 (% (* h2 b) m)))))
 ; functional bounded draw: (value . st') with value in [0,n), riding rand-next
 ; (full-width draw) + modulo. The global-stream analogue is the `rand` nif.
-(: (randint st n) (: r (rand-next st) (cons (% (cap r) n) (cup r)))) ;; FIXME check interface & hook
+(: (randint st n) (: r (rand-next st) (hook (% (cap r) n) (cup r)))) ;; FIXME check interface & hook
 (: caaap (co cap caap) caaup (co cap caup) ;; FIXME group above
    cauap (co cap cuap) cauup (co cap cuup)
    cuaap (co cup caap) cuaup (co cup caup)
    cuuap (co cup cuap) cuuup (co cup cuup))
-; X cons; cap/cup -- the pair's two projections, the matched pair the string diagrams bend
+; X hook; cap/cup -- the chain's two projections, the matched pair the string diagrams bend
 ; (lineage: cap/cup <- cap/cbp <- car/cdr) -- and the caap..cuuup compounds above are the
 ; primitives; the older names are gone.
 (: inc (+ 1) dec (+ -1) ;; FIXME pure code
@@ -67,11 +67,11 @@
 ; the printer's fn_src (cf. ev.c c1); entry is cell 1, handed out via (seek 1 th), and
 ; the src rides the text span so GC traces it. Helpers pass th/f/n explicitly -- a
 ; closure over the forward-bound th miscompiles under the bootstrap c0.
-(: (nfnest f i acc) (? (< i 1) acc (nfnest f (+ -1 i) (cons f (cons acc 0))))
+(: (nfnest f i acc) (? (< i 1) acc (nfnest f (+ -1 i) (hook f (hook acc 0))))
    (nfq th f i n) (? (< i n) (: _ (poke (+ 1 (* 2 i)) lvm_quote th) _ (poke (+ 2 (* 2 i)) f th) (nfq th f (+ 1 i) n)) th)
    (nfa th i n) (? (< i n) (: _ (poke (+ (+ 3 (* 2 n)) i) lvm_ap th) (nfa th (+ 1 i) n)) th)
    (numfn n f) (:                                  ; build (\ x (f (f ... (f x)))), n f's
-     src (cons '\ (cons 'x (cons (nfnest f n 'x) 0)))  ; alloc before spin; printer source
+     src (hook '\ (hook 'x (hook (nfnest f n 'x) 0)))  ; alloc before spin; printer source
      th (spin (+ 5 (* 3 n)))                         ; [src] n*[quote f] [arg n] n*[ap] [ret 1]
      _ (poke 0 src th) _ (nfq th f 0 n)             ; no allocation past spin: th can't move
      _ (poke (+ 1 (* 2 n)) lvm_arg th) _ (poke (+ 2 (* 2 n)) n th)   ; arg n: x, now under n f's
@@ -127,9 +127,9 @@
 (: (add f g a x) (f a (g a x))
    (mul f g x) (f (g x))
    _ (pin book 'add add) _ (pin book 'mul mul))
-(: (map f l) (? (twop l) (cons (f (cap l)) (map f (cup l))))
-   (foldl f z l) (? (twop l) (foldl f (f z (cap l)) (cup l)) z)
-   (foldr f z l) (? (twop l) (f (cap l) (foldr f z (cup l))) z))
+(: (map f l) (? (chainp l) (hook (f (cap l)) (map f (cup l))))
+   (foldl f z l) (? (chainp l) (foldl f (f z (cap l)) (cup l)) z)
+   (foldr f z l) (? (chainp l) (f (cap l) (foldr f z (cup l))) z))
 ; the monadic words behind the glued sigils (the valence law; see opfix and
 ; book['monadics] below). net is the CONTENT MEASURE as a value -- + turned
 ; inward: a number is its own net (phase intact, exact), an array sums its
@@ -138,10 +138,10 @@
 ; dyadics turned inward; bit the truth bit (the Iverson bracket, !!).
 (: (net x) (? (arrp x) (asum x)
               (nump x) x
-              (twop x) (foldl (\ a e (+ a (net e))) 0 x)
+              (chainp x) (foldl (\ a e (+ a (net e))) 0 x)
               (sat x))
    (prod x) (? (arrp x) (aprod x)
-               (twop x) (foldl (\ a e (* a (prod e))) 1 x)
+               (chainp x) (foldl (\ a e (* a (prod e))) 1 x)
                x)
    neg (- 0)
    recip (/ 1)
@@ -159,42 +159,42 @@
 (: (foldl1 f l) (foldl f (cap l) (cup l))
    (foldr1 f l) (foldr f (last l) (init l))
    ap (foldl id)
-   (filter p l) (? (twop l) (: m (filter p (cup l)) (? (p (cap l)) (cons (cap l) m) m)))
-   (init l) (? (twop (cup l)) (cons (cap l) (init (cup l))))
-   (last l) (? (twop (cup l)) (last (cup l)) (cap l))
-   (each l f) (? (twop l) (: _ (f (cap l)) (each (cup l) f)))
-   (ldel x l) (? (twop l) (? (= (cap l) x) (cup l) (cons (cap l) (ldel x (cup l)))))
-   (all f l) (? (twop l) (? (f (cap l)) (all f (cup l))) 1)
-   (any f l) (? (twop l) (? (f (cap l)) 1 (any f (cup l))))
-   (cat a b) (foldr cons b a))
+   (filter p l) (? (chainp l) (: m (filter p (cup l)) (? (p (cap l)) (hook (cap l) m) m)))
+   (init l) (? (chainp (cup l)) (hook (cap l) (init (cup l))))
+   (last l) (? (chainp (cup l)) (last (cup l)) (cap l))
+   (each l f) (? (chainp l) (: _ (f (cap l)) (each (cup l) f)))
+   (ldel x l) (? (chainp l) (? (= (cap l) x) (cup l) (hook (cap l) (ldel x (cup l)))))
+   (all f l) (? (chainp l) (? (f (cap l)) (all f (cup l))) 1)
+   (any f l) (? (chainp l) (? (f (cap l)) 1 (any f (cup l))))
+   (cat a b) (foldr hook b a))
 ; sort: (sort l) orders l ascending by the total order -- the C lane (a stable
 ; bottom-up merge in the heap gap, one cmp3 per compare, no lisp re-entry);
 ; descending is (rev (sort l)). an arbitrary strict less-than predicate takes
 ; the lisp merge sort: (msort le l), top-down alternating split + merge.
 (: (merge le a b) (? (atomp a) b (atomp b) a
-                     (le (cap a) (cap b)) (cons (cap a) (merge le (cup a) b))
-                     (cons (cap b) (merge le a (cup b))))
-   (sortsplit l) (? (atomp l) (cons l 0) (atomp (cup l)) (cons l 0)
-                    (: r (sortsplit (cuup l)) (cons (cons (cap l) (cap r)) (cons (caup l) (cup r)))))
+                     (le (cap a) (cap b)) (hook (cap a) (merge le (cup a) b))
+                     (hook (cap b) (merge le a (cup b))))
+   (sortsplit l) (? (atomp l) (hook l 0) (atomp (cup l)) (hook l 0)
+                    (: r (sortsplit (cuup l)) (hook (hook (cap l) (cap r)) (hook (caup l) (cup r)))))
    (msort le l) (? (atomp l) l (atomp (cup l)) l
                   (: s (sortsplit l) (merge le (msort le (cap s)) (msort le (cup s))))))
 (: catmap (co (flip foldr 0) (co cat))
-   (assq x l) (? (twop l) (? (= x (caap l)) (cap l) (assq x (cup l))))
-   (lidx x) ((: (f n l) (? (twop l) (? (= x (cap l)) n (f (+ 1 n) (cup l))) -1)) 0)
+   (assq x l) (? (chainp l) (? (= x (caap l)) (cap l) (assq x (cup l))))
+   (lidx x) ((: (f n l) (? (chainp l) (? (= x (cap l)) n (f (+ 1 n) (cup l))) -1)) 0)
    memq (co any (=))
-   (zip a b) (? (twop a) (? (twop b) (cons (cons (cap a) (cap b)) (zip (cup a) (cup b)))))
-   rev (foldl (flip cons) 0)
-   (jot n) ((: (go i) (? (< i n) (cons i (go (+ i 1))))) 0)
+   (zip a b) (? (chainp a) (? (chainp b) (hook (hook (cap a) (cap b)) (zip (cup a) (cup b)))))
+   rev (foldl (flip hook) 0)
+   (jot n) ((: (go i) (? (< i n) (hook i (go (+ i 1))))) 0)
    (drop n l) (? n (drop (- n 1) (cup l)) l)
-   (take n l) (? n (cons (cap l) (take (- n 1) (cup l))))
-   (part p) (foldr (\ a m (? (p a) (cons (cons a (cap m)) (cup m))
-                                        (cons (cap m) (cons a (cup m))))) '(0)))
+   (take n l) (? n (hook (cap l) (take (- n 1) (cup l))))
+   (part p) (foldr (\ a m (? (p a) (hook (hook a (cap m)) (cup m))
+                                        (hook (cap m) (hook a (cup m))))) '(0)))
 (: (sip cl)
  (poke -1 (peek 0 in) (poke -1 -4 (poke -1 -1 (poke -1 0 (poke 4 cl (spin 5))))))
  (pad _)
   (poke -1 (peek 0 in) (poke -1 -2 (poke -1 -1 (poke -1 0 (poke -1 "  " (poke 5 0 (spin 6)))))))
  (page o) (slice (peek 4 o) 0 (peek 5 o))
- (slurp i) (: (rl i) (: c (fgetc i) (? (= c -1) 0 (cons c (rl i)))) (string (rl i)))  ; (pre-opfix: no ! here)
+ (slurp i) (: (rl i) (: c (fgetc i) (? (= c -1) 0 (hook c (rl i)))) (string (rl i)))  ; (pre-opfix: no ! here)
  (show x) (: o (pad 0) _ (fputx o x) (page o)))
 ; help status readers. a global `help` function is called as (help s a b):
 ; s = the status word, two bits -- scare (1: something went wrong) and more
@@ -206,12 +206,12 @@
    (more? s) (= s 2)
    (eof? s) (= s 3))
 ; here are some macro definitions
-(: l (foldr (\ a l (cons cons (cons a (cons l 0)))) 0) (: _ (:: 'L l) _ (:: 'list l)))
-(:: '&& (\ l (: (and l) (? (twop (cup l)) (list '? (cap l) (and (cup l)) 0) (cap l)) (? (twop l) (and l) 1))))
-(:: '|| (\ l (: (or l) (? (twop l) (: y (nom 0) (list ': y (cap l) (list '? y y (or (cup l))))) 0) (or l))))
-(:: ':- (\ a (cons ': (cat (cup a) (cons (cap a) 0)))))
-(:: '?- (\ a (cons '? (cat (cup a) (cons (cap a) 0)))))
-(:: '>>= (\ l (cons (last l) (init l))))
+(: l (foldr (\ a l (hook hook (hook a (hook l 0)))) 0) (: _ (:: 'L l) _ (:: 'list l)))
+(:: '&& (\ l (: (and l) (? (chainp (cup l)) (list '? (cap l) (and (cup l)) 0) (cap l)) (? (chainp l) (and l) 1))))
+(:: '|| (\ l (: (or l) (? (chainp l) (: y (nom 0) (list ': y (cap l) (list '? y y (or (cup l))))) 0) (or l))))
+(:: ':- (\ a (hook ': (cat (cup a) (hook (cap a) 0)))))
+(:: '?- (\ a (hook '? (cat (cup a) (hook (cap a) 0)))))
+(:: '>>= (\ l (hook (last l) (init l))))
 (:: '<=< (\ g (: y (nom 0) (list '\ y (foldr (\ f x (list f x)) y g)))))
 
 ; --- reader operators: the table + the opfix factor pass --------------------
@@ -230,11 +230,11 @@
 ; before its definitions); everything after -- and every later file, the
 ; corpus, the repl -- reads hot.
 (: operators (: t (tablet 0)
-   _ (pin t '$ (cons 'sat 1)) _ (pin t '! (cons 'nilp 1)) _ (pin t '. (cons 'dot 1))
+   _ (pin t '$ (hook 'sat 1)) _ (pin t '! (hook 'nilp 1)) _ (pin t '. (hook 'dot 1))
    _ (pin t '+ 2) _ (pin t '- 2) _ (pin t '* 2) _ (pin t '/ 2) _ (pin t '% 2)
    _ (pin t '= 2) _ (pin t '< 2) _ (pin t '<= 2) _ (pin t '> 2) _ (pin t '>= 2)
    _ (pin t '| 2) _ (pin t '& 2) _ (pin t '? 3)
-   _ (pin t '<- (cons 'pin 3)) _ (pin t '-> (cons 'peep 3))
+   _ (pin t '<- (hook 'pin 3)) _ (pin t '-> (hook 'peep 3))
    t))
 ; the VALENCE LAW's table: a glued operator run is MONADIC (the reader emits
 ; (mono (run datum))); spaced, the run keeps its dyadic/infix life. each entry
@@ -274,14 +274,14 @@
        0)
    ; normalize a table entry for key k -> (name . arity), or 0
    (op-ent k) (: v (operators k)
-                 (? (fixp v) (? (&& (< 0 v) (< v 8)) (cons k v) 0)
-                    (twop v) (? (&& (symp (cap v)) (fixp (cup v)) (< 0 (cup v)) (< (cup v) 8)) v 0)
+                 (? (fixp v) (? (&& (< 0 v) (< v 8)) (hook k v) 0)
+                    (chainp v) (? (&& (symp (cap v)) (fixp (cup v)) (< 0 (cup v)) (< (cup v) 8)) v 0)
                     0))
    ; longest prefix of nm[i..n) that is a table key -> (len . entry), or 0
    (op-long nm i n)
     ((: (go k) (? (< k 1) 0
                   (: e (op-ent (intern (slice nm i (+ i k))))
-                     (? (twop e) (cons k e) (go (- k 1))))))
+                     (? (chainp e) (hook k e) (go (- k 1))))))
      (- n i))
    ; factor symbol s -> a list of (name . arity) entries, or 0
    (opfactor s)
@@ -289,10 +289,10 @@
        ((: (go i)
            (? (< i n)
               (: m (op-long nm i n)
-                 (? (twop m) (: k (cap m) e (cup m)
-                         (? (= (+ i k) n) (cons e 0)         ; the last factor: any arity
+                 (? (chainp m) (: k (cap m) e (cup m)
+                         (? (= (+ i k) n) (hook e 0)         ; the last factor: any arity
                             (= (cup e) 1) (: r (go (+ i k))  ; non-last factors must be arity one
-                                             (? (twop r) (cons e r) 0))
+                                             (? (chainp r) (hook e r) 0))
                             0))
                     0))
               0))
@@ -304,9 +304,9 @@
     ((: (go k) (? (< k 1) 0
                   (: s (intern (slice nm i (+ i k)))
                      e (monadics s)
-                     (? (symp e) (cons k e)
+                     (? (symp e) (hook k e)
                         (: o (op-ent s)
-                           (? (? (twop o) (= 1 (cup o)) 0) (cons k (cap o))
+                           (? (? (chainp o) (= 1 (cup o)) 0) (hook k (cap o))
                               (go (- k 1))))))))
      (- n i))
    ; factor a glued run against the monadic table -> the word list
@@ -316,9 +316,9 @@
        ((: (go i)
            (? (< i n)
               (: m (mono-long nm i n)
-                 (? (twop m)
-                    (? (= (+ i (cap m)) n) (cons (cup m) 0)
-                       (: r (go (+ i (cap m))) (? (twop r) (cons (cup m) r) 0)))
+                 (? (chainp m)
+                    (? (= (+ i (cap m)) n) (hook (cup m) 0)
+                       (: r (go (+ i (cap m))) (? (chainp r) (hook (cup m) r) 0)))
                     0))
               0))
         0)))
@@ -328,12 +328,12 @@
 ; (outermost first), need = operands still wanted (0 = FILLED, fold deferred
 ; so a following infix operator can steal the last operand -- that deferral
 ; IS right-associativity), got = operands so far, reversed. out/pend thread
-; as one (out . pend) pair through the helpers.
-(: (op-fr o ch nm nd gt) (cons o (cons ch (cons nm (cons nd gt))))
+; as one (out . pend) chain through the helpers.
+(: (op-fr o ch nm nd gt) (hook o (hook ch (hook nm (hook nd gt))))
    (op-fro f) (cap f) (op-frc f) (caup f) (op-frn f) (cauup f)
    (op-frd f) (cap (cuuup f)) (op-frg f) (cup (cuuup f))
    ; wrap the chain of arity-one names around a folded form
-   (op-fin ch x) (? (twop ch) (cons (cap ch) (cons (op-fin (cup ch) x) 0)) x)
+   (op-fin ch x) (? (chainp ch) (hook (cap ch) (hook (op-fin (cup ch) x) 0)) x)
    ; fold a frame with whatever it has: nothing collected -> the plain
    ; symbol; a shortfall folds to the partial application (curry law). a
    ; frame at arity ONE (nil name: the whole op lives in the chain) wraps its
@@ -342,7 +342,7 @@
    ; like (0) or ("") NETS zero, so nilp would read it as empty and drop
    ; the operand (the round-16 discipline: kinds for structure)
    (op-fold f) (? (atomp (op-frg f)) (op-fro f)
-                  (symp (op-frn f)) (op-fin (op-frc f) (cons (op-frn f) (rev (op-frg f))))
+                  (symp (op-frn f)) (op-fin (op-frc f) (hook (op-frn f) (rev (op-frg f))))
                   (op-fin (op-frc f) (cap (op-frg f))))
    ; deliver datum d -> (out' . pend'). a collecting frame takes it; a FILLED
    ; frame folds into its parent first (cascading), then d delivers. a
@@ -351,30 +351,30 @@
    ; their fold so a following operator can steal the last operand (that
    ; deferral IS right-associativity).
    (op-del d out pend)
-    (? (atomp pend) (cons (cons d out) pend)
+    (? (atomp pend) (hook (hook d out) pend)
        (: f (cap pend)
           (? (< 0 (op-frd f))
              (: f2 (op-fr (op-fro f) (op-frc f) (op-frn f)
-                          (- (op-frd f) 1) (cons d (op-frg f)))
+                          (- (op-frd f) 1) (hook d (op-frg f)))
                 ; (nilp ..), not !: this block is pre-opfix (the bootstrap restriction)
                 (? (&& (= 0 (op-frd f2)) (nilp (symp (op-frn f2))))
                    (op-del (op-fold f2) out (cup pend))
-                   (cons out (cons f2 (cup pend)))))
+                   (hook out (hook f2 (cup pend)))))
              (: r (op-del (op-fold f) out (cup pend))
                 (op-del d (cap r) (cup r))))))
    ; take a left operand if one is available -> (L . (out' . pend')), or 0.
    ; a FILLED top frame re-arms (need 1) and yields its last operand -- the
    ; C reader's A(F)=1 move; at top level the last finished datum is taken.
    (op-steal out pend)
-    (? (twop pend)
+    (? (chainp pend)
        (: f (cap pend)
           (? (= 0 (op-frd f))
-             (cons (cap (op-frg f))
-                   (cons out (cons (op-fr (op-fro f) (op-frc f) (op-frn f)
+             (hook (cap (op-frg f))
+                   (hook out (hook (op-fr (op-fro f) (op-frc f) (op-frn f)
                                           1 (cup (op-frg f)))
                                    (cup pend))))
              0))
-       (twop out) (cons (cap out) (cons (cup out) pend))
+       (chainp out) (hook (cap out) (hook (cup out) pend))
        0)
    ; drain at end of list: fold every pending frame innermost-out
    (op-drain out pend)
@@ -391,13 +391,13 @@
                    (: ch (map cap (init fs)) en (last fs) nm (cap en) n (cup en)
                       (? (= n 1)                       ; arity one (or a one-chain): prefix --
                          ; nil name, the op rides the chain: marks the frame to fold on fill
-                         (op-w (cup l) out (cons (op-fr e (cat ch (cons nm 0)) 0 1 0) pend))
+                         (op-w (cup l) out (hook (op-fr e (cat ch (hook nm 0)) 0 1 0) pend))
                          (: st (op-steal out pend)     ; infix: capture if a left operand exists
-                            (? (twop st) (op-w (cup l) (cap (cup st))
-                                        (cons (op-fr e ch nm (- n 1) (cons (cap st) 0))
+                            (? (chainp st) (op-w (cup l) (cap (cup st))
+                                        (hook (op-fr e ch nm (- n 1) (hook (cap st) 0))
                                               (cup (cup st))))
-                               (twop ch)               ; composite with no left: prefix
-                               (op-w (cup l) out (cons (op-fr e ch nm 1 0) pend))
+                               (chainp ch)               ; composite with no left: prefix
+                               (op-w (cup l) out (hook (op-fr e ch nm 1 0) pend))
                                (: r (op-del e out pend) ; bare operator: the plain symbol
                                   (op-w (cup l) (cap r) (cup r)))))))))
              (: r (op-del (op-core e) out pend)
@@ -407,8 +407,8 @@
    (op-qq t)
     (? (atomp t) t
        (: h (cap t)
-          (? (= h 'uq)  (cons 'uq  (cons (op-core (caup t)) 0))
-             (= h 'uqs) (cons 'uqs (cons (op-core (caup t)) 0))
+          (? (= h 'uq)  (hook 'uq  (hook (op-core (caup t)) 0))
+             (= h 'uqs) (hook 'uqs (hook (op-core (caup t)) 0))
              (map (\ e (op-qq e)) t))))
    ; op-core: the factor pass. quote interiors are DATA and stay verbatim (so a
    ; quoted list keeps its operators as plain symbols); quasiquote descends
@@ -418,14 +418,14 @@
     (? (atomp x) x
        (: h (cap x)
           (? (&& (= h '\) (atomp (cuup x))) x
-             (= h 'qq) (cons 'qq (cons (op-qq (caup x)) 0))
+             (= h 'qq) (hook 'qq (hook (op-qq (caup x)) 0))
              ; the reader's glued-run emission (mono (run d)): factor the run
              ; monadically around the (recursively opfixed) datum; an
              ; unfactorable run is the plain application (run d)
-             (&& (= h 'mono) (twop (cup x)) (twop (caup x)))
+             (&& (= h 'mono) (chainp (cup x)) (chainp (caup x)))
               (: p (caup x) r (cap p) d (op-core (caup p))
                  fs (? (symp r) (monofactor r) 0)
-                 (? (twop fs) (op-fin fs d) (cons r (cons d 0))))
+                 (? (chainp fs) (op-fin fs d) (hook r (hook d 0))))
              (op-w x 0 0)))))
 ; opfix = op-core, the operator factor pass. (Historically opfix also ran an
 ; optional native-codegen hook, book['opjit]; that JIT experiment was retracted --
@@ -452,18 +452,18 @@
 ; do/begin/progn sequence side effects and return the last (identical to the
 ; current `,` macro -> `(: _ a _ b ... last)`); let -> the `:` let form;
 ; if/cond -> the `?` conditional.
-(: seqx (\ l (cons ': (foldr (\ l r (cons '_ (cons l r))) (list (last l)) (init l)))))
+(: seqx (\ l (hook ': (foldr (\ l r (hook '_ (hook l r))) (list (last l)) (init l)))))
 (:: 'do seqx) (:: 'begin seqx) (:: 'progn seqx)
-(:: 'let (\ a (cons ': a)))
-(:: 'if (\ a (cons '? a)))
-(:: 'cond (\ a (cons '? a)))
+(:: 'let (\ a (hook ': a)))
+(:: 'if (\ a (hook '? a)))
+(:: 'cond (\ a (hook '? a)))
 ; `(quote x)` -> `(\ x)`: the CL/Scheme name for the one-arg-lambda quote (`'x` sugar).
-(:: 'quote (\ a (cons '\ a)))
+(:: 'quote (\ a (hook '\ a)))
 
 ; quasiquote: `tmpl with ,x (unquote) and ,@xs (unquote-splice). The reader emits
 ; (qq tmpl), (uq x), (uqs xs). qqx/qql walk the template; every unquote FIRES (there
 ; is no nesting -- `` is the element-eval list constructor now, so no depth to track).
-; qqx returns CODE that reconstructs the template (cons/cat over the spliced values).
+; qqx returns CODE that reconstructs the template (hook/cat over the spliced values).
 ; uq is also bound to identity so a stray top-level ,x just evaluates its operand.
 (: (qqx t) (?
     (atomp t)       (list '\ t)                              ; atom: quote it
@@ -471,9 +471,9 @@
                     (qql t))                                 ; other list
    (qql t) (?
     (atomp t) (qqx t)                                        ; nil / improper tail
-    (&& (twop (cap t)) (= (caap t) 'uqs))
+    (&& (chainp (cap t)) (= (caap t) 'uqs))
      (list 'cat (caup (cap t)) (qql (cup t)))                ; splice: fire
-    (list 'cons (qqx (cap t)) (qql (cup t)))))               ; ordinary element
+    (list 'hook (qqx (cap t)) (qql (cup t)))))               ; ordinary element
 (:: 'qq (\ a (qqx (cap a))))
 (: uq (\ x x))                                               ; stray ,x evaluates x
 
@@ -490,17 +490,17 @@
 (: (a-rank x) (? (flop x) 1 (| (fixp x) (widep x)) 0 (comp x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
    (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) Z (= k 1) R (= k 2) C O))
-   (a-dim d) (? (twop d) (tally d) (sat d))
-   (a-shape s) (? (twop s) (map a-dim s) (L (a-dim s))))
+   (a-dim d) (? (chainp d) (tally d) (sat d))
+   (a-shape s) (? (chainp s) (map a-dim s) (L (a-dim s))))
 
 ; tuple/hash value constructors (also the read-back targets of the `@(…)` / `#(…)`
 ; printer-sugar forms). `tuple` builds a rank-1 array from its element args,
 ; inferring the element type via a-type (so it carries bignums/symbols in an o
 ; array, not just z/r); `map` builds a map from alternating key/value args.
 (: (ltuple l) (arr (a-type l) (L (foldl (\ n _ (+ 1 n)) 0 l)) l))
-(:: 'tuple (\ a (list 'ltuple (cons 'list a))))
+(:: 'tuple (\ a (list 'ltuple (hook 'list a))))
 ; (hash x) boxes any non-list -- a fresh mutable hash pinning x
-; at 0, so #5 = #(0 5) and #() IS #0 (() is 0); pairs pin as usual, and an odd
+; at 0, so #5 = #(0 5) and #() IS #0 (() is 0); chains pin as usual, and an odd
 ; trailing operand lands in the 0 box slot. the empty hash is (tablet 0).
 (: (hashtx a) (? (atomp a) '(tablet 0)
                  (atomp (cup a)) (list 'pin (hashtx 0) 0 (cap a))
@@ -518,12 +518,12 @@
 ; (array 2 'a 'b), (array '(2 2) 1 2 3 4) and a partial like (array 3) (a collector
 ; awaiting 3 elems) all fall out of l's auto-currying, like numap's n-ary text.
 (: (a-coll sh n acc) (? (< n 1) (: d (rev acc) (arr (a-type d) sh d))
-                        (\ x (a-coll sh (- n 1) (cons x acc))))
+                        (\ x (a-coll sh (- n 1) (hook x acc))))
    (array s) (: sh (a-shape s) (a-coll sh (foldl (*) 1 sh) 0)))
 
 ; recursive-value boxing for `:` (the letrec* "capture by location" fix).
 ; ONE SCOPE: every name bound in a `:` resolves locally over the whole form.
-; `boxfix-core` takes a source-order (name . def) pair-list `prs` and the body
+; `boxfix-core` takes a source-order (name . def) chain-list `prs` and the body
 ; expression. a reference to a name at-or-before its own (first) binding is a
 ; FORWARD reference; the name is indirected through a CELL -- a box (a fresh
 ; map, the # adjoint of :) keyed by the binding site's nom: prepend
@@ -539,10 +539,10 @@
 ; shared verbatim by both compilers: ev.l's wev and c0 (ev.c) both call the
 ; flat `boxfix` wrapper below, bpr+flatten around the same core. `lambp`/`dsug`
 ; are globals so `ale` shares them (lambda detection, binding desugaring).
-(: (lambp x) (? (twop x) (&& (= '\ (cap x)) (twop (cuup x)))) ; \ with >=1 param (one-operand \ is quote)
-   (dsug n d) (? (atomp n) (cons n d) (dsug (cap n) (cons '\ (cat (cup n) (list d)))))
-   (lp x) (: a (cup x) (? (atomp (cup a)) (cons 0 (cap a)) (cons (init a) (last a))))
-   (ln bs) (? (atomp bs) 0 (atomp (cup bs)) 0 (cons (cap (dsug (cap bs) 0)) (ln (cuup bs))))
+(: (lambp x) (? (chainp x) (&& (= '\ (cap x)) (chainp (cuup x)))) ; \ with >=1 param (one-operand \ is quote)
+   (dsug n d) (? (atomp n) (hook n d) (dsug (cap n) (hook '\ (cat (cup n) (list d)))))
+   (lp x) (: a (cup x) (? (atomp (cup a)) (hook 0 (cap a)) (hook (init a) (last a))))
+   (ln bs) (? (atomp bs) 0 (atomp (cup bs)) 0 (hook (cap (dsug (cap bs) 0)) (ln (cuup bs))))
    ; w/wl: does x / binding-list bs reference symbol v? multi-operand \ and
    ; : shadow; one-operand \ is quote (data, nothing free); macro expansion (so :- ?-
    ; &&/|| are seen as the compiler sees them). u tracks lambda depth; dm (direct
@@ -565,38 +565,38 @@
    (boxset prs) (: nm (map cap prs)
      (filter (\ v (any (\ p (w v (cup p) 0 0 (lambp (cup (assq v prs)))))
                        (take (+ 1 (lidx v nm)) prs))) nm))
-   (mkcs bx) (map (\ v (cons v (cons (nom 0) (nom v)))) bx)
-   (cellbinds cs) (map (\ c (cons (caup c) (list tablet 0))) cs))
+   (mkcs bx) (map (\ v (hook v (hook (nom 0) (nom v)))) bx)
+   (cellbinds cs) (map (\ c (hook (caup c) (list tablet 0))) cs))
 ; boxfix-core (c0): same prep + rewrites refs via sub/subl (c0 has no analysis-time
 ; redirect). Returns (prepped-prs . body') or 0.
 (: (boxfix-core prs body) (:
    (rmc cs ns) (filter (\ p (nilp (memq (cap p) ns))) cs)
    (sub cs x) (?
-    (symp x) (: p (assq x cs) (? (twop p) (list missing (caup p) (list '\ (cuup p))) x))
+    (symp x) (: p (assq x cs) (? (chainp p) (list missing (caup p) (list '\ (cuup p))) x))
     (atomp x) x
     (: h (cap x) (?
-      (= h '\) (? (atomp (cuup x)) x (: r (lp x) (cons '\ (cat (cap r) (list (sub (rmc cs (cap r)) (cup r)))))))
-      (= h ':) (cons ': (subl (rmc cs (ln (cup x))) (cup x)))
+      (= h '\) (? (atomp (cuup x)) x (: r (lp x) (hook '\ (cat (cap r) (list (sub (rmc cs (cap r)) (cup r)))))))
+      (= h ':) (hook ': (subl (rmc cs (ln (cup x))) (cup x)))
       (: m (? (symp h) (peep macros h 0) 0) (? m (sub cs (m (cup x))) (map (\ e (sub cs e)) x))))))
    (subl cs bs) (?
     (atomp bs) bs
     (atomp (cup bs)) (list (sub cs (cap bs)))
-    (: nd (dsug (cap bs) (caup bs)) (cons (cap nd) (cons (sub cs (cup nd)) (subl cs (cuup bs))))))
+    (: nd (dsug (cap bs) (caup bs)) (hook (cap nd) (hook (sub cs (cup nd)) (subl cs (cuup bs))))))
    (: bx (boxset prs)
       (? (nilp bx) 0
        (: cs (mkcs bx)
           (one p) (: d (sub cs (cup p))
                      (? (memq (cap p) bx)
-                        (: c (assq (cap p) cs) (cons '_ (list pin (caup c) (list '\ (cuup c)) d)))
-                        (cons (cap p) d)))
-          (cons (cat (cellbinds cs) (map one prs)) (sub cs body)))))))
+                        (: c (assq (cap p) cs) (hook '_ (list pin (caup c) (list '\ (cuup c)) d)))
+                        (hook (cap p) d)))
+          (hook (cat (cellbinds cs) (map one prs)) (sub cs body)))))))
 ; flat-list adapter for c0 (ev.c): a `:` binding list (n1 d1 .. [body]) -> the
 ; rewritten list, or the input unchanged. even (body-less) lets and lets that
 ; need no boxing pass through verbatim.
 (: (boxfix fs) (:
    (ev l) (? (atomp l) 1 (atomp (cup l)) 0 (ev (cuup l)))
-   (bpr fs) (? (atomp (cup fs)) (cons 0 (cap fs))
-               (: r (bpr (cuup fs)) (cons (cons (dsug (cap fs) (caup fs)) (cap r)) (cup r))))
+   (bpr fs) (? (atomp (cup fs)) (hook 0 (cap fs))
+               (: r (bpr (cuup fs)) (hook (hook (dsug (cap fs) (caup fs)) (cap r)) (cup r))))
    (? (ev fs) fs
     (: pb (bpr fs) r (boxfix-core (cap pb) (cup pb))
        (? r (cat (catmap (\ p (list (cap p) (cup p))) (cap r)) (list (cup r))) fs)))))

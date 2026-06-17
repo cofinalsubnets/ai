@@ -50,7 +50,7 @@
       _ (fputs p " return (uintptr_t) a >= (uintptr_t) __start_ai_data\n")
       _ (fputs p "     && (uintptr_t) a <  (uintptr_t) __stop_ai_data; }\n")
       _ (fputs p "static ai_inline enum q ai_typ(union u *o) {\n")
-      _ (fputs p " static const enum q kinds[] = { KVec, KBig, KString, KSym, KTwo, KFlo, KWide, KCplx };\n")
+      _ (fputs p " static const enum q kinds[] = { KVec, KBig, KString, KSym, KChain, KFlo, KWide, KCplx };\n")
       _ (fputs p " return kinds[((uintptr_t) o->ap - (uintptr_t) __start_ai_data) ")
       _ (? po2 (: _ (fputs p ">> ") (fputbn p shift 10)) (fputs p "/ G_DATA_UNIT"))
       _ (fputs p "]; }\n")
@@ -83,7 +83,7 @@
                      nm (cstr s (+ stroff (rd32 s o)))
                      (loop (+ i 1)
                            (? (prefix? prefix nm)
-                              (cons (cons (rdw s (+ o szoff))     ; sh_size
+                              (hook (hook (rdw s (+ o szoff))     ; sh_size
                                           (rdw s (+ o aloff))) acc) ; sh_addralign
                               acc)))
                   acc)
@@ -102,7 +102,7 @@
 
 ; --- driver: (B argv) = (data.o [-o out]) --------------------------
 (: args (cup argv)
-   path (? (twop args) (cap args) (die "usage: gen_data.l <data.o> [-o out]"))
+   path (? (chainp args) (cap args) (die "usage: gen_data.l <data.o> [-o out]"))
    rest (cup args)
-   p (? (&& (twop rest) (= (cap rest) "-o")) (open (cap (cup rest)) "w") out)
+   p (? (&& (chainp rest) (= (cap rest) "-o")) (open (cap (cup rest)) "w") out)
    (gen path p))

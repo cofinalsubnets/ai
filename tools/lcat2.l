@@ -58,7 +58,7 @@
 ; The SURFACE block below (collect/tcollect + rn with its :-/let/qq handling) stays in
 ; lcat2: it is exactly the un-expanded-source adaptation the compiler no longer needs. ===
 (: (sl-char d) (? (< d 26) (+ 97 d) (+ 65 (- d 26)))   ; shortlex over a-zA-Z (bijective base-52):
-   (sl-digits n acc) (? (< n 1) acc (: m (+ -1 n) (sl-digits (/ m 52) (cons (sl-char (% m 52)) acc))))
+   (sl-digits n acc) (? (< n 1) acc (: m (+ -1 n) (sl-digits (/ m 52) (hook (sl-char (% m 52)) acc))))
    (shortlex k) (string (sl-digits (+ 1 k) 0))         ; 0->a .. 25->z 26->A .. 51->Z 52->aa
    (freshname? nm) (= 0 (peep cnt nm 0))                ; nm occurs as no source symbol
    (avail? nm u) (&& (freshname? nm) !(memq nm u))     ; ..and not live on this path
@@ -68,29 +68,29 @@
           (: la (tally (string a)) lb (tally (string b)) (? (> la lb) 1 (< la lb) 0 (< a b)))))
    ; assign fresh names to a scope's co-live bindings (count order). a frozen (tainted)
    ; or can't-shrink binding is kept (mapped to itself, no name spent). -> (env-frame . used').
-   (assign syms used) ((: (g ss m u) (? (twop ss)
+   (assign syms used) ((: (g ss m u) (? (chainp ss)
          (: s (cap ss) nm (pickname u)
             (? (&& !(peep taint s 0) (< (tally nm) (tally (string s))))
-               (: i (intern nm) (g (cup ss) (cons (cons s i) m) (cons i u)))
-               (g (cup ss) (cons (cons s s) m) u)))
-         (cons m u))) (msort cntle syms) 0 used)
+               (: i (intern nm) (g (cup ss) (hook (hook s i) m) (hook i u)))
+               (g (cup ss) (hook (hook s s) m) u)))
+         (hook m u))) (msort cntle syms) 0 used)
    (mapped s m) (: p (assq s m) (? p (cup p) s))
-   (flat lhs) (? (symp lhs) (cons lhs 0) (: r (flat (cap lhs)) (cons (cap r) (cat (cup r) (cup lhs)))))  ; unwind : head-sugar
+   (flat lhs) (? (symp lhs) (hook lhs 0) (: r (flat (cap lhs)) (hook (cap r) (cat (cup r) (cup lhs)))))  ; unwind : head-sugar
    (lhs-rename lhs bmap am) (? (symp lhs) (mapped lhs (cat am bmap))  ; name via bmap, params via am
-       (twop lhs) (cons (lhs-rename (cap lhs) bmap am) (lhs-rename (cup lhs) bmap am)) lhs)
+       (chainp lhs) (hook (lhs-rename (cap lhs) bmap am) (lhs-rename (cup lhs) bmap am)) lhs)
    (bodyless? bs) (? (atomp bs) 1 (atomp (cup bs)) 0 (bodyless? (cuup bs)))
    ; rebuild a : binding list; each binding's sugar params open a fresh sub-scope of its
    ; value (siblings all assign from u1, so their names recycle). recurse via `rec`.
    (rn-binds bs bmap env1 u1 rec) (?
-     (&& (twop bs) (twop (cup bs)))
+     (&& (chainp bs) (chainp (cup bs)))
        (: lhs (cap bs) val (caup bs) f (flat lhs) r (assign (cup f) u1) am (cap r) u2 (cup r)
           penv (cat am env1) lhs2 (lhs-rename lhs bmap am) val2 (rec val penv u2 0 rec)
-          (cons lhs2 (cons val2 (rn-binds (cuup bs) bmap env1 u1 rec))))
-     (twop bs) (cons (rec (cap bs) env1 u1 0 rec) 0)         ; trailing body
+          (hook lhs2 (hook val2 (rn-binds (cuup bs) bmap env1 u1 rec))))
+     (chainp bs) (hook (rec (cap bs) env1 u1 0 rec) 0)         ; trailing body
      0)
    (rn-let bs env used top rec) (: names (ln bs) leak (? top (bodyless? bs) 0)
-       r (? leak (cons 0 used) (assign names used)) bmap (cap r) u1 (cup r) env1 (cat bmap env)
-       (cons ': (rn-binds bs bmap env1 u1 rec)))
+       r (? leak (hook 0 used) (assign names used)) bmap (cap r) u1 (cup r) env1 (cat bmap env)
+       (hook ': (rn-binds bs bmap env1 u1 rec)))
    ; the macroexpanded renamer. top=1 only at a file form; a body-less top-level : leaks
    ; (its names are the global API -> kept). env/used thread scope; a one-operand `\`
    ; (quote) is data and is passed whole.
@@ -100,7 +100,7 @@
      (= '\ (cap x)) (? (lambp x)
         (: lb (lp x) ps (cap lb) bd (cup lb) r (assign ps used) am (cap r) u2 (cup r)
            env2 (cat am env) ps2 (map (\ p (mapped p am)) ps)
-           (cons '\ (cat ps2 (list (rec bd env2 u2 0 rec)))))
+           (hook '\ (cat ps2 (list (rec bd env2 u2 0 rec)))))
         x)
      (= ': (cap x)) (rn-let (cup x) env used top rec)
      (map (\ e (rec e env used 0 rec)) x)))
@@ -109,13 +109,13 @@
 ; adapts the binding/quote macros the compiler would have already expanded away. `rn` is
 ; the recursion the core threads, so nested `:-`/qq are adapted at every level. ===
 (: (collect x) (? (symp x) (pin cnt x (+ 1 (peep cnt x 0)))
-     (twop x) (? (= 'qq (cap x)) (: _ (collect (cap x)) (tcollect (cup x)))   ; qq body -> taint
+     (chainp x) (? (= 'qq (cap x)) (: _ (collect (cap x)) (tcollect (cup x)))   ; qq body -> taint
                  (: _ (collect (cap x)) (collect (cup x)))) 0)
    (tcollect x) (? (symp x) (: _ (pin cnt x (+ 1 (peep cnt x 0))) (pin taint x 1))
-                    (twop x) (: _ (tcollect (cap x)) (tcollect (cup x))) 0)
-   (rn x env used top rec) (? (twop x)
+                    (chainp x) (: _ (tcollect (cap x)) (tcollect (cup x))) 0)
+   (rn x env used top rec) (? (chainp x)
        (? (= ':- (cap x)) (: rl (rn-let (cat (cuup x) (list (caup x))) env used top rec)  ; :- = body-first :
-             rb (cup rl) (cons ':- (cons (last rb) (init rb))))                             ; reorder body back
+             rb (cup rl) (hook ':- (hook (last rb) (init rb))))                             ; reorder body back
           (= 'let (cap x)) (rn-let (cup x) env used top rec)                            ; let = :
           (= 'qq (cap x)) x                                                           ; quasiquote -> whole
           (mxrn x env used top rec))
@@ -123,7 +123,7 @@
 
 ; --- minify (identical to lcat): drop a space only where the two flanking bytes
 ; re-parse to the same datum count without it; then C-escape the survivors. ---
-(: (s2cl s) ((: (g i) (? (< i (tally s)) (cons (peep s i 0) (g (+ 1 i))))) 0)
+(: (s2cl s) ((: (g i) (? (< i (tally s)) (hook (peep s i 0) (g (+ 1 i))))) 0)
    (nforms s) ((: (g p e n) (: r (read p e) (? (| (= e r) (= p r)) n (g p e (+ 1 n)))))
                (sip (s2cl s)) (nom 0) 0)
    ; the valence-law guard (cf. lcat.l): a space between an operator byte and
@@ -147,7 +147,7 @@
               (| (= c 92) (= c 34)) (: _ (fputc out 92) (fputc out c))
               (fputc out c)))
 
-(: (readforms p e) (: r (read p e) (? (= e r) 0 (cons r (readforms p e))))
+(: (readforms p e) (: r (read p e) (? (= e r) 0 (hook r (readforms p e))))
    (joinforms fs) (? (atomp fs) "" (atomp (cup fs)) (show (rn (cap fs) 0 0 1 rn))
        (+ (+ (show (rn (cap fs) 0 0 1 rn)) " ") (joinforms (cup fs))))
    (emit acc) (: _ (fputc out 34)

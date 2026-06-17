@@ -8,12 +8,12 @@
 // non-integer types). Keep these in enum q order (l.h: vec/big/two/text/sym).
 static ai_inline bool in_data(void *a) {
  lvm_t *p = a;
- return p == lvm_two || p == lvm_vec || p == lvm_sym
+ return p == lvm_chain || p == lvm_vec || p == lvm_sym
      || p == lvm_str || p == lvm_big || p == lvm_flo || p == lvm_wide || p == lvm_cbox; }
 
 static ai_inline enum q ai_typ(union u *o) {
  lvm_t *p = o->ap;
- return p == lvm_two ? KTwo :
+ return p == lvm_chain ? KChain :
         p == lvm_vec ? KVec :
         p == lvm_sym ? KSym :
         p == lvm_str ? KString :

@@ -7,7 +7,7 @@
 ; contract is a pure value. (The interactive multi-line line editor is covered in
 ; test/repl.l; its getc/putc are wired to the real in/out ports.)
 
-(: (ri-cl s) ((: (g i) (? (< i (tally s)) (cons (peep s i 0) (g (+ 1 i))))) 0)   ; string -> charlist
+(: (ri-cl s) ((: (g i) (? (< i (tally s)) (hook (peep s i 0) (g (+ 1 i))))) 0)   ; string -> charlist
    (ri-eval s)
      (: cap (pad 0)
         _ (each (parseall (ri-cl s)) (\ v (: _ (fputx cap (ev v)) (fputc cap 10))))
@@ -44,11 +44,11 @@
   ;     reading is STRUCTURAL: only an unclosed shape pends -- a trailing
   ;     operator is a complete datum whose factor folds to a partial (curry
   ;     law) at compile time, so those lines submit ---
-  (nilp (twop (parseall (ri-cl "(+ 1"))))       ; unclosed list -> the more-sentinel
-  (twop (parseall (ri-cl "1 +")))               ; complete: evals to the partial (+ 1)
-  (twop (parseall (ri-cl "1 ? 'a")))            ; complete: (? 1 'a), the curried cond
+  (nilp (chainp (parseall (ri-cl "(+ 1"))))       ; unclosed list -> the more-sentinel
+  (chainp (parseall (ri-cl "1 +")))               ; complete: evals to the partial (+ 1)
+  (chainp (parseall (ri-cl "1 ? 'a")))            ; complete: (? 1 'a), the curried cond
   ("a\n" = (ri-eval "1 ? 'a"))                  ; ... which selects 'a
-  (twop (parseall (ri-cl "(+ 1 2)")))           ; closed -> a one-form list
-  (twop (parseall (ri-cl "1 = 1")))
+  (chainp (parseall (ri-cl "(+ 1 2)")))           ; closed -> a one-form list
+  (chainp (parseall (ri-cl "1 = 1")))
   ; --- closed loop: the printed output re-reads + re-evals to the same result ---
   (= "3\n" (ri-eval (ri-eval "(+ 1 2)"))))

@@ -22,7 +22,7 @@
  (= (bpow2 200) (* B100 B100))            ; identity instead of a transcribed literal
  (= (bpow2 64) 18446744073709551616)
 
- ; --- a bignum is its own tier: not a fixnum, truthy, not falsy, not a pair ---
+ ; --- a bignum is its own tier: not a fixnum, truthy, not falsy, not a chain ---
  (nilp (fixp B100))                       ; (fixp bignum) is false
  (? B100 1 0)                             ; a bignum is truthy
  (nilp (nilp B100))                       ; ...hence not falsy
