@@ -36,8 +36,8 @@ Every familiar numeral fact is a corollary, *proved from this one definition*:
 | `(1 x) = x` | 1 is the identity (`x¹ = x`) | `thm:identity` |
 | `(0 0 x) = x` | const of const is id | `thm:const_of_const` |
 | `(3 2) = 8` | `2³` | `thm:pow_3_2` |
-| `(2 3 4) = 262144` | the tower `4^(3^2)`, left-assoc | `thm:tower` |
-| `(2 2 2 2) = 65536` | tetration | `thm:tetration` |
+| `(2 3 4) = 262144` | left-assoc: `((2 3) 4) = (9 4) = 4⁹` | `thm:tower` |
+| `(2 2 2 2) = 65536` | left-assoc `2↑↑4` (a base-2 coincidence) | `thm:tetration` |
 
 The second face of the same numeral is iteration. Define `appf n f = fun x => Nat.iter n f x`. Then:
 
@@ -53,9 +53,9 @@ A name not in the **book** (the global table) is *missing*. Reading it does not 
 
 > **(2.1) The unit as operator is const-1.** `(Pt x) = 1`. Evidence: `thm:unit_is_const_one`.
 
-> **(2.2) The unit absorbs as a numeral's base.** `(n Pt) = Pt` — it is the fixed point of every numeral.
+> **(2.2) The unit absorbs under any numeric head.** `(g Pt) = Pt` for every numeral *and* every numeric operator `g` — the unit is the fixed point of all of them.
 
-From these two facts a sentence becomes a theorem. `i` is present and numeric; `love` and `you` are missing, hence `Pt`:
+From these two facts a sentence becomes a theorem. `i` is present and numeric (a complex scalar, not a nat — so the explicit quantifier in (2.2) is what licenses the `(i Pt)` step); `love` and `you` are missing, hence `Pt`:
 
 > **(2.3) Absence absorbs.** `(i love you) = ((i Pt) Pt) = (Pt Pt) = 1`. Evidence: `thm:love_theorem`.
 
@@ -69,14 +69,14 @@ The same missing-read law operates at every depth (this is the "one condition" d
 
 ## 3 · the net measure, truth, and color {#net}
 
-ai has no "truthy/falsy" tag. Instead every value carries a **net**, a complex-valued content measure, and truth is the sign of the net in the total order. The Rocq slice models the real fragment `net : V → ℤ` over `V := Vnum z | Vnil | Vcons a b`:
+ai has no "truthy/falsy" tag. Instead every value carries a **net**, a complex-valued content measure, and truth is the sign of the net in the total order. ℂ has no native order or sign of its own, so "`≤ 0`" and "sign" here mean *position relative to the zero point in the §4 total order* — lexicographically by `(re, im)`, read once at the boundary — not a numeric comparison. The Rocq slice models the real fragment `net : V → ℤ` over `V := Vnum z | Vnil | Vcons a b`:
 
 ```
 net (Vnum z)               = z
 net Vnil                   = 0
 net (Vcons a Vnil)         = net a                 -- end of a proper list
 net (Vcons a (Vnum _))     = net a                 -- a DOTTED tail is not a spine element
-net (Vcons a (Vcons _ _))  = net a + net (cdr)     -- the car counts; continue the spine
+net (Vcons a (Vcons b r))  = net a + net (Vcons b r)  -- the car counts; continue the spine
 ```
 
 So a number is its own value, `()` nets 0, and a list nets the **sum of its spine** (a dotted tail atom is "not an element"). Three observations sit on top:
@@ -134,29 +134,11 @@ Two refinements the model is explicit about *not* covering:
 
 This single order is the engine of `sort` — one comparison per chain, the comparator *is* the total order — and of map / hash key ordering.
 
-### the jewels {#jewels}
-
-The numeric carriers earn their own short names — they recur from here through the arrays (§8), and each names a predicate you can probe. They split the **number** band by rank.
-
-A **number** (`nump`) is any numeric value, scalar or array — the bottom band, closed under the ring algebra `+ - *`. A **gem** (`gemp`) is a *scalar* number, one that nets itself (`net x = x`, i.e. `idp x (net x)`): a fixnum, wide int, bignum, float, or complex scalar — the rank-0 point. The word-sized gem, a fixnum, is a **charm** (`charmp`). A **tray** (`trayp`) is an array, numeric or not; a **crest** (`crestp`) is a tray *of gems* — a numeric array. So a number is a gem or a crest, and `$` lands every value on the **green charms**, the nonnegative charms (§3).
-
-| name | predicate | what it is |
-|---|---|---|
-| `number` | `nump` | any numeric value, scalar or array — the bottom band |
-| `gem` | `gemp` | a scalar number, one that nets itself (rank 0) |
-| `charm` | `charmp` | a word-sized gem — a fixnum |
-| `tray` | `trayp` | an array, numeric or not (rank ≥ 1) |
-| `crest` | `crestp` | a tray of gems — a numeric array (rank ≥ 1) |
-
-A crest is *not* a gem (`gemp` is false on a tray, whose net is a fresh sum): it is a tray whose cells are gems. A charm is the smallest gem; a number is a gem or a crest.
-
-The jewels have a structural twin. A gem is fixed under `net` (`idp x (net x)` — its own measure); an **atom** (`atomp`) is fixed under `cap` (`x = (cap x)` — its own head). The non-atom is a **pair** — the chain that `link` builds, whose `cap` and `cup` split a head from a rest. Every gem is an atom (a number is its own head too), so a charm is a *special* atom — fixed under `net` as well as `cap`. `net` is what carves the gems out of the atoms.
-
 ## 5 · generic dispatch {#dispatch}
 
-A value's **kind** is an enum whose order is the lattice of §4. A generic operator at two arguments is an N×N table indexed by the two kinds; an operator at one argument is that table's *diagonal*; the three core tables are `+`, `*`, and **apply**. A both-charm fast path skips the table; otherwise one indexed jump selects a lane that widens only as far as the operands require (array ⊃ complex ⊃ bignum ⊃ float ⊃ …).
+A value's **kind** is an enum whose order is the lattice of §4. A generic operator at two arguments is an N×N table indexed by the two kinds; an operator at one argument is that table's *diagonal*; the three core tables are `+`, `*`, and **apply**. A both-charm (both-fixnum) fast path skips the table; otherwise one indexed jump selects a lane that widens only as far as the operands require (array ⊃ complex ⊃ bignum ⊃ float ⊃ …).
 
-The lattice, the dispatch, and the order are *the same object*: the diagonal of the dispatch matrix is the kind lattice, and the enum order of the kinds is the cross-kind comparison order. You maintain one structure and read it three ways. (This is an architectural invariant of the core, exercised by the corpus; §11 explains the division of evidence.)
+The lattice, the dispatch, and the order are *the same object*: the diagonal of the dispatch matrix is the kind lattice, and the enum order of the kinds is the cross-kind comparison order. You maintain one structure and read it three ways. This section cites no Rocq lemmas on purpose: the dispatch matrix and the tail-threading are implementation invariants the runtime checks and the corpus exercises, not theorems in the Rocq slice — they live at the demonstrate layer (§11), where the chips go quiet.
 
 ## 6 · + and * are generic {#algebra}
 
@@ -196,9 +178,25 @@ The numerals bridge into the term language, but no further:
 
 `<` agrees with `=` here because the comparison hash is α-invariant; `idp` stays identity (finer than both).
 
-## 8 · arrays {#arrays}
+## 8 · numerics {#numerics}
 
-A shaped array — a **tray** — is the APL half of the language. A shape is its list of axis sizes; the **cell count** is the product of the shape (`alen`), the **rank** its length (`arank`): `alen [2;3] = 6` (`thm:alen_23`), `arank [2;3] = 2` (`thm:arank_23`), and a 0-axis yields 0 cells (`thm:alen_empty_axis`). Indexing is row-major and out-of-bounds reads the default:
+The numeric carriers earn their own short names — each names a predicate you can probe, and they carry through the array laws below. They split the **number** band by rank.
+
+A **number** (`nump`) is any numeric value, scalar or array — the bottom band, closed under the ring algebra `+ - *`. A **gem** (`gemp`) is a *scalar* number, one that nets itself (`net x = x`, i.e. `idp x (net x)`): a fixnum, wide int, bignum, float, or complex scalar — the rank-0 point. The word-sized gem, a fixnum, is a **charm** (`charmp`). A **tray** (`trayp`) is an array, numeric or not; a **crest** (`crestp`) is a tray *of gems* — a numeric array. So a number is a gem or a crest, and `$` lands every value on the **green gems** — the nonnegative integers (§3); a word-sized result is a charm, but a saturated bignum is a green gem too.
+
+| name | predicate | what it is |
+|---|---|---|
+| `number` | `nump` | any numeric value, scalar or array — the bottom band |
+| `gem` | `gemp` | a scalar number, one that nets itself (rank 0) |
+| `charm` | `charmp` | a word-sized gem — a fixnum |
+| `tray` | `trayp` | an array, numeric or not (rank ≥ 1) |
+| `crest` | `crestp` | a tray of gems — a numeric array (rank ≥ 1) |
+
+A crest is *not* a gem (`gemp` is false on a tray, whose net is a fresh sum): it is a tray whose cells are gems. A charm is the smallest gem; a number is a gem or a crest.
+
+The jewels have a structural twin. A gem is fixed under `net` (`idp x (net x)` — its own measure); an **atom** (`atomp`) is fixed under `cap` (`x = (cap x)` — its own head). The non-atom is a **pair** — the chain that `link` builds, whose `cap` and `cup` split a head from a rest. Every gem is an atom (a number is its own head too), so a charm is a *special* atom — fixed under `net` as well as `cap`. `net` is what carves the gems out of the atoms.
+
+The **tray** is the APL half of the language. A shape is its list of axis sizes; the **cell count** is the product of the shape (`alen`), the **rank** its length (`arank`): `alen [2;3] = 6` (`thm:alen_23`), `arank [2;3] = 2` (`thm:arank_23`), and a 0-axis yields 0 cells (`thm:alen_empty_axis`). Indexing is row-major and out-of-bounds reads the default:
 
 > **(8.1) peep.** in-bounds reads the cell (`thm:peep_in`), OOB reads the default (`thm:peep_oob`); 2-D row-major is `i·cols + j` (`thm:peep_22`).
 
@@ -232,17 +230,25 @@ A **mint** is a fresh, nameless point — the unforgeable thing:
 
 > **(9.2) Mint laws.** materially empty, `$(mint 0)=0` (`thm:mint_empty`); applies const-1, `((mint 0) x)=1` (`thm:mint_const1`); equal only to itself (`thm:mint_self`); distinct iff serials agree (`thm:mint_distinct`). The **zero point** is `Mint 0`, the face of absence.
 
-A **nom** is McCarthy's atom restored as the chain it always was — a name with a spelling: the pair `(name . serial)`, name its cap (`thm:nom_cap`, `(cap (nom 'x))="x"`), ordered lexicographically by name then serial:
+A **nom** is McCarthy's atom restored as the chain it always was — a spelling paired with a mint: the chain `(spelling . mint)`, the spelling its cap (`thm:nom_cap`, `(cap (nom 'x))="x"`), ordered lexicographically by spelling then serial:
 
 > **(9.3) Nom order.** same-name noms are distinct (`thm:same_name_distinct`) and ordered by serial (`thm:same_name_serial`) — so the total order stays total and GC-stable, and structurally a nom is identity-sharp (the mint inside) for free distinct map keys.
 
-The bands place these exactly: a number `<` a mint `<` a nom, i.e. number `<` name `<` chain — a name sits between string and chain because it is a **mint linked to a string** (`(name . mint)`). `thm:point_above_nothing` (`0 < (mint 0)`) pins the mint *above* nothing, not at the floor; `thm:point_below_nom` (`(mint 0) < (nom 'x)`) seats a bare mint below a named one — both via the §4 order.
+The bands place these exactly. The **name** band is the bare mint, seated between string and chain; a **nom**, being the chain `(spelling . mint)`, lives one band up in chain. So number `<` mint `<` nom — the mint above nothing, the nom (a chain) above the mint. `thm:point_above_nothing` (`0 < (mint 0)`) pins the mint *above* nothing, not at the floor; `thm:point_below_nom` (`(mint 0) < (nom 'x)`) seats a bare mint below a named one — both via the §4 order.
+
+The phrase "the chain it always was" is precise, not rhetorical: a symbol must do exactly two things — carry a **spelling** and stay **identity-distinct** even when spellings coincide — and each demand is a universal property the language already realizes, so the representation is *forced*:
+
+- the **spelling** is a **string**, the free monoid on bytes (`+` concatenates, `""` is the unit, §6.1); interning factors through it — equal spelling ⟹ equal symbol is just the statement that the symbol is a function of this free-monoid element.
+- the **identity** is a **mint**, a point drawn from the one mint stream — the natural-numbers object, the zero point its `0` and a fresh draw its successor. A mint *is* its serial, with `=` the only structure (`thm:mint_distinct`).
+- the **symbol** is their **link** — the categorical product, `cap` and `cup` the two projections (`thm:nom_cap` projects the spelling; `cup` the mint). The product's universal property says any value carrying a spelling-map and an identity-map factors *uniquely* through `(spelling . mint)`.
+
+So McCarthy's atom is not *re-encoded* as a chain; the chain is the object the atom's own operations already characterize, unique up to the iso the universal property guarantees. `string × mint` is the terminal thing that carries a name and an identity — and the symbol was only ever its description.
 
 ## 10 · the numeric tower {#tower}
 
 The integer net of §3 is exact, and the tower above it is built to *stay* exact wherever exactness is reachable. `i*i = -1` is exact, algebraically. `(log -1) = i·π` is exact in the principal-log direction, because `atan2(0,-1)` is π by IEEE fiat and `i` moves it with exact 0/1 products. `sqrt` factors its angle through `sinpi` / `cospi`, so `(1/2)·(-1) = i` on the nose. `/` is true division (an inexact integer quotient promotes to float, an exact one stays integer); `0/0` collapses to `0` (NaN is nothing, keeping the order total); overflow grows fixnum → wide → bignum.
 
-The one place floats bite is the *forward* transcendental: `(-1 = i·π·e)` does **not** hold, because `=` is exact and the nearest double to π cannot make `sin` land on 0, so `e^{iπ}` keeps a ~1.22×10⁻¹⁶ residue. ai keeps that residue rather than rounding it away. The Rocq slice (§11) proves the algebra over exact ℤ and leaves the transcendentals to [test/spec.l](test/spec.l), which asserts a float against a literal only where it is bit-exact on every target.
+The one place floats bite is the *forward* transcendental: `(-1 = ((* i pi) e))` — that is, `e^{iπ} = -1`, since `exp` is `(\ x (x e))` — does **not** hold, because `=` is exact and the nearest double to π cannot make `sin` land on 0, so `e^{iπ}` keeps a ~1.22×10⁻¹⁶ residue. ai keeps that residue rather than rounding it away. The Rocq slice (§11) proves the algebra over exact ℤ and leaves the transcendentals to [test/spec.l](test/spec.l), which asserts a float against a literal only where it is bit-exact on every target.
 
 ## 11 · metatheory: three layers of evidence {#meta}
 
