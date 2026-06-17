@@ -25,7 +25,7 @@ exponential tower. this lisp refinement forms the ML part of
 `ml + apl`. the APL part is a transparent right-associative
 superset that interprets sigils (all-punctuation symbols) as
 infix or prefix operators according to placement. the two forms
-may be mixed freey: infix operators take the lisp meaning in
+may be mixed freely: infix operators take the lisp meaning in
 function position, and infix can be converted to left-associative
 by listing the sigil, eg. `3 = (+) 1 2`.
 
@@ -34,7 +34,7 @@ C gives random memory access via pointer arithmetic
 and platform-specific primitives. `lisp` is the software
 facing basement, which you could factor as `ml * scheme`
 left-associative applicative curried untyped lambda calculus,
-allowing applicative order to vary at will. this is safe
+allowing applicative order to vary at will. this is sound
 excluding side effects because every operator is total and
 every thread is co-operatively pre-empted regardless of user
 program behavior.

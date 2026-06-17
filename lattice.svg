@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 560" font-family="ui-monospace, Menlo, Consolas, monospace">
+  <rect width="700" height="560" fill="#0e1014"/>
+
+  <text x="24" y="32" fill="#8b93a3" font-size="17">the type lattice</text>
+  <text x="24" y="51" fill="#6b7385" font-size="11">the kinds low to high — flattened by the total order, the diagonal of the dispatch tables</text>
+
+  <!-- the order arrow: greater upward -->
+  <defs>
+    <marker id="ah" markerWidth="9" markerHeight="9" refX="4.5" refY="4.5" orient="auto">
+      <path d="M1,8 L4.5,1 L8,8" fill="none" stroke="#7aa2f7" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <line x1="100" y1="496" x2="100" y2="78" stroke="#7aa2f7" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text transform="rotate(-90 80 290)" x="80" y="290" fill="#7aa2f7" font-size="12" text-anchor="middle">the total order &lt; · greater upward</text>
+
+  <!-- the spine -->
+  <line x1="210" y1="92" x2="210" y2="452" stroke="#2a3242" stroke-width="2"/>
+
+  <!-- rungs, top to bottom -->
+  <g>
+    <rect x="135" y="70"  width="150" height="44" rx="6" fill="#11141b" stroke="#232733"/>
+    <text x="210" y="97"  fill="#c8ccd4" font-size="15" text-anchor="middle">hot</text>
+
+    <rect x="135" y="146" width="150" height="44" rx="6" fill="#11141b" stroke="#232733"/>
+    <text x="210" y="173" fill="#c8ccd4" font-size="15" text-anchor="middle">map</text>
+
+    <rect x="135" y="222" width="150" height="44" rx="6" fill="#11141b" stroke="#232733"/>
+    <text x="210" y="249" fill="#c8ccd4" font-size="15" text-anchor="middle">chain</text>
+
+    <rect x="135" y="296" width="150" height="50" rx="6" fill="#11141b" stroke="#232733"/>
+    <text x="210" y="316" fill="#c8ccd4" font-size="15" text-anchor="middle">name</text>
+    <text x="210" y="335" fill="#8b93a3" font-size="11" text-anchor="middle">mint · nom</text>
+
+    <rect x="135" y="374" width="150" height="44" rx="6" fill="#11141b" stroke="#232733"/>
+    <text x="210" y="401" fill="#c8ccd4" font-size="15" text-anchor="middle">string</text>
+
+    <!-- the number band carries the nested tier tower -->
+    <rect x="60" y="452" width="300" height="74" rx="6" fill="#11141b" stroke="#232733"/>
+    <text x="210" y="478" fill="#c8ccd4" font-size="15" text-anchor="middle">number</text>
+    <text x="210" y="505" fill="#9ece6a" font-size="14" text-anchor="middle">N ⊂ Z ⊂ R ⊂ C</text>
+  </g>
+
+  <!-- annotations -->
+  <g fill="#6b7385" font-size="12">
+    <text x="378" y="95">closures, buffers, and ports — the hot band</text>
+    <text x="378" y="172">a map keeps its own rung, just under hot</text>
+    <text x="378" y="305">a name is a mint linked to a string;</text>
+    <text x="378" y="322">a bare mint is the floor of the band,</text>
+    <text x="378" y="339">above nothing: 0 &lt; (mint 0)</text>
+    <text x="378" y="485">one band: = bridges the tower, so 3 = 3.0</text>
+    <text x="378" y="502">(fixnum → wide int → bignum live inside Z)</text>
+  </g>
+
+  <line x1="24" y1="540" x2="676" y2="540" stroke="#232733" stroke-width="1"/>
+  <text x="24" y="556" fill="#6b7385" font-size="11">within a band: numbers by value · text and chains lexicographically · maps and hots by an α-invariant hash. orthogonally, each tier is also an array (rank ≥ 1): arrZ · arrR · arrC · arrO.</text>
+</svg>

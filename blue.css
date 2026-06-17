@@ -1,0 +1,77 @@
+/* blue.css -- the single stylesheet for blue.html (generated from blue.md by
+   tools/blue.l). palette tracks index.html; the type is bumped, de-antialiased,
+   and justified for a chunky bitmap-terminal feel. */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0e1014; color: #c8ccd4;
+  /* lead with bitmap VGA faces for anyone who has them, then degrade to a
+     crisp system monospace. the smoothing/rendering hints ask the browser to
+     stop anti-aliasing where it will listen -- best-effort, no font file. */
+  font-family: "Px437 IBM VGA8", "Px437 IBM VGA 9x16", "ModernDOS 8x16",
+               "PxPlus IBM VGA8", "DejaVu Sans Mono", ui-monospace,
+               Menlo, Consolas, monospace;
+  font-size: 17px; line-height: 1.5;
+  font-variant-ligatures: none; text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: none; font-smooth: never;
+  max-width: 54em; margin: 0 auto; padding: 2em 1em 5em;
+}
+
+h1 { font-size: 2.2em; font-weight: normal; letter-spacing: .04em; }
+h1::before { content: "💙 "; }
+h2 { font-size: 1.15em; font-weight: normal; color: #8b93a3;
+     margin: 2.4em 0 .6em; border-bottom: 1px solid #232733; padding-bottom: .3em; }
+h3 { font-size: 1em; font-weight: normal; color: #9aa3b3; margin: 1.6em 0 .5em; }
+/* section headers are their own anchors, like the index */
+h2 a, h3 a { color: inherit; }
+h2 a:hover, h3 a:hover { text-decoration: none; }
+h2 a:hover::after, h3 a:hover::after { content: " #"; color: #3d4354; }
+
+p { margin: .7em 0; text-align: justify; hyphens: auto; }
+a { color: #7aa2f7; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.dim { color: #6b7385; }
+strong { color: #d8dce4; font-weight: 600; }
+em { color: #b0b6c2; }
+
+code { color: #c8ccd4; background: #161a22; border: 1px solid #1e222c;
+       border-radius: 3px; padding: .05em .35em; white-space: pre-wrap; }
+pre { background: #0a0c10; border: 1px solid #232733; border-radius: 6px;
+      padding: .9em 1em; margin: 1em 0; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; border: none; padding: 0; white-space: pre; color: #aeb6c4; }
+
+/* a theorem name: the green of a proved answer, in the index's palette */
+.thm { color: #9ece6a; background: #11160f; border: 1px solid #1e2a17;
+       border-radius: 3px; padding: .02em .35em; }
+
+/* a numbered law: the callout boxes that carry the propositions */
+.law { background: #0c0f14; border-left: 2px solid #2a3242;
+       border-radius: 0 4px 4px 0; padding: .55em .9em; margin: 1em 0;
+       text-align: justify; hyphens: auto; }
+.law .n { color: #7aa2f7; }
+.ev { color: #6b7385; }
+
+table { border-collapse: collapse; width: 100%; margin: 1.1em 0; font-size: .93em; }
+th, td { border: 1px solid #232733; padding: .35em .6em; text-align: left;
+         vertical-align: top; }
+th { color: #8b93a3; font-weight: normal; background: #11141b; }
+td code { background: none; border: none; padding: 0; }
+
+ul, ol { margin: .7em 0 .7em 1.4em; }
+li { margin: .35em 0; text-align: justify; hyphens: auto; }
+
+hr { border: none; border-top: 1px solid #232733; margin: 2.4em 0; }
+
+/* chrome the generator templates in: subtitle, table of contents, top nav.
+   these stay left-aligned -- justify would stretch their short lines. */
+.sub { color: #6b7385; font-size: .9em; margin: .4em 0 1.6em;
+       text-align: left; hyphens: none; }
+.toc { color: #8b93a3; font-size: .92em; line-height: 2;
+       text-align: left; hyphens: none; }
+.toc a { color: #8b93a3; }
+.toc a:hover { color: #7aa2f7; }
+.topnav { font-size: .85em; margin-bottom: 1.4em; text-align: left; hyphens: none; }
+footer { margin-top: 3.5em; color: #3d4354; font-size: .85em;
+         border-top: 1px solid #232733; padding-top: 1em; }
+.blue { color: #7aa2f7; } .red { color: #e0af68; } .grn { color: #9ece6a; }

@@ -59,10 +59,9 @@
 
 <h1>ai</h1>
 <p>a lisp where every value is a total function of one argument.
-stackless, overflow-safe, generic to the bone — lisp, apl and haskell fused
-over portable public-domain C. the terminal below runs the real thing: the
-same image that boots on bare metal, compiled to wasm, evaluating in your
-browser. nothing is mocked.</p>
+stackless, overflow-safe, generic — lisp, apl and ml over portable
+public-domain C. the terminal below runs the same image that boots on
+bare metal, compiled to wasm and evaluating in your browser.</p>
 <p id="status">loading the image…</p>
 
 <div id="term">
@@ -122,9 +121,10 @@ is the shell; <code>make test_all</code> adds the freestanding kernel and the
 tool gates. the whole thing is portable C with zero dependencies — host,
 bare metal (x86_64 / aarch64 via limine), and the wasm on this page from one
 source. the spec is <a href="CLAUDE.md">CLAUDE.md</a>; the readme is
-<a href="README.md">README.md</a>.</p>
+<a href="README.md">README.md</a>; the <a href="blue.html">blue paper</a> states
+the laws as propositions and points each at its machine-checked proof.</p>
 
-<footer>love is public domain free software. for bee.</footer>
+<footer>for bee</footer>
 
 <script src="wasm/ai.js"></script>
 <script>

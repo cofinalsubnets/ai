@@ -52,6 +52,7 @@
  !(gemp @(1 2 3)) (gemp (net @(1 2 3)))                   ; a TRAY is NOT a gem -- it nets DOWN to a scalar gem (net is a fresh sum)
  !(gemp "x") !(gemp 'a) !(gemp '(1 2))                    ; text/symbol/list are not gems -- they net to something else
  (? (fixp 5) (gemp 5) 1)                                  ; a CHARM is a gem, by spec (net = self)
+ (charmp 5) !(charmp 3.5) !(charmp @(1 2 3)) !(charmp 'a) (? (charmp 5) (gemp 5) 1)   ; a CHARM (charmp) is the word-sized gem: a fixnum, and every charm is a gem
  (trayp @(1 2 3)) (trayp @("a" "b"))                      ; a TRAY is an array of ANY element kind (numbers or objects)
  (crestp @(1 2 3)) !(crestp @("a" "b"))                   ; a CREST is a NUMERIC tray (a tray of gems); a tray of strings is not
  (crestp (array '(2) (200 2) (200 2)))                    ; a tray of BIGS is a crest -- bignum cells are gems (keyed on cells, not the O code)

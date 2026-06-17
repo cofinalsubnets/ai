@@ -156,6 +156,8 @@
    ; Z/R/C tray qualifies outright and an object-typed tray of gem cells (e.g. bignums)
    ; still counts -- a tray of strings does not (a string is no gem).
    (gemp x) (idp x (net x))
+   ; a CHARM is the word-sized gem -- a fixnum (the lisp predicate; oddp C-side).
+   (charmp x) (fixp x)
    (crestp x) (? (trayp x) (? (< (atype x) O) 1 (gemp (peep x 0 0))) 0))
 (: (foldl1 f l) (foldl f (cap l) (cup l))
    (foldr1 f l) (foldr f (last l) (init l))

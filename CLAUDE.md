@@ -24,9 +24,10 @@
 ;   $(ai_h) and the lcat'd headers re-lay on ai0, so incremental builds stay consistent.
 ; * C files EMBED lisp the .l sweeps cannot see: ai.c (g_evals_'s driver string), main.c
 ;   (s2cl + runner), kmain.c (the K_TEST runner), wasm/. grep them on every rename.
-;   the docs EMBED rocq theorem names + ai vocab the sweeps also miss: bluepaper.{html,md}
-;   cite rocq/spec.v lemmas by name (the green chips) and index.html runs live demos --
-;   grep all three on a theorem rename or a vocab change.
+;   the docs EMBED rocq theorem names + ai vocab the sweeps also miss: blue.md (the
+;   blue-paper source, rendered to blue.html by tools/blue.l + blue.css) cites
+;   rocq/spec.v lemmas as `thm:name` chips, and index.html runs live demos -- grep
+;   blue.md + index.html on a theorem rename or a vocab change.
 ; * a bare all-punct symbol mid-list captures its left operand when code compiles (the
 ;   opfix pass) -- escape it in parens ((+) is + as a value); GLUED to a datum it is
 ;   monadic instead (the valence law: space your dyadics); quoted lists are data and

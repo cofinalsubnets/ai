@@ -77,7 +77,7 @@ test_gen: host
 	@$(COQC) -q rocq/gen.v
 	@rm -f rocq/gen.vo rocq/gen.vok rocq/gen.vos rocq/gen.glob rocq/.gen.aux
 endif
-all: host kernel wasm
+all: host kernel wasm blue
 
 # Point git at the tracked hooks dir (.githooks). The pre-commit hook rebuilds
 # wasm/ai.js whenever a commit touches what it is built from, so the committed
@@ -172,6 +172,17 @@ ai0: $(ai0)
 cook/Cookfile: Makefile cook/cook.l $(ho)/$n
 	@echo GEN	$@
 	@$(ho)/$n -l cook/cook.l --emit Makefile > $@
+
+# blue.html: the blue paper, generated from blue.md (with blue.css INLINED into a
+# <style> block) by the ai markdown converter tools/blue.l. A committed artifact
+# like wasm/ai.js -- it ships from the repo and is linked from index.html -- so it
+# is regenerated whenever its source, style, or generator changes. `make blue`
+# refreshes it; it is also part of `all`.
+.PHONY: blue
+blue: blue.html
+blue.html: blue.md blue.css tools/blue.$x $(ho)/$n
+	@echo GEN	$@
+	@$(ho)/$n -l ai/prel.$x tools/blue.$x blue.md > $@
 
 # The lcat'd lib headers (egg.h et al) are PRODUCED BY running ai0, so re-lay
 # them whenever ai0 changes. This dep belongs in the rule above, but $(ai0) is
