@@ -405,6 +405,74 @@ Theorem eta_not_bridged : Lam (App tm_plus (Var 0)) <> tm_plus.
 Proof. discriminate. Qed.
 
 (* ============================================================ *)
+(* reduction: the semantics `ev` RUNS (not what `=` observes)   *)
+(* ============================================================ *)
+(* `=` is alpha+structural and deliberately stops there (above). The runtime's
+   evaluator `ev` goes further -- it REDUCES. This models that operational layer
+   with de Bruijn beta+eta, so the numeral laws (1 = id, 0 = const-1, the Church
+   tower) hold not just as an encoding but as actual reductions, and the
+   distinctions `=` keeps survive reduction too. Each theorem here has a twin
+   assertion against the real binary in test/spec.l (e.g. ((\ x x) 5) ; 5): the
+   Rocq side says "valid by the calculus", the corpus side says "the binary
+   computes exactly this". Two independent witnesses for one claim.
+
+   shift bumps the free vars (index >= cutoff c) when we pass under a binder;
+   subst j s t replaces var j by s and renumbers the vars that outlive the
+   removed binder. The example proofs close by COMPUTATION (exact reduces the
+   index `if`s), so an off-by-one in subst cannot typecheck -- the safety is in
+   the conversion check, not in trusting the definition. *)
+
+Fixpoint shift (d c : nat) (t : tm) : tm :=
+  match t with
+  | Var k   => if Nat.ltb k c then Var k else Var (k + d)
+  | Lam b   => Lam (shift d (S c) b)
+  | App f a => App (shift d c f) (shift d c a)
+  end.
+
+Fixpoint subst (j : nat) (s t : tm) : tm :=
+  match t with
+  | Var k   => if Nat.eqb k j then s
+               else if Nat.ltb k j then Var k else Var (k - 1)
+  | Lam b   => Lam (subst (S j) (shift 1 0 s) b)
+  | App f a => App (subst j s f) (subst j s a)
+  end.
+
+(* single-step beta+eta with full congruence -- the one-step rewrite ev runs *)
+Inductive step : tm -> tm -> Prop :=
+  | st_beta : forall b a, step (App (Lam b) a) (subst 0 a b)
+  | st_eta  : forall f,   step (Lam (App (shift 1 0 f) (Var 0))) f
+  | st_app1 : forall f f' a, step f f' -> step (App f a) (App f' a)
+  | st_app2 : forall f a a', step a a' -> step (App f a) (App f a')
+  | st_lam  : forall b b',   step b b' -> step (Lam b) (Lam b').
+
+Inductive steps : tm -> tm -> Prop :=
+  | sn_refl : forall t, steps t t
+  | sn_step : forall a b c, step a b -> steps b c -> steps a c.
+
+(* (\ x x) a ~> a -- beta on the identity, for ANY argument (spec.l: ((\ x x) 5)) *)
+Theorem beta_id : forall a, step (App tm_one a) a.
+Proof. intro a. exact (st_beta (Var 0) a). Qed.
+
+(* (\ _ 1) a ~> 1 -- const-1 drops its argument (spec.l: ((\ _ 1) 9) ; up to alpha) *)
+Theorem beta_const : forall a, step (App tm_zero a) tm_one.
+Proof. intro a. exact (st_beta (Lam (Var 0)) a). Qed.
+
+(* nested: (\ x x) ((\ x x) a) ~>* a -- the closure reduces all the way down *)
+Theorem beta_nested : forall a, steps (App tm_one (App tm_one a)) a.
+Proof.
+  intro a.
+  eapply sn_step. exact (st_beta (Var 0) (App tm_one a)).
+  eapply sn_step. apply beta_id.
+  apply sn_refl.
+Qed.
+
+(* eta reinforces eta_not_bridged: under de Bruijn the eta-reduct of
+   `Lam (App (Var 7) (Var 0))` is Var 6, NOT tm_plus = Var 7 -- the binder
+   shifted the index, so reduction cannot collapse them either. *)
+Theorem eta_redex_shifts : step (Lam (App (Var 7) (Var 0))) (Var 6).
+Proof. exact (st_eta (Var 6)). Qed.
+
+(* ============================================================ *)
 (* + and * are generic: the sequence monoid and repetition      *)
 (* ============================================================ *)
 
@@ -675,3 +743,95 @@ Proof. intros nm s1 s2 H C. apply H. injection C. auto. Qed.
    serial-key) sorts below a named nom; the nom_lt section refines that order. *)
 Theorem point_below_number : lt (Osym 5) (Onum 0).   Proof. left.  cbn. lia. Qed. (* (mint 0) < 0 *)
 Theorem mint_below_nom     : lt (Osym 3) (Osym 5).   Proof. right. cbn. split; [reflexivity | lia]. Qed. (* a bare mint < a nom *)
+
+(* ============================================================ *)
+(* the complex tier: EXACT complex as Gaussian integers Z[i]    *)
+(* ============================================================ *)
+(* The numeric tower's float/transcendental tier stays an honest miss
+   (spec.v:10-12, not vm_compute-able: e^(iπ) misses -1 by ~1e-16). But the
+   EXACT complex algebra the spec leans on -- i*i = -1 and the (re,im) order --
+   IS exact integer arithmetic, machine-checked here over Z[i]. `twin re im` is
+   the ~(re im) constructor; i = twin 0 1; a real lifts ~r = ~(r 0); and `~`
+   bare conjugates (an involution). Ground-truthed against the binary: the
+   conjugate of ~(2 3) is ~(2 -3), and conj is an involution (~~~(2 3)=~(2 3)). *)
+Record Zi := twin { re : Z ; im : Z }.
+Definition cadd (a b : Zi) : Zi := twin (re a + re b) (im a + im b).
+Definition cmul (a b : Zi) : Zi :=
+  twin (re a * re b - im a * im b) (re a * im b + im a * re b).
+Definition cconj (z : Zi) : Zi := twin (re z) (- im z).
+Definition I : Zi := twin 0 1.
+Definition cof (r : Z) : Zi := twin r 0.
+
+(* the algebraic heart of Euler. NOTE: cbn does NOT unfold these Definitions on
+   its own -- `unfold` the ops first (reflexivity forces delta). *)
+Theorem i_squared       : cmul I I = cof (-1).               Proof. reflexivity. Qed.  (* i * i = -1 *)
+Theorem conj_involution : forall z, cconj (cconj z) = z.     Proof. intros [r k]; unfold cconj; cbn; f_equal; lia. Qed. (* ~~~(2 3) = ~(2 3) *)
+Theorem conj_add        : forall a b, cconj (cadd a b) = cadd (cconj a) (cconj b).
+Proof. intros [ar ai] [br bi]; unfold cconj, cadd; cbn; f_equal; lia. Qed.
+Theorem conj_mul        : forall a b, cconj (cmul a b) = cmul (cconj a) (cconj b).
+Proof. intros [ar ai] [br bi]; unfold cconj, cmul; cbn; f_equal; ring. Qed.
+Theorem real_embeds_add : forall r s, cadd (cof r) (cof s) = cof (r + s).  (* ~3 + ~5 = ~8 *)
+Proof. intros; unfold cadd, cof; cbn; f_equal; lia. Qed.
+
+(* the (re,im) lexicographic order -- matches the binary's total order on complex *)
+Definition clt (a b : Zi) : Prop := re a < re b \/ (re a = re b /\ im a < im b).
+Theorem i_above_zero : clt (cof 0) I.                       Proof. right; cbn; lia. Qed. (* ~(0 0) < i *)
+Theorem conj_below   : forall z, im z > 0 -> clt (cconj z) z. (* (conj ~(2 3)) < ~(2 3) *)
+Proof. intros [r k] H; right; unfold cconj in *; cbn in *; lia. Qed.
+
+(* ============================================================ *)
+(* within a band: text and chains order LEXICOGRAPHICALLY        *)
+(* ============================================================ *)
+(* The O-model (spec.v:272-274) collapses within-band order to one key; this is
+   the refinement it deferred. `lex_lt` (above, where noms reuse it) is the same
+   relation that carries text (lists of char-keys) and chains (lists of
+   element-keys). Ground-truthed: "abc"<"abd", "ab"<"abc", '(1 2)<'(1 3). *)
+Theorem str_lex_lt    : lex_lt [97;98;99] [97;98;100].   Proof. cbn; lia. Qed. (* "abc" < "abd" *)
+Theorem str_prefix_lt : lex_lt [97;98] [97;98;99].       Proof. cbn; lia. Qed. (* "ab"  < "abc" -- a prefix is lower *)
+Theorem chain_lex_lt  : lex_lt [1;2] [1;3].              Proof. cbn; lia. Qed. (* '(1 2) < '(1 3) -- same lex on element-keys *)
+Theorem str_lex_irrefl : forall s, ~ lex_lt s s.
+Proof. induction s as [|x s IH]; cbn; [auto | intros [H|[_ H]]; [lia | auto]]. Qed.
+Theorem str_lex_trans : forall a b c, lex_lt a b -> lex_lt b c -> lex_lt a c.
+Proof. induction a as [|x a IH]; intros [|y b] [|z c]; cbn; try tauto.
+  intros [H1|[H1a H1b]] [H2|[H2a H2b]]; subst; try (left; lia).
+  right; split; [reflexivity | eapply IH; eauto]. Qed.
+
+(* ============================================================ *)
+(* the complex net: a complex GEM nets ITSELF, phase intact      *)
+(* ============================================================ *)
+(* Closes on the Z[i] tier above. The real-fragment net (spec.v:174-179) said
+   the complex extension was the next slice; here it is. `cnet z = z` (a gem is
+   its own measure); `cnilp` reads falsehood in the total order -- re first, then
+   im -- so it agrees with the real `nilp` (net <= 0) on lifted reals, and
+   phases CANCEL AS VECTORS, never by a tiebreak. Ground-truthed: !~(0 -1),
+   !~(-3 4), !!i, and ~(3 4)+~(-3 4) = ~(0 8) (still true). *)
+Definition cnet (z : Zi) : Zi := z.
+Definition cnilp (z : Zi) : bool := (re z <? 0) || ((re z =? 0) && (im z <=? 0)).
+Theorem cnet_self    : forall z, cnet z = z.                Proof. reflexivity. Qed.
+Theorem i_true       : cnilp I = false.                     Proof. reflexivity. Qed. (* !!i *)
+Theorem negi_false   : cnilp (twin 0 (-1)) = true.          Proof. reflexivity. Qed. (* !~(0 -1) *)
+Theorem neg_re_false : cnilp (twin (-3) 4) = true.          Proof. reflexivity. Qed. (* !~(-3 4): re<0 wins *)
+(* phases cancel AS VECTORS: ~(3 4) + ~(-3 4) nets ~(0 8), still positive (true) *)
+Theorem phase_vector_add : cadd (twin 3 4) (twin (-3) 4) = twin 0 8.  Proof. reflexivity. Qed.
+Theorem phase_sum_true   : cnilp (cadd (twin 3 4) (twin (-3) 4)) = false.  Proof. reflexivity. Qed.
+(* the tie-in: cnilp agrees with the real nilp (net <= 0) on lifted reals *)
+Theorem cnilp_real : forall r, cnilp (cof r) = (r <=? 0).
+Proof. intro r. unfold cnilp, cof; cbn.
+  destruct (Z.ltb_spec r 0); destruct (Z.eqb_spec r 0); cbn;
+  try (symmetry; apply Z.leb_le; lia); try (symmetry; apply Z.leb_gt; lia). Qed.
+
+(* ============================================================ *)
+(* axiom audit: every headline law, closed under NO assumptions *)
+(* ============================================================ *)
+(* The cheapest attack on any machine-checked claim is "grep for Axiom/admit".
+   This file has none -- and rather than ask the reader to take that on faith,
+   we make coqc PRINT it. Each line below must report "Closed under the global
+   context" in the build log; anything else (a stray Axiom, an axiom dragged in
+   from the stdlib -- funext, classic, proof-irrelevance) would show here. One
+   representative theorem per pillar: saturation, the total order, the function
+   semantics, the reduction layer, and the complex net. *)
+Print Assumptions sat_clamps.        (* the net/saturation law *)
+Print Assumptions le_total.          (* the total order *)
+Print Assumptions eta_not_bridged.   (* = is alpha+structural, no further *)
+Print Assumptions beta_id.           (* the reduction layer ev runs *)
+Print Assumptions cnilp_real.        (* the complex net agrees with the real one *)

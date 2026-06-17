@@ -90,7 +90,8 @@
 (assert
  (3 = 3.0) !(3 = 4) (1 < 1.5) (3.0 >= 3) (idp 'a 'a) !(idp '(1) '(1))
  ('x < "a") ("a" < 1) (1 < '(0)) !(1 < "a")          ; true-blue order: mint < string < number < chain
- ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10)))   ; the map rung: chain < map < hot
+ ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10))    ; the map rung: chain < map < hot
+ ("abc" < "abd") ("ab" < "abc") ('(1 2) < '(1 3)))    ; within a band: text and chains order lexicographically
 
 ; --- comparing functions --- `=` on functions is alpha + structural (binders by position,
 ; free vars by name, captures pairwise); eta/beta not bridged; 1 = (\ x x), 0 = (\ _ 1).
@@ -103,6 +104,16 @@
  (1 = (\ x x)) ((\ y y) = 1) !(idp 1 (\ x x))                      ; 1 = identity, either side
  (0 = (\ _ 1)) ((\ q 1) = 0) !(0 = (\ _ 2)) !(0 = (\ _ _))        ; 0 = const-1 (and only that)
  !!(\ _ 1) (1 = $(\ _ 1)))     ; the bridge crosses the measure: =-equal to 0, yet present (a top nets 1)
+
+; --- reduction --- `=` stops at alpha (above); `ev` goes further -- it REDUCES. these are the
+; binary twins of rocq/spec.v's reduction layer (step/subst): the proof says "valid by the
+; calculus", the line here says "the binary computes exactly this". beta on the identity and
+; const-1, a nested redex reduced all the way, and eta still unbridged (its de Bruijn reduct shifts).
+(assert
+ (5 = ((\ x x) 5))                               ; beta_id: (\ x x) a ~> a
+ (1 = ((\ _ 1) 9))                               ; beta_const: (\ _ 1) a ~> 1 (drops its arg)
+ (5 = ((\ x x) ((\ x x) 5)))                     ; beta_nested: (\ x x) ((\ x x) a) ~>* a
+ !((\ x (cap x)) = cap))                         ; eta_redex_shifts' twin: eta stays unbridged
 
 ; --- + and * are generic --- `+` adds numbers, concatenates strings, appends lists; `-` numeric
 ; only. the BYTE LAW: a string + an exact integer 0..255 is one byte. symbols left the string
@@ -139,7 +150,10 @@
 ; into a `c`-typed array; the net is the complex SUM of the cells, $v = $(asum v).
 (assert
  ((* i i) = -1) (~(2 0) = 2) (~(-5 10) = ~(1 2) * ~(3 4)) (comp ~5) !(comp 5)
- (~(0 0) = ~0) ((conj ~(2 3)) = ~~(2 3)) ((conj ~(2 3)) = ~(2 -3))
+ (~(0 0) = ~0) ((conj ~(2 3)) = ~~(2 3)) ((conj ~(2 3)) = ~(2 -3)) (~(2 3) = ~~~(2 3))
+ ((conj (~(2 3) + ~(4 5))) = (conj ~(2 3)) + (conj ~(4 5)))      ; conj is additive
+ ((conj (~(2 3) * ~(4 5))) = (conj ~(2 3)) * (conj ~(4 5)))      ; ... and multiplicative
+ (~8 = ~3 + ~5) (~(0 0) < i) ((conj ~(2 3)) < ~(2 3))           ; reals embed; (re,im) order: 0<i, conj below
  (2.0 = (re ~(2 3))) (i < 1) !(1 < i) ("~(0.0 1.0)" = (show i))
  (0.0 = (peep (arg ~(1 @(1 0))) 1 0)))           ; arg broadcasts -- (arg ~(1 x)) = atan, elementwise
 (assert
