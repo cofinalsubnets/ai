@@ -33,7 +33,7 @@
 ; --- mint serials: the total order is TOTAL over symbols -------------------
 ; every mint draws a serial from the one stream (pids share it); symbols
 ; order by name, then interned-first, then serial (creation order); noms
-; (chains) inherit the product order through chain lex + the mint tiebreak.
+; (chains) inherit the chain order through chain lex + the mint tiebreak.
 (: a (nom 'q) b (nom 'q) c (nom 'q)
    n1 (mint 0) n2 (mint 0)
  (assert

@@ -310,7 +310,7 @@ static ai_inline void vec_put_obj(struct ai_vec *v, uintptr_t i, word x) {
 // ai_nilp reads the lex sign (re, then im -- the flagged order choice, applied once,
 // never per element), ai_pin the order-signed magnitude. The common kinds short-
 // circuit with NO walk: nil (the 0 word), EmptyString, fixnum sign, table key count,
-// bignum sign, symbol name; products, vecs, strings and bufs compute their net
+// bignum sign, symbol name; chains, vecs, strings and bufs compute their net
 // (content measures: an all-NUL text or zeroed buf is nothing, and a sum cannot
 // short-circuit -- a later negative can cancel an early positive). Lockstep with
 // ai_pin (lvm_pin): same zero conditions.
@@ -2415,10 +2415,10 @@ static ai_inline intptr_t len_sat(ai_flo_t m) {
 // complex operands only if the measure keeps phase, so the codomain is C and the
 // order retraction happens ONCE, in the observers). A complex scalar nets ITSELF;
 // every other scalar nets on the real line (a number its value, text/spellings
-// their charm sums, a table its key count, a fn/port 1); a product or rank>=1
+// their charm sums, a table its key count, a fn/port 1); a chain or rank>=1
 // array nets the SUM of its elements' nets -- a TRUE complex sum, recursive and
 // UNCLAMPED, the SPINE only (a dotted tail is not an element) -- so a list of
-// negatives nets negative, a product of nothings nets to nothing, and opposite
+// negatives nets negative, a chain of nothings nets to nothing, and opposite
 // phases annihilate by VECTOR cancellation, not by the order's tiebreak. The
 // arrangement does not matter: a packed ai_C array and the o-list of the same
 // values net the same sum, and net(asum v) = net(v) by construction.
@@ -2437,9 +2437,9 @@ static struct ai_zn ai_net(struct ai *g, word x) {
     case KString: { ai_flo_t t = 0;                                 // a string is PACKED CHARS: Σ charms
       for (uintptr_t i = 0; i < len(x); i++) t += (uint8_t) txt(x)[i];
       return zn(t, 0); }                                           // (the count moved to tally)
-    case KChain: { struct ai_zn s = zn(0, 0); word p = x;           // product: sum the SPINE's nets --
+    case KChain: { struct ai_zn s = zn(0, 0); word p = x;           // chain: sum the SPINE's nets --
       do { struct ai_zn e = ai_net(g, A(p));                       // complex sums, so negatives cancel,
-           s.re += e.re, s.im += e.im;                           // phases cancel, and a product of
+           s.re += e.re, s.im += e.im;                           // phases cancel, and a chain of
            p = B(p); } while (chainp(p));                          // nothings nets to nothing
       return s; }
     case KBig: return zn(ai_big_to_flo(x), 0);                   // bignum: full magnitude, sign intact
@@ -5977,7 +5977,7 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
 //            sorts lexicographically by (re, im). IEEE-faithful: NaN is unordered,
 //            so every ordering of it is false.
 //   strings  lexicographic over bytes (a prefix sorts first)
-//   symbols  the product order: name lex (anonymous == the empty name), then
+//   symbols  the chain order: name lex (anonymous == the empty name), then
 //            interned-first, then the mint serial -- TOTAL (see sym_cmp)
 //   chains    lexicographic over (car, then cdr), recursively
 //   maps     by representation hash, in their OWN band (chain < map < lambda)
@@ -5996,7 +5996,7 @@ static ai_inline intptr_t bytes_cmp(const char *pa, uintptr_t la, const char *pb
  uintptr_t n = la < lb ? la : lb;
  int c = n ? memcmp(pa, pb, n) : 0;
  return c ? (c < 0 ? -1 : 1) : la < lb ? -1 : la > lb ? 1 : 0; }
-// symbols: the PRODUCT ORDER -- name lex first (nameless -> "", so mints sit
+// symbols: the CHAIN ORDER -- name lex first (nameless -> "", so mints sit
 // below every named symbol), then interned before fresh on a name tie, then
 // the mint serial (`code`; creation order). same-name noms used to compare
 // EQUAL here while not being `=` -- the order wasn't total; the serial closes
@@ -6046,7 +6046,7 @@ static intptr_t cmp3(struct ai *g, word a, word b) {
 // lisp merge sort for arbitrary predicates. A non-chain passes through; a
 // 1-element list returns itself (identity preserved, like the lisp sort).
 // (tally l): the spine length of a list -- the number of chains, blind to the
-// elements (unlike $, which counts only the sat ones: a product of nothings
+// elements (unlike $, which counts only the sat ones: a chain of nothings
 // is nothing, but it still has a length). the compiler's frame arithmetic
 // runs on tally; the egg pulls it at birth with the other internals.
 // (tally x): THE COUNT -- the second canonical foldMap (every generator weighs

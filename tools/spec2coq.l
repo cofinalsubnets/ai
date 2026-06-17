@@ -10,7 +10,7 @@
 ;     sat / abs / gcd, lists / strings / arrays (asum/amax/.., iota), array-valued
 ;     = (broadcast / append / repeat), hashes & peep.
 ;   * a KIND lattice (value tags) for the type predicates (fixp/chainp/strp/..) and
-;     the band order (number < string < symbol < product < map).
+;     the band order (number < string < symbol < chain < map).
 ; Left to the hand-written laws: the float/complex tier (not vm_compute-able, the
 ; honest misses) and the universally-quantified LAWS. Untranslatable asserts are
 ; SKIPPED and COUNTED -- never silently dropped (the trailing comment reports it).
@@ -125,7 +125,7 @@
                 (idp h 'mapp) "mapp" (idp h 'arrp) "arrp" (idp h 'nump) "nump"
                 (idp h 'intp) "intp" (idp h 'atomp) "atomp" (idp h 'packp) "packp"
                 (idp h 'lamp) "lamp" 0)
-   ; cross-kind ORDER: number<string<symbol<product<map by band; same band stays value/lex
+   ; cross-kind ORDER: number<string<symbol<chain<map by band; same band stays value/lex
    (ordop? h) (| (idp h '<) (| (idp h '<=) (| (idp h '>) (idp h '>=))))
    (litband x) (: t (tk x)
                  (? (= t "Vbot") -1
@@ -151,7 +151,7 @@
                    (idp h '=) (? (&& (intv? (e2 f)) (intv? (e3 f)))   (cat (L "(Z.eqb " (tv (e2 f)) " " (tv (e3 f)) ")"))
                                  (&& (listv? (e2 f)) (listv? (e3 f))) (cat (L "(leqb " (tl (e2 f)) " " (tl (e3 f)) ")"))  ; list/array =
                                  0)
-                   (xband? f) (xband f)                               ; cross-kind ordering: number<string<symbol<product<map
+                   (xband? f) (xband f)                               ; cross-kind ordering: number<string<symbol<chain<map
                    (! (&& (intv? (e2 f)) (intv? (e3 f)))) 0           ; the within-band ORDERING ops below stay integer-only
                    (idp h '<)  (cat (L "(Z.ltb " (tv (e2 f)) " " (tv (e3 f)) ")"))
                    (idp h '<=) (cat (L "(Z.leb " (tv (e2 f)) " " (tv (e3 f)) ")"))

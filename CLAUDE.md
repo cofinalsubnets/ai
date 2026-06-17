@@ -45,7 +45,7 @@
 
 ; --- the type lattice --- two axes. the *tier* spine, low to high:
 ;   N the green charms (the naturals, the range of $)  <  Z integers (fixnum -> wide int -> bignum)
-;     <  R reals (float)  <  C complex  <  O objects (string < symbol < product < map < top)
+;     <  R reals (float)  <  C complex  <  O objects (string < symbol < chain < map < top)
 ; numbers nest as usual (N in Z in R in C). a fixnum is a CHARM, and every value wears a COLOR --
 ; the order-sign of its net: GREEN nets nonnegative (what $ keeps), RED nets negative (what $
 ; clamps to nothing), and BLUE is green's FLOOR -- net exactly zero, kept like a green yet nothing.
@@ -57,7 +57,7 @@
 ; stays green (#0 nets 1: presence over nothing). the *rank* axis is scalar (0) vs array (>= 1, one
 ; per tier: arrZ/R/C/O). the total order < flattens this lattice into BANDS: all numbers are
 ; ONE band ordered by value (representations interleave: 1 < 1.5 < 2 whatever the rep), then
-; string < symbol < product < map < top, each band ordered within itself (text and products
+; string < symbol < chain < map < top, each band ordered within itself (text and chains
 ; lexicographically, maps and tops by an alpha-invariant hash). a map has its own rung
 ; just under the tops, though it still acts as a lookup top for +/*/apply. the
 ; opaque hots (buf/port -- `hotp`) sit in the top band: a buf measures by content
@@ -107,7 +107,7 @@
 ; its spelling, a list or array is the SUM of its elements' nets -- a TRUE complex sum,
 ; recursive and unclamped, the SPINE only (a dotted tail is not an element) -- so
 ; negatives cancel positives, opposite phases cancel as VECTORS (never by the order's
-; tiebreak), and a PRODUCT OF NOTHINGS is nothing too. the law of saturation holds at
+; tiebreak), and a CHAIN OF NOTHINGS is nothing too. the law of saturation holds at
 ; every rank: positive to positive, zero-or-negative to zero, so a list or array of
 ; negatives is nothing, exactly like a negative scalar. maps stay key-counted: presence
 ; is information there, and #0 must stay truthy. there is no "truthy"/"falsy" -- true
@@ -139,9 +139,9 @@ $@(3 4)              ; 7
 ; first word dispatches. the storage predicates:
 ;   fixp bigp widep  -- the integer reps (fixnum, bignum, wide int)
 ;   flop comp arrp  -- float, complex scalar, array; all three share one heap type, `packp`
-;   strp symp chainp mapp  -- string, symbol, product, map
+;   strp symp chainp mapp  -- string, symbol, chain, map
 ; derived: `nump` (any number: fix/wide/big/float/complex/array), `intp` (any integer), `atomp`
-; (anything but a product). `i` is ~(0 1). `lamp` is PRESENCE, not a band: every heap
+; (anything but a chain). `i` is ~(0 1). `lamp` is PRESENCE, not a band: every heap
 ; value answers it (anything wired to a hot -- lit -- everything but a fixnum), chains and
 ; strings included, so lamp SPANS the bands. the top band itself needs no predicate:
 ; under the slogan is-it-top is vacuous -- you may as well ask 0. the opaque hots
@@ -180,14 +180,14 @@ $@(3 4)              ; 7
 8 | 4 | 2 | 1        ; 15      bitwise
 
 ; --- order & equality --- < <= > >= is a *total order over all values*: across kinds by the
-; lattice (number < string < symbol < product < map < top), within a kind by value/
+; lattice (number < string < symbol < chain < map < top), within a kind by value/
 ; lexicographic order (complex by (re,im); maps and lambdas by an alpha-invariant hash; an
 ; array operand broadcasts to a 0/1 mask). `=` is value equality and bridges the whole
 ; numeric tower; `idp` is identity; `!=` is gone -- write `!(a = b)`.
 ; demo:
 3 = 3.0              ; true    = bridges the numeric tower
 1 < 1.5              ; true
-"a" < 'x             ; true    number < string < symbol < product < map < top
+"a" < 'x             ; true    number < string < symbol < chain < map < top
 #(1 10) < cap        ; true    the map rung: chain < map < top
 (idp 'a 'a)          ; true    idp is identity; !(idp '(1) '(1))
 
@@ -302,7 +302,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 (inner @(1 2 3) @(4 5 6)); 32            +.x dot product
 (asum (arr Z '(0) 0))    ; 0             empty reduction = the monoid unit
 
-; --- products & lists --- hook builds the product (the cartesian kind, the chain, classically the
+; --- chains & lists --- hook builds the chain (the cartesian-product kind, classically the
 ; pair); cap and cup are its two projections -- the matched pair the string diagrams bend,
 ; cap the head and cup the rest, each the other's mirror (no cap: you have reached the end
 ; of the list); caap caup .. cuuup are the compounds, read right to left like their classic
@@ -324,7 +324,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; nameless, materially empty ($mint = 0, false), applying as every unit does (const-1),
 ; identity its only property -- the unforgeable thing. a NOM is the literal chain of a
 ; name string and a mint -- (nom "x") = ("x" . fresh point) -- McCarthy's symbol
-; restored as the product it always was (the named-uninterned atom species is gone).
+; restored as the chain it always was (the named-uninterned atom species is gone).
 ; `()` reads as 0 -- nothing's plain spelling -- and (intern "") is 0: the empty
 ; spelling names nothing (the empty-symbol species is gone). ABSENCE is another
 ; matter: a helpless missing read answers the ZERO POINT, the mint at serial 0 --
@@ -334,7 +334,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; from the one mint stream (task pids draw from it too): symbols order by name first
 ; (mints below every named symbol), then by serial -- creation order -- so the total
 ; order is TOTAL, GC-stable; the
-; serial is also the mint's hash. noms inherit all of it through the chain: product
+; serial is also the mint's hash. noms inherit all of it through the chain: chain
 ; order = (name lex, then mint), structural = stays identity-sharp (the mint inside),
 ; distinct map keys for free. SYMBOLS HAVE NO STRING ALGEBRA (+/* nil, apply const-1);
 ; intern and string are the explicit bridge, and a nom's name is (cap nom).

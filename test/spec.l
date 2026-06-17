@@ -39,7 +39,7 @@
  !0 !"" !(tablet 0) !@0 !() !0.0 !~(0 0)         ; zero / empty -> false
  !-5 !-3.9 !~(-3 4) !~(0 -1)                     ; <= 0 in the total order -> false (complex by re then im)
  !!5 !!"x" !!'a !!cap !!i !!~(3 -4)              ; positive / nonempty -> true
- !'(() ()) !'(0 0) !'((0) (())) (0 = $'(() () ()))  ; a product of nothings is nothing, recursively
+ !'(() ()) !'(0 0) !'((0) (())) (0 = $'(() () ()))  ; a chain of nothings is nothing, recursively
  !'(-5) !@(-3 -4) !'(-2 1) !!'(0 1)              ; negatives net <= 0 at every rank; -2+1 < 0 < 0+1
  (3 = $'(1 () 2)) (6 = $'(1 2 3)) (7 = $@(3 4))  ; $ sums the nets, then clamps once
  (1 = $(hook 1 2)) !(hook 0 2)                   ; the SPINE carries the measure: a dotted tail is not an element
@@ -164,7 +164,7 @@
  (: M (inner (arr Z '(2 3) '(1 2 3 4 5 6)) (arr Z '(3 2) '(7 8 9 10 11 12)))  ; 2x2 matmul
     (&& ('(2 2) = (ashape M)) (154 = (peep M '(1 1) 0)))) !(inner @(1 2 3) @(1 2)))
 
-; --- products & lists --- hook builds the product; cap/cup the two projections (caap..cuuup
+; --- chains & lists --- hook builds the chain; cap/cup the two projections (caap..cuuup
 ; the compounds); sort/msort by the total order; (jot n) the first n charms; the higher-order
 ; functions live in the prel.
 (assert
@@ -192,12 +192,12 @@
  !((mint 0) = (mint 0)) (: m (mint 0) (&& (m = m) (idp m m)))  ; distinct always; itself only
  (chainp (nom 'x)) ("x" = (cap (nom 'x)))          ; a nom is the chain; the name is its cap
  (: a (nom 'x) b (nom 'x) (&& (a < b) !(b < a) !(a = b)))   ; chain lex inherits the serial order
- ((mint 0) < (nom 'x))                           ; cross-kind: the point (symbol band) below the product
+ ((mint 0) < (nom 'x))                           ; cross-kind: the point (symbol band) below the chain
  (0 < (mint 0))                                  ; nothing is a number: every point sits above it
  (: a (nom 'k) b (nom 'k) t (tablet 0) _ (pin t a 1) _ (pin t b 2)
     (&& (1 = (t a)) (2 = (t b)) (2 = $t)))      ; same-name noms are distinct map keys
  (97 = ("abc" 0)) (294 = $"abc") (3 = (tally "abc")) (4 = $3.9) (0 = $-3.9) (7 = $@(3 4)) (5 = (abs -5)) (5.0 = (abs @(3 4)))
- !(string 0) !!(string 1)                        ; a NUL nets nothing: the product of nothings reaches the bytes
+ !(string 0) !!(string 1)                        ; a NUL nets nothing: the chain of nothings reaches the bytes
  !(slice (+ "a" 0) 1 2) (97 = $(+ "a" 0))        ; ... an all-NUL text IS nothing, and the NUL byte appends for free
  ("bidden" = (slice "forbidden planet" 3 9)) ("abcd" = (+ "ab" "cd")) (1 = ("hi" 9))
  ('asdf = (intern "asdf")) !((nom 0) = (nom 0)) ("asdf" = (string 'asdf))

@@ -28,7 +28,7 @@
 ; a NOM is the literal chain of a name string and a MINT (the nameless fresh
 ; point the mint nif adjoins; identity its only property, $mint = 0). the old
 ; named-uninterned atom species is gone -- McCarthy's symbol, restored as the
-; product it always was. (nom 0) (any non-text arg) is the bare mint.
+; chain it always was. (nom 0) (any non-text arg) is the bare mint.
 (: (nom n) (? (strp n) (hook n (mint 0)) ;; FIXME hook
               (symp n) (hook (string n) (mint 0))
               (mint 0)))
