@@ -267,10 +267,10 @@ i * i                ; -1        the algebraic heart of euler
 ((/ 1 2) -1)         ; i         sqrt of -1: principal, exact
 
 ; --- complex --- a discrete scalar at the top numeric tier (comp). the `~` reader sigil:
-; ~(re im) builds (wave re im) (3+ operands curry); a bare ~x lifts a real (~r = ~(r 0)) or
+; ~(re im) builds (twin re im) (3+ operands curry); a bare ~x lifts a real (~r = ~(r 0)) or
 ; conjugates a complex (~~(r i) = ~(r -i)), so `~` is conjugation and an involution. i = ~(0 1).
 ; + - * / promote a real and stick (no demotion); order is lexicographic by (re,im) and `=`
-; bridges reals. `wave` and `arg` broadcast over arrays, so the derived forms stay elementwise.
+; bridges reals. `twin` and `arg` broadcast over arrays, so the derived forms stay elementwise.
 ; a rank-N complex array packs (re,im) into a `c`-typed array: peep yields a ~(..) box,
 ; + - * / broadcast numpy-style, `=` gives a mask, and asum/aprod fold complex. the net
 ; is the complex SUM of the cells, so $v = $(asum v) and a packed array nets exactly
@@ -393,8 +393,8 @@ $(buf 4)             ; 0       a zeroed buf is nothing
 ; --- reader operators --- `;` line comment, `#!` pinbang (no block comments). reading is
 ; STRUCTURAL and environment-free: the reader knows tokens, parens, strings, and the value
 ; surface -- ' quote (= one-operand \), ` quasiquote, , unquote, ,@ splice, # hash, @ tup
-; (array), ~ wave (complex/conjugate: ~(re im) splices to (wave re im), a bare ~x is
-; (wave x)) -- and NO operator tables, so the same reader serves data (read) and code.
+; (array), ~ twin (complex/conjugate: ~(re im) splices to (twin re im), a bare ~x is
+; (twin x)) -- and NO operator tables, so the same reader serves data (read) and code.
 ; the LEXER LAW splits tokens by leading char: a name token (alnum/_) keeps - ? ! etc
 ; inside (kebab law) AND a trailing/internal ' (the prime: a', n'' -- a LEADING ' is still
 ; quote, dispatched before the name sounder), while a punctuation-led token is a SIGIL -- a maximal run

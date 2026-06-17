@@ -114,7 +114,7 @@
    (tk x) (? (intv? x) "Vz"  (flop x) "Vflo"  (strp x) "Vstr"  (idp x 'i) "Vcx"
              (chainp x) (: h (cap x)
                         (? (idp h bs) (tkq (e2 x))                     ; '(..) or 'x
-                           (idp h 'wave) "Vcx"                         ; ~(re im)
+                           (idp h 'twin) "Vcx"                         ; ~(re im)
                            (idp h 'hash) "Vmap"                        ; #(..)
                            (| (idp h 'tuple) (idp h 'iota)) "Varr"     ; @(..) / (iota n)
                            "Vbot"))

@@ -23,7 +23,7 @@ syn keyword AiFunc rev take drop part zip ldel assq memq lidx sort sortsplit mer
 syn keyword AiFunc + - * / % < <= = >= > <- -> idp inc dec abs gcd modpow int
 syn keyword AiFunc << >> & \| ^
 syn keyword AiFunc pin pull peep tablet mint gauge
-syn keyword AiFunc sin cos log pow re im conj arg wave
+syn keyword AiFunc sin cos log pow re im conj arg twin
 syn keyword AiFunc nump intp powg num-ap numfn randint net prod neg recip frac bit
 syn keyword AiFunc chainp strp symp tabp lamp hotp packp bigp widep trayp comp flop fixp nilp non atomp unip gemp crestp
 syn keyword AiFunc arr array arank alen ashape atype asum aprod amax amin aall iota
@@ -38,7 +38,7 @@ syn keyword AiFunc help scare scare? more? eof?
 syn keyword AiFunc rand randf rand-next randf-next rng-seed rng-get rng-set
 syn keyword AiFunc open close run getenv exit
 syn keyword AiFunc clock gauge assert ai-version argv cmdline
-syn keyword AiSigilWord non wave qq uq sat
+syn keyword AiSigilWord non twin qq uq sat
 
 " Macros (head-symbol rewrites installed with ::)
 syn keyword AiMacro :: L list do begin progn let if cond quote qq tuple hash

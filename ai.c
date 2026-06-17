@@ -636,7 +636,7 @@ lvm_t lvm_fault;
  _(nif_real, "real", s1(lvm_real)) _(nif_flop, "flop", s1(lvm_flop))\
  _(nif_sin, "sin", s1(lvm_sin)) _(nif_cos, "cos", s1(lvm_cos))\
  _(nif_log, "log", s1(lvm_log)) _(nif_pow, "pow", s2(lvm_pow))\
- _(nif_cplx, "wave", s2(lvm_cplx)) _(nif_Cp, "comp", s1(lvm_Cp))\
+ _(nif_cplx, "twin", s2(lvm_cplx)) _(nif_Cp, "comp", s1(lvm_Cp))\
  _(nif_re, "re", s1(lvm_re)) _(nif_im, "im", s1(lvm_im)) _(nif_conj, "conj", s1(lvm_conj))\
  _(nif_abs, "abs", s1(lvm_abs)) _(nif_arg, "arg", s1(lvm_carg))\
  _(nif_arr, "arr", s3(lvm_arr))\
@@ -2753,7 +2753,7 @@ static struct ai *ioput_vec_elem(struct ai *g, uintptr_t i) {
  return ioputn(g, vec_get_int(v, i), 10); }
 
 // Print element i of a packed ai_C array (at g->sp[0]) as ~(re im) -- the same
-// read-back form as a complex scalar (the `~` reader macro splices into (wave …)).
+// read-back form as a complex scalar (the `~` reader macro splices into (twin …)).
 // re/im are copied to C locals before any ioputc/ai_dtoa2 (which may grow a string
 // port and relocate the array).
 static struct ai *ioput_carr_elem(struct ai *g, uintptr_t i) {
@@ -2801,7 +2801,7 @@ static struct ai *ioput_arr(struct ai *g, uintptr_t off) {
  return ai_ok(g) ? ioputc(g, ')') : g; }
 
 // complex -> ~(re im); round-trips by re-evaluation (the `~` reader macro splices
-// into (wave re im), and wave is a nif). re/im are read into C locals up front so a
+// into (twin re im), and twin is a nif). re/im are read into C locals up front so a
 // GC during ai_dtoa2 can't strand the operand.
 static ai_inline struct ai*ioput_vec_scalar_complex(struct ai*g) {
  ai_flo_t re = cplx_re(g->sp[0]), im = cplx_im(g->sp[0]);
@@ -3313,7 +3313,7 @@ static struct ai* ai_z_getc(struct ai*g) {
 // either a *list accumulator* — a chain (head . tail) holding the elements read so
 // far in source order, ((nil . nil) when empty), built in place by appending at
 // `tail` so no reverse pass is needed — or a *reader-macro* — the wrap symbol \ qq
-// uq uqs hash vec plex wave, recognised by symp. A finished datum is `delivered`
+// uq uqs hash vec plex twin, recognised by symp. A finished datum is `delivered`
 // to the top frame: appended to a list, or wrapped/spliced and re-delivered; with
 // no frame left it is the result. Everything lives on the l stack so GC relocates
 // it across the allocs that reading does.
@@ -3365,7 +3365,7 @@ static ai_inline bool symeq(word x, char const *nm, uintptr_t n) {
  for (uintptr_t i = 0; i < n; i++) if (s->bytes[i] != nm[i]) return false;
  return true; }
 static ai_inline bool hashsym(word x) { return symeq(x, "hash", 4); }
-static ai_inline bool splicesym(word x) { return hashsym(x) || symeq(x, "tuple", 5) || symeq(x, "wave", 4) || symeq(x, "list", 4); }
+static ai_inline bool splicesym(word x) { return hashsym(x) || symeq(x, "tuple", 5) || symeq(x, "twin", 4) || symeq(x, "list", 4); }
 
 static struct ai *ioparse(struct ai *g, bool multi) {
  // multi: ctx starts with one open accumulator (collects all top-level datums in
@@ -3380,11 +3380,11 @@ static struct ai *ioparse(struct ai *g, bool multi) {
    c = g->b; }
   switch (c) {
    case '(': case '[': case '{': g = push_frame(g); continue;   // [ ] { } are () synonyms
-   case '~':                                            // ~(re im)->(wave re im) [construct]; ~x->(conj x)
-    if (!ai_ok(g = zgetc(g))) return g;                 // peek the char after ~: `(` -> splice into wave (build
+   case '~':                                            // ~(re im)->(twin re im) [construct]; ~x->(conj x)
+    if (!ai_ok(g = zgetc(g))) return g;                 // peek the char after ~: `(` -> splice into twin (build
     c2 = g->b;                                         // a complex / curry); anything else -> monadic lift/conj
     if (c2 != EOF) g = zungetc(g, c2);                 // (conj: real r -> ~(r 0); complex z -> conj z)
-    g = push_wrap(g, c2 == '(' ? "wave" : "conj"); continue;
+    g = push_wrap(g, c2 == '(' ? "twin" : "conj"); continue;
    case ',':                                            // unquote / unquote-splice
     if (!ai_ok(g = zgetc(g))) return g;
     if ((c2 = g->b) == '@') { g = push_wrap(g, "uqs"); continue; }
@@ -3489,7 +3489,7 @@ static struct ai *ioparse(struct ai *g, bool multi) {
      if (ai_ok(g)) g->sp[1] = B(g->sp[1]); }
     else if (splicesym(A(g->sp[1])) &&
         (chainp(g->sp[0]) ||
-         (emptyd && !hashsym(A(g->sp[1]))))) {          // #(k v …)/@(e …); empty wave/list still splice
+         (emptyd && !hashsym(A(g->sp[1]))))) {          // #(k v …)/@(e …); empty twin/list still splice
      g = gxl(ai_push(g, 1, A(g->sp[1])));               // splice -> (sym . d)
      if (ai_ok(g)) g->sp[1] = B(g->sp[1]); }
     else {                                             // 'x `x ,x  #x %atom/@atom -> (wrapsym d)
@@ -6793,7 +6793,7 @@ lvm(lvm_im) {
 // (conj z): complex conjugate (re, -im). conj LIFTS: a real r becomes ~(r 0)
 // (= r by value, the tower bridges), so conj is the monadic `~` -- it always
 // lands in C. (It used to pass a real through; lifting makes conj == the old
-// `wave`, so `~x` reads as (conj x) and the constructor takes the name `wave`.)
+// `twin`, so `~x` reads as (conj x) and the constructor takes the name `twin`.)
 lvm(lvm_conj) {
  word a = Sp[0];
  if (Cp(a)) { ai_flo_t re = cplx_re(a), im = cplx_im(a);

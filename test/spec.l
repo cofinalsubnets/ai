@@ -133,7 +133,7 @@
  (-8 = (pow -2 3)) (comp ((/ 1 3) -8))                                       ; integer powers stay real; odd roots go principal
  (0.0 = (sin 0) / (cos 0)) (flop (sin 0)))                                   ; tan 0 = 0
 
-; --- complex --- a scalar at tier C; the `~` sigil: ~(re im) builds (wave re im), a bare ~x
+; --- complex --- a scalar at tier C; the `~` sigil: ~(re im) builds (twin re im), a bare ~x
 ; lifts a real or conjugates (an involution); i = ~(0 1). a rank-N complex array packs (re,im)
 ; into a `c`-typed array; the net is the complex SUM of the cells, $v = $(asum v).
 (assert
@@ -246,7 +246,7 @@
 (assert
  ('(1 (\ x) 3) = `(1 'x 3)) ('(1 2 3 4) = (: xs '(2 3) `(1 ,@xs 4)))
  (532 = $"hello") (5 = (tally "hello")) (42 = $42) (1 = !0) (0 = !5) !!5
- (i = ~(0 1)) (~(2 3) = (wave 2 3)) ('~x = '(conj x)) (lamp dot)
+ (i = ~(0 1)) (~(2 3) = (twin 2 3)) ('~x = '(conj x)) (lamp dot)
  ('((dot x)) = (opfix '(. x))) ('! = (caup '(a ! b)))   ; opfix factors; quotes stay data
  (6 = ((\ x' (x' + 1)) 5)) (symp 'ab') (7 = (: n' 7 n'))   ; the prime: x' is a name (binder, symbol, let); leading ' is still quote
  (3 = 1 + 2) (7 = 1 + 2 * 3) ('b = 0 ? 'a 'b) ('big = (1 < 2) ? 'big 'small)

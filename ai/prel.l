@@ -23,8 +23,8 @@
 ; Z integers, R reals, C packed complex, O objects -- one word per element.
 ; the imaginary unit: complex values are written e.g. (+ 2 (* 3 i))
 ; the bare ~ digraph (~x, ~ not before `(`) reads as (conj x): conj LIFTS now, so
-; it IS the monadic wave -- a real r -> ~(r 0), a complex z -> ~(re -im), an
-; involution. the 2-operand ~(a b) splices into (wave a b), the C constructor.
+; it IS the monadic twin -- a real r -> ~(r 0), a complex z -> ~(re -im), an
+; involution. the 2-operand ~(a b) splices into (twin a b), the C constructor.
 ; a NOM is the literal chain of a name string and a MINT (the nameless fresh
 ; point the mint nif adjoins; identity its only property, $mint = 0). the old
 ; named-uninterned atom species is gone -- McCarthy's symbol, restored as the
