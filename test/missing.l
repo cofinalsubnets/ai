@@ -49,7 +49,7 @@
  (5 = (: f (\ _ an-cell) v (f 0) an-cell 5 (f 0)))) ; ... and the cell, once pinned
 
 ; the help hears the cell miss too; the payload is the binding-site nom
-(: help (\ s a b (? (&& (scare? s) (idp a 'missing) (chainp b) ("an-fwd" = (cap b))) 'cell-nom 0)))
+(: help (\ s a b (? (&& (scare? s) (idp a 'missing) (symp b) ("an-fwd" = (cap b))) 'cell-nom 0)))
 (assert (idp 'cell-nom (: q an-fwd an-fwd 2 q)))
 (: help 0)
 

@@ -178,6 +178,9 @@ static ai_inline bool mintp(word _) { return lamp(_) && cell(_)->ap == lvm_sym; 
 static ai_inline bool packp(word _) { return lamp(_) && cell(_)->ap == lvm_vec; }
 static ai_inline bool strp(word _) { return lamp(_) && cell(_)->ap == lvm_str; }
 static ai_inline bool symp(word _) { return mintp(_) || (chainp(_) && strp(A(_)) && mintp(B(_))); }
+// formp: a REAL compound list -- a chain that is NOT a (name . mint) symbol. This is what the
+// surface `chainp` nif means and what list-vs-atom logic wants: a named symbol counts as an ATOM.
+static ai_inline bool formp(word _) { return chainp(_) && !symp(_); }
 // Mutable flat byte string. NOT a data kind: its head word is the
 // behaves-as-0 lvm_buf (like lvm_port_io for ports), so the GC walks a buf
 // as a plain length-2 text -- [lvm_buf, backing ai_str, terminator] -- and
@@ -2962,9 +2965,9 @@ static ai_inline bool lam_isp(struct ai *g, word x) {         // (\ b.. body): >
 static ai_inline bool lam_quotep(struct ai *g, word x) {       // (\ datum): exactly 1 operand
  return chainp(x) && lam_head(g, A(x)) && chainp(B(x)) && !chainp(BB(x)); }
 static uintptr_t lam_cells(struct ai *g, word x) {             // chains the rebuild will bump
- return !chainp(x) || lam_quotep(g, x) ? 0 : 1 + lam_cells(g, A(x)) + lam_cells(g, B(x)); }
+ return !formp(x) || lam_quotep(g, x) ? 0 : 1 + lam_cells(g, A(x)) + lam_cells(g, B(x)); }  // a symbol is an atom (formp), not a compound to descend
 static uintptr_t lam_depth(struct ai *g, word x, uintptr_t d) {  // max binder level + 1 (= # d-syms)
- if (!chainp(x) || lam_quotep(g, x)) return d;
+ if (!formp(x) || lam_quotep(g, x)) return d;
  if (lam_isp(g, x)) {
   word o = B(x); uintptr_t nb = 0;
   while (chainp(B(o))) nb++, o = B(o);                          // every operand but the last = a binder
@@ -2974,7 +2977,7 @@ static uintptr_t lam_depth(struct ai *g, word x, uintptr_t d) {  // max binder l
  return a > b ? a : b; }
 static word lam_build_ops(struct ai *g, word o, struct lam_bv *sc, uintptr_t d, uintptr_t D);
 static word lam_build(struct ai *g, word x, struct lam_bv *sc, uintptr_t d, uintptr_t D) {
- if (!chainp(x)) {                                              // atom: a bound sym -> d<lev>, else as-is
+ if (!formp(x)) {                                              // atom (incl. a symbol): a bound sym -> d<lev>, else as-is
   if (symp(x)) for (struct lam_bv *p = sc; p; p = p->up) if (p->sym == x) return g->sp[D - 1 - p->lev];
   return x; }
  if (lam_quotep(g, x)) return x;                              // quoted data: share, do not descend
@@ -4456,8 +4459,12 @@ static ai_inline intptr_t seq_byte(word x) {
 // chains here). list+list -> spine append; elt<->list -> the non-list operand joins
 // as a scalar element (front if it is on the left, else appended at the tail).
 static lvm(lvm_add_seq) {
+ // a named symbol is a (name . mint) chain, but for + it is an ATOM (an element to adjoin,
+ // like a number), NOT a list to append -- so the "is this a list" tests use formp, not the
+ // raw chainp macro. sym + real-list adjoins (`'ef + '(1 2)` = `(ef 1 2)`); sym + sym/str/num
+ // falls through to nil (no symbol string algebra). spine-walks stay chainp (real lists only).
  word a = Sp[0], b = Sp[1];
- if (chainp(a) && chainp(b)) {                       // list + list -> append a..b
+ if (formp(a) && formp(b)) {                         // list + list -> append a..b
   uintptr_t n = llen(a); Have(n * Width(struct ai_chain));
   a = Sp[0], b = Sp[1];
   struct ai_chain *base = (struct ai_chain*) Hp, *w = base;
@@ -4465,18 +4472,18 @@ static lvm(lvm_add_seq) {
   for (word l = a; chainp(l); l = B(l), w++) ini_chain(w, A(l), word(w + 1));
   (w - 1)->b = b;                                // last cdr -> b
   return *++Sp = word(base), Ip++, Continue(); }
- if (chainp(a) || chainp(b)) {                        // elt <-> list
-  bool front = !ai_add_lr || chainp(b);              // element on the left -> front
-  word lst = chainp(a) ? a : b, elt = chainp(a) ? b : a;
+ if (formp(a) || formp(b)) {                          // elt <-> list
+  bool front = !ai_add_lr || formp(b);               // element on the left -> front
+  word lst = formp(a) ? a : b, elt = formp(a) ? b : a;
   if (front) { Sp[0] = elt, Sp[1] = lst; return Ap(lvm_link, g); }  // (link elt list)
   uintptr_t n = llen(lst) + 1; Have(n * Width(struct ai_chain));        // append elt at tail
-  lst = chainp(Sp[0]) ? Sp[0] : Sp[1], elt = chainp(Sp[0]) ? Sp[1] : Sp[0];
+  lst = formp(Sp[0]) ? Sp[0] : Sp[1], elt = formp(Sp[0]) ? Sp[1] : Sp[0];
   struct ai_chain *base = (struct ai_chain*) Hp, *w = base;
   Hp += n * Width(struct ai_chain);
   for (word l = lst; chainp(l); l = B(l), w++) ini_chain(w, A(l), word(w + 1));
   ini_chain(w, elt, nil);                           // trailing (elt . nil)
   return *++Sp = word(base), Ip++, Continue(); }
- return *++Sp = nil, Ip++, Continue(); }          // unreachable: matrix gates on a list
+ return *++Sp = nil, Ip++, Continue(); }          // neither is a real list (e.g. sym + sym/str/num): no algebra -> nil
 
 // --- TEXT lane: strings + symbols, name-compatible -------------------------
 // The string tower is STRING (rank 0) < UNINTERNED-SYM (1) < INTERNED-SYM (2). A
@@ -4488,8 +4495,8 @@ static lvm(lvm_add_seq) {
 // rank: string as-is / nom'd to a fresh uninterned sym / interned. An empty
 // result is the ai_str_empty singleton, or nil at symbol rank (the symbol
 // lane is gated off by the dispatch matrix since the mint round anyway).
-static ai_inline struct ai_str *add_name(struct ai *g, word x) {   // symbol -> name string, or 0 (a bare mint / the core)
- return chainp(x) && strp(A(x)) ? str(A(x)) : 0; }      // a named sym is (name . mint): the car is the name; a bare point is nameless
+static ai_inline struct ai_str *add_name(struct ai *g, word x) {   // symbol -> name string, or 0 (a bare mint / the core / a non-symbol)
+ return (chainp(x) && strp(A(x)) && mintp(B(x))) ? str(A(x)) : 0; }  // a named sym is (name . mint): name string in the car, mint in the cdr -- BOTH required (else a list whose head is a string would masquerade as a name)
 static ai_inline int stringrank(struct ai *g, word x) {    // STR 0 / USYM 1 / ISYM|NUM 2
  if (strp(x)) return 0;
  if (x == (word) ai_core_of(g)) return 1;               // the core is a nameless point: an uninterned (fresh) symbol
@@ -4552,40 +4559,36 @@ enum q ai_kind(word x) {
 // to a green charm (($ c) -- the count law, shared with numeral-apply and array shapes:
 // non-positive -> 0 -> the empty singleton, a float ceils, a complex counts by
 // total-order-guarded modulus); an array (or any non-number) is not a count ->
-// nil. A symbol stays at its own rank (no demotion): an interned name repeats
-// to an interned symbol.
+// nil. A symbol is a (name . mint) chain but has NO * (repeat) algebra -- it is neither a
+// real list nor a string here, so it nils out (intern/string are the bridge).
 static lvm(lvm_mul_rep) {
  word a = Sp[0], b = Sp[1];
- bool aseq = strp(a) || symp(a) || chainp(a);
+ bool aseq = strp(a) || formp(a);                   // a real string/list repeats; a symbol does NOT
  word seq = aseq ? a : b, cnt = aseq ? b : a;
- if (!isnum(cnt) && !Cp(cnt)) return *++Sp = nil, Ip++, Continue();   // array/non-number count
+ if ((!strp(seq) && !formp(seq)) || (!isnum(cnt) && !Cp(cnt)))
+  return *++Sp = nil, Ip++, Continue();             // seq not a real sequence (e.g. a symbol), or count not a number
  uintptr_t n = (uintptr_t) ai_pin(g, cnt);
- if (chainp(seq)) {                                  // list -> n copies of the spine
+ if (formp(seq)) {                                   // list -> n copies of the spine
   if (!n) return *++Sp = nil, Ip++, Continue();
   uintptr_t m = llen(seq), total = m * n;
   Have(total * Width(struct ai_chain));
-  seq = chainp(Sp[0]) ? Sp[0] : Sp[1];               // re-read post-GC
+  seq = formp(Sp[0]) ? Sp[0] : Sp[1];                // re-read post-GC
   struct ai_chain *base = (struct ai_chain*) Hp, *w = base;
   Hp += total * Width(struct ai_chain);
   for (uintptr_t i = 0; i < n; i++)
    for (word l = seq; chainp(l); l = B(l), w++) ini_chain(w, A(l), word(w + 1));
   (w - 1)->b = nil;
   return *++Sp = word(base), Ip++, Continue(); }
- // string / symbol: repeat the byte content (a symbol's name; anonymous -> empty)
- int rank = strp(seq) ? 0 : stringrank(g, seq);         // 0 str / 1 usym / 2 isym
- struct ai_str *src = strp(seq) ? str(seq) : add_name(g, seq);
- uintptr_t sl = src ? src->len : 0, total = sl * n;
- if (!total) return *++Sp = rank ? nil : EmptyString, Ip++, Continue();
+ // string -> repeat the bytes
+ struct ai_str *src = str(seq);
+ uintptr_t sl = src->len, total = sl * n;
+ if (!total) return *++Sp = EmptyString, Ip++, Continue();
  uintptr_t req = str_type_width + b2w(total);
  Have(req);
- seq = (strp(Sp[0]) || symp(Sp[0])) ? Sp[0] : Sp[1];   // re-read post-GC
- src = strp(seq) ? str(seq) : add_name(g, seq);
+ src = str(strp(Sp[0]) ? Sp[0] : Sp[1]);               // re-read post-GC
  struct ai_str *z = ini_str((struct ai_str*) Hp, total); Hp += req;
  for (uintptr_t i = 0; i < n; i++) memcpy(txt(z) + i * sl, txt(src), sl);
- *++Sp = word(z);
- return rank == 0 ? (Ip++, Continue())             // string
-      : rank == 1 ? Ap(lvm_mint, g)             // uninterned symbol
-                  : Ap(lvm_intern, g); }          // interned symbol
+ return *++Sp = word(z), Ip++, Continue(); }
 
 // --- apply lane (the data-value `(g x)` aps; moved here from data.c) -----
 // When a data value is applied, its sentinel (data.c, pinned in the ai_data
@@ -6022,7 +6025,19 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
 // (KCharm) so fix/box/big/float/complex order by VALUE, not representation. Arrays
 // divert to lvm_vbin before this, so KArr* never appear. One source of truth:
 // the enum q order itself.
-static ai_inline int cmp_rank(word x) { return (isnum(x) || Cp(x)) ? KCharm : symp(x) ? KMint : (int) ai_kind(x); }  // a named symbol is a (name . mint) chain but ranks in the mint band (below chains)
+// the true-blue total order, low -> high: () < mint < string < number < chain < tray < map < hot.
+// a symbol/mint is the blue floor; STRING sits above mint and just below the number band (the
+// charm -- a byte-valued fixnum -- bridges string-bytes up to the number tower, the byte law);
+// CHAIN is a special (1-D, hooked) tray, so it seats just BELOW the general n-D tray. numbers
+// fold to one by-value band; map/hot stay on top. The compare order is decoupled from the enum
+// (dispatch) order: we remap kinds to lattice ranks here, the enum/matrices are untouched.
+static ai_inline int cmp_rank(word x) {
+ if (symp(x)) return 0;                            // mint/symbol -- the floor (a named sym is a (name . mint) chain)
+ enum q k = ai_kind(x);
+ if (k == KString) return 1;                       // string: above mint, below number
+ if (isnum(x) || Cp(x)) return 2;                  // the number band, by value (charm bridges up from string)
+ if (k == KChain) return 3;                        // chain: a special 1-D tray, just below the general tray
+ return (int) k; }                                 // KVec..KArrO trays (>=6), KMap, KHot -- all above chain, relative order kept
 static ai_inline intptr_t bytes_cmp(const char *pa, uintptr_t la, const char *pb, uintptr_t lb) {
  uintptr_t n = la < lb ? la : lb;
  int c = n ? memcmp(pa, pb, n) : 0;
@@ -6054,21 +6069,23 @@ static ai_inline intptr_t mint_cmp(struct ai *g, word a, word b) {
 // is alloc-free + GC-stable, so the lambda case is safe to call mid-comparison.
 static intptr_t cmp3(struct ai *g, word a, word b) {
  int ra = cmp_rank(a), rb = cmp_rank(b);
- if (ra != rb) return ra < rb ? -1 : 1;                    // cross-kind: type lattice
- switch (ra) {
-  case KCharm:                                               // number band, by value
-   if (Cp(a) || Cp(b)) {                                   // complex: (re, im) lexicographic
-    ai_flo_t ar = Cp(a) ? cplx_re(a) : toflo(a), br = Cp(b) ? cplx_re(b) : toflo(b);
-    if (ar != br) return ar < br ? -1 : 1;
-    ai_flo_t ai = Cp(a) ? cplx_im(a) : 0, bi = Cp(b) ? cplx_im(b) : 0;
-    return ai < bi ? -1 : ai > bi ? 1 : 0; }
-   if (flop(a) || flop(b)) { ai_flo_t av = toflo(a), bv = toflo(b); return av < bv ? -1 : av > bv ? 1 : 0; }
-   return ai_big_cmp(a, b);                                 // exact fix/box/big tower
-  case KString: return bytes_cmp(txt(a), len(a), txt(b), len(b));
-  case KMint:   return mint_cmp(g, a, b);
-  case KChain: { intptr_t c = cmp3(g, A(a), A(b)); return c ? c : cmp3(g, B(a), B(b)); }  // car, then cdr
-  default: { uintptr_t ha = hash(g, a), hb = hash(g, b);   // lambda/map/port/buf: by repr hash
-             return ha < hb ? -1 : ha > hb ? 1 : 0; } } }
+ if (ra != rb) return ra < rb ? -1 : 1;                    // cross-kind: the true-blue lattice (cmp_rank)
+ // same band -- dispatch by the actual kind (NOT the synthetic cmp_rank, which remaps mint/
+ // string/chain off their enum ordinal). symbols first: a named sym IS a chain, so the chain
+ // recursion below would otherwise grab it.
+ if (symp(a)) return mint_cmp(g, a, b);                    // mint band: () < bare mints < named syms
+ if (isnum(a) || Cp(a)) {                                  // number band, by value
+  if (Cp(a) || Cp(b)) {                                    // complex: (re, im) lexicographic
+   ai_flo_t ar = Cp(a) ? cplx_re(a) : toflo(a), br = Cp(b) ? cplx_re(b) : toflo(b);
+   if (ar != br) return ar < br ? -1 : 1;
+   ai_flo_t ai = Cp(a) ? cplx_im(a) : 0, bi = Cp(b) ? cplx_im(b) : 0;
+   return ai < bi ? -1 : ai > bi ? 1 : 0; }
+  if (flop(a) || flop(b)) { ai_flo_t av = toflo(a), bv = toflo(b); return av < bv ? -1 : av > bv ? 1 : 0; }
+  return ai_big_cmp(a, b); }                                // exact fix/box/big tower
+ if (strp(a)) return bytes_cmp(txt(a), len(a), txt(b), len(b));
+ if (formp(a)) { intptr_t c = cmp3(g, A(a), A(b)); return c ? c : cmp3(g, B(a), B(b)); }  // chain: car, then cdr
+ uintptr_t ha = hash(g, a), hb = hash(g, b);               // lambda/map/port/buf: by repr hash
+ return ha < hb ? -1 : ha > hb ? 1 : 0; }
 
 // (sort l): sort a list ascending by the total order (cmp3), STABLE. One
 // reservation up front -- n result chains (committed) plus 2n scratch words
@@ -6128,8 +6145,8 @@ static lvm(lvm_cmp_ord, int op) {
  word a = Sp[0], b = Sp[1]; intptr_t r;
  if (arrp(a) || arrp(b)) return Ap(lvm_vbin, g, op);      // array -> elementwise
  int ra = cmp_rank(a), rb = cmp_rank(b);
- if (ra != rb) r = vcmp_int(op, ra, rb);                   // cross-kind: type lattice
- else if (ra != KCharm) r = vcmp_int(op, cmp3(g, a, b), 0);  // string / sym / chain / lambda
+ if (ra != rb) r = vcmp_int(op, ra, rb);                   // cross-kind: the true-blue lattice (cmp_rank)
+ else if (!(isnum(a) || Cp(a))) r = vcmp_int(op, cmp3(g, a, b), 0);  // same non-number band: string / sym / chain / lambda / map (cmp_rank remaps these off KCharm, so test the kind)
  else if (Cp(a) || Cp(b)) {                                // complex: lexicographic, per op
   ai_flo_t ar = Cp(a) ? cplx_re(a) : toflo(a), br = Cp(b) ? cplx_re(b) : toflo(b);
   r = ar != br ? vcmp_flo(op, ar, br)

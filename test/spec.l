@@ -89,8 +89,8 @@
 ; within by value/lex order); `=` bridges the numeric tower; `idp` is identity; `!=` is gone.
 (assert
  (3 = 3.0) !(3 = 4) (1 < 1.5) (3.0 >= 3) (idp 'a 'a) !(idp '(1) '(1))
- (1 < "a") ("a" < 'x) ('x < '(0)) !("a" < 1)
- ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10)))   ; the map rung: chain < map < top
+ ('x < "a") ("a" < 1) (1 < '(0)) !(1 < "a")          ; true-blue order: mint < string < number < chain
+ ('(0) < #(1 10)) (#(1 10) < cap) !(cap < #(1 10)))   ; the map rung: chain < map < hot
 
 ; --- comparing functions --- `=` on functions is alpha + structural (binders by position,
 ; free vars by name, captures pairwise); eta/beta not bridged; 1 = (\ x x), 0 = (\ _ 1).
@@ -172,7 +172,7 @@
 ; functions live in the prel.
 (assert
  (1 = (cap '(1 2 3))) ('(2 3) = (cup '(1 2 3))) (3 = (caup '(2 3 4))) ('(1 2) = (link 1 (link 2 0)))
- !(cap 0) ('x = (cap 'x)) !(cup 'x)              ; no cap at the end of the list; an atom is its own cap
+ !(cap 0) ("x" = (cap 'x)) !(cup 'x)              ; no cap at the end of the list; a symbol's cap is its NAME, its cup the mint (false)
  ('(0 1 2) = (jot 3)) !(jot 0) (3 = $(jot 3)) ; jot: the first n charms; the empty count is nothing
  ('(2 3 4) = (map inc '(1 2 3))) (24 = (foldl (*) 1 '(1 2 3 4))) (6 = (foldr (+) 0 '(1 2 3)))
  ('(1 3) = (filter (\ x (x % 2)) '(1 2 3 4))) ('(1 2 3) = (sort '(3 1 2))) ('(3 2 1) = (msort (>) '(1 2 3)))
@@ -193,10 +193,10 @@
  (symp (mint 0)) (0 = $(mint 0)) !(mint 0)       ; the fresh point: a nameless atom, materially empty
  (1 = ((mint 0) 5)) (1 = ('xyz 1))               ; units apply const-1; the name index is gone
  !((mint 0) = (mint 0)) (: m (mint 0) (&& (m = m) (idp m m)))  ; distinct always; itself only
- (chainp (nom 'x)) ("x" = (cap (nom 'x)))          ; a nom is the chain; the name is its cap
- (: a (nom 'x) b (nom 'x) (&& (a < b) !(b < a) !(a = b)))   ; chain lex inherits the serial order
- ((mint 0) < (nom 'x))                           ; cross-kind: the point (symbol band) below the chain
- (0 < (mint 0))                                  ; nothing is a number: every point sits above it
+ (symp (nom 'x)) !(chainp (nom 'x)) ("x" = (cap (nom 'x)))  ; a nom is a name (symp, an ATOM), repr'd as (name . mint); its name is its cap
+ (: a (nom 'x) b (nom 'x) (&& (a < b) !(b < a) !(a = b)))   ; same-name noms order by the inner mint serial
+ ((mint 0) < (nom 'x))                           ; within the mint band: a bare mint below a named symbol
+ ((mint 0) < 0)                                  ; the blue floor: every point sits BELOW the numbers (true-blue)
  (: a (nom 'k) b (nom 'k) t (tablet 0) _ (pin t a 1) _ (pin t b 2)
     (&& (1 = (t a)) (2 = (t b)) (2 = $t)))      ; same-name noms are distinct map keys
  (97 = ("abc" 0)) (294 = $"abc") (3 = (tally "abc")) (4 = $3.9) (0 = $-3.9) (7 = $@(3 4)) (5 = (abs -5)) (5.0 = (abs @(3 4)))

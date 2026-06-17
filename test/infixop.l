@@ -25,7 +25,7 @@
  ; ? at three -- the cond form, infix
  ('a = (1 ? 'a 'b)) ('b = (0 ? 'a 'b))
  ('big = ((1 < 2) ? 'big 'small))
- (1 = (1 < 2 ? 'big 'small))                    ; right-assoc: ? takes 2 first -- paren the test
+ (0 = (1 < 2 ? 'big 'small))                    ; right-assoc: ? takes 2 first -> (< 1 'big); a symbol sorts BELOW 1 (true-blue), so 0
 
  ; chain termination: a non-operator datum folds the pending chain
  ('(3 3) = (L 1 + 2 3))                         ; (L (+ 1 2) 3)

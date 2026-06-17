@@ -227,10 +227,10 @@
  ; --- within PAIR: recursive lexicographic; a shorter prefix sorts first ---
  (< '(1 2) '(1 3))   (< '(1) '(1 2))   (< '(1 2) '(2))
  !(< '(1 2) '(1 2))   (<= '(1 2) '(1 2))
- ; --- CROSS-kind = the type lattice (number < string < symbol < chain < lambda) ---
- (< 1 "a")   (< "a" 'a)   (< 'a '(0))   (< '(0) inc)
- (< 1.5 "")   (< (100 2) 'z)   (< ~(1 1) "x")      ; ANY number < ANY string
- !(< "a" 1)   !(< '(0) 'z)                        ; ...and the reverses are false (chain > sym)
+ ; --- CROSS-kind = the true-blue lattice (symbol < string < number < chain < lambda) ---
+ (< 'a "a")   (< "a" 1)   (< 1 '(0))   (< '(0) inc)
+ (< "" 1.5)   (< 'z (100 2))   (< "x" ~(1 1))      ; ANY string < ANY number
+ !(< 1 "a")   !(< '(0) 'z)                        ; ...and the reverses are false (chain > sym)
  ; --- LAMBDA is the top class; within it, ordered by representation hash ---
  (< 5 inc)   (> inc '(0))   (< "z" inc)                ; everything sorts below a lambda
  !(< inc inc)   (<= inc inc)   (>= inc inc)         ; reflexive: a lambda equals itself

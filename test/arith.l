@@ -102,7 +102,7 @@
  (> 2 1.5)
  (>= 3.0 3)
 
- ; --- comparison is a TOTAL ORDER over all values: a number sorts below any
- ;     string (number < string < sym < chain < lambda); full lattice in matrix.l ---
- (< 1 "a")
- !(< "a" 1))
+ ; --- comparison is a TOTAL ORDER over all values: true-blue seats a string BELOW
+ ;     numbers (mint < string < number < chain < lambda); full lattice in matrix.l ---
+ (< "a" 1)
+ !(< 1 "a"))
