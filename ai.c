@@ -2850,13 +2850,38 @@ static ai_inline struct ai*ioput_str(struct ai*g, word _) {
  return ai_pop(ioputc(g, '"'), 1); }
 
 // A bare mint (KMint) is nameless: () is the core (the face of absence), and
-// every other point prints `(mint 0)` -- which re-reads to a FRESH point, the
-// same round-trip the mutables make (a printed map is a fresh map): identity is
-// the mint's whole being, so no spelling can carry it. A NAMED symbol is no
-// longer here -- it is the (name . mint) chain, printed bare by ioput_chain.
+// every other point prints `$<serial>` -- the serial in base 36, the mint's
+// GC-stable identity AND its `<` order key, so distinct mints wear distinct
+// faces that sort like the values. The `$` is a DIAGNOSTIC sigil, not a
+// reparse: a mint cannot round-trip (identity is its whole being, no spelling
+// carries it), so the face only has to DISTINGUISH, which the serial does. A
+// NAMED symbol is no longer here -- it is the (name . mint) chain, printed bare
+// by ioput_chain.
+//
+// Why this is safe -- the four loads this face must bear, and why each holds:
+//  1. NON-REPARSE IS NOT A REGRESSION. `show` is diagnostic, not serialization;
+//     nothing in the system rebuilds a mint from its printed form. The OLD face
+//     `(mint 0)` did not round-trip either -- it re-read to a FRESH point (a new
+//     serial), so identity was already lost. We trade a fresh-mint reparse for a
+//     distinguishing one; no caller depended on the reparse.
+//  2. THE READ IS TOTAL, NEVER A TRAP. `$je` re-reads (valence law) as the data
+//     (mono ($ je)), which opfix factors to the glued monadic (sat je); `je` is a
+//     missing name -> the zero point -> (sat ()) = 0. A defined, terminating
+//     value -- never a crash, never a loop, and never a forged mint (it cannot
+//     resurrect the identity it never carried). [probed: both ($je) and ($0)
+//     evaluate to 0]
+//  3. STABLE WITHIN A RUN. The serial rides the GC copy (ini_missing forwards
+//     src->code), so (show m) = (show m) for a live mint across any collection --
+//     the face is a function of identity, not of a moving address. (An address
+//     would FAIL this: two-space copying relocates the object every cycle.)
+//  4. NEVER ASSERTED AS A LITERAL. The serial counts mints stream-wide, so it is
+//     non-deterministic across runs / corpus order. Tests therefore assert the
+//     SHAPE only (leading $, stable, distinct-mints-distinct), never an exact
+//     face. And `$0` can never appear: the core is serial 0 and the guard above
+//     prints it as () -- so the absence face and a mint face never collide.
 static ai_inline struct ai*ioput_sym(struct ai*g, word _) {
  if (_ == (word) ai_core_of(g)) return ioputcs(g, "()");  // the face of absence
- return ioputcs(g, "(mint 0)"); }                          // a mint: fresh on re-read
+ return ioputn(ioputc(g, '$'), (intptr_t) sym(_)->code, 36); }   // $<serial base36>
 
 
 // Maps print as #(k v …), the empty map as (tablet 0); both round-trip.
