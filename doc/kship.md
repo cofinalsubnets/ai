@@ -37,12 +37,14 @@ share host files with anyone.
 
 ## Notes from the build (read before you start — these cost me time)
 
-**Where you are (2026-06-17):** milestones 1 AND 2 are DONE and **boot-verified on
-metal**. The kernel lives in `port/kship/` (a ship in port); the agent
-(`port/kship/kship.l`) is baked in and runs the heartbeat on the real timer tick
-(m1). The virtio-net driver (`port/kship/x86_64/net.c`) is up and **echoes UDP
-datagrams end-to-end under qemu** (m2 gate passed). Next: milestone 2e — bridge the
-socket to a `k_sources[]` slot so the agent *perceives* the NIC (the m3 on-ramp).
+**Where you are (2026-06-17):** milestones 1 AND 2 (incl. 2e) DONE and **boot-verified
+on metal**. The kernel lives in `port/kship/` (a ship in port); the agent
+(`port/kship/kship.l`) is baked in and runs the heartbeat on the real timer tick (m1).
+The virtio-net driver (`port/kship/x86_64/net.c`) is up; the NIC is exposed as the ai
+port **`nic`** and a pure-ai program echoes UDP datagrams end-to-end under qemu
+(`(slurp nic)`→`(fputs nic d)`→`(fflush nic)`). Next: **milestone 3** — `net.l` +
+aineko on metal, and wire the agent's perceive step to `ai_wait_fds` over {nic, clock}
+so kship's perceive→decide→act loop closes over the real network.
 
 **Build & run recipes:**
 - Host model (fast iteration, the ai half is real here too): `out/host/ai port/kship/kship.l`.
@@ -101,9 +103,21 @@ Stages (each gates by qemu boot with `-device virtio-net-pci`):
 - [x] **2c** TX (synchronous, spin on used) + ARP reply for 10.0.2.15.
 - [x] **2d** UDP echo — **THE GATE, PASSED.** host→`localhost:5555`→SLIRP→guest RX→ARP→
       IPv4/UDP parse→echo (swap MAC/IP/ports, fix IP csum, UDP csum=0)→host gets it back.
-- [ ] **2e** a `k_sources[]` socket slot bridging the socket to getc/putc/ready/close —
-      the on-ramp to milestone 3 (`net.l` + aineko on metal). The C echo (`net_serve`/the
-      `netserve` nif) proves the driver; 2e makes it ai-driven (perceive over the NIC).
+- [x] **2e** `k_sources[2]` socket slot → the ai port **`nic`**. ✅ boot-verified: a
+      pure-ai echo (`make ... NETECHO=1`) `(slurp nic)`→`(fputs nic d)`→`(fflush nic)`
+      round-trips a UDP datagram EXACTLY. RX enqueues per-peer datagrams (`dgq`); `nic_getc`
+      hands one datagram's bytes then a single `-1` (so `slurp` reads one) and blocks for
+      the next (keyboard model, never terminal EOF); `nic_flush` replies to that datagram's
+      sender. `nic_ready` polls the RX ring (feeds `ai_ready`/`ai_wait_fds`).
+
+Two gotchas worth keeping:
+- **never type a long program into the serial shell** — the line editor redraws the whole
+  line per keystroke (O(n²) over serial), so a ~70-char line never finishes in a test
+  window. BAKE it instead (the `NETECHO=1` flag bakes the echo program; `KSHIP=1` bakes
+  `kship.l`). Short one-liners (`(netserve 0)`) are fine to type.
+- **use the UDP length field for payload size, not the frame length** — a sub-60-byte frame
+  is ethernet-padded; the virtio RX `len` includes the padding, so slicing payload by frame
+  length appends NUL bytes. `plen = be16(udp+4) - 8`, clamped to available.
 
 The driver is `port/kship/x86_64/net.c`; `net_init` (called from kmain) brings it up,
 the `netserve` nif (`(netserve 0)`) runs the blocking C echo loop. ⚠ **gotcha:** `net` is

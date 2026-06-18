@@ -191,40 +191,80 @@ static void tx_send(uint8_t const *frame, unsigned len) {
     __sync_synchronize();
   nic.tx.last_used = nic.tx.used->idx; }
 
-// handle one received ethernet frame (f, len): answer ARP-for-us, echo UDP-to-us.
-// transforms happen in place over the RX buffer; tx_send copies before we return.
+// --- the ai stream surface (stage 2e) ----------------------------------------
+// A queue of received UDP datagrams (the k_sources[] NIC socket). RX enqueues
+// each payload + its peer; nic_getc hands the bytes to ai (blocking, with a -1
+// between datagrams so `slurp` reads exactly one); fputs+fflush build a reply
+// datagram back to the peer of the datagram currently being read. So an ai agent
+// does `(slurp nic)` to perceive and `(fputs nic r) (fflush nic)` to act.
+#define DQ      8
+#define DG_MAX  1472                   // max UDP payload over standard ethernet
+struct dgram { uint16_t len, peer_port, our_port; uint8_t mac[6], ip[4], data[DG_MAX]; };
+static struct dgram dgq[DQ];
+static int dq_head, dq_tail;           // ring [head, tail) of pending datagrams
+static int cur_pos;                    // read cursor within dgq[dq_head]
+static bool cur_open;                  // a datagram is mid-read by nic_getc
+static struct { uint16_t dport, sport; uint8_t mac[6], ip[4]; } reply;  // fflush target
+static uint8_t txq[DG_MAX];            // ai's outgoing payload, filled by nic_putc
+static unsigned txn;
+
+// build + transmit one UDP datagram (dmac/dip/dport = peer, sport = our port).
+static void nic_send_to(uint8_t const *dmac, uint8_t const *dip, uint16_t dport,
+                        uint16_t sport, uint8_t const *p, unsigned n) {
+  static uint8_t fr[14 + 20 + 8 + DG_MAX];
+  if (n > DG_MAX) n = DG_MAX;
+  for (int i = 0; i < 6; i++) { fr[i] = dmac[i]; fr[6 + i] = nic.mac[i]; }
+  wr16(fr + 12, 0x0800);
+  uint8_t *ip = fr + 14;
+  ip[0] = 0x45; ip[1] = 0; wr16(ip + 2, (uint16_t) (20 + 8 + n));
+  wr16(ip + 4, 0); wr16(ip + 6, 0); ip[8] = 64; ip[9] = 17; ip[10] = ip[11] = 0;
+  for (int i = 0; i < 4; i++) { ip[12 + i] = our_ip[i]; ip[16 + i] = dip[i]; }
+  wr16(ip + 10, ip_csum(ip, 20));
+  uint8_t *udp = ip + 20;
+  wr16(udp + 0, sport); wr16(udp + 2, dport);
+  wr16(udp + 4, (uint16_t) (8 + n)); wr16(udp + 6, 0);   // UDP csum 0 = unused
+  for (unsigned i = 0; i < n; i++) udp[8 + i] = p[i];
+  tx_send(fr, 14 + 20 + 8 + n); }
+
+// handle one received ethernet frame: answer ARP-for-us, enqueue UDP-to-us.
 static void handle(uint8_t *f, unsigned len) {
   if (len < 14) return;
   uint16_t et = be16(f + 12);
 
-  if (et == 0x0806 && len >= 42) {              // ARP
+  if (et == 0x0806 && len >= 42) {              // ARP request for us -> reply (in place)
     uint8_t *a = f + 14;
-    if (be16(a + 6) != 1 || !ip_is_ours(a + 24)) return;   // not a request for us
+    if (be16(a + 6) != 1 || !ip_is_ours(a + 24)) return;
     uint8_t req_sha[6], req_spa[4];
     for (int i = 0; i < 6; i++) req_sha[i] = a[8 + i];
     for (int i = 0; i < 4; i++) req_spa[i] = a[14 + i];
-    for (int i = 0; i < 6; i++) { f[i] = req_sha[i]; f[6 + i] = nic.mac[i]; }  // eth dst/src
-    wr16(a + 6, 2);                              // oper = reply
-    for (int i = 0; i < 6; i++) a[8 + i] = nic.mac[i];      // sha = us
-    for (int i = 0; i < 4; i++) a[14 + i] = our_ip[i];      // spa = us
-    for (int i = 0; i < 6; i++) a[18 + i] = req_sha[i];     // tha = requester
-    for (int i = 0; i < 4; i++) a[24 + i] = req_spa[i];     // tpa = requester
+    for (int i = 0; i < 6; i++) { f[i] = req_sha[i]; f[6 + i] = nic.mac[i]; }
+    wr16(a + 6, 2);
+    for (int i = 0; i < 6; i++) a[8 + i] = nic.mac[i];
+    for (int i = 0; i < 4; i++) a[14 + i] = our_ip[i];
+    for (int i = 0; i < 6; i++) a[18 + i] = req_sha[i];
+    for (int i = 0; i < 4; i++) a[24 + i] = req_spa[i];
     tx_send(f, 42);
     return; }
 
-  if (et == 0x0800 && len >= 14 + 20) {          // IPv4
+  if (et == 0x0800 && len >= 14 + 20) {          // IPv4 / UDP to us -> enqueue
     uint8_t *ip = f + 14;
     int ihl = (ip[0] & 0xf) * 4;
-    if (ip[9] != 17 || !ip_is_ours(ip + 16) || len < (unsigned) (14 + ihl + 8)) return;  // UDP to us
-    for (int i = 0; i < 6; i++) { uint8_t t = f[i]; f[i] = f[6 + i]; f[6 + i] = t; }      // swap eth
-    for (int i = 0; i < 4; i++) { uint8_t t = ip[12 + i]; ip[12 + i] = ip[16 + i]; ip[16 + i] = t; }  // swap IP
+    if (ip[9] != 17 || !ip_is_ours(ip + 16) || len < (unsigned) (14 + ihl + 8)) return;
+    if ((dq_tail + 1) % DQ == dq_head) return;    // queue full: drop
     uint8_t *udp = ip + ihl;
-    uint8_t s0 = udp[0], s1 = udp[1];
-    udp[0] = udp[2]; udp[1] = udp[3]; udp[2] = s0; udp[3] = s1;   // swap UDP ports
-    udp[6] = udp[7] = 0;                          // UDP checksum 0 = unused (legal over IPv4)
-    ip[10] = ip[11] = 0;
-    wr16(ip + 10, ip_csum(ip, ihl));              // fix IP header checksum
-    tx_send(f, len); } }
+    unsigned avail = len - (unsigned) (14 + ihl + 8);
+    unsigned ulen = be16(udp + 4);                // UDP length field = 8 + payload
+    unsigned plen = ulen >= 8 ? ulen - 8 : 0;     // authoritative: ignores eth padding
+    if (plen > avail) plen = avail;               // but never over-read the frame
+    if (plen > DG_MAX) plen = DG_MAX;
+    struct dgram *d = &dgq[dq_tail];
+    d->len = (uint16_t) plen;
+    d->peer_port = be16(udp + 0);                 // sender's source port
+    d->our_port = be16(udp + 2);                  // the port it was sent to (ours)
+    for (int i = 0; i < 6; i++) d->mac[i] = f[6 + i];
+    for (int i = 0; i < 4; i++) d->ip[i] = ip[12 + i];
+    for (unsigned i = 0; i < plen; i++) d->data[i] = udp[8 + i];
+    dq_tail = (dq_tail + 1) % DQ; } }
 
 // drain the RX used ring, handling each frame, re-posting its buffer.
 static void net_poll(void) {
@@ -238,10 +278,45 @@ static void net_poll(void) {
   __sync_synchronize();
   outw(nic.io + V_QUEUE_NOTIFY, 0); }
 
-// the blocking echo server (the `netserve` nif): poll, then hlt until the next tick.
+// --- the k_sources[] NIC socket methods (slot wired in kmain) ----------------
+// ready: a datagram is buffered (feeds ai_ready / ai_wait_fds).
+bool nic_ready(int fd) { (void) fd; net_poll(); return cur_open || dq_head != dq_tail; }
+
+// getc: next byte of the head datagram; -1 once at its end (so slurp reads one),
+// then BLOCK for the next datagram (the keyboard model -- never a terminal EOF).
+int nic_getc(int fd) {
+  (void) fd;
+  if (!cur_open) {
+    while (dq_head == dq_tail) { net_poll(); asm volatile ("hlt"); }
+    cur_pos = 0; cur_open = true;
+    struct dgram *d = &dgq[dq_head];
+    reply.dport = d->peer_port; reply.sport = d->our_port;
+    for (int i = 0; i < 6; i++) reply.mac[i] = d->mac[i];
+    for (int i = 0; i < 4; i++) reply.ip[i] = d->ip[i]; }
+  struct dgram *d = &dgq[dq_head];
+  if (cur_pos < d->len) return d->data[cur_pos++];
+  cur_open = false; dq_head = (dq_head + 1) % DQ;     // end of datagram
+  return -1; }
+
+// putc/flush: buffer reply bytes, then send them as one datagram to the peer of
+// the datagram nic_getc is currently reading.
+void nic_putc(int fd, int c) { (void) fd; if (txn < DG_MAX) txq[txn++] = (uint8_t) c; }
+void nic_flush(int fd) {
+  (void) fd;
+  if (txn) nic_send_to(reply.mac, reply.ip, reply.dport, reply.sport, txq, txn);
+  txn = 0; }
+
+// the blocking C echo server (the `netserve` nif): drain the datagram queue,
+// bouncing each payload back to its sender, then hlt until the next tick.
 void net_serve(void) {
   np_s("net: echo server on 10.0.2.15 (polled)\r\n");
-  for (;;) { net_poll(); asm volatile ("hlt"); } }
+  for (;;) {
+    net_poll();
+    while (dq_head != dq_tail) {
+      struct dgram *d = &dgq[dq_head];
+      nic_send_to(d->mac, d->ip, d->peer_port, d->our_port, d->data, d->len);
+      dq_head = (dq_head + 1) % DQ; }
+    asm volatile ("hlt"); } }
 
 // Bring the NIC up: PCI enum -> status/feature handshake -> RX+TX rings ->
 // DRIVER_OK -> read MAC. A no-op (one log line) when no device is present.

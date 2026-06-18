@@ -293,6 +293,12 @@ endif
 ifdef KSHIP
 ksuf := -kship
 endif
+# NETECHO=1 boots into an ai-driven UDP echo server over the `nic` port (stage 2e
+# gate): the agent perceives a datagram with (slurp nic) and replies with
+# (fputs nic d)(fflush nic). Own suffix; normal kernel unchanged.
+ifdef NETECHO
+ksuf := -netecho
+endif
 
 # Cross toolchain defaults to clang + lld (one multi-target pair covers every
 # arch). Override for a GCC cross toolchain, e.g.
@@ -341,6 +347,9 @@ endif
 # -DKSHIP to select the boot driver in kmain.c.
 ifdef KSHIP
 kcppflags += -DKSHIP
+endif
+ifdef NETECHO
+kcppflags += -DNETECHO
 endif
 
 ifeq ($(KCC_IS_CLANG),1)

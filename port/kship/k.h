@@ -32,6 +32,15 @@ void net_init(void);
 // Blocks (hlt between polls).
 void net_serve(void);
 
+// The k_sources[] NIC-socket methods (stage 2e): a UDP datagram queue exposed as
+// a byte stream so ai `(slurp nic)` perceives one datagram and `(fputs nic r)
+// (fflush nic)` replies to its sender. kmain wires these into a k_sources slot +
+// a port bound to the `nic` global.
+int  nic_getc(int fd);
+void nic_putc(int fd, int c);
+void nic_flush(int fd);
+bool nic_ready(int fd);
+
 #define k_boot_ram_max 64
 
 struct k_boot {

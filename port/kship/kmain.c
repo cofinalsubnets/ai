@@ -168,6 +168,9 @@ static void serial_flush(int fd) { (void) fd; fbdraw(); }
 static struct k_source k_sources[k_sources_max] = {
   [0] = { .getc = kb_getc,      .ready = kb_ready    },
   [1] = { .putc = serial_putc1, .flush = serial_flush },
+  // Slot 2: the virtio-net UDP socket (net.c). getc hands one received datagram
+  // to ai, putc/flush send a reply, ready polls the RX queue (feeds ai_wait_fds).
+  [2] = { .getc = nic_getc, .putc = nic_putc, .flush = nic_flush, .ready = nic_ready },
 };
 
 // Generic kernel dispatchers. ungetc/eof touch only header fields so
@@ -216,6 +219,9 @@ struct ai_io ai_stdout = { .ap = lvm_port_io,
 // No separate error stream; route err to the same fd as out (the console).
 struct ai_io ai_stderr = { .ap = lvm_port_io,
                          .fd = putcharm(1), .ungetc_buf = putcharm(EOF), .eof_seen = putcharm(false), };
+// The NIC socket port (fd 2 -> k_sources[2]); bound to the ai global `nic` below.
+static struct ai_io ai_nic = { .ap = lvm_port_io,
+                         .fd = putcharm(2), .ungetc_buf = putcharm(EOF), .eof_seen = putcharm(false), };
 
 struct ai_port_vt const ai_fd_port_vt = { fd_getc, fd_ungetc, fd_eof, fd_putc, fd_flush };
 
@@ -489,7 +495,8 @@ static struct ai_def defs[] = {
   {"exit", (intptr_t) nif_exit},
 #endif
   {"color", (intptr_t) nif_color},
-  {"netserve", (intptr_t) nif_net} };   // `net` is taken (the prel content measure)
+  {"netserve", (intptr_t) nif_net},     // `net` is taken (the prel content measure)
+  {"nic", (intptr_t) &ai_nic} };        // the virtio-net socket as an ai port
 
 #ifdef K_TEST
 // The whole test corpus, baked VERBATIM to a C string literal by tools/lcatv.l
@@ -575,6 +582,11 @@ void kmain(void) {
  // agent build: drink the baked `kship-src` through zevs (the same stream shell),
  // running the heartbeat loop on the real timer tick, then drop into the shell.
  "(: _ (zevs (sip ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (shell 0))"
+#elif defined(NETECHO)
+ // net-echo build (stage 2e gate): the agent perceives one UDP datagram off the
+ // `nic` port (slurp), then acts -- writes it back to its sender (fputs+fflush).
+ // an ai-driven echo server, no C echo loop. boots straight into it.
+ "(: (kecho _) (: d (slurp nic) _ (fputs nic d) _ (fflush nic) (kecho 0)) (kecho 0))"
 #else
  "(shell 0)"
 #endif
