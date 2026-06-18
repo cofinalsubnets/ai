@@ -92,10 +92,10 @@
 ; by design: the fresh point is materially empty -- a distinct NOTHING.)
 (: same? (\ x (= (? (nil? x) 1 0) (? (= 0 (sat x)) 1 0)))
 (assert
- (nil? "") (nil? (tablet 0)) (nil? (buf 0)) (nil? @0) (nil? 0) (nil? ())  ; empties/zeros are false
+ (nil? "") (nil? (tablet 0)) (nil? (cask 0)) (nil? @0) (nil? 0) (nil? ())  ; empties/zeros are false
  !!"x" !!#(1 2) !(mint 0)                                        ; present values are true; the mint is nothing
  !!cap !!out !!(\ x x)                                                ; functions/ports too
- (same? "") (same? (tablet 0)) (same? (buf 0)) (same? @0) (same? 0)
+ (same? "") (same? (tablet 0)) (same? (cask 0)) (same? @0) (same? 0)
  (same? "x") (same? #(1 2)) (same? (mint 0)) (same? cap) (same? out)
  (same? ~(0 0)) (same? ~(0.3 0.4)) (same? @(0 0)) (same? @(0.1 0))
  (same? (100 2)) (same? 'abc) (same? '(1 2))))

@@ -2,7 +2,7 @@
 ; executable? i.e. can the bytes of a `toast` (on the kernel, a plain heap copy)
 ; be jumped into and run?
 ;
-; It builds a buf holding six AMD64 bytes --
+; It builds a cask holding six AMD64 bytes --
 ;
 ;     B8 2A 00 00 00   mov eax, 42      ; imm32 little-endian = 42 (0x2A)
 ;     C3               ret              ; return; eax/rax = 42
@@ -16,7 +16,7 @@
 ;   * prints 42  => data memory is ALREADY executable. The trampoline IS the
 ;                   whole substrate; a love glaze is an afternoon away.
 ;   * faults     => HHDM is mapped no-execute. The substrate also needs a
-;     (hang /     clear-the-NX-bit step in the kernel's page tables before a buf
+;     (hang /     clear-the-NX-bit step in the kernel's page tables before a cask
 ;      reset)     can be run. Bounded work, but a real step up.
 ;
 ; REQUIRES the eat + toast nifs wired into ai.c first. Until then `eat`/`toast`
@@ -26,9 +26,9 @@
 ; kernel (the kernel has no signal barrier), which would take `make test` down with
 ; it. Run it standalone.
 
-(: b (buf 6)
+(: b (cask 6)
    _ (pin b 0 184)              ; B8   mov eax, imm32
-   _ (pin b 1 42)               ; 2A   imm32 = 42   (bytes 2..4 stay 0 from the zeroed buf)
+   _ (pin b 1 42)               ; 2A   imm32 = 42   (bytes 2..4 stay 0 from the zeroed cask)
    _ (pin b 5 195)              ; C3   ret
    r (eat 1 (toast b) 0)        ; bake the bytes into a toast, eat it (1 arg, ignored)
    _ (dot r))                   ; 42 on success

@@ -1,49 +1,49 @@
-; buf (Phase 3): a mutable flat byte string. One constructor (buf); pin /
+; cask (Phase 3): a mutable flat byte string. One constructor (cask); pin /
 ; get / put fold into the generic ops (get/put dispatch on the value's kind);
-; blit blits a byte range from a string or buf into a buf. Bytes are data, so
+; pour blits a byte range from a string or cask into a cask. Bytes are data, so
 ; a stored byte reads back as its unsigned value 0..255. Equality is by
-; identity -- a buf is mutable, so two distinct bufs never compare =.
+; identity -- a cask is mutable, so two distinct bufs never compare =.
 
 (assert
- ; --- construction + length, and what a buf is NOT ---
- (= 4 (tally (buf 4)))   ; the COUNT is tally now
- (= 0 (sat (buf 4)))     ; a zeroed buf NETS nothing: hot chars measure by content
- (= 0 (tally (buf 0)))
- !(string? (buf 4))                          ; a buf is not a string
- !(fix? (buf 4))                          ; ...nor a number
+ ; --- construction + length, and what a cask is NOT ---
+ (= 4 (tally (cask 4)))   ; the COUNT is tally now
+ (= 0 (sat (cask 4)))     ; a zeroed cask NETS nothing: hot chars measure by content
+ (= 0 (tally (cask 0)))
+ !(string? (cask 4))                          ; a cask is not a string
+ !(fix? (cask 4))                          ; ...nor a number
 
- ; --- a fresh buf is zeroed ---
- (: b (buf 4) (= 0 (+ (peep b 0 0) (peep b 1 0) (peep b 2 0) (peep b 3 0))))
+ ; --- a fresh cask is zeroed ---
+ (: b (cask 4) (= 0 (+ (peep b 0 0) (peep b 1 0) (peep b 2 0) (peep b 3 0))))
 
- ; --- put stores a byte, get reads it back; put returns the buf ---
- (: b (buf 3) _ (pin b 0 65) _ (pin b 1 66) _ (pin b 2 67)
+ ; --- put stores a byte, get reads it back; put returns the cask ---
+ (: b (cask 3) _ (pin b 0 65) _ (pin b 1 66) _ (pin b 2 67)
     (&& (= 65 (peep b 0 0)) (= 66 (peep b 1 0)) (= 67 (peep b 2 0))))
- (: b (buf 1) (= b (pin b 0 9)))             ; put returns the buf
+ (: b (cask 1) (= b (pin b 0 9)))             ; put returns the cask
 
  ; --- bytes are unsigned 0..255; a store keeps only the low byte ---
- (: b (buf 1) _ (pin b 0 255) (= 255 (peep b 0 0)))   ; 0xff reads unsigned
- (: b (buf 1) _ (pin b 0 257) (= 1 (peep b 0 0)))     ; 257 & 255 = 1
+ (: b (cask 1) _ (pin b 0 255) (= 255 (peep b 0 0)))   ; 0xff reads unsigned
+ (: b (cask 1) _ (pin b 0 257) (= 1 (peep b 0 0)))     ; 257 & 255 = 1
 
  ; --- out-of-range / misuse is a silent no-op (no crash) ---
- (: b (buf 2) _ (pin b 5 1) _ (pin b -1 1) (= 0 (+ (peep b 0 0) (peep b 1 0))))
- (= 0 (peep (buf 2) 9 0))                     ; out-of-range get -> default
+ (: b (cask 2) _ (pin b 5 1) _ (pin b -1 1) (= 0 (+ (peep b 0 0) (peep b 1 0))))
+ (= 0 (peep (cask 2) 9 0))                     ; out-of-range get -> default
 
- ; --- blit from a string source ---
- (: b (buf 4) _ (blit b 0 "ABCD" 0 4)
+ ; --- pour from a string source ---
+ (: b (cask 4) _ (pour b 0 "ABCD" 0 4)
     (&& (= 65 (peep b 0 0)) (= 68 (peep b 3 0))))
- (: b (buf 4) _ (blit b 1 "ABCD" 2 2)       ; copy "CD" to offset 1
+ (: b (cask 4) _ (pour b 1 "ABCD" 2 2)       ; copy "CD" to offset 1
     (&& (= 0 (peep b 0 0)) (= 67 (peep b 1 0)) (= 68 (peep b 2 0))))
- (: b (buf 2) (= b (blit b 0 "XY" 0 2)))    ; blit returns dst
+ (: b (cask 2) (= b (pour b 0 "XY" 0 2)))    ; pour returns dst
 
- ; --- blit buf -> buf ---
- (: s (buf 3) d (buf 3)
+ ; --- pour cask -> cask ---
+ (: s (cask 3) d (cask 3)
     _ (pin s 0 7) _ (pin s 1 8) _ (pin s 2 9)
-    _ (blit d 0 s 0 3)
+    _ (pour d 0 s 0 3)
     (&& (= 7 (peep d 0 0)) (= 9 (peep d 2 0))))
 
- ; --- blit clamps an oversized count rather than trampling the heap ---
- (: b (buf 2) _ (blit b 0 "ABCD" 0 100) (= 2 (tally b)))
+ ; --- pour clamps an oversized count rather than trampling the heap ---
+ (: b (cask 2) _ (pour b 0 "ABCD" 0 100) (= 2 (tally b)))
 
- ; --- equality is by identity (a buf is mutable) ---
- (: b (buf 2) (= b b))                       ; a buf equals itself
- !(= (buf 2) (buf 2)))                 ; distinct bufs never compare =
+ ; --- equality is by identity (a cask is mutable) ---
+ (: b (cask 2) (= b b))                       ; a cask equals itself
+ !(= (cask 2) (cask 2)))                 ; distinct bufs never compare =

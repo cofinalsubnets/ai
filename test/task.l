@@ -177,9 +177,9 @@
  ; (3 3 3 3) (see g/repl.l do_eval). Here a worker squares a ~200k-bit number
  ; once; a ticker peer counts how often it gets scheduled mid-multiply. Before
  ; chunking, the worker held the CPU for the whole product and the ticker (capped
- ; so it can't wrap the 1-byte buf) never ran -- post-chunking it runs many times.
+ ; so it can't wrap the 1-byte cask) never ran -- post-chunking it runs many times.
  (: big (200000 2)
-    ticks (buf 1)
+    ticks (cask 1)
     w (spawn (\ _ (* big big)) 0)
     t (spawn (\ _ (: (go _) (? (done? w) 0
                                (: c (peep ticks 0 0)

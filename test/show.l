@@ -48,14 +48,14 @@
   (string? (show '(1 2 3)))
   (string? (show (tablet 0)))
 
-  ; buffer growth: a 200-element list far exceeds the 32-byte initial buf,
+  ; buffer growth: a 200-element list far exceeds the 32-byte initial cask,
   ; forcing several doublings inside to_putc.
   (: (rng n) (? (= n 0) 0 (link n (rng (- n 1))))
      s (show (rng 200))
      ; 200 numbers + 199 separators + 2 parens = at least 400 chars
    (do (string? s) (< 400 (tally s))))
 
-  ; GC stress: 500 inspects in a loop. Each call alloc'd a heap port + buf,
+  ; GC stress: 500 inspects in a loop. Each call alloc'd a heap port + cask,
   ; provoking many GCs. Final call must still produce the expected output.
   (: (loop n) (? (= n 0) (show (link 1 (link 2 (link 3 0))))
                  (do (show "stress") (loop (- n 1))))

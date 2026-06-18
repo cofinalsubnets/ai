@@ -27,19 +27,19 @@
 ; numeral acts as the zero numeral, a float ceils, a complex/array its saturated net.
 (assert
  (= 8 (3 2.0))                                ; float operand: 2.0 ** 3 = 8.0, = bridges to 8
- (= 9 (2.0 3))                                ; float operator: 3 ** 2.0 via real pow = 9.0
+ (= 9 (2.0 3))                                ; float operator: 3 ** 2.0 via real power = 9.0
  (= 13 ((2.5 (+ 1)) 10))                      ; float operator on a fn: ($ 2.5)=3 compositions
  (= 10 (((- 0 2.5) (+ 1)) 10))                ; saturation first: ($ -2.5)=0 -> the zero numeral
  (= 10 ((-3 (+ 1)) 10)) (= 1 (-3 (+ 1)))      ; (-3 f) = (0 f) = 1 -- negatives have no church content
  (= 10 ((0 (+ 1)) 10))                        ; (0 f) = 1 = identity numeral -> 10 unchanged
  (= 1 (0 'anything))                          ; 0 is const-1: (0 x) = 1 for every x
- (= 1 ((buf 4) 'anything))                 ; opaque handles (buf/port) behave as 0 too
+ (= 1 ((cask 4) 'anything))                 ; opaque handles (cask/port) behave as 0 too
  (aall (= (2 (arr 0 '(3) '(2 3 4))) (arr 0 '(3) '(4 9 16))))  ; array operand: elementwise ** broadcast
- (aall (= ((arr 0 '(3) '(2 3 4)) 5) (arr 0.0 '(3) '(25.0 125.0 625.0))))  ; array OPERATOR: 5 ** [2 3 4] elementwise (vmap2 pow)
+ (aall (= ((arr 0 '(3) '(2 3 4)) 5) (arr 0.0 '(3) '(25.0 125.0 625.0))))  ; array OPERATOR: 5 ** [2 3 4] elementwise (vmap2 power)
  (= 15 (((arr 0 '(2) '(2 3)) (+ 1)) 10))   ; array operator on a fn: compose ($ [2 3]) = 2+3 = 5, the net sum
  (= 15 ((~(3 4) (+ 1)) 10))               ; complex operator on a fn: compose ($ ~(3 4)) = |3+4i| = 5
  (= 10 ((~(-3 4) (+ 1)) 10))              ; ... but a complex sorting negative saturates to 0
- (twin? (~(0 1) 5))                       ; complex operator on a number -> complex pow (5^i), no longer fenced
+ (twin? (~(0 1) 5))                       ; complex operator on a number -> complex power (5^i), no longer fenced
  (< (abs (- 1 (abs (~(0 1) 5)))) 0.0001)  ; |5^i| = 1 exactly (w^z = exp(z Log w))
  (< (abs (im (~(0 1) ~(0 1)))) 0.0001)) ; i^i = e^(-pi/2) is real
 ; basic arithmetic

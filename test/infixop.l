@@ -50,7 +50,7 @@
 (: p (sip '(49 32 43)) (assert (1 = (read p 99)) ('+ = (read p 99))))  ; "1 +" -> 1, +
 
 ; extensible with a plain pin; cleaned up after
-(: ** pow)
+(: ** power)
 (pin in-tbl '** 2)
 (assert (8.0 = (2 ** 3)) (512.0 = (2 ** 3 ** 2)))  ; right-assoc: 2^(3^2)
 (pull in-tbl '** 0)
@@ -62,7 +62,7 @@
  (20 = (: t #(1 10) _ (t <- 2 20) (t -> 2 0)))   ; pin then peep, infix
  (7 = (((tablet 0) <- 'k 7) 'k))                        ; <- returns the collection
  (9 = (#(1 10) -> 2 9))                          ; -> falls back to the default
- (65 = (: b (buf 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
+ (65 = (: b (cask 1) _ (b <- 0 65) (b -> 0 0)))  ; bufs take the same accessors
  ('pin = (cap (peep operators '<- 0)))  ; the table entries are (name . arity) aliases
  (3 = (cup (peep operators '-> 0)))
  (nom? '<-) (30 = ((->) #(3 30) 3 0))            ; escaped, -> is still peep-as-a-value

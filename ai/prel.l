@@ -94,16 +94,16 @@
    ; (e.g. (capped k)) becomes the result directly -- no thunk, no allocation on the
    ; hot num-ap path; the only duplication is the trivial, identical scare.
    (apover k) (< (peep apcap 0 0) k)
-   ; x ** n across the whole tower. array exponent -> elementwise pow (broadcasts
+   ; x ** n across the whole tower. array exponent -> elementwise power (broadcasts
    ; via the vmap2 engine, float result); integer exponent -> exact squaring, with
    ; a NEGATIVE integer giving the reciprocal power (so (-1 x) == (/ 1 x) and
-   ; (sqrt x) == ((/ 1 2) x)); otherwise pow, which carries a complex lane
+   ; (sqrt x) == ((/ 1 2) x)); otherwise power, which carries a complex lane
    ; (w^z = exp(z Log w)) and a real lane.
-   (powg x n) (? (set? n) (pow x n)
+   (powg x n) (? (set? n) (power x n)
                  (whole? n) (: m (? (< n 0) (- 0 n) n)
                              (? (apover m) (scare 'apcap m)
                                 (< n 0) (/ 1 (ipow x m)) (ipow x m)))
-                 (pow x n))
+                 (power x n))
    ; Church-numeral application generalized across the whole tower. n is the
    ; operator (the numeral), x the operand. numeric operand -> x ** n. non-numeric
    ; operand (a function) -> compose ($ n) times: saturation reduces ANY numeral to

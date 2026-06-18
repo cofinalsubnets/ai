@@ -94,9 +94,9 @@
  (= 'miss (peep (pin (tablet 0) B100 'hit) (+ B100 1) 'miss))
 
  ; --- prel ** / gcd / modpow: exact across the tower via * / % ---
- ; (`**` is exact-integer power; the float `pow` nif is tested in math.l)
+ ; (`**` is exact-integer power; the float `power` nif is tested in math.l)
  (= 8 (3 2))                           ; small ints stay fixnums
- (fix? (3 2))                          ; ...and stay integers (not float pow)
+ (fix? (3 2))                          ; ...and stay integers (not float power)
  (= B100 (100 2))                      ; promotes to a bignum
  (= (bpow2 200) (200 2))
  (= 1 (0 999))                         ; e <= 0 -> 1

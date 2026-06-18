@@ -60,14 +60,14 @@
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
 
 ; --- types & predicates --- storage: fix? big? full? gem? twin? set? string? nom? two? tab?;
-; derived constellation? whole? atom?; lit? = presence (any heap value); hot? names the buf/port zoo.
+; derived constellation? whole? atom?; lit? = presence (any heap value); hot? names the cask/port zoo.
 (assert
  (fix? 5) (two? '(1 2)) (string? "hi") (nom? 'x) (lit? cap) (tab? #(1 2))
  (big? (100 2)) ((? wint full? big?) (62 2)) (gem? 1.5) (twin? i) (set? @(1 2 3))
  (constellation? 1.5) (constellation? i) (constellation? (62 2)) (whole? (62 2)) (atom? 'x) !(atom? '(1))
- (hot? (buf 4)) (hot? out) (hot? (sip '(104)))   ; the hot zoo, named
+ (hot? (cask 4)) (hot? out) (hot? (sip '(104)))   ; the hot zoo, named
  !(hot? #()) !(hot? cap) !(hot? 5) !(hot? "s")   ; maps/functions/data are not hots
- (lit? (buf 4)) (lit? '(1)) (lit? "s") !(lit? 5) ; the lit?-spans-bands pin: lit = any heap value
+ (lit? (cask 4)) (lit? '(1)) (lit? "s") !(lit? 5) ; the lit?-spans-bands pin: lit = any heap value
  (1 = $cap) (1 = $out) (1 = $(sip 0))            ; tops and ports net 1: present, drained or not
  (fix? (: p (spawn (\ x x) 0) _ (wait p) p))  ; a task id is a number, not a handle
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
@@ -126,15 +126,15 @@
  !("ab" * -3) ("ababab" = "ab" * 2.5) !('(1 2) * 0))
 
 ; --- numeric functions --- abs int (type-aware); constants e pi i; gcd modpow; the only
-; transcendental nifs are pow sine cosine log; power/sqrt/exp/nth-root/tan/atan derived from
+; transcendental nifs are power sine cosine log; power/sqrt/exp/nth-root/tan/atan derived from
 ; numerals + complex (sqrt is total: ((/ 1 2) -1) = i).
 (assert
  (5 = (abs -5)) (fix? (abs -5)) (5.0 = (abs ~(3 4))) (2 = (int 2.9))
  (1024 = (10 2)) (21 = (gcd 1071 462)) (976371285 = (modpow 2 100 1000000007))
- (2.0 = ((/ 1 2) 4)) (1024.0 = (pow 2 10)) (1 = (0 e)) (2.718281828459045 = e))
+ (2.0 = ((/ 1 2) 4)) (1024.0 = (power 2 10)) (1 = (0 e)) (2.718281828459045 = e))
 
 ; --- a few identities --- tetration is the tower with one base; i*i = -1; euler holds in the
-; EXACT direction ((log -1) = i * pi -- `=` is exact, so e^(i*pi) does not hold forward); pow's
+; EXACT direction ((log -1) = i * pi -- `=` is exact, so e^(i*pi) does not hold forward); power's
 ; principal root is exact, ((/ 1 2) -1) = i on the nose. (only bit-exact claims on every target.)
 (assert
  (27 = (3 3)) (7625597484987 = (3 3 3)) (16 = (2 2 2)) (65536 = (2 2 2 2))   ; tetration
@@ -142,7 +142,7 @@
  ((log -1) = i * pi) ((log i) = i * pi / 2)                                  ; euler, in the exact direction
  (twin? (log -1)) (gem? (log 2)) (twin? (log ~(2 3)))                          ; log widens only when it must
  (i = ((/ 1 2) -1)) (~(0 2) = ((/ 1 2) -4))                                  ; sqrt of a negative: principal, exact
- (-8 = (pow -2 3)) (twin? ((/ 1 3) -8))                                       ; integer powers stay real; odd roots go principal
+ (-8 = (power -2 3)) (twin? ((/ 1 3) -8))                                       ; integer powers stay real; odd roots go principal
  (0.0 = (sine 0) / (cosine 0)) (gem? (sine 0)))                                   ; tan 0 = 0
 
 ; --- complex --- a scalar at tier C; the `~` sigil: ~(re im) builds (twin re im), a bare ~x
@@ -236,24 +236,24 @@
 
 ; --- the EMPTY SPELLINGS (the nothing surface) --- each kind's empty by its sigil: () the
 ; chain (the zero-point, DISTINCT from the number 0), "" the string, @() the array, #() the
-; map, ~(0 0) the zero complex, (buf 0) the buffer -- all net 0 -> green -> false. spelled via
+; map, ~(0 0) the zero complex, (cask 0) the buffer -- all net 0 -> green -> false. spelled via
 ; 0/() too: @()/#() are the EMPTIES (the reader emits (iota 0)/(tablet 0)); @0/#0 wrap the
 ; VALUE 0 (a 1-cell -> the scalar 0, a box). every nothing is a MASK; () the bare-ish floor.
 (assert
- !() !0 !"" !@() !#() !~(0 0) !(buf 0)           ; every empty is false (green)
+ !() !0 !"" !@() !#() !~(0 0) !(cask 0)           ; every empty is false (green)
  (nil? ()) (nil? 0) !(= () 0) !(id? () 0)        ; () (zero-point) and 0 (number) are DISTINCT, both nothing
  ("@()" = (show @())) (1 = (arank @())) (0 = (alen @())) (Star = (atype @()))  ; @() the empty array, round-trips
  (tab? #()) (0 = $#()) ("(tablet 0)" = (show #()))   ; #() the empty map
  (0 = @0) (nil? (arank @0))                      ; @0 wraps the VALUE 0 -> the scalar 0 (a 1-cell demotes)
  (tab? #0) (1 = $#0) !!#0)                       ; #0 wraps the VALUE 0 -> a box (present)
 
-; --- buffers --- (buf n) mutable zeroed bytes; peep/pin a byte 0..255; `$` nets the charms
-; (a zeroed buf is nothing); blit; identity equality.
+; --- buffers --- (cask n) mutable zeroed bytes; peep/pin a byte 0..255; `$` nets the charms
+; (a zeroed cask is nothing); pour; identity equality.
 (assert
- (: b (buf 3) _ (pin b 0 65) (65 = (peep b 0 0))) (0 = $(buf 4)) (4 = (tally (buf 4)))
- !(buf 3) (65 = (: b (buf 1) _ (pin b 0 65) $b))  ; zeroed -> nothing; bytes are charms (lockstep at bufs)
- (: b (buf 1) _ (pin b 0 257) (1 = (peep b 0 0))) (: b (buf 4) _ (blit b 0 "ABCD" 0 4) (68 = (peep b 3 0)))
- !((buf 2) = (buf 2)))
+ (: b (cask 3) _ (pin b 0 65) (65 = (peep b 0 0))) (0 = $(cask 4)) (4 = (tally (cask 4)))
+ !(cask 3) (65 = (: b (cask 1) _ (pin b 0 65) $b))  ; zeroed -> nothing; bytes are charms (lockstep at bufs)
+ (: b (cask 1) _ (pin b 0 257) (1 = (peep b 0 0))) (: b (cask 4) _ (pour b 0 "ABCD" 0 4) (68 = (peep b 3 0)))
+ !((cask 2) = (cask 2)))
 
 ; --- reader operators --- structural, environment-free reading; sigils factored at COMPILE
 ; time by opfix against the `operators` table. the VALENCE LAW: glued is monadic, spaced is
@@ -318,4 +318,4 @@
 
 ; --- odds & ends --- show renders a value as its reparsable printed form; (clock t) is ms since
 ; t and (gauge 0) reports a VM stat; an opaque handle acts as a constant function.
-(assert (string? (show @(1 2 3))) (fix? (clock 0)) (1 = ((buf 4) 'x)))
+(assert (string? (show @(1 2 3))) (fix? (clock 0)) (1 = ((cask 4) 'x)))

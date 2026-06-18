@@ -644,12 +644,12 @@ lvm_t lvm_fault;
  _(nif_put, "pin", s3(lvm_put)) _(nif_pull, "pull", s3(lvm_pull))\
  _(nif_table, "tablet", s1(lvm_table)) _(nif_keys, "keys", s1(lvm_keys))\
  _(nif_dig, "dig", s1(lvm_dig))\
- _(nif_bufnew, "buf", s1(lvm_bufnew)) _(nif_bcopy, "blit", s5(lvm_bcopy))\
+ _(nif_bufnew, "cask", s1(lvm_bufnew)) _(nif_bcopy, "pour", s5(lvm_bcopy))\
  _(nif_eat1, "eat1", s2(lvm_eat1)) _(nif_eat2, "eat2", s3(lvm_eat2)) _(nif_toast, "toast", s1(lvm_toast))\
  _(nif_chainp, "two?", s1(lvm_chainp)) _(nif_strp, "string?", s1(lvm_strp))\
  _(nif_real, "gem", s1(lvm_real)) _(nif_flop, "gem?", s1(lvm_flop))\
  _(nif_sin, "sine", s1(lvm_sin)) _(nif_cos, "cosine", s1(lvm_cos))\
- _(nif_log, "log", s1(lvm_log)) _(nif_pow, "pow", s2(lvm_pow))\
+ _(nif_log, "log", s1(lvm_log)) _(nif_pow, "power", s2(lvm_pow))\
  _(nif_cplx, "twin", s2(lvm_cplx)) _(nif_Cp, "twin?", s1(lvm_Cp))\
  _(nif_re, "re", s1(lvm_re)) _(nif_im, "im", s1(lvm_im)) _(nif_conj, "conj", s1(lvm_conj))\
  _(nif_abs, "abs", s1(lvm_abs)) _(nif_arg, "arg", s1(lvm_carg))\
@@ -754,7 +754,7 @@ lvm(lvm_absent2) { return Sp[1] = nil, Sp += 1, Ip++, Continue(); }        // 2-
 static union u const nif_absent[]      = {{lvm_absent}, {lvm_ret0}};
 static union u const nif_absent_open[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_absent2}, {lvm_ret0}};
 static struct ai_def const frontend_defaults[] = {
- {"exit", (word) nif_absent}, {"open", (word) nif_absent_open}, {"close", (word) nif_absent},
+ {"nap", (word) nif_absent}, {"open", (word) nif_absent_open}, {"close", (word) nif_absent},
  {"run", (word) nif_absent},  {"getenv", (word) nif_absent} };
 
 // reverse-lookup a function value against the builtin table -> its source name,

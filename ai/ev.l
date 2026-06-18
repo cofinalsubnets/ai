@@ -43,7 +43,7 @@
             fix? nom? two? tab? lit? string? nil? gem? twin? atom?
             snip string
             re im conj arg gem twin
-            sine cosine log pow))
+            sine cosine log power))
    pureset (foldl (\ t s (: v (bag s) (? v (pin t v 1) t))) (tablet 0) names)
    (add t s) (: v (bag s)
     (? (fix? v) t

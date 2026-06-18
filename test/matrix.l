@@ -81,7 +81,7 @@
  (= 7 (((+) 3) 4))                            ; KHot: a nif / partial application
  (= 10 (mx-map 1))   (= 20 (mx-map 2))        ; KHot: a map looks its key up
  (nil? (mx-map 9))                            ; ...missing key -> nil
- (= 1 ((buf 4) 'x)))                       ; opaque handle (buf) behaves as 0
+ (= 1 ((cask 4) 'x)))                       ; opaque handle (cask) behaves as 0
 
 ; ============================================================================
 ; `+` matrix (g_add_mx): the FINE within-category cells symadd.l folds together

@@ -11,6 +11,6 @@
      (? f (do
       (putx (tally f)) (puts " failed:") (putc 10)
       (each f (\ x (do (puts "  ") (putx x) (putc 10))))
-      (exit 1)
+      (nap 1)
       ))
      ))
