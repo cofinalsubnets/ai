@@ -10,8 +10,8 @@
 
   (ff q p) (?
    (nom? p) (pin t p q)
-   (two? p) (: _ (ff (co cap q) (cap p))
-                (ff (co cup q) (cup p))))
+   (two? p) (: _ (ff (compose cap q) (cap p))
+                (ff (compose cup q) (cup p))))
   _ (ff id p)
   ks (keys t)
 

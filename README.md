@@ -36,7 +36,7 @@ facing basement, which you could factor as `ml * scheme`
 left-associative applicative curried untyped lambda calculus,
 allowing applicative order to vary at will. this is sound
 excluding side effects because every operator is total and
-every thread is co-operatively pre-empted regardless of user
+every thread is compose-operatively pre-empted regardless of user
 program behavior.
 
 features

@@ -66,7 +66,7 @@
    (cntle a b) (: ca (peep cnt a 0) cb (peep cnt b 0)    ; order a scope's bindings: count desc,
        (? (> ca cb) 1 (< ca cb) 0                      ; then length desc, then name -- deterministic
           (: la (tally (string a)) lb (tally (string b)) (? (> la lb) 1 (< la lb) 0 (< a b)))))
-   ; assign fresh names to a scope's co-live bindings (count order). a frozen (tainted)
+   ; assign fresh names to a scope's compose-live bindings (count order). a frozen (tainted)
    ; or can't-shrink binding is kept (mapped to itself, no name spent). -> (env-frame . used').
    (assign syms used) ((: (g ss m u) (? (two? ss)
          (: s (cap ss) nm (pickname u)

@@ -15,10 +15,10 @@
    zero? nil?                                  ; zero? aliases nil? (the net-to-zero test)
    (one? x) (= x (cap x))
    (atom? x) (nil? (two? x))
-   (co f g) (\ x (f (g x)))
+   (compose f g) (\ x (f (g x)))
    (names _ ) (keys bag)
-   caap (co cap cap) caup (co cap cup) ;; FIXME emit pure code -- combine like operations and metaprogram a concrete thread for each definition
-   cuap (co cup cap) cuup (co cup cup))
+   caap (compose cap cap) caup (compose cap cup) ;; FIXME emit pure code -- combine like operations and metaprogram a concrete thread for each definition
+   cuap (compose cup cap) cuup (compose cup cup))
 ; array element-kind codes (enum g_vec_type), named for the tier spine:
 ; Z integers, R reals, C packed complex, O objects -- one word per element.
 ; the imaginary unit: complex values are written e.g. (+ 2 (* 3 i))
@@ -40,10 +40,10 @@
 ; functional bounded draw: (value . st') with value in [0,n), riding rand-next
 ; (full-width draw) + modulo. The global-stream analogue is the `rand` nif.
 (: (randint st n) (: r (rand-next st) (link (% (cap r) n) (cup r)))) ;; FIXME check interface & link
-(: caaap (co cap caap) caaup (co cap caup) ;; FIXME group above
-   cauap (co cap cuap) cauup (co cap cuup)
-   cuaap (co cup caap) cuaup (co cup caup)
-   cuuap (co cup cuap) cuuup (co cup cuup))
+(: caaap (compose cap caap) caaup (compose cap caup) ;; FIXME group above
+   cauap (compose cap cuap) cauup (compose cap cuup)
+   cuaap (compose cup caap) cuaup (compose cup caup)
+   cuuap (compose cup cuap) cuuup (compose cup cuup))
 ; X link; cap/cup -- the chain's two projections, the matched pair the string diagrams bend
 ; (lineage: cap/cup <- cap/cbp <- car/cdr) -- and the caap..cuuup compounds above are the
 ; primitives; the older names are gone.
@@ -181,10 +181,10 @@
                     (: r (sortsplit (cuup l)) (link (link (cap l) (cap r)) (link (caup l) (cup r)))))
    (msort le l) (? (atom? l) l (atom? (cup l)) l
                   (: s (sortsplit l) (merge le (msort le (cap s)) (msort le (cup s))))))
-(: catmap (co (flip foldr 0) (co cat))
+(: catmap (compose (flip foldr 0) (compose cat))
    (assq x l) (? (two? l) (? (= x (caap l)) (cap l) (assq x (cup l))))
    (lidx x) ((: (f n l) (? (two? l) (? (= x (cap l)) n (f (+ 1 n) (cup l))) -1)) 0)
-   memq (co any (=))
+   memq (compose any (=))
    (zip a b) (? (two? a) (? (two? b) (link (link (cap a) (cap b)) (zip (cup a) (cup b)))))
    rev (foldl (flip link) 0)
    (jot n) ((: (go i) (? (< i n) (link i (go (+ i 1))))) 0)

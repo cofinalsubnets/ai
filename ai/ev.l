@@ -65,8 +65,8 @@
   ; --- THE EMISSION INTERFACE (the codegen seam) --------------------------------------
   ; ana walks the analyzed form and emits code through these primitives. an EMITTER is a
   ; curried (\ k n ..): k = the continuation emitter, n = the current cell index (the
-  ; thread builds BACKWARD, poke -1 prepending). `co` (prel: (co f g x) = (f (g x)))
-  ; sequences emitters -- (co A B) emits A, then B, then k. the leaf emitters:
+  ; thread builds BACKWARD, poke -1 prepending). `compose` (prel: (compose f g x) = (f (g x)))
+  ; sequences emitters -- (compose A B) emits A, then B, then k. the leaf emitters:
   ;   kim x    -- a quote / constant            karg i  -- an arg ref at frame index i
   ;   em1 op   -- a 1-word inline vm op          em2 op x -- a 2-word op (op + operand)
   ;   kap n    -- an n-ary apply (peeps the continuation for lvm_ret -> a tail call)
@@ -194,8 +194,8 @@
   (push c k x) (: _ (pin c k (link x (c k))) x)
   (pop c k) (: x (c k) _ (pin c k (cup x)) (cap x))
   (iap c b) (: op (cap b) as (cup b)                       ; (iop op . args) -> inline the vm op
-   (? (atom? (cup as)) (co (ana c (cap as)) (em1 op))      ; one arg
-      (: s (c 'stk) k (apr2l c as) _ (pin c 'stk s) (co k (em1 op))))) ; n-ary, r2l args
+   (? (atom? (cup as)) (compose (ana c (cap as)) (em1 op))      ; one arg
+      (: s (c 'stk) k (apr2l c as) _ (pin c 'stk s) (compose k (em1 op))))) ; n-ary, r2l args
   ; falook: walk the scope chain for head's fixed arity, recorded by ale in each
   ; enclosing let's 'far map. > 0 = a multi-arg lambda sibling of that arity; 0 = a
   ; binding of that name that is NOT an n-ary-callable fixed-arity lambda (a value, a
@@ -212,16 +212,16 @@
   (apxh c b) (: nary (cap b) head (caup b) args (cuup b)
               n2 (? nary 1 (&& (nom? head) (: a (falook c head) (&& (< 1 a) (= (tally args) a)))))
               f (ana c head) s (c 'stk) _ (push c 'stk 0)
-              g (? n2 (co (apr2l c args) (kap (tally args))) (apl2r c args))
+              g (? n2 (compose (apr2l c args) (kap (tally args))) (apl2r c args))
               _ (pin c 'stk s)
-            (co f g))
+            (compose f g))
   (app c a b) (: f (ana c a)
                s (c 'stk) _ (push c 'stk 0)
                g (apl2r c b) _ (pin c 'stk s)
-             (co f g))
+             (compose f g))
  (apl2r c b) (?- id (two? b) (: f (ana c (cap b)) g (apl2r c (cup b))
-                    (co f (co (kap 1) g))))
- (apr2l c b) (?- id (two? b) (: g (apr2l c (cup b)) f (ana c (cap b)) _ (push c 'stk 0) (co g f)))
+                    (compose f (compose (kap 1) g))))
+ (apr2l c b) (?- id (two? b) (: g (apr2l c (cup b)) f (ana c (cap b)) _ (push c 'stk 0) (compose g f)))
  (kap n k m)
   (: j (k (+ 2 m))
    t (= (peek 0 j) lvm_ret)                              ; peep the continuation for ret -> tail
@@ -233,7 +233,7 @@
   ; JUMPS to the join (the cond's continuation k). the wrapper records k on the 'join
   ; stack for the duration; tojoin reads it (and inlines a ret/tap join over a dead jump).
   ; a constant test (pro folds it to a quote) picks its branch outright, no code.
-  (aco c b) (:- (: f (clauses b) (\ k n (: k2 (f (co (push c 'join) k) n) _ (pop c 'join) k2)))
+  (aco c b) (:- (: f (clauses b) (\ k n (: k2 (f (compose (push c 'join) k) n) _ (pop c 'join) k2)))
    ; tojoin: after a result, jump to the join (top of 'join) -- but fuse a ret/tap/tapn
    ; join INLINE rather than emit a jump straight to a return.
    (tojoin k n) (:
@@ -247,13 +247,13 @@
    ; branch; else emit lvm_cond -- true runs `then` + jumps to join, false falls to `rest`.
    (clauses b) (?
     (atom? b)       (kim 0)                                ; no else (wev usually supplies one)
-    (atom? (cup b)) (co (ana c (cap b)) tojoin)            ; trailing else: result, then join
+    (atom? (cup b)) (compose (ana c (cap b)) tojoin)            ; trailing else: result, then join
     (: test (ana c (cap b))
        then (ana c (caup b))
        rest (clauses (cuup b))
        (? (= kim (pro test)) (? (peek 3 test) then rest)   ; constant test -> pick a branch
         (\ x (test (\ n
-         (: k (co (push c 'alt) (rest x))                  ; k = the false branch (the rest)
+         (: k (compose (push c 'alt) (rest x))                  ; k = the false branch (the rest)
             j (then (tojoin k) (+ 2 n))                    ; true: then, jump to join, into k
             (p2 lvm_cond (pop c 'alt) j)))))))))
 
@@ -278,7 +278,7 @@
                    _ (push c 'stk 0)
                    q (apl2r c (cup (cof lfd)))
                    _ (pop c 'stk)
-                 (co p q))
+                 (compose p q))
   ; variable expression analyzer
   (ava c x)
    (: lfd (assq x (c 'lam))
