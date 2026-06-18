@@ -9,7 +9,7 @@ emcc = $(CCACHE) $(EMCC)
 o = ../out/wasm
 
 # g.c was split into per-concern translation units (kernel/*.c); build them all.
-g_c = ../ai.c ../data.c
+g_c = ../ai.c
 g_h = $(wildcard ../*.h)
 
 # One object per source so an edit recompiles just that TU (and so ccache
@@ -19,14 +19,10 @@ host_o = $(o)/host.o
 core_o = $(g_c:../%.c=$(o)/%.o)
 objs = $(host_o) $(core_o)
 
-# inc/ holds wasm's <data.h> override (no flat code-address space, so it
-# resolves data kinds by sentinel ap rather than .ai_data slot index).
-# It must be its own include dir, NOT ".": emcc deprioritizes the compiler's
-# cwd in the <...> search path, which would let ../data.h win instead.
 CFLAGS = -std=gnu2x -O2 -g0 -Dai_tco=0 \
   -Wall -Wno-unused-parameter -Wno-shift-negative-value \
   -fno-exceptions \
-  -Iinc -I.. -I../out/lib
+  -I.. -I../out/lib
 
 EMFLAGS = \
   -sMODULARIZE=1 -sEXPORT_NAME=Ai \

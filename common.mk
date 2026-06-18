@@ -21,7 +21,7 @@ tco ?= 1
 t = $R/test/00-init.$x $R/test/spec.$x $(filter-out %/00-init.$x %/spec.$x,$(sort $(wildcard $R/test/*.$x)))
 
 ai_h = $(wildcard $R/*.h)
-ai_c = $R/ai.c $R/data.c
+ai_c = $R/ai.c
 f_c = $(wildcard $R/font/*.c)
 c_c = $(wildcard $R/libc/*.c)
 

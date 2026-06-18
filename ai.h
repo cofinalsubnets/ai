@@ -324,7 +324,29 @@ enum q ai_kind(word);
 // (ai_typ returns one of the five data kinds), so the first dimension is KN, not ai_data_n.
 extern lvm_t *ai_apply_mx[KN][KN];
 extern union u const numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
-lvm_t lvm_ap, lvm_chain, lvm_vec, lvm_sym, lvm_str, lvm_big, lvm_flo, lvm_wide, lvm_cbox; // sentinels + ap: data.c & inline predicates
+lvm_t lvm_ap, lvm_chain, lvm_vec, lvm_sym, lvm_str, lvm_big, lvm_flo, lvm_wide, lvm_cbox; // the data-kind sentinels (+ ap); defined in ai.c, read by inline predicates and ai_typ
+// ai_typ recovers a data value's kind by comparing its first word (ap) against
+// the sentinel addresses. A tiny compare on the COLD apply path (only reached
+// when a data value is applied). This replaces the old ai_data ELF-section
+// slot-index trick (data.c + tools/gen_data + data.ld + a reflected, generated
+// data.h + data_boot.o), which existed solely to turn this compare into one
+// shift -- all that build machinery for a couple of cold divisions. The
+// sentinels are now ordinary functions in ai.c; there is no section, no stride,
+// no reflection, no platform split (this is what __APPLE__/wasm already did).
+static ai_inline bool in_data(void *a) {
+ lvm_t *p = (lvm_t*) a;
+ return p == lvm_vec || p == lvm_big || p == lvm_str || p == lvm_sym
+     || p == lvm_chain || p == lvm_flo || p == lvm_wide || p == lvm_cbox; }
+static ai_inline enum q ai_typ(union u *o) {
+ lvm_t *p = o->ap;
+ return p == lvm_vec   ? KVec
+      : p == lvm_big    ? KBig
+      : p == lvm_str    ? KString
+      : p == lvm_sym    ? KMint
+      : p == lvm_chain  ? KChain
+      : p == lvm_flo    ? KFlo
+      : p == lvm_wide   ? KWide
+      :                   KCplx; }   // the 8th and last: lvm_cbox
 uintptr_t hash(struct ai*, word), ai_vec_bytes(struct ai_vec*);
 #define str(_) ((struct ai_str*)(_))
 #define lamp evenp

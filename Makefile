@@ -137,25 +137,15 @@ out/lib/ai_version.h: force_version
 # ====================================================================
 ho = out/host
 h_o = $(ai_c:$(R)/%.c=$(ho)/%.o)
-# -I$(ho) first so the generated $(ho)/data.h shadows the portable top-level data.h.
 # the host runs $(tco) (common.mk; default 1 = tail-threaded, vmret-checked);
 # ai0 below stays pinned 0, the deliberate trampoline-coverage lane.
+# (-I$(ho) -Iout/lib for the generated egg/cli headers.)
 hcc = $(CC) $(ai_cflags) -Dai_tco=$(tco) -fpic -I$(ho) -I. -Iout/lib
-# The data-sentinel layout trick is ELF-only: data.ld (a GNU linker script) and
-# the generated $(ho)/data.h (reflected from data.o's ELF section sizes by
-# gen_data.l) give ai_typ its O(1) slot recovery. mach-o has neither, so on
-# Darwin drop both -- data.c/ai.c fall back to the portable top-level data.h,
-# whose __APPLE__ path recovers a kind by comparing an ap to the five sentinel
-# addresses (no section, no linker script, no reflection).
+# whole-archive flag differs by linker (ld64 vs GNU ld); ai_typ is now a plain
+# compare in ai.h, so there is no data.ld / generated data.h on any platform.
 ifeq ($(shell uname -s),Darwin)
-data_ld =
-ldflags =
-hdata_h =
 so_archive = -Wl,-force_load,$(ho)/lib$n.a       # ld64's whole-archive
 else
-data_ld = data.ld
-ldflags = -Wl,-T,$(data_ld)
-hdata_h = $(ho)/data.h
 so_archive = -Wl,--whole-archive $(ho)/lib$n.a -Wl,--no-whole-archive
 endif
 ai0 = $(ho)/ai0
@@ -200,21 +190,10 @@ $(ho)/lib$n.a: $(h_o)
 	                          # stale .o in the archive -> multiple-definition at link. the
 	                          # rm rebuilds it fresh, so a rename no longer needs `make clean`.
 
-$(ho)/lib$n.so: $(ho)/lib$n.a $(data_ld)
+$(ho)/lib$n.so: $(ho)/lib$n.a
 	@echo LD	$@
 	@mkdir -p $(dir $@)
-	@$(hcc) $(ldflags) -shared -o $@ $(so_archive) -lm
-
-# Reflection-only TU: data.c with the FINAL flags ($(tco)/fpic, so its ai_data.NN
-# sentinel sections size exactly like the linked data.o) but the PORTABLE top-level
-# data.h (NO -I$(ho), so a stale generated $(ho)/data.h can never shadow it). The
-# sentinel bodies don't inline ai_typ, so the section stride is header-independent --
-# gen_data.l reflects this object, breaking the data.o <-> data.h cycle so the linked
-# data.o (pattern rule below) can depend on the regenerated header. Never linked.
-$(ho)/data_boot.o: data.c $(ai_h)
-	@echo CC	$@
-	@mkdir -p $(dir $@)
-	@$(CC) $(ai_cflags) -Dai_tco=$(tco) -fpic -I. -Iout/lib -c $< -o $@
+	@$(hcc) -shared -o $@ $(so_archive) -lm
 
 # Bootstrap interpreter, compiled against the fallback top-level data.h (no
 # -I$(ho)) + -DGL_BOOTSTRAP -Dai_tco=0 (also exercises the non-threaded trampoline
@@ -232,22 +211,13 @@ $(ho)/0/%.o: $(R)/%.c $(ai_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(gl0_cc) -c $< -o $@
-$(ai0): $(ai0_o) $(data_ld)
+$(ai0): $(ai0_o)
 	@echo LD	$@
 	@mkdir -p $(dir $@)
-	@$(CC) $(ai_cflags) $(ldflags) -o $@ $(ai0_o) -lm
+	@$(CC) $(ai_cflags) -o $@ $(ai0_o) -lm
 
-# tools/gen_data.l reflects $(ho)/data_boot.o's ai_data.NN section sizes into
-# $(ho)/data.h, whose ai_typ() shifts instead of the portable header's divides.
-# Reflecting the boot TU (not the linked data.o) breaks the circular dependency:
-# the linked data.o (pattern rule) then depends on $(hdata_h) and is rebuilt
-# whenever the sentinel set changes, so its baked kinds[] can never go stale.
-$(hdata_h): $(ho)/data_boot.o $(ai0) tools/gen_data.$x ai/prel.$x
-	@echo GEN	$@
-	@$(ai0) -l ai/prel.$x tools/gen_data.$x $< -o $@
-
-# ai.c/data.c -> out/host/*.o (against the generated data.h).
-$(ho)/%.o: $(R)/%.c $(ai_h) $(hdata_h)
+# ai.c -> out/host/*.o
+$(ho)/%.o: $(R)/%.c $(ai_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -c $< -o $@
@@ -257,10 +227,10 @@ $(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
 
 # main.c is compiled into the final l inline (G_EGG_PRE/POST assemble the lib
 # headers); depend on them so it relinks when a lib source changes.
-$(ho)/$n: main.c $(ho)/lib$n.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h $(hdata_h) $(data_ld)
+$(ho)/$n: main.c $(ho)/lib$n.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(hcc) $(ldflags) -o $@ main.c $(ho)/lib$n.a -lm
+	@$(hcc) -o $@ main.c $(ho)/lib$n.a -lm
 
 $(ho)/$n.1: doc/$n.1 out/lib/ai_version.h
 	@echo GEN	$@
@@ -306,12 +276,6 @@ k_S_o = $(k_S:$(R)/%.S=$(k_odir)/%.o)
 k_asm_o = $(k_asm:$(R)/%.asm=$(k_odir)/%.o)
 k_o = $(k_shared_o) $(k_arch_o) $(k_free_o) $(k_S_o) $(k_asm_o)
 
-# Per-arch data.h reflected out of this arch's data.o (its sentinel stride differs
-# by target). Every C object depends on it; data.o bootstraps from the portable
-# top-level data.h (no $(kdata_h) prerequisite -- circular).
-kdata_h = $(k_odir)/data.h
-gen_data = $(R)/tools/gen_data.$x
-
 kcflags = $(ai_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
   -ffunction-sections -fdata-sections
 kldflags := -static -nostdlib --gc-sections -T $(R)/port/$a/$a.lds -z max-page-size=0x1000
@@ -352,24 +316,9 @@ $(ko)/$n-$a$(ksuf).elf: $(R)/port/$a/$a.lds $(k_o)
 	@mkdir -p "$(dir $@)"
 	@$(KLD) $(kldflags) $(k_o) -o $@
 
-# Reflection-only TU (mirrors the host's data_boot.o): data.c with this arch's
-# kernel flags but the PORTABLE header -- -I$(k_odir) is filtered out so a stale
-# generated $(kdata_h) can never shadow it. The sentinel section stride is header-
-# independent, so reflecting this object (not the linked data.o) breaks the
-# data.o <-> data.h cycle; the linked data.o (pattern rule) then depends on
-# $(kdata_h) and is rebuilt whenever the sentinel set changes. Never linked.
-$(k_odir)/data_boot.o: $(R)/data.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h
-	@echo CC	$@
-	@mkdir -p "$(dir $@)"
-	@$(filter-out -I$(k_odir),$(kcc)) -c $< -o $@
-
-$(kdata_h): $(k_odir)/data_boot.o $(gen_data) | $(m)
-	@echo GEN	$@
-	@$(m) $(gen_data) $< -o $@
-
-# Shared C sources (ai.c/data.c, font/, c/) + per-arch port//.
+# Shared C sources (ai.c, font/, c/) + per-arch port//.
 # Under K_TEST kmain.c #includes the baked corpus out/lib/ktests.h.
-$(k_odir)/%.o: $(R)/%.c $(k_h) $(kdata_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h $(if $(K_TEST),out/lib/ktests.h)
+$(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h $(if $(K_TEST),out/lib/ktests.h)
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
@@ -549,7 +498,7 @@ out/host/flamegraph.svg: out/host/perf.data
 repl: host
 	@$m
 cloc:
-	cloc --by-file --force-lang=Lisp,$x ai ai.c ai.h data.c data.h kmain.c main.c k.h port tools test vim
+	cloc --by-file --force-lang=Lisp,$x ai ai.c ai.h kmain.c main.c k.h port tools test vim
 cat: clean all test
 cata: clean all test_all
 # Full clean rebuild, every frontend, all tests, then the corpus under valgrind.

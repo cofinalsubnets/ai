@@ -161,10 +161,24 @@ lvm(lvm_cbin, int);
 // here when an operand is a ai_O array, so each element op runs the promoting
 // scalar dispatch (exact bignum results) instead of the typed raw-C lanes.
 lvm(lvm_obin, int);
-// data-kind recovery (datp/typ). Included here, after the self-quote sentinels
-// above, because a frontend's override (e.g. wasm/inc/data.h) resolves kinds
-// by comparing an ap against lvm_chain..lvm_str directly.
-#include <data.h>
+// data-kind recovery (datp/typ): ai_typ/in_data now live in ai.h as a direct
+// compare against the sentinel addresses -- no generated header, no section.
+//
+// The data-kind sentinels: each is the first word (ap) of a data kind's heap
+// objects. Applying one lands here and tail-jumps through the apply matrix;
+// ai_typ (ai.h) reads the kind back off the ap. Bodies are byte-identical tail
+// calls, kept distinct only by address (ai_noicf, in the lvm macro) so ai_typ's
+// compare works. Formerly laid in the ai_data ELF section by data.c -- now just
+// plain functions (the section/stride/reflection machinery is gone).
+static lvm(data_apply) { return Ap(ai_apply_mx[ai_typ(Ip)][ai_kind(Sp[0])], g); }
+lvm(lvm_vec)   { return Ap(data_apply, g); }
+lvm(lvm_big)   { return Ap(data_apply, g); }
+lvm(lvm_str)   { return Ap(data_apply, g); }
+lvm(lvm_sym)   { return Ap(data_apply, g); }
+lvm(lvm_chain) { return Ap(data_apply, g); }
+lvm(lvm_flo)   { return Ap(data_apply, g); }
+lvm(lvm_wide)  { return Ap(data_apply, g); }
+lvm(lvm_cbox)  { return Ap(data_apply, g); }
 char const *ai_nif_name(intptr_t);
 #define vec(_) ((struct ai_vec*)(_))
 #define charmp oddp
