@@ -36,7 +36,7 @@
 ; * the repl reads each LINE as one expression (1 = 1 answers 1); files read forms. the
 ;   interactive shell installs a default help when none is present (ai/bao.l shell-help):
 ;   a scare prints `;; a b` and answers the zero point, so the session survives every raise and a
-;   missing name or apcap is VISIBLE; the more bits keep the read protocol (port back when
+;   missing nom or apcap is VISIBLE; the more bits keep the read protocol (port back when
 ;   incomplete, sentinel at eof). file mode stays helpless -- terminal, per the law.
 ; * python \b-sweeps treat - as a boundary: kebab names with capital segments mangle.
 ; * the CREW (crew/*.md) drives dev: the apps over the core -- aineko (netcat,
@@ -55,9 +55,12 @@
 ; (you eat a toast; $ keeps the blue charms; a set of stars is a galaxy). we frame in the
 ; GREEN -- name what a value IS and KEEPS, not what it lacks; green, not red. the surface
 ; stays small and deliberate ((names ()) is the whole vocabulary). the celestial numerics:
-; a CHARM is a fixnum (a word); a STAR is a self-netting scalar (charm/full/big/float/complex);
+; a CHARM is a fixnum (a word); a STAR is a self-netting scalar (charm/full/big/gem/twin-gem);
 ; a GALAXY is a set of stars (a numeric array); a CONSTELLATION is any numeric (a star or a
 ; galaxy) -- a charm is a star is a constellation. the global env is the `bag` (not the "book").
+; the jewels under the star: a CHARM is a fixnum, a whole little word; a GEM is a float, the
+; smooth kind that falls between the charms; a TWIN GEM is a complex, two gems paired (re, im),
+; and `twin` is what pairs them.
 
 ; --- the shape of it --- one cell is one word: a fixnum is a tagged odd word, anything else
 ; is a heap object whose first word is its hot -- a live external reference, the wire out of
@@ -70,7 +73,7 @@
 
 ; --- the type lattice --- two axes. the *tier* spine, low to high:
 ;   N the blue charms (the naturals, the range of $)  <  Z integers (fixnum -> wide int -> bignum)
-;     <  R reals (float)  <  C complex  <  O objects (string < symbol < chain < map < top)
+;     <  R gems (the reals, as floats)  <  C twin gems (complex)  <  O objects (string < symbol < chain < map < top)
 ; numbers nest as usual (N in Z in R in C). a fixnum is a CHARM, and every value wears a COLOR --
 ; the order-sign of its net: BLUE nets nonnegative (what $ keeps), RED nets negative (what $
 ; clamps to nothing), and GREEN is blue's FLOOR -- net exactly zero, kept like a blue yet nothing.
@@ -213,7 +216,7 @@ $@(3 4)              ; 7
 ; lattice (number < string < symbol < chain < map < top), within a kind by value/
 ; lexicographic order (complex by (re,im); maps and lambdas by an alpha-invariant hash; an
 ; array operand broadcasts to a 0/1 mask). `=` is value equality and bridges the whole
-; numeric tower; `id?` is identity; `!=` is gone -- write `!(a = b)`.
+; numeric tower; `id?` is identity; for "not equal", write `!(a = b)`.
 ; demo:
 3 = 3.0              ; true    = bridges the numeric tower
 1 < 1.5              ; true
@@ -286,11 +289,12 @@ i * i                ; -1        the algebraic heart of euler
 (log -1) = i * pi    ; true      euler, in the EXACT direction
 ((/ 1 2) -1)         ; i         sqrt of -1: principal, exact
 
-; --- complex --- a discrete scalar at the top numeric tier (twin?). the `~` reader sigil:
-; ~(re im) builds (twin re im) (3+ operands curry); a bare ~x lifts a real (~r = ~(r 0)) or
-; conjugates a complex (~~(r i) = ~(r -i)), so `~` is conjugation and an involution. i = ~(0 1).
-; + - * / promote a real and stick (no demotion); order is lexicographic by (re,im) and `=`
-; bridges reals. `twin` and `arg` broadcast over arrays, so the derived forms stay elementwise.
+; --- complex (the twin gems) --- a discrete scalar at the top numeric tier (twin?), two gems
+; matched. the `~` reader sigil: ~(re im) builds (twin re im) (3+ operands curry); a bare ~x
+; lifts a gem (~r = ~(r 0)) or conjugates a twin gem (~~(r i) = ~(r -i)), so `~` is conjugation
+; and an involution. i = ~(0 1). + - * / promote a gem and stick (no demotion); order is
+; lexicographic by (re,im) and `=` bridges the gems. `twin` and `arg` broadcast over arrays,
+; so the derived forms stay elementwise.
 ; a rank-N complex array packs (re,im) into a `c`-typed array: peep yields a ~(..) box,
 ; + - * / broadcast numpy-style, `=` gives a mask, and asum/aprod fold complex. the net
 ; is the complex SUM of the cells, so $v = $(asum v) and a packed array nets exactly
@@ -354,9 +358,8 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; nameless, materially empty ($mint = 0, false), applying as every unit does (const-1),
 ; identity its only property -- the unforgeable thing. a NOM is the literal chain of a
 ; name string and a mint -- (nom "x") = ("x" . fresh point) -- McCarthy's symbol
-; restored as the chain it always was (the named-uninterned atom species is gone).
-; `()` reads as 0 -- nothing's plain spelling -- and (intern "") is 0: the empty
-; spelling names nothing (the empty-symbol species is gone). ABSENCE is another
+; restored as the chain it always was. `()` reads as 0 -- nothing's plain spelling --
+; and (intern "") is 0: the empty spelling names nothing. ABSENCE is another
 ; matter: a helpless missing read answers the ZERO POINT, the mint at serial 0 --
 ; nameless, $0, false, printed as () (the face of absence; like any point, no
 ; spelling carries it back), and a UNIT: it absorbs application where a number
@@ -372,8 +375,8 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; max(0, ceil(net)): a string's CHARM SUM, a symbol's spelling sum, a number's own value
 ; ($-3.9 = 0), a list's or array's element sum -- so $ and abs diverge ((abs -5) = 5 but
 ; $-5 = 0, and $@(3 4) = 7 where (abs @(3 4)) is the norm 5). the count is tally.
-; snip takes a half-open snip; + concatenates ("" is the identity; scat is gone); string
-; coerces; \n escapes.
+; snip takes a half-open snip; + concatenates ("" is the identity); string makes text of
+; any value; \n escapes.
 ; demo:
 ()                   ; 0           nothing's plain spelling; (intern "") ; 0
 (intern "asdf")      ; asdf
@@ -506,7 +509,7 @@ $"ab" + 2            ; 197     a sigil at one binds tightest: (+ ($ "ab") 2)
 (call-cc (\ k (k 41)))       ; 41   a one-shot escape
 (: p (spawn (\ x (x + 1)) 41) (wait p))   ; 42   tasks (always wait an orphan)
 (apcap 0)            ; 1048576   the count ceiling, a tunable box
-not-in-the-bag      ; ()        a missing name reads the zero point (helpless)
+not-in-the-bag      ; ()        a missing nom reads the zero point (helpless)
 (welp 1 'a 'b)       ; ()        the floor: a bare scare welps to the zero point
 
 ; --- i/o & ports --- `in`/`out` are the default ports; the prel wraps getc and
@@ -541,13 +544,13 @@ not-in-the-bag      ; ()        a missing name reads the zero point (helpless)
 ; on it twice -- compile the compiler with the C bootstrap, recompile the whole corpus through
 ; itself -- then the hatchling installs as `ev` in the image at C compile time, no allocation;
 ; `born` records the hatch time (unbound pre-egg: ai0's first corpus pass runs PRE-egg, and an
-; unbound name is missing, reading the zero point). just before it is born the egg MOPS UP every runtime-
-; internal name: the raw cell nifs (peek poke seek spin -- (spin 2 3) is a segfault, big
+; unbound nom is missing, reading the zero point). just before it is born the egg MOPS UP every runtime-
+; internal nom: the raw cell nifs (peek poke seek spin -- (spin 2 3) is a segfault, big
 ; scare; spin is still there for real, it's ultimate), the compiler's machinery
 ; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
 ; lives on inside the compiler's closures), every hot lvm_* pointer,
-; and finally the `bag` itself. compiled references were folded, so only the names die.
-; names the printer, the reader, or an expander EMITS (uq ltuple link pin
+; and finally the `bag` itself. compiled references were folded, so only the noms die.
+; noms the printer, the reader, or an expander EMITS (uq ltuple link pin
 ; tablet mono ..) stay, as do the C-resolved hooks (num-ap add mul help). the shell
 ; core (ai/bao.l) no longer needs mopping: its editor + repl internals are
 ; closure-private (off the bag by construction), and only its entry points --
@@ -555,7 +558,7 @@ not-in-the-bag      ; ()        a missing name reads the zero point (helpless)
 ; demo:
 (lit? ev)            ; true    ev is installed in the image
 born                 ; a fixnum (the hatch time) post-egg; unbound pre-egg
-macros               ; ()      mopped up after birth (a runtime-internal name, gone)
+macros               ; ()      mopped up after birth -- off the bag, so the nom reads nothing
 
 ; --- under the hood --- a generic op dispatches on a value's kind (an enum whose order is the
 ; lattice above). an op at two is an NxN table indexed by the two kinds; an op at one is its

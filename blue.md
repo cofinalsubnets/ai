@@ -182,13 +182,15 @@ The numerals bridge into the term language, but no further:
 
 The numeric carriers earn their own short names — each names a predicate you can probe, and they carry through the array laws below. They split the **number** band by rank.
 
-A **number** (`constellation?`) is any numeric value, scalar or array — the bottom band, closed under the ring algebra `+ - *`. A **star** (`star?`) is a *scalar* number, one that nets itself (`net x = x`, i.e. `id? x (net x)`): a fixnum, wide int, bignum, float, or complex scalar — the rank-0 point. The word-sized star, a fixnum, is a **charm** (`charm?`). A **set** (`set?`) is an array, numeric or not; a **galaxy** (`galaxy?`) is a set *of stars* — a numeric array. So a number is a star or a galaxy, and `$` lands every value on the **green charms** — the nonnegative integers (§3); a word-sized result is a charm, but a saturated bignum is a green star too.
+A **number** (`constellation?`) is any numeric value, scalar or array — the bottom band, closed under the ring algebra `+ - *`. A **star** (`star?`) is a *scalar* number, one that nets itself (`net x = x`, i.e. `id? x (net x)`): a fixnum, wide int, bignum, gem, or twin-gem scalar — the rank-0 point. The star carries two jewels: a **charm** (`charm?`) is a fixnum — the whole little word; a **gem** is a float — the smooth kind that falls between the charms. A **twin gem** is a complex (`twin?`): two gems paired as `(re, im)`, and `twin` is what pairs them. A **set** (`set?`) is an array, numeric or not; a **galaxy** (`galaxy?`) is a set *of stars* — a numeric array. So a number is a star or a galaxy, and `$` lands every value on the **green charms** — the nonnegative integers (§3); a word-sized result is a charm, but a saturated bignum is a green star too.
 
 | name | predicate | what it is |
 |---|---|---|
 | `constellation` | `constellation?` | any numeric value, scalar or array — the bottom band |
 | `star` | `star?` | a scalar number, one that nets itself (rank 0) |
-| `charm` | `charm?` | a word-sized star — a fixnum |
+| `charm` | `charm?` | a fixnum — the whole little word |
+| `gem` | `float?` | a float — the smooth kind, between the charms |
+| `twin gem` | `twin?` | a complex — two gems paired `(re, im)` |
 | `set` | `set?` | an array, numeric or not (rank ≥ 1) |
 | `galaxy` | `galaxy?` | a set of stars — a numeric array (rank ≥ 1) |
 

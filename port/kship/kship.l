@@ -6,7 +6,9 @@
 ; sketch -- but milestone 1 (the heartbeat loop) is REAL on both frontends: it
 ; rides `sleep`/`clock`/`spawn`/`wait`, which are core nifs, so the same code runs
 ; on the host and, unchanged, in the kernel. the `; value` comments are the
-; printed intent; run `out/host/ai port/kship/kship.l` to see them.
+; printed intent; run `out/host/ai -l port/kship/kship.l -e "(demos 0)"` to see them
+; (the file only DEFINES demos now -- a plain load prints nothing; -l preloads it into
+; the shared global scope so the -e call finds it).
 ;
 ; the kernel ALREADY ships the perceive substrate (see kmain.c): k_sources[] is a
 ; getc/putc/ready/close vtable, ai_wait_fds() is select over fds, ai_ready() the
@@ -46,7 +48,7 @@
    (answer st d)                                    ; d = the datagram (a string) -> a reply string
      (? (= d "ping") "pong"
         (= d "stat") (+ "replies=" (+ (show (replies st)) (+ " beats=" (show (beats st)))))  ; + is binary: nest right
-        (show (ev (read (sip (bytes d)) 0))))         ; else: run d AS AI, show the result
+        (show (ev (read (tap (bytes d)) 0))))         ; else: run d AS AI, show the result
    (policy st ev)
      (? (id? (ev-kind ev) 'net)                     ; a packet: answer by its content
           (link (with (+ 1 (replies st)) (beats st)) (link 'send (answer st (ev-load ev))))
@@ -81,7 +83,7 @@
 ; -- sleep/clock are core nifs, so `run-beats` runs identically on the host and in
 ; the kernel. the agent acts on INITIATIVE, driven by time. non-terminating on metal;
 ; bounded by `n` here. returns final state.
-   (beat st period) (: _ (sleep period) (guarded st (link 'tick (clock 0))))
+   (beat st period) (: _ (rest period) (guarded st (link 'tick (clock 0))))
    (run-beats st n period) (? (< n 1) st (run-beats (beat st period) (- n 1) period))
 
 ; --- the LIVE nic agent loop (MILESTONE 3: perceive the real NIC) --- perceive one
@@ -110,7 +112,7 @@
 ; so a restart resumes mid-mission.
    (bytes s)   (map s (jot (tally s)))
    (save st)   (show st)
-   (restore s) (read (sip (bytes s)) fresh)
+   (restore s) (read (tap (bytes s)) fresh)
 
 ; --- the watchdog (task-level / self-restart) --- run the agent as a SUPERVISED
 ; task over a checkpoint string; re-checkpoint its result. a healthy round returns a
@@ -119,7 +121,7 @@
 ; done? and respawns the agent task; here spawn/wait + a shape check stand in.
    (supervise ckpt n period)
      (: p (spawn (\ s (run-beats (restore s) n period)) ckpt)
-        st' (wait p)
+        st' (catch p)
         (? (two? st') (save st') ckpt))
 
 ; --- a mission --- many supervised rounds, each a FRESH task, the state carried only
@@ -143,7 +145,10 @@
 ; leaks `demos` to the global scope. the host sketch + the -kship build call (demos 0)
 ; explicitly; the net-agent build skips it and runs (serve fresh nic) directly (the
 ; demos' sleeps/spawns leave the NIC RX unpolled, so a live agent must start clean --
-; exactly why netecho slurps immediately). run `out/host/ai port/kship/kship.l -e "(demos 0)"`.
+; exactly why netecho slurps immediately). run `out/host/ai -l port/kship/kship.l -e "(demos 0)"`
+; (the -l preload shares the global scope so `demos` is defined when -e fires; a positional
+; file arg with -e AFTER it does NOT run -- the file is the program and the -e tokens are
+; ignored trailing argv).
 (: (demos _)
    (: _ (say "-- scripted {net, clock} stream; the watchdog absorbs the bad event --")
       _ (: evs (L (link 'net "ping") (link 'tick 1) (link 'bogus 0)

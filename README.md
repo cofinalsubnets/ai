@@ -18,18 +18,19 @@ every quote below evals to 1, [try them](https://cofinalsubnets.github.io/ai).
 ai is kind of like `ai = (ml + apl) * (lisp / C)`.
 every value is an operator, a total function of its own type.
 all recursion is on heap and any recursive operator may be
-boundedly applied by integers, which act transparently as
-iterators.  consequently the value of a numeric list under the
-left-associative lisp eval function corresponds to a reversed
-exponential tower. this lisp refinement forms the ML part of
-`ml + apl`. the APL part is a transparent right-associative
-superset that interprets sigils (all-punctuation symbols) as
-infix or prefix operators according to placement. the two forms
-may be mixed freely: infix operators take the lisp meaning in
-function position, and infix can be converted to left-associative
-by listing the sigil, eg. `3 = (+) 1 2`.
+iterated by non-negative integers (green charms), which is
+their function action. consequently the value of a numeric
+list under the left-associative lisp eval function corresponds
+to a reversed exponential tower. this lisp refinement forms
+the ML part of `ml + apl`. the APL part is a transparent
+right-associative superset that interprets sigils (all-punctuation
+symbols) as infix or prefix operators according to placement.
+the two forms may be mixed freely: infix operators take the
+lisp meaning in function position, and infix can be converted
+to left-associative by wrapping the sigil in parens, eg.
+ `3 = (+) 1 2`.
 
-in terms of implementation, `lisp : C :: software : hardware`.
+in terms of implementation, `lisp : software :: C : hardware`.
 C gives random memory access via pointer arithmetic
 and platform-specific primitives. `lisp` is the software
 facing basement, which you could factor as `ml * scheme`
@@ -57,7 +58,7 @@ strings, and the value surface:
 - `` ` `` quasiquote, `,` unquote, `,@` splice
 - `@` at (array literal)
 - `#` hash (hash/box literal)
-- `~` wave (complex literal `~(re im)`; a bare `~x` lifts a real, conjugates a complex)
+- `~` twin (twin-gem/complex literal `~(re im)`; a bare `~x` lifts a gem, conjugates a twin gem)
 
 operator sigils are plain symbols until the compiler factors them against the
 one `operators` table (per-form extensible: pin an entry and the next form
@@ -94,6 +95,11 @@ are true too:
 - `'(2 3 4) = (map (+ 1) '(1 2 3))`
 - `'(0 1 2) = (jot 3)`
 - `10 = +(jot 5)`
+- `'(0 0 1 3 6 10 15 21) = ((flip compose jot (map (compose sat jot))) 8)`
+
+that last is the triangular numbers, point-free: `jot` lays out `0 .. n-1`,
+`sat` sums each prefix to its charm, and `flip compose` feeds the one into the
+other (the nth is the net of `0 .. n-1`, so it opens on the floor twice).
 
 the full spec is [CLAUDE.md](CLAUDE.md) -- the prose narrative with runnable
 demonstrations. the executable spec is [test/spec.l](test/spec.l), a real test

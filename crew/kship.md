@@ -64,7 +64,9 @@ initiative); a **real-hardware NIC driver** (e1000e/Realtek) for metal networkin
 **USB-HID keyboard** for the interactive shell on metal.
 
 **Build & run recipes:**
-- Host model (fast iteration, the ai half is real here too): `out/host/ai port/kship/kship.l`.
+- Host model (fast iteration, the ai half is real here too): `out/host/ai -l port/kship/kship.l -e "(demos 0)"`
+  (the file only DEFINES `demos` now — a plain load prints nothing; `-l` preloads it into the
+  shared global scope so the `-e` call finds it. `-e` AFTER a positional file arg does NOT run).
 - Agent kernel: `make kernel KSHIP=1` → `out/free/ai-x86_64-kship.elf`. Bakes
   `port/kship/kship.l` → `out/lib/kship.h` (lcatv) and boots into the loop, then a shell.
   Normal `make kernel` is unchanged (the interactive shell). The KSHIP wiring lives in
