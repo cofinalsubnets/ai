@@ -5,17 +5,17 @@
 ; them by name. They now live INSIDE bao's closure (ai/bao.l), off the global
 ; book -- so the corpus can no longer reach them, and that is the point.
 ;
-; bao still exercises them, from INSIDE the closure, via `bao-selftest` (a public
-; entry that computes the whole boolean battery against the private helpers and
-; returns the results as a flat list). bao is the BAKED shell core (in the host
-; egg), so bao-selftest is a book global -- this file gates its list through the
-; real test harness with no -l:
+; bao still exercises them, from INSIDE the closure, via `(bao 'test)` (which runs
+; the private `bao-selftest`: it computes the whole boolean battery against the
+; private helpers and returns the results as a flat list). bao is the BAKED shell
+; core (in the host egg) and `bao` is public, so this file gates the battery
+; through the real test harness with no -l -- and no selftest name leaks to the book:
 ;
 ;   cat test/00-init.l boot/baotest.l | out/host/ai
 ;
 ; (wired into `make test_hostnif`.) green dots = pass.
 
-(: results (bao-selftest 0)
+(: results (bao 'test)
    ; every check in the battery must be true.
    _ (each results (\ b (assert b)))
    ; and the battery must be non-trivial (a typo'd selftest returning () would

@@ -85,7 +85,7 @@
 ; the body of this (: ..) returns the public entry points as a list, defglob'd
 ; below; everything else (the ed* editor, parseall, do_eval, the history zipper,
 ; pump/waitfor, the raw-line decode) stays inside this scope, OFF the global book.
-(: bao-exports
+(: _                                ; the export-list holder: `_` never leaks to the book
  (: m (nom 0) eofsym (nom 0)
 
    (revcat a b) (foldl (flip link) b a)
@@ -499,11 +499,12 @@
                 (loop l r)))                         ; up/down/^C/unknown: ignore in a line reader
         (loop 0 0))
 
-   ; (bao _) -- the interactive entry the host frontend launches. for now it is
-   ; exactly the baked shell; an arg is taken (ai has no nullary calls). `wrap`
-   ; is reachable from the bao prompt; the editor-as-line-reader (edraw) and the
-   ; debug `help` are the later modes (crew/bao.md).
-   (bao _) (shell 0)
+   ; (bao a) -- the interactive entry the host frontend launches. `(bao 0)` is
+   ; exactly the baked shell (an arg is taken: ai has no nullary calls); `(bao 'test)`
+   ; runs the private unit battery (boot/baotest.l gates it -- the selftest stays
+   ; closure-private, off the book). `wrap` is reachable from the bao prompt; the
+   ; editor-as-line-reader (edraw) and the debug `help` are the later modes (crew/bao.md).
+   (bao a) (? (= a 'test) (bao-selftest 0) (shell 0))
 
    ; --- the editor self-test, run from inside the closure (so it reaches the
    ; private ed* / parseall / history helpers that USED to be corpus globals).
@@ -606,17 +607,17 @@
    ; the body: the public entry points, defglob'd below. everything above stays
    ; closure-private (off the book), which is what stops the ed* editor + repl
    ; internals from leaking into (names ()).
-   (L shell welp edraw wrap bao bao-selftest))
+   (L shell welp edraw wrap bao))
 
  ; defglob the public surface out of the export list (book is mopped post-egg, so
  ; a top-level body-less (: ..) is the only way to add a global; the privates above
- ; never reach it).
- shell        (cap bao-exports)
- welp         (cap (cup bao-exports))
- edraw        (cap (cup (cup bao-exports)))
- wrap         (cap (cup (cup (cup bao-exports))))
- bao          (cap (cup (cup (cup (cup bao-exports)))))
- bao-selftest (cap (cup (cup (cup (cup (cup bao-exports)))))))
+ ; -- including bao-selftest, reached via (bao 'test) -- never reach it). the holder
+ ; is `_` (the previous line's value, by the sequence law), so it never leaks either.
+ shell (cap _)
+ welp  (cap (cup _))
+ edraw (cap (cup (cup _)))
+ wrap  (cap (cup (cup (cup _))))
+ bao   (cap (cup (cup (cup (cup _))))))
 
 ; bao.l is DEFINE-ONLY -- loading it (egg-bake or `-l ai/bao.l`) installs the shell
 ; core but does NOT launch. The frontend launches: host/main.c evals `(bao 0)` on a

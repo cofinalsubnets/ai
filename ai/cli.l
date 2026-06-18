@@ -13,14 +13,17 @@
 ; (pre/load1/rdev) uses only nifs/special-forms, NOT prel fns (chainp not atomp; |, the
 ; bitwise-or nif, not the || macro; link not the L macro for the export list).
 ;
-; cli-exports: the helpers (rdev load1 eval1 bye version usage need pre) are CLOSURE-PRIVATE
-; in the inner body-having `:`, OFF the global book -- only `parsed` and `argv` (the kept
-; publics; argv is read by test/run.l + host/main.c) are defglob'd out, the cli sibling of
-; the repl->bao consolidation. The inner body returns (parsed program-view-argv run), where
-; `run` is the dispatch THUNK. Order matters: we defglob `argv` to the program's view FIRST,
-; THEN call `(run 0)` -- the loaded program reads the global `argv`, so it must already be
-; rebound before the load fires. (-v/-h still exit inside `pre`, before the rebind, as before.)
-(: cli-exports
+; the helpers (rdev load1 eval1 bye version usage need pre) are CLOSURE-PRIVATE in the inner
+; body-having `:`, OFF the global book -- only `parsed` and `argv` (the kept publics; argv is
+; read by test/run.l + host/main.c) are defglob'd out, the cli sibling of the repl->bao
+; consolidation. The triple holder is bound to `_`, NOT a name: a top-level body-less `:`
+; defglobs every NAMED binding to the book, and this form RE-RUNS at startup (so an egg mop
+; can't catch it), but `_` never leaks -- the intermediate stays off (names ()). The reads
+; below pick it up by the sequence law. The inner body returns (parsed program-view-argv run),
+; where `run` is the dispatch THUNK. Order matters: we defglob `argv` to the program's view
+; FIRST, THEN call `(run 0)` -- the loaded program reads the global `argv`, so it must already
+; be rebound before the load fires. (-v/-h still exit inside `pre`, before the rebind, as before.)
+(: _
  (: (rdev q) ((: (go e q) (: r (read q e) (? (= e r) 0 (: _ (ev 'ev r) (go e q))))) (mint 0) q)
     (load1 p) (: q (open p "r")
        (? q (rdev q) (: _ (fputs err (+ "ai: cannot open " p)) (exit 1))))
@@ -50,6 +53,6 @@
               (= (cap p) 'file) (load1 (caup p))
               (rdev in)))
     (link p (link av (link run 0))))    ; the body: return (parsed program-argv run)
- parsed (cap cli-exports)               ; DEFGLOB the kept publics out of the export list
- argv   (cap (cup cli-exports))         ; rebind argv to the program's view, BEFORE the run
- _ ((caup (cup cli-exports)) 0))        ; (run 0): dispatch now that argv is the program's view
+ parsed (cap _)                         ; DEFGLOB the kept publics out of the triple (the prev `_`)
+ argv   (cap (cup _))                   ; rebind argv to the program's view, BEFORE the run
+ _ ((caup (cup _)) 0))                  ; (run 0): dispatch now that argv is the program's view
