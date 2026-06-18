@@ -14,7 +14,7 @@
 
 (assert
  ; --- construction / accessors ---
- (= 3 O)   (= O (atype oa-a))                    ; type code 3
+ (= 3 Top)   (= Top (atype oa-a))                    ; type code 3
  (= 1 (arank oa-a))   (= 5 (alen oa-a))
  (= 5 (cap (ashape oa-a)))
  (nil? (arr () 0 0))                                ; rank-0 demotes to its lone cell -- nil-filled here
@@ -61,7 +61,7 @@
 
 (assert
  ; result of an op on a g_O array is itself g_O
- (= O (atype oa-sum))
+ (= Top (atype oa-sum))
  ; exact elementwise results (no wrap, no float rounding)
  (= (+ (100 2) 1) (peep oa-sum 0 0))
  (= (* 2 (100 2)) (peep oa-prd 1 0))
@@ -107,10 +107,10 @@
 (assert
  ; type inference: pure ints -> z, any float -> r, anything past the real
  ; 64-bit tower (bignum/symbol/...) -> o
- (= Z (atype (array 3 1 2 3)))
- (= R (atype (array 3 1 2.0 3)))
- (= O   (atype oa-q))
- (= O   (atype oa-bn))
+ (= Star (atype (array 3 1 2 3)))
+ (= Gem (atype (array 3 1 2.0 3)))
+ (= Top (atype oa-q))
+ (= Top (atype oa-bn))
  ; numeric shape -> rank-1 vector of length ($ n); a non-positive shape is empty
  (= 1 (arank (array 4 1 2 3 4)))
  (= 0 (alen (array -3))) (= "@()" (show (array -3)))
@@ -130,7 +130,7 @@
  (= 5 (alen (array ~(3 4) 0 0 0 0 0)))           ; ($ ~(3 4)) = 5
  (= 8 (alen (array (L 2.0 3.5) 1 2 3 4 5 6 7 8)))  ; dims (2 4) -> 8 elems
  ; @ reader macro: @(e …) is sugar for a rank-1 array, type inferred
- (= O (atype @((100 2) 1)))                    ; bignum element -> object array
+ (= Top (atype @((100 2) 1)))                    ; bignum element -> object array
  (aall (= @(1 2 3) (array 3 1 2 3))))
 
 ; --- pin / truthiness: (nil? x) == (= 0 (pin x)) holds across tuple types, via
@@ -141,7 +141,7 @@
    oa-c2 (array 2 ~(0 0) ~(3 4))               ; |0|²+|3+4i|² = 25 -> ceil 5
    oa-b2 (array 2 (100 2) 0))                 ; bignum element saturates pin, forces o
 (assert
- (= C (atype oa-z2)) (= C (atype oa-c2)) (= O (atype oa-b2))
+ (= Twin (atype oa-z2)) (= Twin (atype oa-c2)) (= Top (atype oa-b2))
  (= 0 (sat oa-z2)) (nil? oa-z2)                   ; all-zero object array -> falsy, pin 0
  (= 5 (sat oa-c2)) !!oa-c2                         ; one nonzero element -> truthy, ceil(5)
  !!oa-b2                                          ; a bignum element is truthy

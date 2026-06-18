@@ -71,7 +71,7 @@
     (? wint (< 1e300 (pow 2 100000000000000000000)) 1)              ; f64 only -- 1e300 is inf in f32
 
     ; --- pow / atan2 elementwise over arrays (numpy broadcast); result is r ---
-    (= R (atype (pow (arr 0 '(2) '(2 3)) 2)))                  ; always a float array
+    (= Gem (atype (pow (arr 0 '(2) '(2 3)) 2)))                  ; always a float array
     (aall (= (pow (arr 0.0 '(3) '(1 2 3)) 2) (arr 0.0 '(3) '(1 4 9))))  ; array ^ scalar
     (aall (= (pow 2 (arr 0.0 '(3) '(1 2 3))) (arr 0.0 '(3) '(2 4 8))))  ; scalar ^ array
     (aall (= (pow (arr 0.0 '(3) '(1 2 3)) (arr 0.0 '(3) '(2 2 2)))      ; array ^ array

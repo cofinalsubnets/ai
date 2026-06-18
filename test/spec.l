@@ -157,7 +157,7 @@
  (2.0 = (re ~(2 3))) (i < 1) !(1 < i) ("~(0.0 1.0)" = (show i))
  (0.0 = (peep (arg ~(1 @(1 0))) 1 0)))           ; arg broadcasts -- (arg ~(1 x)) = atan, elementwise
 (assert
- (: v (array 2 ~(1 2) ~(3 4)) (&& (C = (atype v)) (~(1 2) = (peep v 0 0)) (~(4 6) = (asum v))
+ (: v (array 2 ~(1 2) ~(3 4)) (&& (Twin = (atype v)) (~(1 2) = (peep v 0 0)) (~(4 6) = (asum v))
     (~(2 4) = (peep (v + v) 0 0)) (~(2 4) = (peep (~(2 0) * v) 0 0)) !(v < v)
     ($v = $(asum v)) ("@(~(1.0 2.0) ~(3.0 4.0))" = (show v))))
  (8 = $(array 2 ~(3 4) ~(-3 4))) (8 = $(L ~(3 4) ~(-3 4))))
@@ -167,17 +167,17 @@
 ; reduce asum/aprod/amax/amin/aall; contract inner (+.x) / outer (o.x); empty reductions = units.
 (assert
  (6 = (alen (arr 0 '(2 3) 0))) (2 = (arank (arr 0 '(2 3) 0))) ('(2 3) = (ashape (arr 0 '(2 3) 0)))
- (Z = (atype (arr 0 '(2 3) 0))) (20 = (peep @(10 20 30) 1 -1)) (-1 = (peep @(10 20 30) 9 -1))
+ (Star = (atype (arr 0 '(2 3) 0))) (20 = (peep @(10 20 30) 1 -1)) (-1 = (peep @(10 20 30) 9 -1))
  (3 = (peep (arr 0 '(2 2) '(1 2 3 4)) '(1 0) -1)) (@(11 22 33) = @(1 2 3) + @(10 20 30))
- (@(2 4 6) = @(1 2 3) * 2) (R = (atype ((arr 0 '(2) 0) + 1.5))) (Z = (atype ((arr 0 '(3) 0) < 1)))
+ (@(2 4 6) = @(1 2 3) * 2) (Gem = (atype ((arr 0 '(2) 0) + 1.5))) (Star = (atype ((arr 0 '(3) 0) < 1)))
  (60 = (asum @(10 20 30))) (30 = (amax @(10 30 20))) (5 = (asum 5)) (aall (1 < 2))
- (@(0 1 2) = (iota 3)) (Z = (atype (iota 3))) !(iota 0) !(iota -1) (4950 = (asum (iota 100)))   ; iota: jot's range as a z-array
+ (@(0 1 2) = (iota 3)) (Star = (atype (iota 3))) !(iota 0) !(iota -1) (4950 = (asum (iota 100)))   ; iota: jot's range as a z-array
  (aall (@(2.0 3.0) = ((/ 1 2) @(4.0 9.0)))) (@(3.5 5.5) = @(7 11) / 2) (@(3 5) = (// @(7 11) 2))
  (@(4 6) = @(8 12) / 2) !(arr 0 '(3) 0) ("@(10 20 30)" = (show @(10 20 30)))
  (aall (@(10 20 30) = (array 3 10 20 30))) !(@(1 2 3) + @(1 2)) !(arr 99 '(3) 0)
  (0 = (asum (arr 0 '(0) 0))) (1 = (aprod (arr 0 '(0) 0))) (aall (arr 0 '(0) 0))
  ("@()" = (show (arr 0 '(0) 0))) (0 = (alen ((arr 0 '(0) 0) + 1)))
- (32 = (inner @(1 2 3) @(4 5 6))) (Z = (atype (outer @(1 2) @(3 4))))   ; +.x dot ; o.x outer
+ (32 = (inner @(1 2 3) @(4 5 6))) (Star = (atype (outer @(1 2) @(3 4))))   ; +.x dot ; o.x outer
  (: M (inner (arr 0 '(2 3) '(1 2 3 4 5 6)) (arr 0 '(3 2) '(7 8 9 10 11 12)))  ; 2x2 matmul
     (&& ('(2 2) = (ashape M)) (154 = (peep M '(1 1) 0)))) !(inner @(1 2 3) @(1 2)))
 
@@ -242,7 +242,7 @@
 (assert
  !() !0 !"" !@() !#() !~(0 0) !(buf 0)           ; every empty is false (green)
  (nil? ()) (nil? 0) !(= () 0) !(id? () 0)        ; () (zero-point) and 0 (number) are DISTINCT, both nothing
- ("@()" = (show @())) (1 = (arank @())) (0 = (alen @())) (Z = (atype @()))  ; @() the empty array, round-trips
+ ("@()" = (show @())) (1 = (arank @())) (0 = (alen @())) (Star = (atype @()))  ; @() the empty array, round-trips
  (tab? #()) (0 = $#()) ("(tablet 0)" = (show #()))   ; #() the empty map
  (0 = @0) (nil? (arank @0))                      ; @0 wraps the VALUE 0 -> the scalar 0 (a 1-cell demotes)
  (tab? #0) (1 = $#0) !!#0)                       ; #0 wraps the VALUE 0 -> a box (present)

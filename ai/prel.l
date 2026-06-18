@@ -12,7 +12,7 @@
    true 1 false 0
    i ~(0 1) ;; FIXME up top
    (tangent x) (/ (sine x) (cosine x))          ; derived: tan = sin/cos
-   Z 0 R 1 C 2 O 3                              ; array element-kind codes (the tier spine)
+   Star 0 Gem 1 Twin 2 Top 3                              ; array element-kind codes (the tier spine)
    zero? nil?                                  ; zero? aliases nil? (the net-to-zero test)
    (one? x) (= x (cap x))
    (atom? x) (nil? (two? x))
@@ -159,7 +159,7 @@
    (star? x) (id? x (net x))
    ; a CHARM is the word-sized star -- a fixnum (the lisp predicate; oddp C-side).
    (charm? x) (fix? x)
-   (galaxy? x) (? (set? x) (? (< (atype x) O) 1 (star? (peep x 0 0))) 0))
+   (galaxy? x) (? (set? x) (? (< (atype x) Top) 1 (star? (peep x 0 0))) 0))
 (: (foldl1 f l) (foldl f (cap l) (cup l))
    (foldr1 f l) (foldr f (last l) (init l))
    ap (foldl id)

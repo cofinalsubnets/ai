@@ -14,8 +14,8 @@
  ; --- constructor + accessors ---
  (= 2 (arank (arr 0 '(2 3) 0)))
  (= 6 (alen (arr 0 '(2 3) 0)))
- (= Z (atype (arr 0 '(2 3) 0)))
- (= R (atype (arr 0.0 '(4) 0)))
+ (= Star (atype (arr 0 '(2 3) 0)))
+ (= Gem (atype (arr 0.0 '(4) 0)))
  (= '(2 3) (ashape (arr 0 '(2 3) 0)))
  (nil? (arank 5))                     ; non-tuple -> nil
  (nil? (atype "x"))
@@ -59,7 +59,7 @@
  (aall (= (arr 0 '(3) '(9 19 29)) (- (arr 0 '(3) '(10 20 30)) 1)))
  (aall (= (arr 0 '(2) '(4 6)) (* (arr 0 '(2) '(2 3)) 2)))
  (aall (= (arr 0 '(2) '(3 5)) (// (arr 0 '(2) '(7 11)) 2)))   ; `//` floor division, stays z
- (= R (atype (/ (arr 0 '(2) '(7 11)) 2)))                     ; `/` promotes (7/2 inexact) -> r
+ (= Gem (atype (/ (arr 0 '(2) '(7 11)) 2)))                     ; `/` promotes (7/2 inexact) -> r
  (aall (= (arr 0.0 '(2) '(3.5 5.5)) (/ (arr 0 '(2) '(7 11)) 2)))
  (aall (= (arr 0 '(2) '(4 6)) (/ (arr 0 '(2) '(8 12)) 2)))   ; `/` stays z when every element divides evenly
  (aall (= (arr 0 '(2) '(1 1)) (% (arr 0 '(2) '(7 11)) 2)))
@@ -79,10 +79,10 @@
           (+ (arr 0 '(2 2) '(1 1 2 2)) (arr 0 '(1 2) '(10 20)))))
 
  ; --- mixed element-type promotes to the widest ---
- (= R (atype (+ (arr 0 '(2) 0) 1.5)))            ; z array + r scalar -> r
+ (= Gem (atype (+ (arr 0 '(2) 0) 1.5)))            ; z array + r scalar -> r
  (aall (= (arr 0.0 '(2) '(1.5 1.5)) (+ (arr 0 '(2) 0) 1.5)))
- (= Z (atype (+ (arr 0 '(2) 0) (arr 0 '(2) 0))))  ; z + z -> z
- (= Z (atype (+ (arr 0 '(2) 0) 1)))                ; scalar int never widens the array
+ (= Star (atype (+ (arr 0 '(2) 0) (arr 0 '(2) 0))))  ; z + z -> z
+ (= Star (atype (+ (arr 0 '(2) 0) 1)))                ; scalar int never widens the array
 
  ; --- comparison -> 0/1 bool array ---
  (aall (< (arr 0 '(3) '(1 2 3)) 10))
@@ -90,7 +90,7 @@
  (sat (< (arr 0 '(3) '(1 20 30)) 10))
  !(sat (< (arr 0 '(3) '(10 20 30)) 5))
  (aall (= (arr 0 '(3) '(1 0 1)) (< (arr 0 '(3) '(1 5 2)) 3)))
- (= Z (atype (< (arr 0 '(3) 0) 1)))               ; bool array is z
+ (= Star (atype (< (arr 0 '(3) 0) 1)))               ; bool array is z
  ; whole-array equality is (aall (= a b))
  (aall (= (arr 0 '(2) '(5 6)) (arr 0 '(2) '(5 6))))
  !(aall (= (arr 0 '(2) '(5 6)) (arr 0 '(2) '(5 7))))
@@ -137,7 +137,7 @@
 
  ; --- elementwise transcendentals over an array ---
  (aall (= (arr 0.0 '(2) '(2.0 3.0)) ((/ 1 2) (arr 0.0 '(2) '(4.0 9.0)))))
- (= R (atype ((/ 1 2) (arr 0 '(3) 0))))  ; result is a float array
+ (= Gem (atype ((/ 1 2) (arr 0 '(3) 0))))  ; result is a float array
 
  ; --- print as constructor forms ---
  ; rank-1 -> the @(…) sugar (@ reader splices into (tuple …)); rank>=2 ->
@@ -180,4 +180,4 @@
   (-1 = (peep e 0 -1))                           ; out of bounds -> the default
   ('(0 3) = (ashape ((arr 0.0 '(0 3) 0) + 1)))     ; rank-2 empties keep their shape
   (: rt @()                                      ; the printed form (@()) reads back
-     (&& (0 = (alen rt)) ('(0) = (ashape rt)) (Z = (atype rt))))))
+     (&& (0 = (alen rt)) ('(0) = (ashape rt)) (Star = (atype rt))))))

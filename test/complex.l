@@ -117,8 +117,8 @@
 
 (assert
  ; --- construction / type / shape ---
- (= 2 C)   (= C (atype ca-v))   (= C (atype ca-z))   (= C (atype ca-a))
- (= C (atype ca-r))   (= C (atype ca-m))
+ (= 2 Twin)   (= Twin (atype ca-v))   (= Twin (atype ca-z))   (= Twin (atype ca-a))
+ (= Twin (atype ca-r))   (= Twin (atype ca-m))
  (= 1 (arank ca-v))   (= 2 (alen ca-v))
  (= 2 (arank ca-m))   (= 4 (alen ca-m))
 
