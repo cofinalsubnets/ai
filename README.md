@@ -82,7 +82,7 @@ source read as ever (`(+ 1 2)`, `(1 +)`).
 - a glued sigil binds tightest: `$"ab" + 2` is `(+ ($ "ab") 2)`, i.e. 197
 the numerals still carry the power family (`-1 x = 1 / x`, `(1 / 2) x =
 sqrt x`, `n x = x ** n`); words cover the rest (`abs int gcd // << >> ^
-sin cos log pow`), and general folds stay words: `(foldl f z l)`.
+sine cosine log pow`), and general folds stay words: `(foldl f z l)`.
 
 pure lisp is the lassoc subset: `?` is still the cond form at the head of a
 list, bare punct symbols escape in parens -- `(+)` is `+` as a value -- and

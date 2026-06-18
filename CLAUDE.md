@@ -241,14 +241,14 @@ $@(3 4)              ; 7
 "ab" * 3             ; "ababab"  * is repeated +; the count saturates
 
 ; --- numeric functions --- abs and int are type-aware; the constants are e pi i; also gcd and
-; modpow. the only irreducible transcendental nifs are pow sin cos log (float; bignums widen,
+; modpow. the only irreducible transcendental nifs are pow sine cosine log (float; bignums widen,
 ; arrays map elementwise; log and pow climb tiers -- log of a negative/complex argument gives
 ; the complex principal value ~((log |z|) (arg z)), and a finite negative base to a non-integer
 ; power gives its principal root, the angle pi*e factored exactly (sinpi/cospi), so the derived
 ; sqrt is total: ((/ 1 2) -1) = i). everything else is *derived* from numerals
 ; and complex -- no nif:
 ;   power (k b) = b**k    sqrt ((/ 1 2) x)    exp (x e)    nth root ((/ 1 n) x)
-;   tan (/ (sin x) (cos x))    atan (arg ~(1 x))    atan2 (arg ~(x y))
+;   tan (/ (sine x) (cosine x))    atan (arg ~(1 x))    atan2 (arg ~(x y))
 ; demo:
 (abs -5)             ; 5         type-aware: (abs ~(3 4)) ; 5.0
 ((/ 1 2) 4)          ; 2.0       sqrt, derived from the numeral
@@ -260,9 +260,9 @@ e                    ; 2.718281828459045
 ; --- a few identities --- tetration is just the tower with one base: (3 3) = 3^3, (3 3 3) =
 ; 3^(3^3), (2 2 2 2) = 2^2^2^2. i*i = -1 -- the algebraic heart of euler's e^(i*pi) = -1 -- and
 ; e^(i*0) = 1. the textbook (-1 = i * pi e) does *not* hold forward: `=` is exact and e^(i*pi)
-; carries a ~1.22e-16 imaginary residue -- cos rounds to exactly -1.0, but sin of the nearest
+; carries a ~1.22e-16 imaginary residue -- cosine rounds to exactly -1.0, but sine of the nearest
 ; double to pi cannot land on 0, so what survives is pi's OWN representation error surfaced
-; through sin (~1.22e-16 = pi - the double nearest pi). the honest price of an irrational pi in
+; through sine (~1.22e-16 = pi - the double nearest pi). the honest price of an irrational pi in
 ; floats. read it backwards instead -- the principal log IS exact: atan2(0 -1) is pi by IEEE fiat and i moves
 ; it with exact 0/1 products, so ((log -1) = i * pi) bit-exactly. pow climbs the same way: a
 ; finite negative base to a non-integer power is its principal root, the angle pi*e factored
@@ -309,7 +309,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; (+.x -- a's last axis against b's first: 1D.1D is the dot product, 2D.2D matrix multiply)
 ; and outer (o.x -- all pairwise products, rank ra+rb). an array nets the SUM of its elements
 ; ($ = max(0, ceil(asum)), like a list), so an all-zero or net-negative array is false.
-; sin/cos/log/pow and the derived forms map elementwise. a 0-axis is real:
+; sine/cosine/log/pow and the derived forms map elementwise. a 0-axis is real:
 ; broadcast keeps it empty (a 1-axis takes the OTHER size, 0 included), an empty
 ; rank-1 prints (array '(0)) (@ has no empty spelling), and EMPTY REDUCTIONS ANSWER
 ; THEIR MONOID UNITS -- (asum e) = 0, (aprod e) = 1, (aall e) true: the floor

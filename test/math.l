@@ -1,6 +1,6 @@
 ; transcendentals + sqrt + pow + pi.
 ; host uses libm; precision is ~1 ulp so identities don't need a slop band
-; except where two errors compound (e.g. (sin pi) is ~1e-16, not exactly 0).
+; except where two errors compound (e.g. (sine pi) is ~1e-16, not exactly 0).
 
 (: (close? a b eps) (< (- (? (< a b) (- b a) (- a b)) 0) eps)
    (close a b)       (close? a b (? w64 1e-12 1e-5))   ; f32 reals (wasm) need a looser eps
@@ -8,21 +8,21 @@
 
    (assert
     ; --- pi from boot.l, basic identities ---
-    (= 1.0 (cos 0))
-    (= 0.0 (sin 0))
-    (= -1.0 (cos pi))
-    (close 0 (sin pi))
-    (very-close 1.0 (sin (/ pi 2)))
-    (very-close 0 (cos (/ pi 2)))
+    (= 1.0 (cosine 0))
+    (= 0.0 (sine 0))
+    (= -1.0 (cosine pi))
+    (close 0 (sine pi))
+    (very-close 1.0 (sine (/ pi 2)))
+    (very-close 0 (cosine (/ pi 2)))
 
     ; --- pythagorean identity ---
-    (close 1.0 (+ (* (sin 1.234) (sin 1.234))
-                  (* (cos 1.234) (cos 1.234))))
-    (close 1.0 (+ (* (sin (- 0 0.7)) (sin (- 0 0.7)))
-                  (* (cos (- 0 0.7)) (cos (- 0 0.7)))))
+    (close 1.0 (+ (* (sine 1.234) (sine 1.234))
+                  (* (cosine 1.234) (cosine 1.234))))
+    (close 1.0 (+ (* (sine (- 0 0.7)) (sine (- 0 0.7)))
+                  (* (cosine (- 0 0.7)) (cosine (- 0 0.7)))))
 
-    ; --- atan inverse of tan in (-pi/2, pi/2); tan is now (/ (sin x) (cos x)) ---
-    (close 0.7 (arg ~(1 (/ (sin 0.7) (cos 0.7)))))
+    ; --- atan inverse of tan in (-pi/2, pi/2); tan is now (/ (sine x) (cosine x)) ---
+    (close 0.7 (arg ~(1 (/ (sine 0.7) (cosine 0.7)))))
 
     ; --- atan2 quadrants ---
     (very-close 0.0 (arg ~(1 0)))
@@ -54,13 +54,13 @@
     (close 1.414213562373095 (pow 2 0.5))
 
     ; --- accepts fixnum args (promoted to float) ---
-    (flop (sin 0))
+    (flop (sine 0))
     (flop ((/ 1 2) 4))
     (flop (pow 2 3))
 
     ; --- non-numeric arg → nil ---
     ; (nil counts as numeric — it's putnum(0).)
-    (nilp (sin "x"))
+    (nilp (sine "x"))
     (nilp (pow "a" 1))
     (nilp (twin "x" 1))      ; twin of a non-number -> nil (so (arg (twin 1 "x")) folds to 0)
 

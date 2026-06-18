@@ -126,7 +126,7 @@
  !("ab" * -3) ("ababab" = "ab" * 2.5) !('(1 2) * 0))
 
 ; --- numeric functions --- abs int (type-aware); constants e pi i; gcd modpow; the only
-; transcendental nifs are pow sin cos log; power/sqrt/exp/nth-root/tan/atan derived from
+; transcendental nifs are pow sine cosine log; power/sqrt/exp/nth-root/tan/atan derived from
 ; numerals + complex (sqrt is total: ((/ 1 2) -1) = i).
 (assert
  (5 = (abs -5)) (fixp (abs -5)) (5.0 = (abs ~(3 4))) (2 = (int 2.9))
@@ -143,7 +143,7 @@
  (comp (log -1)) (flop (log 2)) (comp (log ~(2 3)))                          ; log widens only when it must
  (i = ((/ 1 2) -1)) (~(0 2) = ((/ 1 2) -4))                                  ; sqrt of a negative: principal, exact
  (-8 = (pow -2 3)) (comp ((/ 1 3) -8))                                       ; integer powers stay real; odd roots go principal
- (0.0 = (sin 0) / (cos 0)) (flop (sin 0)))                                   ; tan 0 = 0
+ (0.0 = (sine 0) / (cosine 0)) (flop (sine 0)))                                   ; tan 0 = 0
 
 ; --- complex --- a scalar at tier C; the `~` sigil: ~(re im) builds (twin re im), a bare ~x
 ; lifts a real or conjugates (an involution); i = ~(0 1). a rank-N complex array packs (re,im)

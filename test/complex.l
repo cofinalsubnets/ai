@@ -76,10 +76,10 @@
  !(< 1 i)   (< ~(1 1) ~(2 2))   (<= ~(1 1) ~(2 2))
  (< ~(2 1) ~(2 5))   !(< ~(2 5) ~(2 1))
 
- ; --- % is undefined on complex; sin stays real-domain (-> nil); sqrt is ((/ 1 2) x)
+ ; --- % is undefined on complex; sine stays real-domain (-> nil); sqrt is ((/ 1 2) x)
  ;     and now works on a complex (via pow); twin rejects a complex part ---
  (nilp (% i 2))
- (nilp (sin i))   (close 0.7071067811865476 (re ((/ 1 2) i)))   (nilp (twin 1 i))
+ (nilp (sine i))   (close 0.7071067811865476 (re ((/ 1 2) i)))   (nilp (twin 1 i))
  ; pow IS defined on complex: w^z = exp(z Log w). i^2 = -1, i^i = e^(-pi/2) (real)
  (close -1 (re (pow i 2)))   (? w64 (close 0 (im (pow i 2))) 1)   ; im residue exceeds close's tol under f32 powf
  (close 0.20787957635076193 (re (pow i i)))   (close 0 (im (pow i i)))

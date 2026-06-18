@@ -248,7 +248,7 @@ So McCarthy's atom is not *re-encoded* as a chain; the chain is the object the a
 
 The integer net of §3 is exact, and the tower above it is built to *stay* exact wherever exactness is reachable. `i*i = -1` is exact, algebraically. `(log -1) = i·π` is exact in the principal-log direction, because `atan2(0,-1)` is π by IEEE fiat and `i` moves it with exact 0/1 products. `sqrt` factors its angle through `sinpi` / `cospi`, so `(1/2)·(-1) = i` on the nose. `/` is true division (an inexact integer quotient promotes to float, an exact one stays integer); `0/0` collapses to `0` (NaN is nothing, keeping the order total); overflow grows fixnum → wide → bignum.
 
-The one place floats bite is the *forward* transcendental: `(-1 = ((* i pi) e))` — that is, `e^{iπ} = -1`, since `exp` is `(\ x (x e))` — does **not** hold, because `=` is exact and the nearest double to π cannot make `sin` land on 0, so `e^{iπ}` keeps a ~1.22×10⁻¹⁶ residue. ai keeps that residue rather than rounding it away. The Rocq slice (§11) proves the algebra over exact ℤ and leaves the transcendentals to [test/spec.l](test/spec.l), which asserts a float against a literal only where it is bit-exact on every target.
+The one place floats bite is the *forward* transcendental: `(-1 = ((* i pi) e))` — that is, `e^{iπ} = -1`, since `exp` is `(\ x (x e))` — does **not** hold, because `=` is exact and the nearest double to π cannot make `sine` land on 0, so `e^{iπ}` keeps a ~1.22×10⁻¹⁶ residue. ai keeps that residue rather than rounding it away. The Rocq slice (§11) proves the algebra over exact ℤ and leaves the transcendentals to [test/spec.l](test/spec.l), which asserts a float against a literal only where it is bit-exact on every target.
 
 ## 11 · metatheory: three layers of evidence {#meta}
 

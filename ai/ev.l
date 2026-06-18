@@ -43,7 +43,7 @@
             fixp nomp chainp tabp lamp strp nilp flop comp atomp
             snip string
             re im conj arg real twin
-            sin cos log pow))
+            sine cosine log pow))
    pureset (foldl (\ t s (: v (book s) (? v (pin t v 1) t))) (tablet 0) names)
    (add t s) (: v (book s)
     (? (fixp v) t
