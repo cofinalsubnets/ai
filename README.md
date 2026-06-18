@@ -178,6 +178,31 @@ Makefile from scratch, and the cook-built binary passes the whole corpus. cook
 runs *on* ai, so you need an ai to begin; the [cook/Cookfile](cook/Cookfile) is the
 curated cross-cutting verbs (`test clean valg vmret bench install`).
 
+### the crew
+
+cook is one of the **kship crew** -- a small crew of real programs that ride on
+**kship**, the freestanding ai kernel ([a ship in port](port/kship/)). each is a
+tiny ai layer over a handful of host nifs; on a hosted system they `make install`
+onto PATH beside `ai`. each has a personality doc under [crew/](crew/).
+
+- **aineko** -- a netcat clone in ~50 lines (愛猫, "beloved cat"): `aineko host
+  port` is a TCP client, `aineko -l port` a server, bytes pumping both ways at
+  once. it is the "real apps day one" demo, and the shape the cooperative scheduler
+  was built for: two spawned pump loops, each parked in a port read on a different
+  fd, interleave with no select loop. socket nifs in [host/net.c](host/net.c), the
+  program in [tools/aineko.l](tools/aineko.l).
+- **bao** -- the interactive shell as a loadable lib (`ai -l bao`, or the installed
+  `bao`): raw `ai` shrinks to a bare read/eval/write filter, and bao is the editor +
+  history + fault-face on top, doubling as a pty wrapper (one editor, the condition
+  system). [ai/bao.l](ai/bao.l) + [host/pty.c](host/pty.c).
+- **kship** -- the ship itself: the freestanding kernel grown a NIC and a
+  self-driving agent loop, booting on bare metal with no OS, perceiving the network,
+  running the language over UDP -- a bare-metal network REPL. `make kernel KSHIP=1`
+  builds the bootable image. [port/kship/](port/kship/).
+- **siri** -- the synthesist: keeps the user-facing surface coherent, converging
+  the names the book exposes and mopping compiler internals out of sight, so the
+  global namespace stays a deliberate vocabulary. [crew/siri.md](crew/siri.md).
+
 ### under the hood
 - one word per value: a fixnum is a tagged odd word, anything else is a heap
   object whose first word is its hot -- a live external reference, the wire out
