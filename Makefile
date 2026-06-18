@@ -137,6 +137,10 @@ out/lib/ai_version.h: force_version
 # ====================================================================
 ho = out/host
 h_o = $(ai_c:$(R)/%.c=$(ho)/%.o)
+# host/*.c: per-app host-nif files (auto-globbed, auto-registered via AI_NIF).
+# Linked DIRECTLY into the binary (not via libai.a) so the ai_nifs section is
+# never archive-collected. Drop a host/<app>.c in and it builds -- no rule edit.
+host_o = $(patsubst host/%.c,$(ho)/host/%.o,$(wildcard host/*.c))
 # the host runs $(tco) (common.mk; default 1 = tail-threaded, vmret-checked);
 # ai0 below stays pinned 0, the deliberate trampoline-coverage lane.
 # (-I$(ho) -Iout/lib for the generated egg/cli headers.)
@@ -227,10 +231,10 @@ $(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
 
 # main.c is compiled into the final l inline (G_EGG_PRE/POST assemble the lib
 # headers); depend on them so it relinks when a lib source changes.
-$(ho)/ai: main.c $(ho)/libai.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h
+$(ho)/ai: main.c $(host_o) $(ho)/libai.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(hcc) -o $@ main.c $(ho)/libai.a -lm
+	@$(hcc) -o $@ main.c $(host_o) $(ho)/libai.a -lm
 
 $(ho)/ai.1: doc/ai.1 out/lib/ai_version.h
 	@echo GEN	$@

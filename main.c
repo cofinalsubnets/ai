@@ -285,6 +285,13 @@ static union u const
  nif_close[] = {{lvm_close}, {lvm_ret0}},
  nif_run[] = {{lvm_run}, {lvm_ret0}},
  nif_getenv[] = {{lvm_getenv}, {lvm_ret0}};
+// register them in the ai_nifs section (drained in main below); a host/*.c app
+// file does the same with AI_NIF and is auto-globbed into the build -- no edit here.
+AI_NIF("exit", nif_exit);
+AI_NIF("open", nif_open);
+AI_NIF("close", nif_close);
+AI_NIF("run", nif_run);
+AI_NIF("getenv", nif_getenv);
 
 // --- the boot script ---------------------------------------------------
 // Everything the two builds disagree about lives in this ONE conditional
@@ -389,13 +396,10 @@ int main(int argc, char const **argv) {
   for (g = ai_push(g, 1, ai_nil); ac--; g = gxr(g));
   if (ai_ok(g)) {
     ai_word full_argv = ai_pop1(g);                // shared by `argv` and `cmdline`
-    struct ai_def d[] = {{"exit", (ai_word) nif_exit},
-                        {"open", (ai_word) nif_open},
-                        {"close", (ai_word) nif_close},
-                        {"run", (ai_word) nif_run},
-                        {"getenv", (ai_word) nif_getenv},
-                        {"argv", full_argv},
-                        {"cmdline", full_argv}, };
+    // the static nifs (exit/open/close/run/getenv + any host/*.c app nifs) come
+    // from the ai_nifs section; argv/cmdline are runtime values, defined here.
+    g = ai_defn(g, __start_ai_nifs, __stop_ai_nifs - __start_ai_nifs);
+    struct ai_def d[] = {{"argv", full_argv}, {"cmdline", full_argv}};
     g = ai_defn(g, d, countof(d));
     g = boot(g, argp); }
   switch (ai_code_of(g)) {

@@ -161,6 +161,25 @@ struct ai {
 
 struct ai_def { char const *n; intptr_t x; };
 
+// Host nif auto-registration. A host/*.c file (or main.c) registers a nif by
+// name with AI_NIF("name", nif_body) -- the entry lands in the `ai_nifs` section
+// and main()'s boot drains [__start_ai_nifs, __stop_ai_nifs) via ai_defn. So an
+// app thread adds nifs in its OWN host/<app>.c (auto-globbed + auto-registered)
+// without editing ai.c, ai.h, or main.c's table. No linker script: the toolchain
+// auto-defines the bracket symbols (Linux __start_/__stop_; mach-o section$).
+#if defined(__APPLE__)
+extern struct ai_def const __start_ai_nifs[] __asm("section$start$__DATA$ai_nifs");
+extern struct ai_def const __stop_ai_nifs[]  __asm("section$end$__DATA$ai_nifs");
+#define AI_NIF(nm, fn) \
+  static struct ai_def const __attribute__((section("__DATA,ai_nifs"), used)) \
+    _ainif_##fn = { (nm), (intptr_t) (fn) }
+#else
+extern struct ai_def const __start_ai_nifs[], __stop_ai_nifs[];
+#define AI_NIF(nm, fn) \
+  static struct ai_def const __attribute__((section("ai_nifs"), used)) \
+    _ainif_##fn = { (nm), (intptr_t) (fn) }
+#endif
+
 // Port vtable. One shape covers both directions; unused slots in a given
 // port get noop_* stubs (defined in g.c) so dispatch needs no NULL guards.
 struct ai_port_vt {
