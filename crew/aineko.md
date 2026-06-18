@@ -139,40 +139,35 @@ sockets) stay unaffected — no VM or `ai.c` change.
 `make nettest`); half-close semantics (the `shutdown` nif); keeping kernel/wasm
 green (auto-excluded, but verify prel.l stays socket-free).
 
-## LANDED — Stage 1 + Stage 2 (2026-06-17, green) — commit info to fold in
+## LANDED + SHIPPED — Stage 1 + Stage 2 (green, all committed on `post`)
 
-Built and verified. The doc body above describes the OLD `main.c`-everything nif
-pattern; the actual work used the newer `host/*.c` glob + `AI_NIF` auto-registration
-(commit `bf6535b4`) — **zero edits to `ai.c`/`ai.h`/`main.c`**, the brief's pattern.
+Built, verified, committed, and **installed as a `bin/aineko`** (`make install`).
+The doc body above describes the OLD `main.c`-everything nif pattern; the actual
+work used the newer `host/*.c` glob + `AI_NIF` auto-registration (commit
+`bf6535b4`) — **zero edits to `ai.c`/`ai.h`/`main.c`**, the brief's pattern. The
+Makefile fold-in (`nettest` target, `hostnif_tests += boot/net.l`) is all landed.
 
-**New files (self-contained, commit as-is — same as bao's 9b15c90c pattern):**
+**The files (all on `post`):**
 - `host/net.c` — the four socket nifs `(connect host port)` / `(listen port)` /
   `(accept l)` / `(shutdown s how)`. Each mirrors `lvm_open`: make an fd →
   `ai_io_alloc(g, fd)` → heap port (close finalizer); read/write then free via
   fgetc/fputc. Auto-globbed into `host_o`, registered with `AI_NIF`. Blocking
   (one-shot); `how` is the POSIX SHUT_* fixnum (1 = write half-close).
 - `tools/aineko.l` — client (`aineko HOST PORT`) + server (`aineko -l PORT`), two
-  pump loops. Run via `out/host/ai -l ai/prel.l tools/aineko.l …` until the egg
-  bakes it into a multi-call binary.
+  pump loops. Carries a `#!/usr/bin/env -S ai -l` shebang and installs as
+  `bin/aineko`; runnable in-tree via `out/host/ai -l ai/prel.l tools/aineko.l …`.
 - `boot/net.l` — in-process loopback smoke (assert harness, prints `net: ok`),
-  the `hostnif_tests` member.
-- `test/net/loopback.sh` — the two-process full-duplex fixture (`make nettest`).
+  wired into `hostnif_tests` (`make test_hostnif`).
+- `test/net/loopback.sh` — the two-process full-duplex fixture (`make nettest`,
+  port via `make nettest PORT=NNNN`). Deliberately NOT in `make test`/`test_all`
+  (needs two live processes + a free port); `boot/net.l` covers the nifs portably.
 
-**Makefile fold-in (shared file — leave to the coordinated commit; 3 additive hunks):**
-1. `.PHONY` gains `nettest` (and `test_hostnif`, if not already in via the core thread).
-2. Append `boot/net.l` to `hostnif_tests` → `hostnif_tests = boot/pty.l boot/net.l`.
-3. The `nettest` target (after `test_hostnif`):
-   ```
-   PORT ?= 7390
-   nettest: host
-   	@echo NETTEST $m "(127.0.0.1:$(PORT))"
-   	@sh $R/test/net/loopback.sh $m $(PORT)
-   ```
-   Deliberately NOT in `make test`/`test_all` (needs two live processes + a free
-   port); `boot/net.l` in `test_hostnif` covers the nifs portably.
-
-**Suggested commit message:**
-`aineko: TCP socket nifs (host/net.c) + the netcat clone (tools/aineko.l)`
+**Next / remaining:** Stage 3 (non-blocking + buffering polish — O_NONBLOCK +
+EAGAIN→yield, `struct fdio` to kill per-byte reads) stays OPTIONAL / post-release.
+Stage 4 (the "a netcat clone in ~50 lines" line in the README/paper) is the only
+release-facing item left. The longer arc is folding aineko into the multi-call
+binary (`runtime-personalities-so`) so it dispatches by `argv[0]` rather than via
+the `bin/aineko` launcher.
 
 **Teardown — corrects this doc's "hush the other pump" sketch.** The two
 directions are INDEPENDENT half-duplex channels: a socket-READ EOF does NOT mean

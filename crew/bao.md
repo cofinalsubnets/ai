@@ -14,25 +14,32 @@ system), so they share one tool.
 ## Status (2026-06-18)
 
 Phase 1 is mostly landed; the next move is **path B** (the io/scheduler rework).
+All bao work is on **`post`** now (the `trueblue` branch was dropped and its work
+folded into `main`/`post`; `post` is the dev branch).
 
-- **Landed (on `trueblue`):** the pty nifs (`host/pty.c`: `ptyrun`/`reap`/`kill`/
-  `winsize`/`ptyecho`), `wrap` (the transparent bidirectional pty pump with child-
-  death teardown), `edraw` (bao's port-parameterized raw-line editor), `bao.l` made
-  **define-only**, and the shell-split (`host/main.c` installs bao then launches
-  `(bao 0)` on a tty; a pipe stays the bare filter). Gates: `make test_hostnif`
-  (`pty: ok`), `cat test/00-init.l boot/baoedit.l | ai -l ai/bao.l` (`baoedit: ok`).
+- **Landed:** the pty nifs (`host/pty.c`: `ptyrun`/`reap`/`kill`/`winsize`/`ptyecho`,
+  `ab0e726b`), `wrap` (the transparent bidirectional pty pump with child-death
+  teardown, `0420fe87`), `edraw` (bao's port-parameterized raw-line editor) +
+  `bao.l` made **define-only** (`77c7cac0`), and the shell-split (`host/main.c`
+  installs bao then launches `(bao 0)` on a tty; a pipe stays the bare filter —
+  `74071dbb`). bao now also installs as a `bin/bao` launcher (`make install`).
+  Gates: `make test_hostnif` (`pty: ok`), `cat test/00-init.l boot/baoedit.l |
+  ai -l ai/bao.l` (`baoedit: ok`).
 - **Blocked → path B:** wiring `edraw` *into* `wrap` (the real rlwrap: edited lines
   feed the child) was **built and reverted** — it deadlocks the cooperative
   scheduler (an editor task writing `out` while the pump task reads the master +
   writes `out`). The fix is not a half-duplex shortcut; it is the io rework below.
-- **Path B is now FULLY DESIGNED** — `doc/stream.md` (the four-defect diagnosis,
-  the coinductive `source` hot, `read`-as-a-pure-fold, `select`/`ready?`, the
-  staged migration) — and the **pure half is MODELED and green** in `boot/stream.l`
-  (a `boot/tag.l`-style companion: `cat test/00-init.l boot/stream.l | out/host/ai`
-  → 17 asserts + `stream: ok`). The build is a dedicated **core `ai.c` session**
-  (the core thread owns `ai.c`/`ai.h`); bao's part is the `bao.l`/`repl.l` ports.
-- **Next:** core lands path B (unblocking the rlwrap wiring), then Phase 2 (the
-  debugger — a `help` handler with a face).
+- **Path B — DESIGNED + MODELED, COMMITTED (`b9f87013`):** `doc/stream.md` (the
+  four-defect diagnosis, the coinductive `source` hot, `read`-as-a-pure-fold,
+  `select`/`ready?`, the staged migration) and the **pure half MODELED and green**
+  in `boot/stream.l` (a `boot/tag.l`-style companion: `cat test/00-init.l
+  boot/stream.l | out/host/ai` → 17 asserts + `stream: ok`). What remains is the
+  **C build**: a dedicated **core `ai.c` session** (the core thread owns
+  `ai.c`/`ai.h`); bao's part is then the `bao.l`/`repl.l` ports + the rlwrap wiring.
+- **Next:** (1) core lands path B in `ai.c` (the `source` hot + `select`/`ready?`),
+  unblocking the rlwrap wiring; (2) bao ports `bao.l`/`repl.l` onto the stream
+  surface + re-lands `edraw`→`wrap`; (3) Phase 2 (the debugger — a `help` handler
+  with a face).
 
 ## Agent brief — you are the bao thread
 

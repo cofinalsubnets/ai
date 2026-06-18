@@ -39,6 +39,15 @@
 ;   missing name or apcap is VISIBLE; the more bits keep the read protocol (port back when
 ;   incomplete, sentinel at eof). file mode stays helpless -- terminal, per the law.
 ; * python \b-sweeps treat - as a boundary: kebab names with capital segments mangle.
+; * the CREW (crew/*.md) drives dev: the apps over the core -- aineko (netcat,
+;   tools/aineko.l + host/net.c), bao (the shell/rlwrap/debugger, ai/bao.l + host/pty.c),
+;   cook (make-in-ai, cook/cook.l), kship (the freestanding agent-kernel, port/kship/).
+;   each crew/<app>.md is an AGENT BRIEF -- a personality a dedicated session is pointed
+;   at, owning a NON-OVERLAPPING file territory so the sessions run in parallel. the apps
+;   add nifs through the host/*.c glob + AI_NIF (no core edit); ai.c/ai.h/host/main.c are
+;   CORE territory -- a crew session that needs a core change stops and asks the core
+;   thread (this session), never reaches in. crew/README.md is the roster; the runnable
+;   ones install on PATH via `make install`.
 
 ; --- the shape of it --- one cell is one word: a fixnum is a tagged odd word, anything else
 ; is a heap object whose first word is its hot -- a live external reference, the wire out of
