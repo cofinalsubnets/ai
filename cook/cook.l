@@ -132,11 +132,25 @@
    ; run a recipe: each step in order.
    (recur item steps) (each steps (\ step (step1 step)))
 
-   ; one step. a list is an argv (a subprocess); any other lamp is a thunk.
+   ; one step. a list HEADED BY THE SYMBOL `exec` -- (exec PROG ARGS..) -- is an
+   ; INTERACTIVE step: it runs via the `exec` nif, which REPLACES cook and inherits
+   ; the terminal, so the child (the repl, gdb, qemu) drives the real tty rather than
+   ; having its stdout captured by `run`. A plain list of strings is an argv
+   ; subprocess (captured); any other lamp is a thunk.
    (step1 step)
-   (? (chainp step) (shell step)
+   (? (&& (chainp step) (= (cap step) 'exec)) (do-exec (cup step))   ; (exec ..) -- the interactive step
+      (chainp step) (shell step)
       (lamp step) (step 0)
       0)
+
+   ; an interactive step: exec the argv, replacing this process (tty inherited).
+   ; the exec nif returns only on FAILURE -- then an errno fixnum -- so anything
+   ; past it is the error path. exec is terminal by nature (the repl never returns),
+   ; so cook's "cooked X" summary is correctly never reached.
+   (do-exec argv)
+   (: _ (fflush out)
+       _ (exec argv)
+       _ (fputs err (+ "cook: cannot exec " (join " " argv))) _ (fputc err 10) (exit 1))
 
    ; run one argv: echo it, run it, echo its captured stdout, abort on failure.
    (shell step)
@@ -479,16 +493,29 @@
                 (g (+ 1 i) (+ acc (s i))))))
        0 ""))
    (expand-words ws as) (catmap (\ w (split-ws (expand w as 0))) ws)
+   ; a recipe LINE that begins with the shell `exec` builtin is an INTERACTIVE
+   ; line: `exec <cmd>` replaces the shell, so make already runs it on the real
+   ; tty -- and cook honours the same convention, running it through the exec nif
+   ; (the `(exec ..)` step) rather than capturing it via `run`. So one notation --
+   ; `exec` -- marks the repl / gdb / qemu targets interactive in BOTH builders.
+   (starts? s pre) (&& (<= (tally pre) (tally s)) (= pre (snip s 0 (tally pre))))
+   (execp cmd) (: t (ltrim cmd)
+                  (&& (starts? t "exec") (|| (= 4 (tally t)) (chws (t 4)))))
    ; build a recipe's argv steps, pinning the automatic vars into the table first.
    ; build a card's steps. each raw is (silent ignore . body) from recipe-parse;
    ; expand the body NOW (the $@/$</$^/$* automatics are live in `as` at this
    ; point, and get re-pinned per item) and close over the expanded command in a
-   ; thunk that runs it make-style via sh-line, carrying the @/- flags.
+   ; thunk that runs it make-style via sh-line, carrying the @/- flags. An
+   ; exec-prefixed line instead becomes an (exec "sh" "-c" cmd) interactive step
+   ; (serialized as such under --emit, run via the exec nif otherwise).
    (expand-steps raws t pr stem as)
    (: _ (pin as "@" t) _ (pin as "<" (? (chainp pr) (cap pr) ""))
        _ (pin as "^" (join " " pr)) _ (pin as "*" stem)
        (map (\ raw (: cmd (expand (cup (cup raw)) as 0)
-                       (? (peep emitp 0 0) (L "sh" "-c" cmd)
+                       (? (execp cmd)
+                          (? (peep emitp 0 0) (link 'exec (L "sh" "-c" cmd))
+                             (\ _ (do-exec (L "sh" "-c" cmd))))
+                          (peep emitp 0 0) (L "sh" "-c" cmd)
                           (\ _ (sh-line (cap raw) (cap (cup raw)) cmd))))) raws))
 
    ; -- conditionals & assignment ops over the variable table `as` --

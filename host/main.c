@@ -258,6 +258,46 @@ static lvm(lvm_run) {
  Sp += 1; Ip += 1;
  return Continue(); }
 
+// (exec argv) -> REPLACE this process with argv[0], inheriting stdio (the real
+// terminal). Unlike (run argv) -- which forks, pipes the child's stdout into a
+// captured string, and waits -- exec hands the tty straight to the child, so an
+// INTERACTIVE program drives the terminal. On success it never returns; on a bad
+// argv or a failed exec it returns an errno (or -1) fixnum, exactly like run's
+// spawn-failure path. cook execs its terminal recipe steps this way (the repl,
+// gdb, the qemu run targets). Marshals argv into cav like host_run, then execvp
+// in place -- no allocation between the build and the exec, so cav stays valid.
+ai_noinline static struct ai *host_exec(struct ai *g, ai_word argv) {
+ intptr_t argc = 0;
+ uintptr_t total = 0;
+ for (ai_word p = argv; chainp(p); p = B(p)) {
+  if (!ai_strp(A(p))) return ai_push(g, 1, putcharm(-1));   // misuse
+  argc++, total += len(A(p)) + 1; }
+ if (!argc) return ai_push(g, 1, putcharm(-1));            // empty argv
+ if (!ai_ok(g = ai_have(g, (uintptr_t) argc + 1 + b2w(total)))) return g;
+ argv = g->sp[0];                                          // re-root post-ai_have
+ char **cav = (char**) g->hp;
+ char *blob = (char*) (g->hp + (argc + 1));
+ { uintptr_t off = 0; intptr_t i = 0;
+   for (ai_word p = argv; chainp(p); p = B(p), i++) {
+    struct ai_str *s = str(A(p));
+    memcpy(blob + off, txt(s), len(s));
+    blob[off + len(s)] = 0;
+    cav[i] = blob + off;
+    off += len(s) + 1; }
+   cav[argc] = NULL; }
+ fflush(stdout); fflush(stderr);
+ execvp(cav[0], cav);
+ return ai_push(g, 1, putcharm(errno)); }                  // exec failed -> errno
+
+static lvm(lvm_exec) {
+ Pack(g);
+ g = host_exec(g, Sp[0]);                                  // returns only on failure
+ if (!ai_ok(g)) return ghelp(g);
+ Unpack(g);
+ Sp[1] = Sp[0];                                            // errno fixnum over argv
+ Sp += 1; Ip += 1;
+ return Continue(); }
+
 // Copy the name to a C string and look it up. Factored out (ai_noinline) so the
 // memcpy(&name,...) escape can't defeat lvm_getenv's tail call (cf. call_open).
 ai_noinline static char const *host_getenv(struct ai_str *nv) {
@@ -290,6 +330,7 @@ static union u const
  nif_open[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_open}, {lvm_ret0}},
  nif_close[] = {{lvm_close}, {lvm_ret0}},
  nif_run[] = {{lvm_run}, {lvm_ret0}},
+ nif_exec[] = {{lvm_exec}, {lvm_ret0}},
  nif_getenv[] = {{lvm_getenv}, {lvm_ret0}},
  nif_getpid[] = {{lvm_getpid}, {lvm_ret0}};
 // Register in the ai_nifs section (drained in main below). An app thread adds its
@@ -303,6 +344,7 @@ AI_NIF("exit", nif_exit);
 AI_NIF("open", nif_open);
 AI_NIF("close", nif_close);
 AI_NIF("run", nif_run);
+AI_NIF("exec", nif_exec);
 AI_NIF("getenv", nif_getenv);
 AI_NIF("getpid", nif_getpid);
 
