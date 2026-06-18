@@ -356,6 +356,15 @@ Theorem number_lt_product : forall x y, lt (Onum x)  (Oprod y). Proof. intros. l
 Theorem product_lt_map    : forall x y, lt (Oprod x) (Omap y).  Proof. intros. left. cbn. lia. Qed.
 Theorem map_lt_top        : forall x y, lt (Omap x)  (Otop y).  Proof. intros. left. cbn. lia. Qed.
 
+(* the 0-vs-() discipline, ORDER side: () is a FLOOR MINT (an Osym, the bluest
+   point), so it sits strictly below the number 0 (an Onum) -- ORDER-distinct,
+   while the value model has them =-equal-as-nothing (nil_neq_zero: both nilp, yet
+   distinct values). Two of the three axes the flip thread asked the proof to keep
+   apart; the third, CONTROL (() hands control to the runtime g, 0 is the inert
+   value-false bit -- floor-is-the-runtime), is operational and lives outside this
+   pure order/net math. *)
+Theorem unit_lt_zero : forall z, lt (Osym z) (Onum 0).  Proof. intros. left. cbn. lia. Qed.
+
 (* ============================================================ *)
 (* comparing functions: = is alpha + structural                 *)
 (* ============================================================ *)
@@ -521,6 +530,30 @@ Theorem count_saturates : forall c, c <= 0 -> scount c = 0%nat.
 Proof. intros c H. unfold scount. rewrite Z.max_l by lia. reflexivity. Qed.
 Theorem count_keeps : forall c, 0 <= c -> Z.of_nat (scount c) = c.
 Proof. intros c H. unfold scount. rewrite Z.max_r by lia. apply Z2Nat.id. lia. Qed.
+
+(* THE COUNT LAW IS SHARED: numeral-apply (n f) composes f the SAME scount times.
+   `*` repeats (smul) and a numeral composes (numap) through ONE saturated count,
+   the same Z.max 0 that defines `sat` -- so count_saturates is BOTH the *-floor
+   and the compose-floor. This is the count side of the one saturation bit; its
+   value-side twin is sat_clamps (net <= 0 => sat = 0), and its third face is the
+   n-ary closure's fire-vs-hold (test/oracle.l, rocq/extract.v). (Only the
+   COMPOSITION count saturates; the numeral-on-numeral exponent climbs to
+   reciprocals -- (-1 x) = 1/x -- so this is appf-iteration, not `app`.) *)
+Definition numap {A} (c : Z) (f : A -> A) (x : A) : A := Nat.iter (scount c) f x.
+
+(* a non-positive count composes 0 times: the identity -- the compose-FLOOR,
+   the eval-count reflection of sat_clamps, via the SAME count_saturates *)
+Theorem numap_floor : forall A (c : Z) (f : A -> A) (x : A),
+  c <= 0 -> numap c f x = x.
+Proof. intros A c f x H. unfold numap. rewrite (count_saturates c H). reflexivity. Qed.
+
+(* a nonnegative count agrees with the bare (n f) nat lane (appf) *)
+Theorem numap_pos : forall A (n : nat) (f : A -> A) (x : A),
+  numap (Z.of_nat n) f x = appf n f x.
+Proof.
+  intros A n f x. unfold numap, appf. f_equal.
+  unfold scount. rewrite Z.max_r by lia. apply Nat2Z.id.
+Qed.
 
 (* + IS THE MEASURE HOMOMORPHISM, and * scales the measure by the count *)
 Definition sum (s : list Z) : Z := fold_right Z.add 0 s.
@@ -830,7 +863,9 @@ Proof. intro r. unfold cnilp, cof; cbn.
    from the stdlib -- funext, classic, proof-irrelevance) would show here. One
    representative theorem per pillar: saturation, the total order, the function
    semantics, the reduction layer, and the complex net. *)
-Print Assumptions sat_clamps.        (* the net/saturation law *)
+Print Assumptions sat_clamps.        (* the net/saturation law (value side) *)
+Print Assumptions numap_floor.       (* the count-law floor (count side, same $) *)
+Print Assumptions unit_lt_zero.      (* () < 0: the floor below value-false (order side) *)
 Print Assumptions le_total.          (* the total order *)
 Print Assumptions eta_not_bridged.   (* = is alpha+structural, no further *)
 Print Assumptions beta_id.           (* the reduction layer ev runs *)
