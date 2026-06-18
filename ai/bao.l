@@ -343,11 +343,11 @@
    ; `help` function gets control at the scare (condition data on struct g)
    ; BEFORE the task dies; either way done?/key? is where the repl resumes.
    (do_eval v)
-     (: pid (spawn ev v)
+     (: pid (hatch ev v)
         (poll _)
           (? (done? pid) (: r (wait pid) _ (putx r) -1)   ; the answer
              (key? 0)    (: c (getc 0)
-                            (? (= c 3) (do (puts "^C") (hush pid) -1)
+                            (? (= c 3) (do (puts "^C") (chill pid) -1)
                                (poll 0)))
              (do (yield 0) (poll 0)))
         (poll 0))
@@ -399,9 +399,9 @@
 
    ; --- the host-only pty wrapper (wrap) ---
    ; reachable from the bao prompt to pty-wrap a host program -- (wrap (L
-   ; "python3")). it uses the pty nifs (ptyrun, reap) which live in host/pty.c
+   ; "python3")). it uses the pty nifs (ptyrun, gather) which live in host/pty.c
    ; and are NOT present in ai0 or the kernel; bao is baked into both, so the
-   ; references are DEFERRED to call time through (ev 'ptyrun) / (ev 'reap)
+   ; references are DEFERRED to call time through (ev 'ptyrun) / (ev 'gather)
    ; -- quoted symbols are inert data at bake time (no missing-name fires), and
    ; wrap is never CALLED on those frontends. on the host they resolve to the
    ; live nifs. NOTE: drives the real in/out tty fds, so it is exercised
@@ -413,10 +413,10 @@
    ; aineko's pump -- prel stays socket/pty-free, so each app carries its own.)
    (pump src dst) (: ch (get src) (? (= ch -1) 0 (: _ (put dst ch) _ (flush dst) (pump src dst))))
 
-   ; poll a non-blocking (reap pid) to its exited PAIR. the pair is told from
+   ; poll a non-blocking (gather pid) to its exited PAIR. the pair is told from
    ; still-running (0) STRUCTURALLY (two?), never by net: the status pair (0)
    ; nets blue, so ! / nil? can't tell it from 0 -- only two? can.
-   (waitfor pid) (: s ((ev 'reap) pid) (? (two? s) s (= 0 s) (do (sleep 2) (waitfor pid)) s))
+   (waitfor pid) (: s ((ev 'gather) pid) (? (two? s) s (= 0 s) (do (sleep 2) (waitfor pid)) s))
 
    ; (wrap argv) -- run argv on a fresh pty and become a TRANSPARENT bidirectional
    ; pump: stdin -> the child, the child's output -> stdout, both live at once
@@ -427,20 +427,20 @@
    ; master EOF (the child gone); the stdin->master side runs in `up` and, on the
    ; user's own EOF, forwards VEOF (byte 4) so a canonical child exits. funnel
    ; through one death: when master EOF lands, join `up` -- wait if it already
-   ; finished (user EOF first), else hush it (still parked on stdin; the child is
+   ; finished (user EOF first), else chill it (still parked on stdin; the child is
    ; dead so dropping pending input is correct, not aineko's data-loss case).
-   ; returns the child's exited status pair, or ptyrun's errno fixnum on spawn
+   ; returns the child's exited status pair, or ptyrun's errno fixnum on hatch
    ; failure.
    (wrap argv)
      (: r ((ev 'ptyrun) argv)
         (? (two? r)
            (: pid (cap r) m (cup r)
-              up (spawn (\ _ (: _ (pump in m) (put m 4))) 0)   ; stdin -> child; VEOF on user EOF
+              up (hatch (\ _ (: _ (pump in m) (put m 4))) 0)   ; stdin -> child; VEOF on user EOF
               _ (pump m out)                                      ; child -> stdout; ends when the child dies
-              _ (? (done? up) (wait up) (hush up))                ; join the input pump through the one death
+              _ (? (done? up) (wait up) (chill up))                ; join the input pump through the one death
               _ (flush out)
               _ (close m)
-              (waitfor pid))                                      ; reap the child
+              (waitfor pid))                                      ; gather the child
            r))
 
    ; --- the raw-line editor (bao's own line reader) ---

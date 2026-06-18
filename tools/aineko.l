@@ -14,7 +14,7 @@
 ; Run (until the egg bakes aineko into a multi-call binary):
 ;   out/host/ai -l ai/prel.l tools/aineko.l HOST PORT
 ;   out/host/ai -l ai/prel.l tools/aineko.l -l PORT
-; The socket nifs (connect/listen/accept/shutdown) live in host/net.c; prel stays
+; The socket nifs (connect/listen/accept/seal) live in host/net.c; prel stays
 ; socket-free so the kernel/wasm frontends are unaffected.
 
 ; A top-level body-having `:` runs directly (and leaks no bindings). NOT wrapped
@@ -38,16 +38,16 @@
     ; INDEPENDENT half-duplex channels: a read-side EOF does NOT mean the write
     ; side is dead, so we must drain our outbound stdin fully before closing.
     ;   - stdin -> socket runs in THIS task: it always sends every stdin byte
-    ;     before teardown, then half-closes the write side (shutdown s 1) so the
+    ;     before teardown, then half-closes the write side (seal s 1) so the
     ;     peer sees EOF rather than a hung half-open socket.
     ;   - socket -> stdout runs in the spawned task `down`; it ends when the peer
     ;     closes (socket EOF). The two pumps interleave through the cooperative
     ;     scheduler (each parked in a port read on its own fd).
     ; Teardown joins through one path: send all of stdin, half-close, then WAIT
     ; for the inbound pump to drain to the peer's EOF before the final close.
-    (talk s) (: down (spawn (\ _ (pump s out)) 0)   ; socket -> stdout, in a task
+    (talk s) (: down (hatch (\ _ (pump s out)) 0)   ; socket -> stdout, in a task
                 _ (pump in s)                        ; stdin -> socket (drains fully here)
-                _ (shutdown s 1)                     ; half-close write: peer sees stdin EOF
+                _ (seal s 1)                     ; half-close write: peer sees stdin EOF
                 _ (wait down)                        ; let the inbound pump drain to socket EOF
                 _ (flush out)
                 _ (close s)

@@ -69,7 +69,7 @@
  !(hot? #()) !(hot? cap) !(hot? 5) !(hot? "s")   ; maps/functions/data are not hots
  (lit? (cask 4)) (lit? '(1)) (lit? "s") !(lit? 5) ; the lit?-spans-bands pin: lit = any heap value
  (1 = $cap) (1 = $out) (1 = $(sip 0))            ; tops and ports net 1: present, drained or not
- (fix? (: p (spawn (\ x x) 0) _ (wait p) p))  ; a task id is a number, not a handle
+ (fix? (: p (hatch (\ x x) 0) _ (wait p) p))  ; a task id is a number, not a handle
  ((64 2) = 2 * (63 2))                           ; fixnum overflow -> exact bignum ((k b) = b**k)
  (5.0 = (abs ~(3 4))) (~(2.0 3.0) = 2 + 3 * i))  ; mixed arithmetic widens to the higher tier
 
@@ -289,12 +289,12 @@
  (2 = (|| 0 2 3)) ('(1 2 3) = (L 1 2 3)) (6 = (do 1 2 6)) (3 = (let a 1 b 2 (a + b)))
  (3 = (:- (a + b) a 1 b 2)) ('big = (?- 'else (1 < 2) 'big)) (9 = ((<=< inc (\ x (x * 2))) 4)))
 
-; --- control --- ev compiles+runs; call-cc a one-shot escape; tasks spawn/wait/yield/sleep/done?;
+; --- control --- ev compiles+runs; call-cc a one-shot escape; tasks hatch/wait/yield/sleep/done?;
 ; the RNG is xoshiro256++; a global `help` takes every raise (scare/more bits); a missing name
 ; raises (scare 'missing nom); numeral counts are CAPPED by the `apcap` box.
 (assert
  (3 = (ev '(+ 1 2))) (lit? ev) (41 = (call-cc (\ k (k 41)))) (42 = 1 + (call-cc (\ k 41)))
- (42 = (: p (spawn (\ x (do (yield 0) (x + 1))) 41) (wait p))) (0 = (wait 99999)) (done? 99999)
+ (42 = (: p (hatch (\ x (do (yield 0) (x + 1))) 41) (wait p))) (0 = (wait 99999)) (done? 99999)
  !(sleep 0) (4 = (alen (rng-seed 1))) ((rand 10) < 10) (gem? (randf 0))
  (scare? 1) !(scare? 3) (eof? 3) !(eof? 2) (more? 2) !(more? 3) (lit? scare)
  (tab? apcap) (1048576 = (apcap 0))              ; the count ceiling, a tunable box

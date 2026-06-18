@@ -669,9 +669,9 @@ lvm_t lvm_fault;
  _(nif_nilp, "nil?", s1(lvm_nilp)) _(nif_ev, "ev", s1(lvm_eval))\
  _(nif_callk, "call-cc", s1(lvm_callk)) _(nif_scare, "scare", s2(lvm_scare))\
  _(nif_missing, "missing", s2(lvm_missing)) _(nif_yield, "yield", s1(lvm_yield_nif)) \
- _(nif_spawn, "spawn", s2(lvm_spawn)) _(nif_wait, "wait", s1(lvm_wait)) \
+ _(nif_spawn, "hatch", s2(lvm_spawn)) _(nif_wait, "wait", s1(lvm_wait)) \
  _(nif_sleep, "sleep", s1(lvm_sleep)) _(nif_donep, "done?", s1(lvm_donep)) \
- _(nif_hush, "hush", s1(lvm_hush)) \
+ _(nif_hush, "chill", s1(lvm_hush)) \
  _(nif_key, "key?", s1(lvm_key)) \
  _(nif_fputbn, "putbn", s3(lvm_fputbn))\
  _(nif_fputx, "print", s2(lvm_fputx))\

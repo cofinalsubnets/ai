@@ -219,8 +219,8 @@ static union u const
   nif_setwinsize[] = {{lvm_cur}, {.x = putcharm(3)}, {lvm_setwinsize}, {lvm_ret0}},
   nif_ptyecho[]    = {{lvm_cur}, {.x = putcharm(2)}, {lvm_ptyecho}, {lvm_ret0}};
 AI_NIF("ptyrun", nif_ptyrun);
-AI_NIF("reap", nif_reap);
-AI_NIF("kill", nif_kill);
+AI_NIF("gather", nif_reap);
+AI_NIF("still", nif_kill);
 AI_NIF("winsize", nif_winsize);
 AI_NIF("setwinsize", nif_setwinsize);
 AI_NIF("ptyecho", nif_ptyecho);

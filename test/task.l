@@ -1,5 +1,5 @@
-; tests for cooperative multitasking: spawn / yield / wait / sleep / done?.
-; (spawn fn x)  -> pid (positive integer); starts a new task running (fn x).
+; tests for cooperative multitasking: hatch / yield / wait / sleep / done?.
+; (hatch fn x)  -> pid (positive integer); starts a new task running (fn x).
 ;                  the main task has reserved pid 0.
 ; (yield 0)     -> nil; cooperatively suspends so other ready tasks can run.
 ;                  (yield) is just `yield` since (x)=x in l — call with an arg.
@@ -13,17 +13,17 @@
 ;                  nil if pid refers to a runnable task.
 
 (assert
- ; spawn-wait round trip: fn is applied to x; the result flows back through wait.
- (= 42 (: p (spawn (\ x x) 42) (wait p)))
- (= 43 (: p (spawn (\ x (+ x 1)) 42) (wait p)))
- (= 49 (: p (spawn (\ x (* x x)) 7) (wait p)))
+ ; hatch-wait round trip: fn is applied to x; the result flows back through wait.
+ (= 42 (: p (hatch (\ x x) 42) (wait p)))
+ (= 43 (: p (hatch (\ x (+ x 1)) 42) (wait p)))
+ (= 49 (: p (hatch (\ x (* x x)) 7) (wait p)))
 
- ; spawn returns a positive integer pid (main reserves pid 0).
- (: p (spawn (\ _ 0) 0) _ (wait p) (&& (fix? p) (> p 0)))
+ ; hatch returns a positive integer pid (main reserves pid 0).
+ (: p (hatch (\ _ 0) 0) _ (wait p) (&& (fix? p) (> p 0)))
 
  ; pids are monotonically increasing within a VM.
- (: a (spawn (\ x x) 0)
-    b (spawn (\ x x) 0)
+ (: a (hatch (\ x x) 0)
+    b (hatch (\ x x) 0)
     _ (wait a) _ (wait b)
     (> b a))
 
@@ -35,28 +35,28 @@
  (= 0 (wait 0))
 
  ; collecting a dormant task removes it: a second wait on the same pid sees 0.
- (: p (spawn (\ x x) 99)
+ (: p (hatch (\ x x) 99)
     (&& (= 99 (wait p)) (= 0 (wait p))))
 
  ; many tasks can be reaped in any order.
- (: a (spawn (\ x (* x 10)) 3)
-    b (spawn (\ x (* x 10)) 4)
-    c (spawn (\ x (* x 10)) 5)
+ (: a (hatch (\ x (* x 10)) 3)
+    b (hatch (\ x (* x 10)) 4)
+    c (hatch (\ x (* x 10)) 5)
     (&& (= 50 (wait c))
         (= 30 (wait a))
         (= 40 (wait b))))
 
  ; a task may yield mid-execution and still return its value through wait.
- (: p (spawn (\ x (do (yield 0) (yield 0) (yield 0) (+ x 1))) 41)
+ (: p (hatch (\ x (do (yield 0) (yield 0) (yield 0) (+ x 1))) 41)
     (= 42 (wait p)))
 
- ; nested spawn: a worker can spawn and wait on its own subtask.
- (: p (spawn (\ _ (: q (spawn (\ x (+ x 1)) 10) (wait q))) 0)
+ ; nested hatch: a worker can hatch and wait on its own subtask.
+ (: p (hatch (\ _ (: q (hatch (\ x (+ x 1)) 10) (wait q))) 0)
     (= 11 (wait p)))
 
  ; tasks share the heap: a captured hash sees writes from the worker.
  (: t (tablet 0)
-    p (spawn (\ k (pin t k 'done)) 'key)
+    p (hatch (\ k (pin t k 'done)) 'key)
     _ (wait p)
     (= 'done (peep t 'key 0)))
 
@@ -65,7 +65,7 @@
  ; alongside it and eventually returns the result.
  (: t (tablet 0)
     _ (pin t 'n 0)
-    p (spawn (\ _ (: (loop _) (? (< (peep t 'n 0) 3)
+    p (hatch (\ _ (: (loop _) (? (< (peep t 'n 0) 3)
                                 (do (pin t 'n (+ 1 (peep t 'n 0)))
                                    (yield 0)
                                    (loop 0))
@@ -84,13 +84,13 @@
  (= 1 (done? 0))
 
  ; done? on a freshly spawned task is false: the task hasn't completed.
- (: p (spawn (\ _ 42) 0) r (done? p) _ (wait p) (nil? r))
+ (: p (hatch (\ _ 42) 0) r (done? p) _ (wait p) (nil? r))
 
  ; after yielding, the worker completes and done? becomes true.
- (: p (spawn (\ _ 42) 0) _ (yield 0) r (done? p) _ (wait p) (= 1 r))
+ (: p (hatch (\ _ 42) 0) _ (yield 0) r (done? p) _ (wait p) (= 1 r))
 
  ; after wait collects the task, done? is again true (pid is gone).
- (: p (spawn (\ _ 42) 0) _ (wait p) (= 1 (done? p)))
+ (: p (hatch (\ _ 42) 0) _ (wait p) (= 1 (done? p)))
 
  ; --- sleep ---
 
@@ -108,8 +108,8 @@
 
  ; sleeping tasks run concurrently: two parallel 30ms sleeps finish in well under 60ms.
  (: t0 (clock 0)
-    a (spawn (\ _ (sleep 30)) 0)
-    b (spawn (\ _ (sleep 30)) 0)
+    a (hatch (\ _ (sleep 30)) 0)
+    b (hatch (\ _ (sleep 30)) 0)
     _ (wait a) _ (wait b)
     elapsed (clock t0)
     (&& (>= elapsed 30) (< elapsed 60)))
@@ -119,7 +119,7 @@
  ; so main's yield_sw enters the deadline-coalesce wait with peer's 30 as min_wake.
  ; When peer wakes at ~30, main's pending wake_at must be preserved across the snapshot.
  (: t0 (clock 0)
-    p (spawn (\ _ (sleep 30)) 0)
+    p (hatch (\ _ (sleep 30)) 0)
     _ (yield 0)
     _ (sleep 80)
     _ (wait p)
@@ -129,43 +129,43 @@
  ; sleep cooperates: while one task sleeps, another finishes its work.
  (: t (tablet 0)
     _ (pin t 'flag 0)
-    a (spawn (\ _ (sleep 30)) 0)
-    b (spawn (\ _ (pin t 'flag 1)) 0)
+    a (hatch (\ _ (sleep 30)) 0)
+    b (hatch (\ _ (pin t 'flag 1)) 0)
     _ (wait a) _ (wait b)
     (= 1 (peep t 'flag 0)))
 
- ; --- hush ---
+ ; --- chill ---
 
- ; hush on an unknown pid: 0, no-op.
- (= 0 (hush 99999))
- ; hush on a non-numeric pid: 0.
- (= 0 (hush nil))
- ; hush on self (main = 0): 0 (self-hush impossible by construction).
- (= 0 (hush 0))
+ ; chill on an unknown pid: 0, no-op.
+ (= 0 (chill 99999))
+ ; chill on a non-numeric pid: 0.
+ (= 0 (chill nil))
+ ; chill on self (main = 0): 0 (self-chill impossible by construction).
+ (= 0 (chill 0))
 
- ; hush a running task: returns 1. The task is gone from the ring, so
+ ; chill a running task: returns 1. The task is gone from the ring, so
  ; wait on its pid returns 0 (unknown).
  (: t (tablet 0)
     _ (pin t 'flag 0)
-    p (spawn (\ _ (: (loop _) (do (yield 0) (pin t 'flag 1) (loop 0)) (loop 0))) 0)
-    r (hush p)
+    p (hatch (\ _ (: (loop _) (do (yield 0) (pin t 'flag 1) (loop 0)) (loop 0))) 0)
+    r (chill p)
     (&& (= 1 r) (= 0 (wait p))))
 
- ; hush a dormant task (already finished): also returns 1, then wait sees 0.
- (: p (spawn (\ _ 42) 0)
+ ; chill a dormant task (already finished): also returns 1, then wait sees 0.
+ (: p (hatch (\ _ 42) 0)
     _ (yield 0)
     ; p is dormant now (done? would be 1).
-    (&& (= 1 (hush p)) (= 0 (wait p))))
+    (&& (= 1 (chill p)) (= 0 (wait p))))
 
- ; double-hush: second hush is a no-op since the pid is gone from the ring.
- (: p (spawn (\ _ (: (loop _) (do (yield 0) (loop 0)) (loop 0))) 0)
-    (&& (= 1 (hush p)) (= 0 (hush p))))
+ ; double-chill: second chill is a no-op since the pid is gone from the ring.
+ (: p (hatch (\ _ (: (loop _) (do (yield 0) (loop 0)) (loop 0))) 0)
+    (&& (= 1 (chill p)) (= 0 (chill p))))
 
  ; killing one of several tasks leaves the others intact.
  (: t (tablet 0)
-    a (spawn (\ _ (: (loop _) (do (yield 0) (loop 0)) (loop 0))) 0)
-    b (spawn (\ x (* x 10)) 7)
-    _ (hush a)
+    a (hatch (\ _ (: (loop _) (do (yield 0) (loop 0)) (loop 0))) 0)
+    b (hatch (\ x (* x 10)) 7)
+    _ (chill a)
     rb (wait b)
     (&& (= 0 (wait a)) (= 70 rb)))
 
@@ -180,8 +180,8 @@
  ; so it can't wrap the 1-byte cask) never ran -- post-chunking it runs many times.
  (: big (200000 2)
     ticks (cask 1)
-    w (spawn (\ _ (* big big)) 0)
-    t (spawn (\ _ (: (go _) (? (done? w) 0
+    w (hatch (\ _ (* big big)) 0)
+    t (hatch (\ _ (: (go _) (? (done? w) 0
                                (: c (peep ticks 0 0)
                                   _ (? (< c 250) (pin ticks 0 (+ c 1)) 0)
                                   _ (yield 0) (go 0)))
@@ -189,43 +189,43 @@
     _ (wait w) _ (wait t)
     (< 5 (peep ticks 0 0)))
 
- ; a peer can hush a task while it is mid-multiply, not only once it finishes:
- ; the worker parks at a yield inside the product, so hush finds it runnable.
- (: w (spawn (\ _ (* (200000 2) (200000 2))) 0)
+ ; a peer can chill a task while it is mid-multiply, not only once it finishes:
+ ; the worker parks at a yield inside the product, so chill finds it runnable.
+ (: w (hatch (\ _ (* (200000 2) (200000 2))) 0)
     _ (yield 0)
-    (&& (= 1 (hush w)) (= 0 (wait w))))
+    (&& (= 1 (chill w)) (= 0 (wait w))))
 
  ; --- wake_at scheduler behavior ---
 
  ; wait on a sleeping task: main has to sleep deeply alongside it, then
  ; collect the result. Elapsed should be ~30ms, not 0 or much more.
  (: t0 (clock 0)
-    p (spawn (\ _ (do (sleep 30) 'done)) 0)
+    p (hatch (\ _ (do (sleep 30) 'done)) 0)
     r (wait p)
     elapsed (clock t0)
     (&& (= 'done r) (>= elapsed 30) (< elapsed 80)))
 
  ; tasks with different sleep durations wake in order: shorter sleep
  ; finishes first, longer still sleeping when we check, then completes.
- (: a (spawn (\ _ (do (sleep 10) 1)) 0)
-    b (spawn (\ _ (do (sleep 80) 2)) 0)
+ (: a (hatch (\ _ (do (sleep 10) 1)) 0)
+    b (hatch (\ _ (do (sleep 80) 2)) 0)
     ra (wait a)               ; ~10ms; b still sleeping
     db (done? b)              ; b should still be running
     rb (wait b)               ; ~70ms more
     (&& (= 1 ra) (nil? db) (= 2 rb)))
 
- ; hush a sleeping task: scheduler skips it via wake_at, but hush walks the
+ ; chill a sleeping task: scheduler skips it via wake_at, but chill walks the
  ; ring directly and finds it regardless of state.
- (: p (spawn (\ _ (do (sleep 10000) 'never)) 0)
-    r (hush p)
+ (: p (hatch (\ _ (do (sleep 10000) 'never)) 0)
+    r (chill p)
     (&& (= 1 r) (= 0 (wait p))))
 
  ; sleep tasks coexist with non-sleeping ones: a worker that yields ap
  ; gets time while another sleeps.
  (: t (tablet 0)
     _ (pin t 'n 0)
-    a (spawn (\ _ (sleep 30)) 0)
-    b (spawn (\ _ (: (loop _) (? (< (peep t 'n 0) 5)
+    a (hatch (\ _ (sleep 30)) 0)
+    b (hatch (\ _ (: (loop _) (? (< (peep t 'n 0) 5)
                                 (do (pin t 'n (+ 1 (peep t 'n 0)))
                                    (yield 0)
                                    (loop 0))

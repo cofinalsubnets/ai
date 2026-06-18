@@ -149,4 +149,4 @@ static union u const
 AI_NIF("connect",  nif_connect);
 AI_NIF("listen",   nif_listen);
 AI_NIF("accept",   nif_accept);
-AI_NIF("shutdown", nif_shutdown);
+AI_NIF("seal", nif_shutdown);
