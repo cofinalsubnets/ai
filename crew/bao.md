@@ -41,6 +41,52 @@ folded into `main`/`post`; `post` is the dev branch).
   surface + re-lands `edraw`→`wrap`; (3) Phase 2 (the debugger — a `help` handler
   with a face).
 
+## Planned — repl → bao consolidation (the namespace cleanup, user-directed)
+
+Goal (user, as bao): the editor/repl internals must NOT leak as user-visible book
+globals just because the corpus tests them. **Move repl.l's content into bao.l,
+remove repl.l, move its tests, so bao becomes the shell core and the `ed*`/repl
+names leave the global namespace.** This is the bao half of [[siri-namespace-triage]]
+release item #1.
+
+⚠ ARCHITECTURE FINDING (probed `a8e32ad1`): `repl.l` is NOT host-only — it is the
+**shared baked shell core** for THREE frontends, so this is an atomic multi-frontend
+cut, not a file rename:
+- **kernel** (`port/kship/kmain.c`) calls `(shell 0)` and BAKES repl — it has no file
+  loader, so the shell must be baked into the kernel image (it can't `-l bao.l`).
+- **ai0** (`host/main.c` `#include "repl0.h"`) — the self-test runner is
+  `(zevs (sip (s2cl tests)))`; `zev`/`zevs`/`s2cl` come from repl.l.
+- **host** (`host/main.c` `#include "repl.h"`) — non-tty stdin is `(zevs in)`.
+
+So the end state is: **bao IS the baked shell core** (kernel + ai0 + host bake `bao`,
+not `repl`). Defensible and cleaner (one shell, named bao); the `ed*` editor names
+stop being user globals because the editor lives inside bao's scope.
+
+Migration steps (atomic — gate host + ai0 + kernel together, can't half-land):
+1. Move repl.l's bodies into bao.l: the editor (`ed*`, history), the stream shell
+   (`zev`/`zevs`/`shell`/`charms`/`s2cl`), the floor handler. Keep ONLY the entry
+   points the C bake resolves by name (`shell`, `zevs`, `s2cl`, `zev`) as book
+   globals; wrap the `ed*` editor + helpers in a closure so they don't leak.
+2. Makefile: `repl0.h`/`repl.h` → `bao0.h`/`bao.h` (the `gl0_h` list, the `lib_h`
+   lcat rule, the `$(ho)/host/main.o` + `$(ho)/ai` prereqs). bao.l is already lcat'd
+   to `bao.h`; fold repl's role in.
+3. `host/main.c`: `#include "repl0.h"`/`"repl.h"` → the bao headers; update the
+   prose comments (they cite repl.l).
+4. `port/kship/kmain.c`: bake bao instead of repl; `(shell 0)` still resolves.
+5. Tests: `test/repl.l` + `test/replio.l` + `test/zev.l` test `ed*`/`parseall`/`zevs`
+   by NAME in the CORPUS (concatenated, no `-l`) — that's the leak's root. Move the
+   editor-internal asserts to a bao-loaded test (the `boot/baoedit.l` pattern:
+   `cat test/00-init.l boot/baoX.l | ai -l ai/bao.l`, gated by `make test_hostnif`);
+   keep only the genuinely-public behavior (if any) in the corpus. The kernel
+   K_TEST corpus that needs `zevs` keeps reaching it (it's a baked book entry still).
+6. CLAUDE.md: the repl.l references (the "repl reads each LINE" note, the bootstrap
+   section's `repl.l` mentions) → bao. grep repl across .l + C + docs.
+7. `(names ())` should drop the `ed*` set (~22) once the editor is closure-scoped.
+
+Gate: `make test` (host + ai0×2) AND `make test_all` (kernel) — the kernel bake is
+the load-bearing verification. This is a clean-cut fresh-session job (like the
+true-blue reseat); do NOT start it without room to finish + gate all three frontends.
+
 ## Agent brief — you are the bao thread
 
 You build bao, in parallel with the aineko / cook / kship threads.
