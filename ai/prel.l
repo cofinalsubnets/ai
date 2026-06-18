@@ -80,7 +80,7 @@
    (seek 1 th))
    ;; FIXME rename | -> bit-or to free | for pipe operator
    (nump x) (| (fixp x) (| (packp x) (bigp x)))   ; whole tower: fixnum / float / wide int / complex / array / bignum
-   (intp n) (| (fixp n) (| (widep n) (bigp n)))       ; integer-valued numeral (exact power exponent / composition count)
+   (whole? n) (| (fixp n) (| (widep n) (bigp n)))       ; integer-valued numeral (exact power exponent / composition count)
    ; b ** k by exact squaring (O(log k)); k>=0. The lone home of integer power --
    ; (k b) numeral application routes here, so `**` is unneeded.
    ; the count ceiling: a PUBLIC tunable box. a numeral compose count or exact-power
@@ -99,7 +99,7 @@
    ; (sqrt x) == ((/ 1 2) x)); otherwise pow, which carries a complex lane
    ; (w^z = exp(z Log w)) and a real lane.
    (powg x n) (? (trayp n) (pow x n)
-                 (intp n) (: m (? (< n 0) (- 0 n) n)
+                 (whole? n) (: m (? (< n 0) (- 0 n) n)
                              (? (apover m) (scare 'apcap m)
                                 (< n 0) (/ 1 (ipow x m)) (ipow x m)))
                  (pow x n))

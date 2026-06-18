@@ -155,7 +155,7 @@ $@(3 4)              ; 7
 ;   fixp bigp widep  -- the integer reps (fixnum, bignum, wide int)
 ;   flop comp trayp  -- float, complex scalar, array; all three share one heap type, `packp`
 ;   strp symp chainp tabp  -- string, symbol, chain, map
-; derived: `nump` (any number: fix/wide/big/float/complex/array), `intp` (any integer), `atomp`
+; derived: `nump` (any number: fix/wide/big/float/complex/array), `whole?` (any integer), `atomp`
 ; (anything but a chain). the NUMERIC vocab refines the numbers: a GEM is a self-netting
 ; SCALAR (`gemp x` == `idp x (net x)`: charm/wide/big/float/complex), a TRAY is an array of
 ; any kind (`trayp`, the renamed arrp), and a CREST is a numeric tray -- a tray of gems
@@ -170,7 +170,7 @@ $@(3 4)              ; 7
 ; truth/task tests, not type tests.
 ; demo:
 (fixp 5) (chainp '(1 2)) (strp "hi") (symp 'x) (tabp #(1 2))   ; the storage predicates
-(nump i) (intp (62 2)) (atomp 'x)                            ; derived
+(nump i) (whole? (62 2)) (atomp 'x)                            ; derived
 (lamp "s") (lamp '(1)) !(lamp 5)                             ; lamp = presence (any heap value)
 (hotp (buf 4)) (hotp out) !(hotp cap)                        ; the hot zoo: buf/port only
 ((64 2) = 2 * (63 2))        ; true   fixnum overflow -> exact bignum ((k b) = b**k)

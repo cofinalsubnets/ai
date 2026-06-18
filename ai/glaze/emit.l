@@ -64,7 +64,7 @@
        (cat (cat '(15 142) (le4 (+ Lt 5)))                                       ; jle else (skip then + jmp)
          (cat thb (cat (cat '(233) (le4 Le)) elb))))))                           ; then ; jmp end ; else
    (cgv v vl e d) (? (= e v)  (vl d)                                             ; vl = a load FN of d (leaf guards, loop counter doesn't)
-                     (intp e) (cat '(72 184) (le8 e))                            ; movabs rax, n
+                     (whole? e) (cat '(72 184) (le8 e))                            ; movabs rax, n
                      (chainp e) (: op (cap e)  a (caup e)  b (caup (cup e))
                                  (? (memq op '(+ - *))      (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (opseq op d))))
                                     (memq op '(// %))        (cat (cgv v vl a d) (cat push-rax (cat (cgv v vl b (+ d 1)) (idivseq op d))))
@@ -93,7 +93,7 @@
    ; param i -> frame index in [imps args]; loaded fixnum-guarded from Sp[i] (param 0 is
    ; the FIRST capture when partial-applied). argix finds a var's frame index in ps.
    (argix e ps i) (? !(chainp ps) 0  (= e (cap ps)) i  (argix e (cup ps) (+ i 1)))   ; param -> index
-   (cgn ps e d) (? (intp e) (cat '(72 184) (le8 e))                       ; movabs rax, n
+   (cgn ps e d) (? (whole? e) (cat '(72 184) (le8 e))                       ; movabs rax, n
                    (chainp e) (: op (cap e)  a (caup e)  b (caup (cup e))
                                (? (memq op '(+ - *))      (cat (cgn ps a d) (cat push-rax (cat (cgn ps b (+ d 1)) (opseq-mn op d))))
                                   (memq op '(// %))        (cat (cgn ps a d) (cat push-rax (cat (cgn ps b (+ d 1)) (idivseq-mn op d))))
@@ -141,7 +141,7 @@
    (cgl n vars e d)
     (? (= e n)        (fxv 0 d)                                  ; the param: guarded Sp[0] load (untag)
        (memq e vars)  (reg-ld (argix e vars 0))                  ; a loop var: raw register
-       (intp e)       (cat '(72 184) (le8 e))                    ; movabs
+       (whole? e)       (cat '(72 184) (le8 e))                    ; movabs
        (chainp e) (: op (cap e)  a (caup e)  b (caup (cup e))
                    (? (memq op '(+ - *))      (cat (cgl n vars a d) (cat push-rax (cat (cgl n vars b (+ d 1)) (opseq op d))))
                       (memq op '(// %))        (cat (cgl n vars a d) (cat push-rax (cat (cgl n vars b (+ d 1)) (idivseq op d))))

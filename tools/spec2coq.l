@@ -123,7 +123,7 @@
    (kpred h) (? (idp h 'fixp) "fixp" (idp h 'flop) "flop" (idp h 'comp) "comp"
                 (idp h 'strp) "strp" (idp h 'nomp) "nomp" (idp h 'chainp) "chainp"
                 (idp h 'tabp) "tabp" (idp h 'trayp) "trayp" (idp h 'nump) "nump"
-                (idp h 'intp) "intp" (idp h 'atomp) "atomp" (idp h 'packp) "packp"
+                (idp h 'whole?) "whole" (idp h 'atomp) "atomp" (idp h 'packp) "packp"
                 (idp h 'lamp) "lamp" 0)
    ; cross-kind ORDER: symbol<string<number<chain<map by band; same band stays value/lex
    (ordop? h) (| (idp h '<) (| (idp h '<=) (| (idp h '>) (idp h '>=))))
@@ -209,7 +209,7 @@
      "Definition chainp  v := match v with Vpair=> true | _ => false end." (string 10)
      "Definition tabp  v := match v with Vmap => true | _ => false end." (string 10)
      "Definition trayp  v := match v with Varr => true | _ => false end." (string 10)
-     "Definition intp  v := match v with Vz   => true | _ => false end." (string 10)
+     "Definition whole   v := match v with Vz   => true | _ => false end." (string 10)
      "Definition nump  v := match v with Vz|Vflo|Vcx|Varr => true | _ => false end." (string 10)
      "Definition packp v := match v with Vflo|Vcx|Varr => true | _ => false end." (string 10)
      "Definition atomp v := match v with Vpair => false | _ => true end." (string 10)

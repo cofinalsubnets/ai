@@ -60,11 +60,11 @@
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
 
 ; --- types & predicates --- storage: fixp bigp widep flop comp trayp strp nomp chainp tabp;
-; derived nump intp atomp; lamp = presence (any heap value); hotp names the buf/port zoo.
+; derived nump whole? atomp; lamp = presence (any heap value); hotp names the buf/port zoo.
 (assert
  (fixp 5) (chainp '(1 2)) (strp "hi") (nomp 'x) (lamp cap) (tabp #(1 2))
  (bigp (100 2)) ((? w64 widep bigp) (62 2)) (flop 1.5) (comp i) (trayp @(1 2 3)) (packp 1.5)
- (nump 1.5) (nump i) (nump (62 2)) (intp (62 2)) (atomp 'x) !(atomp '(1))
+ (nump 1.5) (nump i) (nump (62 2)) (whole? (62 2)) (atomp 'x) !(atomp '(1))
  (hotp (buf 4)) (hotp out) (hotp (sip '(104)))   ; the hot zoo, named
  !(hotp #()) !(hotp cap) !(hotp 5) !(hotp "s")   ; maps/functions/data are not hots
  (lamp (buf 4)) (lamp '(1)) (lamp "s") !(lamp 5) ; the lamp-spans-bands pin: lit = any heap value

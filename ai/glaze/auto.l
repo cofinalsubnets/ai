@@ -17,7 +17,7 @@
 (: base-ev ev
    ; the emitter's expression grammar over var v: var | int | arith | cmp | (? t a b)
    (exprp e v) (? (= e v)   1
-                  (intp e)  1
+                  (whole? e)  1
                   (chainp e)  (: op (cap e)
                                (? (memq op '(+ - * // % & | ^ < <= > >= =)) (&& (exprp (caup e) v) (exprp (caup (cup e)) v))
                                   (= op '?) (&& (chainp (cup (cup (cup e)))) !(chainp (cup (cup (cup (cup e)))))   ; exactly 3 operands
@@ -28,7 +28,7 @@
    (qual lam) (&& (chainp lam) (= (cap lam) '\) (chainp (cup lam)) (symp (caup lam))                ; (\ v E), v any symbol
                   (chainp (cup (cup lam))) !(chainp (cup (cup (cup lam)))) (exprp (caup (cup lam)) (caup lam)))
    ; --- arity-N leaf: (\ p0 .. p_{n-1} E), E over the params (any distinct symbols) ---
-   (exprn ps e) (? (memq e ps) 1  (intp e) 1
+   (exprn ps e) (? (memq e ps) 1  (whole? e) 1
                    (chainp e) (: op (cap e)
                                (? (memq op '(+ - * // % & | ^ < <= > >= =)) (&& (exprn ps (caup e)) (exprn ps (caup (cup e))))
                                   (= op '?) (&& (chainp (cup (cup (cup e)))) !(chainp (cup (cup (cup (cup e)))))
@@ -85,7 +85,7 @@
               (= (tally updates) (tally vars)) (= (tally inits) (tally vars))
               (chainp T) (memq (cap T) '(< <= > >= =)) (exprn fr T)   ; TEST a comparison over {n,vars}
               (all (\ u (exprn fr u)) updates) (exprn fr R)         ; updates + RESULT exprs over {n,vars}
-              (all intp inits))                                     ; inits are fixnum consts
+              (all whole? inits))                                     ; inits are fixnum consts
        (? ok (L vars updates T R inits) 0))
    (njit-loop-n lam vars updates test result inits)
     (nat (emit (loopcode-n (caup lam) vars updates test result inits)) (base-ev lam) lam)
