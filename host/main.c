@@ -317,9 +317,9 @@ AI_NIF("getpid", nif_getpid);
 // self-hosted ev installed from ev.l -- so one ai0 invocation exercises both
 // compilers (and -Dai_tco=0 makes it the trampoline path). s2cldef installs
 // s2cl (string -> charlist); runner drinks the baked corpus (the global
-// `tests`) through zevs (repl.l), whose `(ev 'ev r)` indirection late-binds
-// to whatever `ev` is now, so the same shell drives the c0 pass and (after
-// the egg) the self-hosted pass.
+// `tests`) through zevs (the shell core, ai/bao.l), whose `(ev 'ev r)` indirection
+// late-binds to whatever `ev` is now, so the same shell drives the c0 pass and
+// (after the egg) the self-hosted pass.
 static char const cli[] =
 #include "cli0.h"
  ;
@@ -328,19 +328,19 @@ static char const tests0[] =
  ;
 static char const
  s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (tally s)) (link (peep s i 0) (g (+ 1 i))))) 0))",
- runner[] = "(zevs (sip (s2cl tests)))";   // the stream shell (repl.l) drinks the baked corpus
+ runner[] = "(zevs (sip (s2cl tests)))";   // the stream shell (ai/bao.l) drinks the baked corpus
 
 // With args, run the build tool (lcat / gen_data) through the CLI driver.
-// With no args, self-test: eval prel+repl and run the baked corpus via c0,
-// then bootstrap the self-hosted ev (egg) and run the corpus again through it.
+// With no args, self-test: eval prel+bao (the shell core) and run the baked corpus
+// via c0, then bootstrap the self-hosted ev (egg) and run the corpus again through it.
 static struct ai *boot(struct ai *g, bool argp) {
   if (argp) return ai_evals_(g, cli);
   g = ai_strof(g, tests0);                            // the baked corpus, as a string
   struct ai_def td[] = {{"tests", ai_pop1(g)}};
   g = ai_defn(g, td, countof(td));
-  g = ai_evals_(g,                                    // prel + repl, compiled by c0
+  g = ai_evals_(g,                                    // prel + bao (the shell core), compiled by c0
 #include "prel0.h"
-#include "repl0.h"
+#include "bao0.h"
   );
   g = ai_evals_(g, s2cldef);
   g = ai_evals_(g, runner);                           // pass 1: corpus via ev = the c0 nif
@@ -375,16 +375,11 @@ static char const cli[] =
 #include "cli.h"
  ;
 static char const
- rel[] = "(zevs in)";   // non-tty stdin: the stream shell (repl.l) drinks the in port
-// a tty: eval the bao personality (ai/bao.l, baked to bao.h). bao.l is DEFINE-ONLY
-// (installs (bao _) but does not launch -- that shape makes it loadable for tests),
-// so the frontend launches it: install the defs, then eval "(bao 0)". Done at
-// DISPATCH (not in the egg-warm above), so the egg-baked `shell` is already
-// installed; this is the seam bao's pty-wrapper + debugger modes grow into
-// (crew/bao.md). raw_mode() ran above.
-static char const bao[] =
-#include "bao.h"
- ;
+ rel[] = "(zevs in)";   // non-tty stdin: the stream shell (ai/bao.l) drinks the in port
+// a tty: launch the bao shell. bao IS the baked shell core now (ai/bao.l, baked to
+// bao.h, evaled in the egg-warm below), DEFINE-ONLY -- it installs (bao _)/shell/...
+// but does not launch, so the same image serves a pipe (the bare `rel` runner) and
+// the corpus self-test. The frontend launches it on a tty by evaling "(bao 0)".
 static char const baolaunch[] = "(bao 0)";   // bao.l is define-only -> the frontend starts it
 
 // NOTE: the native-JIT experiment was retracted. It proved one durable finding
@@ -403,12 +398,11 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "prel.h"
 #include "ev.h"
     "))"
-#include "repl.h"
+#include "bao.h"
   );
   if (argp) return ai_evals_(g, cli);
   if (!replp) return ai_evals_(g, rel);
-  g = ai_evals_(g, bao);                 // install the personality (define-only)
-  return ai_evals_(g, baolaunch); }      // ... then launch it: (bao 0)
+  return ai_evals_(g, baolaunch); }      // a tty: launch the baked bao shell: (bao 0)
 #endif
 
 int main(int argc, char const **argv) {

@@ -44,7 +44,7 @@ test_host: host
 # test/00-init.l assert harness (which exits 1 on the first failure), so the gate
 # checks BOTH exit 0 AND the sentinel -- a silent reader-stop exits 0 without it.
 # Add a thread's smoke script to hostnif_tests (aineko: boot/net.l, &c).
-hostnif_tests = boot/pty.l boot/net.l
+hostnif_tests = boot/pty.l boot/net.l boot/baoedit.l boot/baotest.l
 test_hostnif: host
 	@for s in $(hostnif_tests); do echo "HOSTNIF $$s"; \
 	  cat test/00-init.l $$s | $m > out/host/.test_hostnif.out 2>&1; r=$$?; \
@@ -150,7 +150,7 @@ lib_h = $(patsubst ai/%.l,out/lib/%.h,$(wildcard ai/*.l))
 # are baked in so ai0 self-tests both compilers in one run (see main.c). The final
 # l uses the canonicalized lcat headers from the rule below instead.
 sed_lit = sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/'
-gl0_h = out/lib/cli0.h out/lib/egg0.h out/lib/prel0.h out/lib/ev0.h out/lib/repl0.h out/lib/tests0.h
+gl0_h = out/lib/cli0.h out/lib/egg0.h out/lib/prel0.h out/lib/ev0.h out/lib/bao0.h out/lib/tests0.h
 .PHONY: lib
 lib: $(lib_h) $(gl0_h)
 $(lib_h): out/lib/%.h: ai/%.l tools/lcat.l   # + $(ai0), stated below where it is in scope
@@ -310,15 +310,16 @@ $(ho)/%.o: $(R)/%.c $(ai_h)
 
 # l.o carries the version string (ai_version.h); relink it when the id changes.
 $(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
-# host/main.o bakes the lcat lib headers inline (egg + prel/ev/repl/cli/bao). Now
-# that it rides the host/*.c glob (compiled once, not recompiled on every link, as
-# the old inline `$(hcc) main.c` did), recompile it when any baked header changes.
-$(ho)/host/main.o: out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h out/lib/bao.h
+# host/main.o bakes the lcat lib headers inline (egg + prel/ev/cli/bao -- bao is the
+# baked shell core now, subsuming the old repl.h). Now that it rides the host/*.c
+# glob (compiled once, not recompiled on every link, as the old inline `$(hcc)
+# main.c` did), recompile it when any baked header changes.
+$(ho)/host/main.o: out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h
 
 # host/main.c (auto-globbed into $(host_o)) carries main() + the egg, assembled
 # inline via G_EGG_PRE/POST. No separate main.c compile -- it rides the host/*.c
 # glob now; the recompile-on-header-change dep is the line just above.
-$(ho)/ai: $(host_o) $(ho)/libai.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h out/lib/bao.h
+$(ho)/ai: $(host_o) $(ho)/libai.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -o $@ $(host_o) $(ho)/libai.a -lm $(host_ldflags)
@@ -441,7 +442,7 @@ $(ko)/ai-$a$(ksuf).elf: $(R)/port/kship/$a/$a.lds $(k_o)
 # Shared C sources (ai.c, font/, c/) + per-arch port//.
 # Under K_TEST kmain.c #includes the baked corpus out/lib/ktests.h; under KSHIP
 # the baked agent out/lib/kship.h.
-$(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h $(if $(K_TEST),out/lib/ktests.h) $(if $(KSHIP)$(NETAGENT),out/lib/kship.h)
+$(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/bao.h $(if $(K_TEST),out/lib/ktests.h) $(if $(KSHIP)$(NETAGENT),out/lib/kship.h)
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
@@ -657,7 +658,6 @@ installs = \
   $d/share/man/man1/ai.1 \
   $d/lib/ai/prel.l \
   $d/lib/ai/ev.l \
-  $d/lib/ai/repl.l \
   $d/lib/ai/bao.l \
   $d/lib/libai.a \
   $d/lib/libai.so \

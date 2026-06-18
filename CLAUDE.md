@@ -1,7 +1,7 @@
 ```ai
 ; ai -- a lisp-surfaced, fully-curried language over a tiny generic C core.
 ; a portable C runtime (ai.c + ai.h) plus a self-hosting compiler written in ai
-; (the ai/{prel,ev,repl}.l layers). source is .l; the host binary is `ai`. see README.md.
+; (the ai/{prel,ev,bao}.l layers). source is .l; the host binary is `ai`. see README.md.
 ;
 ; this file is the NARRATIVE: the prose spec, my working notes, and runnable demonstrations --
 ; CLAUDE.md is my context file. the EXECUTABLE spec -- every claim below, assert-backed on
@@ -34,7 +34,7 @@
 ;   keep their operators plain.
 ; * a corpus test that spawns must (wait p) its task: an orphan stalls the kernel runner.
 ; * the repl reads each LINE as one expression (1 = 1 answers 1); files read forms. the
-;   interactive shell installs a default help when none is present (repl.l shell-help):
+;   interactive shell installs a default help when none is present (ai/bao.l shell-help):
 ;   a scare prints `;; a b` and answers the zero point, so the session survives every raise and a
 ;   missing name or apcap is VISIBLE; the more bits keep the read protocol (port back when
 ;   incomplete, sentinel at eof). file mode stays helpless -- terminal, per the law.
@@ -535,11 +535,13 @@ not-in-the-book      ; ()        a missing name reads the zero point (helpless)
 ; internal name: the raw cell nifs (peek poke seek spin -- (spin 2 3) is a segfault, big
 ; scare; spin is still there for real, it's ultimate), the compiler's machinery
 ; (boxfix, wev, the num-ap and array-ctor helpers, the macro expanders -- the macro TABLE
-; lives on inside the compiler's closures), the repl sentinels, every hot lvm_* pointer,
+; lives on inside the compiler's closures), every hot lvm_* pointer,
 ; and finally the `book` itself. compiled references were folded, so only the names die.
 ; names the printer, the reader, or an expander EMITS (uq ltuple link pin
-; tablet mono ..) stay, as do the
-; C-resolved hooks (num-ap add mul help) and the repl's test-driven editor surface.
+; tablet mono ..) stay, as do the C-resolved hooks (num-ap add mul help). the shell
+; core (ai/bao.l) no longer needs mopping: its editor + repl internals are
+; closure-private (off the book by construction), and only its entry points --
+; shell/welp/edraw/wrap/bao + the stream shell zev/zevs/charms -- are globals.
 ; demo:
 (lamp ev)            ; true    ev is installed in the image
 born                 ; a fixnum (the hatch time) post-egg; unbound pre-egg
@@ -550,7 +552,7 @@ macros               ; ()      mopped up after birth (a runtime-internal name, g
 ; diagonal; the three core tables are + , * , and apply. a both-fixnum fast path skips the
 ; table; otherwise one indexed jump picks a lane that widens only as far as the operands need
 ; (array, complex, bignum, float, ...). the VM is tail-threaded over a two-space copying
-; collector; out-of-pool constants are immortal. the ai/ layer (prel ev repl cli egg) drips
+; collector; out-of-pool constants are immortal. the ai/ layer (prel ev bao cli egg) drips
 ; into every frontend: the host (out/host/ai), the freestanding kernel (x86_64/aarch64),
 ; and wasm. build codegen lives in ai under tools/; the C is
 ; freestanding, -Wall -Wextra -Werror.

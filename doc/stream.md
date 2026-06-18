@@ -210,9 +210,10 @@ Strictly additive first; delete only after parity.
   rlwrap wiring that was reverted now runs. Gate: manual interactive (`(wrap (L
   "bash"))`, type, edit, Enter, see echo) + the scriptable pty round-trip in
   `boot/pty.l`.
-- **Stage 3 — port the editor/repl/sip surface** in `repl.l` and the cli onto
-  streams. Heaviest stage (the egg-baked editor; coordinate with the core thread —
-  `repl.l` is shared, kernel- and corpus-pinned, see `ai/bao.l:7-17`).
+- **Stage 3 — port the editor/repl/sip surface** in `ai/bao.l` (the baked shell
+  core, formerly `repl.l`) and the cli onto streams. Heaviest stage (the egg-baked
+  editor; coordinate with the core thread — `bao.l` is shared, kernel- and
+  corpus-pinned).
 - **Stage 4 — delete.** Remove `fgetc`/`fungetc`/`feof`/`key?`/`ungetc_buf`/
   `eof_seen` and the more-bit/port-back protocol (§7). Gate: every tier green +
   valg 0/0 + vmret.
@@ -266,8 +267,8 @@ the half-duplex shortcut and chose the full rework**, so these are a fallback on
    the pushback is empty and the fd is unready —
    `if (getcharm(i->ungetc_buf) == EOF && !ai_ready(getcharm(i->fd))) park`.
 2. **Generalize `key?` -> a port-taking `ready?`** (and keep `key?`=stdin for
-   `repl.l`): `(ready? p)` probes `p`'s fd via `ai_ready`, register both names on
-   one nif.
+   the shell core `ai/bao.l`): `(ready? p)` probes `p`'s fd via `ai_ready`,
+   register both names on one nif.
 
 These remove defect 1 and add the missing readiness surface, but leave the `-1`
 sentinel, the scattered fd logic, the more-bit protocol, and the write-side stall —
@@ -278,9 +279,10 @@ principled end-state they are a down-payment on.
 
 - **Core thread owns `ai.c`/`ai.h`.** bao designs this (this doc); the `source`/
   `select`/scheduler edits land in a dedicated core session. The bao-side ports
-  (`bao.l`, and proposing the `repl.l` changes) are bao's.
-- **`repl.l` is shared and pinned** (kernel `(shell 0)`, the ai0 corpus). Stage 3
-  cannot move the editor out — it ports it in place, with the core thread.
+  (`bao.l`, the shell core) are bao's.
+- **`bao.l` is shared and pinned** (kernel `(shell 0)`, the ai0 corpus, the host
+  egg). Stage 3 cannot move the editor out — it ports it in place, with the core
+  thread.
 - **Risks:** interactive testing is a weak gate (mechanics scriptable via `sip`/the
   pty round-trip, full interaction manual); the `read`-as-fold parity (Stage 1)
   must clear the oracle before the old reader deletes; `select`'s return shape is a

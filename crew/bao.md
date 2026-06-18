@@ -41,7 +41,32 @@ folded into `main`/`post`; `post` is the dev branch).
   surface + re-lands `edraw`→`wrap`; (3) Phase 2 (the debugger — a `help` handler
   with a face).
 
-## Planned — repl → bao consolidation (the namespace cleanup, user-directed)
+## LANDED — repl → bao consolidation (the namespace cleanup, user-directed)
+
+✅ DONE. **repl.l is gone; bao.l is the baked shell core for all three frontends**
+(host + kernel + ai0). The editor (`ed*`), the history zipper, `parseall`,
+`do_eval`, `repl`, `shell-help`, the raw-line decode (`bev`/`besc`), and the pty
+pump (`pump`/`waitfor`) now live INSIDE one closure in `bao.l`, off the global
+book. Only the entry points are globals: `shell`, `welp`, `edraw`, `wrap`, `bao`,
+`bao-selftest`, plus the stream shell `zev`/`zevs`/`charms`/`charms->chars` (+ one
+intermediate holder `bao-exports`). `(names ())` dropped **276 → 248** (−28); the
+`ed*` set went **15 → 1** (only the public `edraw` survives).
+
+KEY MECHANISM (probed): post-egg the `book` table is mopped, so a top-level
+body-LESS `(: ..)` defglob is the ONLY way to add a global. The fix: a top-level
+body-having `(: ..)` defines all the privates and RETURNS the public closures as a
+list (`bao-exports`); a body-less `(: ..)` then defglobs `shell`/`welp`/... out of
+it. The host-only pty nifs (`ptyrun`/`reap`) are DEFERRED via `(ev 'ptyrun)` --
+quoted symbols are inert at bake time (a direct free ref would fire `missing` and
+break ai0 pass 2 / the kernel bake; PROVED both ways), and resolve to the live
+nifs on the host. The editor unit battery moved from the corpus (`test/repl.l` +
+`test/replio.l`, deleted) into `bao-selftest` (computes the booleans against the
+private helpers, returns a flat list) + `boot/baotest.l` (gates that list through
+the real `assert`, wired into `make test_hostnif`). `test/zev.l` stays in the
+corpus (zev/zevs/charms are public). Gate: host 2650 / ai0 2650×2 / kernel 2445
+(qemu) / proof green / hostnif pty+net+baoedit+baotest all `: ok`.
+
+The ORIGINAL plan (kept for the record):
 
 Goal (user, as bao): the editor/repl internals must NOT leak as user-visible book
 globals just because the corpus tests them. **Move repl.l's content into bao.l,

@@ -563,8 +563,8 @@ void kmain(void) {
   g = ai_defn(g, kd, countof(kd));
 #endif
   // load the prel, then run the l read-eval-print loop. its line
-  // editor (in repl.l) drives the console; PS/2 keyboard and serial
-  // input both arrive as ANSI escape sequences the l edev decodes.
+  // editor (in ai/bao.l, the baked shell core) drives the console; PS/2 keyboard
+  // and serial input both arrive as ANSI escape sequences the l edev decodes.
   struct ai *r = ai_evals_(g, "("
 #include "egg.h"
  ai_egg_pre
@@ -572,10 +572,10 @@ void kmain(void) {
  " "
 #include "ev.h"
  ai_egg_post
-#include "repl.h"
+#include "bao.h"
 #ifdef K_TEST
  // test build: drink the baked `tests` string (string -> charlist -> sip port)
- // through zevs (repl.l) -- the same stream shell as the host's stdin runner.
+ // through zevs (ai/bao.l) -- the same stream shell as the host's stdin runner.
  // zz-fin.l prints the summary and (exit 1)s on failure.
  "(zevs (sip ((: (g i) (? (< i (tally tests)) (link (peep tests i 0) (g (+ 1 i))))) 0)))"
 #elif defined(KSHIP)
