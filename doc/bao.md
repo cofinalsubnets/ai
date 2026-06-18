@@ -1,7 +1,8 @@
 # bao — the shell, the rlwrap, and the debugger
 
-A design sketch (draft only — build after `aineko`). **bao** (steamed bun: a soft
-wrapper around a chewy command) is three things that turn out to be one:
+The bao design + agent brief (see **Status** below for what has landed). **bao**
+(steamed bun: a soft wrapper around a chewy command) is three things that turn out
+to be one:
 
 1. **the interactive shell** — line editing, history, prompt, the fault-face;
 2. **the rlwrap replacement** — a pty wrapper that gives *any* program bao's editor;
@@ -9,6 +10,29 @@ wrapper around a chewy command) is three things that turn out to be one:
 
 All three are the same muscle (an editor + a wrapped process + the condition
 system), so they share one tool.
+
+## Status (2026-06-18)
+
+Phase 1 is mostly landed; the next move is **path B** (the io/scheduler rework).
+
+- **Landed (on `trueblue`):** the pty nifs (`host/pty.c`: `ptyrun`/`reap`/`kill`/
+  `winsize`/`ptyecho`), `wrap` (the transparent bidirectional pty pump with child-
+  death teardown), `edraw` (bao's port-parameterized raw-line editor), `bao.l` made
+  **define-only**, and the shell-split (`host/main.c` installs bao then launches
+  `(bao 0)` on a tty; a pipe stays the bare filter). Gates: `make test_hostnif`
+  (`pty: ok`), `cat test/00-init.l boot/baoedit.l | ai -l ai/bao.l` (`baoedit: ok`).
+- **Blocked → path B:** wiring `edraw` *into* `wrap` (the real rlwrap: edited lines
+  feed the child) was **built and reverted** — it deadlocks the cooperative
+  scheduler (an editor task writing `out` while the pump task reads the master +
+  writes `out`). The fix is not a half-duplex shortcut; it is the io rework below.
+- **Path B is now FULLY DESIGNED** — `doc/stream.md` (the four-defect diagnosis,
+  the coinductive `source` hot, `read`-as-a-pure-fold, `select`/`ready?`, the
+  staged migration) — and the **pure half is MODELED and green** in `boot/stream.l`
+  (a `boot/tag.l`-style companion: `cat test/00-init.l boot/stream.l | out/host/ai`
+  → 17 asserts + `stream: ok`). The build is a dedicated **core `ai.c` session**
+  (the core thread owns `ai.c`/`ai.h`); bao's part is the `bao.l`/`repl.l` ports.
+- **Next:** core lands path B (unblocking the rlwrap wiring), then Phase 2 (the
+  debugger — a `help` handler with a face).
 
 ## Agent brief — you are the bao thread
 
@@ -70,6 +94,11 @@ shell) and the pty-wrapper/debugger (wrapping *other* programs). Same bao, two r
   task blocks on — two pumps on different fds interleave with no select loop.
 
 ## The io foundation bao carries — the stream redesign (path B)
+
+> **Full implementable design: `doc/stream.md`** — the deadlock diagnosis (the four
+> structural defects), the `source` hot, `read`-as-a-pure-fold, `select`/`ready?`,
+> the delete/keep ledger, the staged migration, and the minimal-fix fallback. This
+> section is the summary.
 
 The current `fgetc`/`fungetc`/`feof`/`key?` port surface is **POSIX wrongly
 embedded in the core.** Four leaks: a mutable `ungetc_buf` in every port; the `-1`
