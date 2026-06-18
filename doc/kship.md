@@ -10,6 +10,31 @@ kernel grown a NIC and an agent loop on the egg." The runnable companion to this
 doc is `boot/kship.l`, which models the ai half (the perceive→decide→act fold, the
 watchdog, the checkpoint) so the shape runs and probes on the host before any C.
 
+## Agent brief — you are the kship thread
+
+You build kship, in parallel with the aineko / bao / cook threads. You have the
+easiest territory: a **different frontend** (the freestanding kernel), so you don't
+share host files with anyone.
+
+- **Your territory (you own these):** `kmain.c`, `boot/kship.l`, `port/<arch>/*`
+  (the per-arch glue), the virtio-net driver you add.
+- **Read-only for you:** `ai.h`, this doc. The perceive substrate already exists in
+  `kmain.c` — `k_sources[]`, `ai_wait_fds` (= select), `ai_ready`, `ai_clock`.
+- **DO NOT EDIT `ai.c` / `ai.h`** (the shared core) or other threads' host files
+  (`host/*.c`, `main.c`, `tools/aineko.l`, `bao.l`, `cook/cook.l`). The kernel
+  links `ai.c` but does NOT link `main.c`, so the host nifs don't reach you — your
+  net layer is your own C in `kmain.c`/`port/`. Need a core change? **Ask the core
+  thread** (the main session); don't edit `ai.c`/`ai.h`.
+- **The shape:** new C is a virtio-net driver + one socket slot; the perceive→
+  decide→act loop and the watchdog (a `help` handler with a face) stay **ai**, in
+  `boot/kship.l` → baked into the kernel. Model it on the host first (`boot/kship.l`
+  runs there) before the bare-metal C.
+- **Conceptual sibling of aineko** (its net stack) and bao (the watchdog ≈ bao's
+  debugger, both "a `help` handler with a face") — but **zero file overlap**, so you
+  can run fully in parallel from the start.
+- **Gate:** `make test` green (you don't touch the corpus); the kernel gate is
+  `make test_all` (qemu) — heavy, needs the ovmf/limine downloads.
+
 ## What "self-driving" means here — one fork
 
 - **(A) Reactive control loop** — a pure-ai policy: perceive → decide (rules /

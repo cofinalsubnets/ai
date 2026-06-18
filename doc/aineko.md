@@ -10,6 +10,32 @@ hang off of.
 We skip what netcat carries for completeness but a demo doesn't need: UDP, TLS,
 `-z` (port scan), `-x` (proxy). Client + server + DNS is the whole thing.
 
+## Agent brief — you are the aineko thread
+
+You build aineko, in parallel with the bao / cook / kship threads. The rules that
+keep us from colliding:
+
+- **Your territory (you own these, edit freely):** `host/net.c` (the socket nifs),
+  `tools/aineko.l`, a new `make nettest` target + its loopback fixture.
+- **Read-only for you:** `ai.h` (your nif-writing surface), this doc, `main.c`
+  (`lvm_open`/`host_run` are your templates — read, don't edit).
+- **DO NOT EDIT `ai.c` or `ai.h` or `main.c`.** Those are the **core thread's**
+  (the main Claude session). If you need a core change — a new accessor, a struct
+  field, an `ai_io` tweak — **stop and ask the core thread**; don't reach in. Same
+  for any other thread's files (`bao.l`, `host/pty.c`, `kmain.c`, `cook/cook.l`).
+- **The nif pattern (no core edit needed):** add nifs in `host/net.c` —
+  `#include "ai.h"`, define `lvm_<x>` + `nif_<x>[]`, then `AI_NIF("name", nif_<x>)`.
+  The Makefile auto-globs `host/*.c` and boot drains the section. See `host/host.c`
+  for the worked example (the `getpid` nif).
+- **You are the shared trunk:** bao's pty-wrapper and kship's net layer reuse your
+  pump/teardown discipline and the host-nif pattern. Land Stage 1 cleanly; it's the
+  foundation two other threads build on.
+- **First task:** Stage 1 (connect/listen/accept/shutdown + DNS) in `host/net.c`,
+  gated by `make nettest` (host-only loopback). Then Stage 2 (`tools/aineko.l`).
+- **Gate:** `make test` must stay green (you don't touch the corpus); your own gate
+  is `make nettest`. Keep `ai/prel.l` free of unconditional socket refs so
+  kernel/wasm stay green.
+
 ## Why netcat is the ideal first app
 
 A netcat is a **bidirectional pump**: stdin → socket and socket → stdout, both

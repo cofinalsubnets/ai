@@ -10,6 +10,30 @@ wrapper around a chewy command) is three things that turn out to be one:
 All three are the same muscle (an editor + a wrapped process + the condition
 system), so they share one tool.
 
+## Agent brief — you are the bao thread
+
+You build bao, in parallel with the aineko / cook / kship threads.
+
+- **Your territory (you own these):** `bao.l` (the shell, split out of `repl.l`),
+  `host/pty.c` (the ptyrun/reap/kill/winsize nifs).
+- **Read-only for you:** `ai.h`, this doc, `ai/repl.l` (you reuse its editor —
+  read it, and coordinate with the core thread before *moving* code out of it),
+  `main.c` (`host_run` is the `ptyrun` template).
+- **DO NOT EDIT `ai.c` / `ai.h` / `main.c`** or other threads' files
+  (`host/net.c`, `tools/aineko.l`, `kmain.c`, `cook/cook.l`). Need a core change?
+  **Stop and ask the core thread** (the main Claude session) — it owns ai.c/ai.h.
+- **The nif pattern:** add pty nifs in `host/pty.c` via `AI_NIF` (see `host/host.c`
+  for the worked `getpid` example) — auto-globbed, no core edit.
+- **Two halves, different readiness:**
+  1. **Shell-split (`repl.l` → `bao.l`) — start NOW**, independent of everything.
+  2. **pty-wrapper (`host/pty.c`) — AFTER aineko's host-nif foundation lands**
+     (you reuse its pump/teardown discipline; `ptyrun` extends `host_run`).
+- **The `repl.l` split needs core-thread coordination** (it changes `main.c`'s
+  shell auto-select + the egg bake) — propose it to the core thread, don't do the
+  `main.c` half yourself.
+- **Gate:** `make test` green; pty mechanics are scriptable, full interaction is
+  manual.
+
 ## The core/shell split
 
 Raw **`ai` shrinks to a pure read/eval/write filter** — trivially callable,
