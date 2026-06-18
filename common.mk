@@ -5,9 +5,7 @@
 # Per-frontend build output lives under $R/out/<frontend>/.
 R ?= .
 
-n = ai
-x = l
-m = $R/out/host/$n
+m = $R/out/host/ai
 a ?= $(shell uname -m)
 
 # ai_tco for the builds that can take it: 1 = the tail-threaded VM (aps tail-jump,
@@ -18,7 +16,7 @@ a ?= $(shell uname -m)
 tco ?= 1
 
 # the corpus: 00-init's harness first, the spec second, then the rest
-t = $R/test/00-init.$x $R/test/spec.$x $(filter-out %/00-init.$x %/spec.$x,$(sort $(wildcard $R/test/*.$x)))
+t = $R/test/00-init.l $R/test/spec.l $(filter-out %/00-init.l %/spec.l,$(sort $(wildcard $R/test/*.l)))
 
 ai_h = $(wildcard $R/*.h)
 ai_c = $R/ai.c

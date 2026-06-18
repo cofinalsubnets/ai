@@ -71,8 +71,8 @@ test_gen:
 	@echo "test_gen: skipped (needs rocq/coqc)"
 else
 test_gen: host
-	@echo GEN	rocq/gen.v "(tools/spec2coq.$x on $m)"
-	@$m tools/spec2coq.$x > rocq/gen.v
+	@echo GEN	rocq/gen.v "(tools/spec2coq.l on $m)"
+	@$m tools/spec2coq.l > rocq/gen.v
 	@echo TEST rocq/gen.v "(coqc)"
 	@$(COQC) -q rocq/gen.v
 	@rm -f rocq/gen.vo rocq/gen.vok rocq/gen.vos rocq/gen.glob rocq/.gen.aux
@@ -89,7 +89,7 @@ hooks:
 # out/lib/*.h by tools/lcat.l (run on the bootstrap interpreter ai0). Frontends
 # #include these and assemble the bootstrap with G_EGG_PRE/POST (ai.h).
 # Drop a .l into ai/ and it is picked up automatically -- no rule to edit.
-lib_h = $(patsubst ai/%.$x,out/lib/%.h,$(wildcard ai/*.$x))
+lib_h = $(patsubst ai/%.l,out/lib/%.h,$(wildcard ai/*.l))
 # ai0's bootstrap headers: sed-wrapped raw source (a text->C-literal needing no
 # interpreter -- the l reader strips the ; comments at read time), since ai0
 # can't lcat the very sources it is assembled from (chicken/egg). cli.l doubles as
@@ -100,11 +100,11 @@ sed_lit = sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/'
 gl0_h = out/lib/cli0.h out/lib/egg0.h out/lib/prel0.h out/lib/ev0.h out/lib/repl0.h out/lib/tests0.h
 .PHONY: lib
 lib: $(lib_h) $(gl0_h)
-$(lib_h): out/lib/%.h: ai/%.$x tools/lcat.$x   # + $(ai0), stated below where it is in scope
+$(lib_h): out/lib/%.h: ai/%.l tools/lcat.l   # + $(ai0), stated below where it is in scope
 	@mkdir -p out/lib
 	@echo GEN	$@
-	@$(ai0) -l ai/prel.$x tools/lcat.$x $< > $@
-out/lib/%0.h: ai/%.$x
+	@$(ai0) -l ai/prel.l tools/lcat.l $< > $@
+out/lib/%0.h: ai/%.l
 	@mkdir -p out/lib
 	@echo GEN	$@
 	@$(sed_lit) $< > $@
@@ -144,13 +144,13 @@ hcc = $(CC) $(ai_cflags) -Dai_tco=$(tco) -fpic -I$(ho) -I. -Iout/lib
 # whole-archive flag differs by linker (ld64 vs GNU ld); ai_typ is now a plain
 # compare in ai.h, so there is no data.ld / generated data.h on any platform.
 ifeq ($(shell uname -s),Darwin)
-so_archive = -Wl,-force_load,$(ho)/lib$n.a       # ld64's whole-archive
+so_archive = -Wl,-force_load,$(ho)/libai.a       # ld64's whole-archive
 else
-so_archive = -Wl,--whole-archive $(ho)/lib$n.a -Wl,--no-whole-archive
+so_archive = -Wl,--whole-archive $(ho)/libai.a -Wl,--no-whole-archive
 endif
 ai0 = $(ho)/ai0
 
-host: $(ho)/$n $(ho)/lib$n.so $(ho)/$n.1
+host: $(ho)/ai $(ho)/libai.so $(ho)/ai.1
 ai0: $(ai0)
 
 # cook/Cookfile: this Makefile transpiled into a resolved cook recipe by
@@ -159,9 +159,9 @@ ai0: $(ai0)
 # RESOLVED -- a flat, self-documenting snapshot. Regenerate it whenever the
 # Makefile changes. (A baked snapshot: re-run `make cook/Cookfile` after adding
 # a source/test file, since the wildcard lists are frozen at emit time.)
-cook/Cookfile: Makefile cook/cook.l $(ho)/$n
+cook/Cookfile: Makefile cook/cook.l $(ho)/ai
 	@echo GEN	$@
-	@$(ho)/$n -l cook/cook.l --emit Makefile > $@
+	@$(ho)/ai -l cook/cook.l --emit Makefile > $@
 
 # blue.html: the blue paper, generated from blue.md (with blue.css INLINED into a
 # <style> block) by the ai markdown converter tools/blue.l. A committed artifact
@@ -170,9 +170,9 @@ cook/Cookfile: Makefile cook/cook.l $(ho)/$n
 # refreshes it; it is also part of `all`.
 .PHONY: blue
 blue: blue.html
-blue.html: blue.md blue.css tools/blue.$x $(ho)/$n
+blue.html: blue.md blue.css tools/blue.l $(ho)/ai
 	@echo GEN	$@
-	@$(ho)/$n -l ai/prel.$x tools/blue.$x blue.md > $@
+	@$(ho)/ai -l ai/prel.l tools/blue.l blue.md > $@
 
 # The lcat'd lib headers (egg.h et al) are PRODUCED BY running ai0, so re-lay
 # them whenever ai0 changes. This dep belongs in the rule above, but $(ai0) is
@@ -182,7 +182,7 @@ blue.html: blue.md blue.css tools/blue.$x $(ho)/$n
 # cleaned: ai0's own objects already depend on $(ai_h), so ai0 can't go stale.)
 $(lib_h): $(ai0)
 
-$(ho)/lib$n.a: $(h_o)
+$(ho)/libai.a: $(h_o)
 	@echo AR	$@
 	@mkdir -p $(dir $@)
 	@rm -f $@; ar rcs $@ $^   # rm first: `ar r` REPLACES/ADDS but never REMOVES, so a
@@ -190,7 +190,7 @@ $(ho)/lib$n.a: $(h_o)
 	                          # stale .o in the archive -> multiple-definition at link. the
 	                          # rm rebuilds it fresh, so a rename no longer needs `make clean`.
 
-$(ho)/lib$n.so: $(ho)/lib$n.a
+$(ho)/libai.so: $(ho)/libai.a
 	@echo LD	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -shared -o $@ $(so_archive) -lm
@@ -227,16 +227,16 @@ $(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
 
 # main.c is compiled into the final l inline (G_EGG_PRE/POST assemble the lib
 # headers); depend on them so it relinks when a lib source changes.
-$(ho)/$n: main.c $(ho)/lib$n.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h
+$(ho)/ai: main.c $(ho)/libai.a out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/repl.h out/lib/cli.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(hcc) -o $@ main.c $(ho)/lib$n.a -lm
+	@$(hcc) -o $@ main.c $(ho)/libai.a -lm
 
-$(ho)/$n.1: doc/$n.1 out/lib/ai_version.h
+$(ho)/ai.1: doc/ai.1 out/lib/ai_version.h
 	@echo GEN	$@
 	@mkdir -p $(dir $@)
 	@v=$$(sed -n 's/.*AI_VERSION "\(.*\)"/\1/p' out/lib/ai_version.h); \
-	 sed "s/@VERSION@/$$v/" doc/$n.1 > $@
+	 sed "s/@VERSION@/$$v/" doc/ai.1 > $@
 
 # ====================================================================
 # kernel (freestanding) build -- outputs under out/free. Was free/Makefile.
@@ -309,9 +309,9 @@ kldflags_aarch64 = -m aarch64elf
 kcc = $(KCC) $(kcflags) $(kcflags_$a) $(kcppflags) $(kcc_if_clang)
 k_nasmflags := -f elf64 -g -F dwarf -Wall -w-reloc-abs-qword -w-reloc-abs-dword -w-reloc-rel-dword
 
-kernel: $(ko)/$n-$a$(ksuf).elf
+kernel: $(ko)/ai-$a$(ksuf).elf
 
-$(ko)/$n-$a$(ksuf).elf: $(R)/port/$a/$a.lds $(k_o)
+$(ko)/ai-$a$(ksuf).elf: $(R)/port/$a/$a.lds $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(KLD) $(kldflags) $(k_o) -o $@
@@ -352,7 +352,7 @@ $(ko)/limine.conf:
 	@mkdir -p $(dir $@)
 	@printf 'timeout: 1\n/gk\n    protocol: limine\n    path: boot():/boot/kernel\n' > $@
 
-$(ko)/$n-$a$(ksuf).iso: $(ko)/$n-$a$(ksuf).elf $(dl)/limine/limine $(ko)/limine.conf
+$(ko)/ai-$a$(ksuf).iso: $(ko)/ai-$a$(ksuf).elf $(dl)/limine/limine $(ko)/limine.conf
 	@echo MK $@
 	@rm -rf $(ko)/iso_root
 	@mkdir -p $(ko)/iso_root/boot
@@ -368,7 +368,7 @@ $(ko)/$n-$a$(ksuf).iso: $(ko)/$n-$a$(ksuf).elf $(dl)/limine/limine $(ko)/limine.
 	@$(dl)/limine/limine bios-install $@
 	@rm -rf $(ko)/iso_root
 
-$(ko)/$n-$a.hdd: $(ko)/$n-$a.elf $(dl)/limine/limine $(ko)/limine.conf
+$(ko)/ai-$a.hdd: $(ko)/ai-$a.elf $(dl)/limine/limine $(ko)/limine.conf
 	@echo MK $@
 	@rm -f $@
 	@dd if=/dev/zero bs=1M count=0 seek=64 of=$@
@@ -392,11 +392,11 @@ k_qemu = qemu-system-$a -m 256M $(k_qemu_$a) \
 .PHONY: run run-hdd run-$a run-hdd-$a run-headless
 run: run-$a
 run-hdd: run-hdd-$a
-run-$a: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+run-$a: $(ko)/ai-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	$(k_qemu) -cdrom $<
-run-hdd-$a: $(ko)/$n-$a.hdd $(dl)/edk2-ovmf/ovmf-code-$a.fd
+run-hdd-$a: $(ko)/ai-$a.hdd $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	$(k_qemu) -hda $<
-run-headless: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+run-headless: $(ko)/ai-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	$(k_qemu) -cdrom $< -display none -no-reboot
 
 # --- headless serial test (wired into test_all; x86_64 + qemu only) ------------
@@ -424,18 +424,18 @@ run-headless: $(ko)/$n-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 # precision (1e-12/1e-15) that the freestanding libc/math.c series can't meet;
 # bell.l's Bell-number bignums are too heavy for the emulated kernel.
 kt = $(filter-out %/io.l %/run.l %/math.l %/bell.l,$t)
-out/lib/ktests.$x: $(kt) $(R)/Makefile
+out/lib/ktests.l: $(kt) $(R)/Makefile
 	@mkdir -p out/lib
 	@cat $(kt) > $@
-out/lib/ktests.h: out/lib/ktests.$x $(ai0) tools/lcatv.$x ai/prel.$x
+out/lib/ktests.h: out/lib/ktests.l $(ai0) tools/lcatv.l ai/prel.l
 	@echo GEN	$@
-	@$(ai0) -l ai/prel.$x tools/lcatv.$x out/lib/ktests.$x > $@
+	@$(ai0) -l ai/prel.l tools/lcatv.l out/lib/ktests.l > $@
 .PHONY: test_kernel
 ifeq ($a,x86_64)
-test_kernel: host $(R)/tools/ktest.$x
-	@$(MAKE) -s K_TEST=1 $(ko)/$n-$a-test.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
-	@echo TEST $(ko)/$n-$a-test.iso "(serial, headless)"
-	@$m $(R)/tools/ktest.$x $(ko)/$n-$a-test.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+test_kernel: host $(R)/tools/ktest.l
+	@$(MAKE) -s K_TEST=1 $(ko)/ai-$a-test.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+	@echo TEST $(ko)/ai-$a-test.iso "(serial, headless)"
+	@$m $(R)/tools/ktest.l $(ko)/ai-$a-test.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 else
 test_kernel:
 	@echo "test_kernel: skipped (host arch $a is not x86_64)"
@@ -456,7 +456,7 @@ test_wasm:
 	@echo "test_wasm: skipped (needs emcc + node)"
 else
 test_wasm: wasm
-	@echo TEST wasm/$n.js "(node)"
+	@echo TEST wasm/ai.js "(node)"
 	@$(NODE) $(R)/wasm/test.mjs $t
 endif
 
@@ -498,7 +498,7 @@ out/host/flamegraph.svg: out/host/perf.data
 repl: host
 	@$m
 cloc:
-	cloc --by-file --force-lang=Lisp,$x ai ai.c ai.h kmain.c main.c k.h port tools test vim
+	cloc --by-file ai ai.c ai.h kmain.c main.c k.h port tools test vim
 cat: clean all test
 cata: clean all test_all
 # Full clean rebuild, every frontend, all tests, then the corpus under valgrind.
@@ -509,7 +509,7 @@ disasm: host
 gdb: host
 	gdb $m
 vmret: host
-	@$m tools/vmret.$x $m
+	@$m tools/vmret.l $m
 
 bench: host
 	$(MAKE) -C bench bench
@@ -521,18 +521,18 @@ DESTDIR ?= $(HOME)/
 d = $(DESTDIR)/$(PREFIX)
 v = $(DESTDIR)/$(VIMPREFIX)
 installs = \
-  $d/bin/$n \
+  $d/bin/ai \
   $d/bin/cook \
-  $d/share/man/man1/$n.1 \
-  $d/lib/$n/prel.$x \
-  $d/lib/$n/ev.$x \
-  $d/lib/$n/repl.$x \
-  $d/lib/lib$n.a \
-  $d/lib/lib$n.so \
+  $d/share/man/man1/ai.1 \
+  $d/lib/ai/prel.l \
+  $d/lib/ai/ev.l \
+  $d/lib/ai/repl.l \
+  $d/lib/libai.a \
+  $d/lib/libai.so \
   $d/include/ai.h \
-  $v/ftdetect/$n.vim \
-  $v/syntax/$n.vim \
-  $v/ftplugin/$n.vim
+  $v/ftdetect/ai.vim \
+  $v/syntax/ai.vim \
+  $v/ftplugin/ai.vim
 
 install: $(installs)
 uninstall:
@@ -543,19 +543,19 @@ $d/include/ai.h: ai.h
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/$n/%.$x: ai/%.$x
+$d/lib/ai/%.l: ai/%.l
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/lib$n.a: out/host/lib$n.a
+$d/lib/libai.a: out/host/libai.a
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$d/lib/lib$n.so: out/host/lib$n.so
+$d/lib/libai.so: out/host/libai.so
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
 
-$d/bin/$n: out/host/$n
+$d/bin/ai: out/host/ai
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
 
@@ -563,22 +563,22 @@ $d/bin/$n: out/host/$n
 # Its `#!/usr/bin/env -S ai -l` shebang re-execs the installed `ai` to load it,
 # then it discovers a Makefile/Cookfile/Cards.l in the cwd. A script, not a
 # binary, so no -s strip.
-$d/bin/cook: cook/cook.$x
+$d/bin/cook: cook/cook.l
 	@echo CP	$(abspath $@)
 	@install -D -m 755 $< $@
 
-$d/share/man/man1/$n.1: out/host/$n.1
+$d/share/man/man1/ai.1: out/host/ai.1
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$v/ftdetect/$n.vim: vim/ftdetect.vim
+$v/ftdetect/ai.vim: vim/ftdetect.vim
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$v/syntax/$n.vim: vim/syntax.vim
+$v/syntax/ai.vim: vim/syntax.vim
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$v/ftplugin/$n.vim: vim/ftplugin.vim
+$v/ftplugin/ai.vim: vim/ftplugin.vim
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@

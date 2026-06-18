@@ -27,7 +27,7 @@
 R := ..
 include $(R)/common.mk
 
-GL   := $(R)/out/host/$n
+GL   := $(R)/out/host/ai
 HARN := bench.l
 BDIR := $(R)/out/bench
 TIMEOUT ?= 30
