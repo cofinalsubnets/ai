@@ -19,15 +19,16 @@ perceive → decide → act.
 
 ai is `top`; the crew are its faces, in dual pairs.
 
-- **source faces — compose.** **read** (charms → forms), then **feel** (forms → top, the partial
-  evaluator). read ; feel.
+- **source faces — compose.** **scan** (charms → forms), then **feel** (forms → top, the partial
+  evaluator). scan ; feel — and **read** is the composition, the stream shell that reads and runs.
 - **world faces — coproduct.** **bao** — the shell / bridge. **aineko** 愛猫 — bao's net face (netcat).
 
 ## the keepers
 
 - **cook** — the builder. make, in ai.
-- **mow** — the gardener. two-space copying GC; keeps the heap green.
-- **ticks** — the scheduler. the cooperative heartbeat: spawn, yield, wait — each task its turn.
+- **mow** — the gardener, a catcow. two-space copying GC; keeps the heap green.
+- **ticks** — the scheduler, a clock. the cooperative heartbeat: spawn, yield, wait — each task its turn.
+- **tree** — version control. the history; what feel scopes out for gwen, through tele.
 - **gwen** — ai's debugger. probes the binary.
 
 ## come aboard
