@@ -37,7 +37,8 @@ share host files with anyone.
 
 ## Notes from the build (read before you start — these cost me time)
 
-**Where you are (2026-06-18):** milestones 1, 2 (incl. 2e), **AND 3 DONE**.
+**Where you are (2026-06-19):** milestones 1, 2 (incl. 2e), 3, **4 (merged `{nic,
+clock}` perceive), AND 5 (the OUTBOUND brain) DONE** — all qemu-verified.
 **★ kship BOOTS ON REAL HARDWARE** (off a laptop, no Linux/libc) — the autonomous
 demos paint the framebuffer with no keyboard needed; PS/2-only input + virtio-net-only
 networking are the real-metal gaps (a USB-HID + a real-NIC driver are future). The
@@ -58,10 +59,29 @@ a callable `(demos _)` (no auto-run) so the live agent starts clean. Verified in
 re-baked `out/lib/kship.h` (dep was `$(if $(KSHIP),…)`), so a netagent ISO silently ran a
 STALE kship.l → "caught: missing serve". Fixed to `$(if $(KSHIP)$(NETAGENT),…)`.
 
-Next: **a real policy brain** (decide on content beyond eval — a socket round-trip / a
-model is the seam); **merged `{nic, clock}` perceive** via `ai_wait_fds` (react AND act on
-initiative); a **real-hardware NIC driver** (e1000e/Realtek) for metal networking; a
-**USB-HID keyboard** for the interactive shell on metal.
+**★ MILESTONE 5 — the OUTBOUND brain (the (B) fork; this session, 2026-06-19):** m1–4
+only REACT to packets and BEAT on the clock; the decide step was LOCAL (read+ev). m5
+makes the brain REMOTE — on its own clock kship now **INITIATES** a UDP round-trip to an
+oracle and acts on the reply: "the decide step being a network round-trip, one read over
+a socket stream." The whole round-trip reuses the port surface — `(aim ip oport)` points
+the nic outbound, then prel's `say`/`flush`/`slurp` do the trip — so the ONLY new C is
+the `aim` nif + ARP resolution (`net.c`: `handle` now learns ARP replies, `arp_resolve`
+requests + polls the gateway MAC, `nic_aim` sets the reply target via the SLIRP gateway
+`10.0.2.2`; `kmain.c` registers the s2 nif). The ai side (`kship.l`) is `ask`/`ip4`/`quest`,
+the round-trip handed in as one `ask1` closure (the kernel builds it over `aim`+`nic`, the
+host demo stubs it) so the file still loads where no nic exists — same param discipline as
+`port`. Build: `make kernel NETBRAIN=1` → `(quest (\ q (ask nic aim (ip4 10 0 2 2) 9999 q))
+"ping" 300 -1)`. **Verified in qemu** (a python UDP oracle on `0.0.0.0:9999`, plain SLIRP
+user-net, NO hostfwd — the guest reaches the host at the gateway `10.0.2.2`): six 3 s
+heartbeats each ARP the gateway, send `ping` outbound, and narrate `oracle <- pong#N(ping)`
+— two-sided (the oracle logged six `RECV 'ping'`). The LLM-in-the-loop is now literally a
+different oracle endpoint; the harness is unchanged.
+
+Next: a **richer remote brain** (a JSON/SSE codec so the oracle can be a real model;
+**request correlation** so a single nic can run the m4 reactor AND an m5 quest at once —
+today they'd race on the shared dgq/`reply`, so NETBRAIN is a pure client); a **real-hardware
+NIC driver** (e1000e/Realtek) for metal networking; a **USB-HID keyboard** for the
+interactive shell on metal.
 
 **Build & run recipes:**
 - Host model (fast iteration, the ai half is real here too): `out/host/ai -l port/kship/kship.l -e "(demos 0)"`
@@ -78,6 +98,14 @@ initiative); a **real-hardware NIC driver** (e1000e/Realtek) for metal networkin
   -drive if=pflash,unit=0,format=raw,file=out/dl/edk2-ovmf/ovmf-code-x86_64.fd,readonly=on
   -cdrom out/free/ai-x86_64-kship.iso </dev/null` — cap it with `timeout 25` (it drops to
   a shell that blocks on serial input). Output prints on the serial console.
+- Outbound brain (m5): `make out/free/ai-x86_64-netbrain.iso NETBRAIN=1`, then boot the
+  SAME qemu line but with `-cdrom …-netbrain.iso -netdev user,id=n0 -device
+  virtio-net-pci,netdev=n0` (plain SLIRP, **no `hostfwd`** — outbound reaches the host at
+  the gateway `10.0.2.2`). Run a UDP oracle on the host first (`python3` bound to
+  `0.0.0.0:9999`, reply to the sender). **⚠ the oracle must OUTLIVE its launcher** — start
+  it as its own foreground process (a managed background task), not `cmd & ; …` in a script
+  that then exits (the `&` child dies with the script → the guest's `slurp` blocks forever
+  and you see only `net: … up` then silence). Expect `oracle <- pong#N(...)` every ~3 s.
 
 **ai gotchas that bit me writing `kship.l`** (the sketch had 3 silent bugs because it
 was never gated — `boot/*.l` sketches don't run under `make test`):

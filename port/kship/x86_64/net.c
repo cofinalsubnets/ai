@@ -226,14 +226,58 @@ static void nic_send_to(uint8_t const *dmac, uint8_t const *dip, uint16_t dport,
   for (unsigned i = 0; i < n; i++) udp[8 + i] = p[i];
   tx_send(fr, 14 + 20 + 8 + n); }
 
+// --- ARP for OUTBOUND (resolve a MAC so we can INITIATE) ---------------------
+// reply-to-sender reuses the MAC learned off the incoming frame; INITIATING a
+// datagram to an off-subnet host instead means routing through the SLIRP gateway
+// (10.0.2.2, the NAT router), whose MAC we resolve by ARP. a tiny cache holds it
+// (and any peer we've heard from). milestone 5 (the outbound brain).
+static uint8_t const gw_ip[4] = { 10, 0, 2, 2 };       // the SLIRP gateway / NAT router
+#define ARP_N 4
+static struct arpent { uint8_t ip[4], mac[6]; bool used; } arp_cache[ARP_N];
+
+static bool ip4eq(uint8_t const *a, uint8_t const *b) {
+  return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]; }
+
+// learn ip->mac: refresh an existing slot, else fill a free one, else evict slot 0.
+static void arp_learn(uint8_t const *ip, uint8_t const *mac) {
+  int slot = -1;
+  for (int i = 0; i < ARP_N; i++)
+    if (arp_cache[i].used && ip4eq(arp_cache[i].ip, ip)) { slot = i; break; }
+  if (slot < 0) for (int i = 0; i < ARP_N; i++) if (!arp_cache[i].used) { slot = i; break; }
+  if (slot < 0) slot = 0;
+  for (int j = 0; j < 4; j++) arp_cache[slot].ip[j]  = ip[j];
+  for (int j = 0; j < 6; j++) arp_cache[slot].mac[j] = mac[j];
+  arp_cache[slot].used = true; }
+
+static bool arp_find(uint8_t const *ip, uint8_t *mac) {
+  for (int i = 0; i < ARP_N; i++)
+    if (arp_cache[i].used && ip4eq(arp_cache[i].ip, ip)) {
+      for (int j = 0; j < 6; j++) mac[j] = arp_cache[i].mac[j];
+      return true; }
+  return false; }
+
+// broadcast an ARP request asking who-has `tpa` (so a reply caches its MAC).
+static void arp_request(uint8_t const *tpa) {
+  uint8_t fr[42];
+  for (int i = 0; i < 6; i++) { fr[i] = 0xff; fr[6 + i] = nic.mac[i]; }
+  wr16(fr + 12, 0x0806);
+  uint8_t *a = fr + 14;
+  wr16(a + 0, 1); wr16(a + 2, 0x0800); a[4] = 6; a[5] = 4; wr16(a + 6, 1);
+  for (int i = 0; i < 6; i++) a[8 + i]  = nic.mac[i];   // SHA = us
+  for (int i = 0; i < 4; i++) a[14 + i] = our_ip[i];    // SPA = us
+  for (int i = 0; i < 6; i++) a[18 + i] = 0;            // THA unknown
+  for (int i = 0; i < 4; i++) a[24 + i] = tpa[i];       // TPA = who we ask for
+  tx_send(fr, 42); }
+
 // handle one received ethernet frame: answer ARP-for-us, enqueue UDP-to-us.
 static void handle(uint8_t *f, unsigned len) {
   if (len < 14) return;
   uint16_t et = be16(f + 12);
 
-  if (et == 0x0806 && len >= 42) {              // ARP request for us -> reply (in place)
+  if (et == 0x0806 && len >= 42) {              // ARP: learn the sender; answer requests for us
     uint8_t *a = f + 14;
-    if (be16(a + 6) != 1 || !ip_is_ours(a + 24)) return;
+    arp_learn(a + 14, a + 8);                   // SPA->SHA (present in both request & reply) -> cache it
+    if (be16(a + 6) != 1 || !ip_is_ours(a + 24)) return;   // a reply (op 2) or not-for-us: learning was the point
     uint8_t req_sha[6], req_spa[4];
     for (int i = 0; i < 6; i++) req_sha[i] = a[8 + i];
     for (int i = 0; i < 4; i++) req_spa[i] = a[14 + i];
@@ -277,6 +321,38 @@ static void net_poll(void) {
     rx_post((int) id); }
   __sync_synchronize();
   outw(nic.io + V_QUEUE_NOTIFY, 0); }
+
+// resolve `ip` to a MAC: cached -> done; else ARP and poll the RX ring across a few
+// timer ticks until the reply lands. false on timeout (the caller treats that as no
+// route -- aim returns 0 and the ai brain's say/flush quietly send nothing).
+static bool arp_resolve(uint8_t const *ip, uint8_t *mac) {
+  if (arp_find(ip, mac)) return true;
+  for (int tries = 0; tries < 50; tries++) {
+    arp_request(ip);
+    for (int w = 0; w < 4; w++) {                 // ~4 ticks per request to hear the reply
+      net_poll();
+      if (arp_find(ip, mac)) return true;
+      asm volatile ("hlt"); } }
+  return false; }
+
+// (aim ipword oport) -- point the nic's reply target at an ARBITRARY destination for
+// the NEXT say/flush, so the ai brain can INITIATE a datagram, not just answer a
+// sender. we send to the GATEWAY's MAC but the destination IP (SLIRP NATs every
+// off-subnet datagram through 10.0.2.2), with a fixed source port so the NAT'd reply
+// returns addressed to us and the RX path enqueues it for slurp. ipword packs the
+// dotted address a.b.c.d as one 32-bit fixnum (the ai side's `ip4`). returns 1 if a
+// route resolved, 0 on ARP timeout (or no NIC).
+#define OUR_SPORT 5555
+int nic_aim(uint32_t ipword, uint16_t oport) {
+  if (!nic.up) return 0;
+  uint8_t gwmac[6];
+  if (!arp_resolve(gw_ip, gwmac)) return 0;
+  for (int i = 0; i < 6; i++) reply.mac[i] = gwmac[i];
+  reply.ip[0] = (uint8_t) (ipword >> 24); reply.ip[1] = (uint8_t) (ipword >> 16);
+  reply.ip[2] = (uint8_t) (ipword >> 8);  reply.ip[3] = (uint8_t) ipword;
+  reply.dport = oport;
+  reply.sport = OUR_SPORT;
+  return 1; }
 
 // --- the k_sources[] NIC socket methods (slot wired in kmain) ----------------
 // ready: a datagram is buffered (feeds ai_ready / ai_wait_fds).

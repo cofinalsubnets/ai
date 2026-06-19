@@ -434,6 +434,16 @@ static lvm(lvm_net) {
   Ip += 1;
   return Continue(); }
 
+// (aim ipword oport) -- point the nic outbound for the NEXT say/flush so the ai brain
+// can INITIATE a datagram (net.c, milestone 5). ipword packs a.b.c.d into one fixnum;
+// returns 1 if the route resolved by ARP, else 0. A 2-arg nif: this is the s2 shape's
+// op (the lvm_ret0 in nif_aim returns the result), expanded by hand to match kmain.
+static lvm(lvm_aim) {
+  intptr_t r = putcharm(nic_aim((uint32_t) getcharm(Sp[0]), (uint16_t) getcharm(Sp[1])));
+  *(Sp += 1) = r;
+  Ip += 1;
+  return Continue(); }
+
 #ifdef K_TEST
 // (exit code) -- quit qemu; the test corpus calls it on completion / failure.
 static lvm(lvm_kexit) { k_qemu_exit(getcharm(Sp[0])); Ip += 1; return Continue(); }
@@ -447,6 +457,7 @@ static union u
   nif_key[] = {{key}, {lvm_ret0}},
   nif_color[] = {{lvm_cur}, {.x = putcharm(2)}, {color}, {lvm_ret0}},
   nif_net[] = {{lvm_net}, {lvm_ret0}},
+  nif_aim[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_aim}, {lvm_ret0}},   // 2-arg, s2 shape
 #ifdef K_TEST
   nif_exit[] = {{lvm_kexit}, {lvm_ret0}},
 #endif
@@ -496,7 +507,8 @@ static struct ai_def defs[] = {
 #endif
   {"color", (intptr_t) nif_color},
   {"netserve", (intptr_t) nif_net},     // `net` is taken (the prel content measure)
-  {"nic", (intptr_t) &ai_nic} };        // the virtio-net socket as an ai port
+  {"nic", (intptr_t) &ai_nic},          // the virtio-net socket as an ai port
+  {"aim", (intptr_t) nif_aim} };        // point the nic outbound (milestone 5)
 
 #ifdef K_TEST
 // The whole test corpus, baked VERBATIM to a C string literal by tools/lcatv.l
@@ -506,7 +518,7 @@ static char const ktests[] =
 ;
 #endif
 
-#if defined(KSHIP) || defined(NETAGENT)
+#if defined(KSHIP) || defined(NETAGENT) || defined(NETBRAIN)
 // The kship agent (port/kship/kship.l), baked VERBATIM by lcatv (out/lib/kship.h).
 // Bound to the global `kship-src` and drunk form-by-form through zevs at boot --
 // the kernel boots straight into the self-driving heartbeat loop. See crew/kship.md.
@@ -555,7 +567,7 @@ void kmain(void) {
   struct ai_def td[] = {{"tests", ai_pop1(g)}};
   g = ai_defn(g, td, countof(td));
 #endif
-#if defined(KSHIP) || defined(NETAGENT)
+#if defined(KSHIP) || defined(NETAGENT) || defined(NETBRAIN)
   // bind the baked agent to the global `kship-src`; the driver below drinks it
   // through zevs, then drops into the shell so the machine stays usable.
   g = ai_strof(g, kship_src);
@@ -593,6 +605,14 @@ void kmain(void) {
  // pure-reactive `serve` is still defined for comparison. Non-terminating; the agent
  // IS the server.
  "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (drive fresh nic 300))"
+#elif defined(NETBRAIN)
+ // net-brain build (MILESTONE 5): the OUTBOUND brain (crew/kship.md (B)). drink
+ // kship-src, then build `ask1` -- a question -> its reply, via aim+say+flush+slurp to
+ // a remote oracle (10.0.2.2:9999, the SLIRP host) -- and run `quest`: every ~3 s the
+ // agent INITIATES a UDP round-trip on its OWN clock and narrates the reply. the decide
+ // step is now REMOTE: the brain plugs in over the wire, not read+ev. a negative count
+ // runs unbounded. Non-terminating; here the agent is a client, not a server.
+ "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (quest (\\ q (ask nic aim (ip4 10 0 2 2) 9999 q)) \"ping\" 300 -1))"
 #elif defined(NETECHO)
  // net-echo build (stage 2e gate): the agent perceives one UDP datagram off the
  // `nic` port (slurp), then acts -- writes it back to its sender (fputs+fflush).

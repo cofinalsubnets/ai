@@ -173,6 +173,39 @@
         _ (react c port)                                 ; the reactor (this task), unbounded
         (catch p))                                        ; unreachable on metal; orphan law kept
 
+; --- the OUTBOUND brain (MILESTONE 5: kship INITIATES a round-trip) --- m1-m4 only
+; REACT to packets and BEAT on the clock; the decide step was LOCAL (read+ev, a REPL).
+; (B) in crew/kship.md makes the brain REMOTE: on its own initiative kship ships a
+; question OUT to an oracle and acts on the reply -- "the decide step being a network
+; round-trip, one read over a socket stream." that round-trip reuses the port surface
+; ENTIRELY: `aim` points the nic at an arbitrary (ip, oport) -- resolving the SLIRP
+; gateway's MAC by ARP in C, since SLIRP routes every off-subnet datagram through the
+; gateway -- and then prel's say/flush WRITE the question to the wire and slurp BLOCKS
+; for the answer. so the only genuinely new C is `aim` + the ARP resolve; the byte
+; marshaling is the say/slurp the reactor already uses. `aim` is a kernel-only nif, so
+; it never appears here by name -- the whole round-trip is handed in as one closure
+; `ask1` (a question -> its reply), the kernel building it over `aim`+`nic`, the host a
+; stub. same discipline as `port`: a metal-only capability enters as a param, so this
+; file still loads where no nic exists.
+   (ask port aim ip oport q)                            ; the metal round-trip (kernel wraps this as ask1)
+     (: _ (aim ip oport)                                ; point the nic outbound (ARP for the gateway, in C)
+        _ (say port q)                                  ; write the question to the wire (raw, port-first)
+        _ (flush port)                                  ; transmit the datagram to (ip, oport)
+        (slurp port))                                   ; perceive: BLOCK for the oracle's reply
+   (ip4 a b c d) (+ (* a 16777216) (+ (* b 65536) (+ (* c 256) d)))  ; a.b.c.d -> the fixnum aim reads
+
+; quest: the outbound loop -- every `period` ticks, ASK the oracle the standing question
+; and narrate the reply. kship acts on its OWN initiative (no incoming packet needed),
+; the decide step a remote round-trip through `ask1`. bounded by n (positive: the host
+; demo + a metal smoke test); a negative n runs unbounded on metal (counts down past 0,
+; never back to it -- the same idiom as pulse). returns 0 when bounded out.
+   (quest ask1 q period n)
+     (? (= n 0) 0
+        (: _ (rest period)                              ; perceive: the clock deadline (initiative)
+           r (ask1 q)                                   ; decide: ask the remote brain (a wire round-trip)
+           _ (note (+ "  oracle <- " r))                ; act: narrate the answer
+           (quest ask1 q period (- n 1))))
+
 ; --- checkpoint --- state is a plain value, so persistence is show/read. `bytes`
 ; lifts the saved string to the byte list `sip` reads (a string is a fn over its
 ; indices -- (map s (jot n))). on metal `save` writes to a flat region / virtio-blk
@@ -246,4 +279,6 @@
            _ (catch p)                                     ; join the heartbeat (the orphan law)
            _ (. "  replies=") _ (. (peep c 0 0))           ; 2   both scripted packets answered
            _ (. " beats=")    _ (. (peep c 1 0)) (. "\n")) ; 3   three heartbeats, on initiative
+      _ (note "-- milestone 5: the brain is REMOTE -- ask a (stub) oracle on initiative --")
+      _ (quest (\ q (+ "oracle says " q)) "the meaning of life?" 2 2)  ; 2 rounds; metal ask1 is the real wire
       0))

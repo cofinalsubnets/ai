@@ -41,6 +41,11 @@ void nic_putc(int fd, int c);
 void nic_flush(int fd);
 bool nic_ready(int fd);
 
+// nic_aim -- point the nic at an arbitrary destination (ipword = a.b.c.d packed,
+// oport its UDP port) for the next say/flush, resolving the route by ARP. lets the
+// ai brain INITIATE an outbound datagram (the `aim` nif, milestone 5). 1 = routed.
+int  nic_aim(uint32_t ipword, uint16_t oport);
+
 #define k_boot_ram_max 64
 
 struct k_boot {
