@@ -118,7 +118,7 @@ lvm_t lvm_kcall,
  // the arithmetic lane the scalar arith slow paths divert into.
  lvm_cplx, lvm_Cp, lvm_re, lvm_im, lvm_conj, lvm_abs, lvm_carg,
  lvm_bxor,  lvm_bsr,    lvm_bsl,    lvm_snip,
- lvm_link,   lvm_car,  lvm_cdr,    lvm_puts,
+ lvm_link,   lvm_cap,  lvm_cup,    lvm_puts,
  lvm_getc,  lvm_string, lvm_lt,     lvm_le,   lvm_eq,     lvm_same, lvm_gt,  lvm_ge,
  lvm_sort,  lvm_tally,
  lvm_put, lvm_pull, lvm_table,   lvm_keys,  lvm_dig,
@@ -632,7 +632,7 @@ lvm_t lvm_fault;
  _(nif_same, "id?", s2(lvm_same)) \
  _(nif_bsl, "<<", s2(lvm_bsl)) _(nif_bsr, ">>", s2(lvm_bsr))\
  _(nif_band, "&", s2(lvm_band)) _(nif_bor, "|", s2(lvm_bor)) _(nif_bxor, "^", s2(lvm_bxor))\
- _(nif_link, "link", s2(lvm_link)) _(nif_car, "cap", s1(lvm_car)) _(nif_cdr, "cup", s1(lvm_cdr))\
+ _(nif_link, "link", s2(lvm_link)) _(nif_car, "cap", s1(lvm_cap)) _(nif_cdr, "cup", s1(lvm_cup))\
  _(nif_sort, "sort", s1(lvm_sort)) _(nif_tally, "tally", s1(lvm_tally)) \
  _(nif_snip, "snip", s3(lvm_snip)) \
  _(nif_read, "read", s2(lvm_read))\
@@ -4322,8 +4322,8 @@ op11(lvm_intf, flop(Sp[0]) ? putcharm((intptr_t) flo_get(Sp[0])) : Sp[0])
 // ============================================================================
 // chain
 // ============================================================================
-op11(lvm_car, chainp(Sp[0]) ? A(Sp[0]) : Sp[0])
-op11(lvm_cdr, chainp(Sp[0]) ? B(Sp[0]) : nil)
+op11(lvm_cap, chainp(Sp[0]) ? A(Sp[0]) : Sp[0])
+op11(lvm_cup, chainp(Sp[0]) ? B(Sp[0]) : (word)g)
 op11(lvm_chainp, (chainp(Sp[0]) && !nomp(Sp[0])) ? putcharm(1) : nil)  // the SURFACE chainp = a real compound list (formp): a named symbol is (name . mint) but counts as an atom
 lvm(lvm_link) {
  Have(Width(struct ai_chain));
@@ -4473,6 +4473,7 @@ static lvm(lvm_add_seq) {
  if (formp(a) || formp(b)) {                          // elt <-> list
   bool front = !ai_add_lr || formp(b);               // element on the left -> front
   word lst = formp(a) ? a : b, elt = formp(a) ? b : a;
+  if (mintp(elt)) return *++Sp = lst, Ip++, Continue();  // a bare mint is + 's identity on lists (the zero point too): nothing adjoins nothing
   if (front) { Sp[0] = elt, Sp[1] = lst; return Ap(lvm_link, g); }  // (link elt list)
   uintptr_t n = llen(lst) + 1; Have(n * Width(struct ai_chain));        // append elt at tail
   lst = formp(Sp[0]) ? Sp[0] : Sp[1], elt = formp(Sp[0]) ? Sp[1] : Sp[0];

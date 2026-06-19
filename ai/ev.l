@@ -246,7 +246,7 @@
    ; clauses: test/result pairs then a trailing else. a constant test folds to one
    ; branch; else emit lvm_cond -- true runs `then` + jumps to join, false falls to `rest`.
    (clauses b) (?
-    (atom? b)       (kim 0)                                ; no else (wev usually supplies one)
+    (atom? b)       (kim ())                                ; no else (wev usually supplies one)
     (atom? (cup b)) (compose (ana c (cap b)) tojoin)            ; trailing else: result, then join
     (: test (ana c (cap b))
        then (ana c (caup b))

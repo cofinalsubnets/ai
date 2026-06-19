@@ -574,21 +574,25 @@ void kmain(void) {
  ai_egg_post
 #include "bao.h"
 #ifdef K_TEST
- // test build: drink the baked `tests` string (string -> charlist -> sip port)
+ // test build: drink the baked `tests` string (string -> charlist -> tap port)
  // through zevs (ai/bao.l) -- the same stream shell as the host's stdin runner.
- // zz-fin.l prints the summary and (exit 1)s on failure.
- "(zevs (sip ((: (g i) (? (< i (tally tests)) (link (peep tests i 0) (g (+ 1 i))))) 0)))"
+ // zz-fin.l prints the summary and (exit 1)s on failure. (`tap` builds the port;
+ // `sip` is the verb that draws ONE unit -- see the vessel frame in ai/prel.l.)
+ "(zevs (tap ((: (g i) (? (< i (tally tests)) (link (peep tests i 0) (g (+ 1 i))))) 0)))"
 #elif defined(KSHIP)
  // agent build: drink the baked `kship-src` (defines the agent; demos no longer
  // auto-run), run (demos 0) to show the heartbeat/watchdog/checkpoint, then the shell.
- "(: _ (zevs (sip ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) _ (demos 0) (shell 0))"
+ "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) _ (demos 0) (shell 0))"
 #elif defined(NETAGENT)
- // net-agent build (MILESTONE 3): drink kship-src (defines + leaks the agent --
- // policy, the watchdog `help`, `serve`), THEN run the live loop. (serve fresh nic)
- // perceives a UDP datagram off the `nic` port, decides via the policy, replies
- // "pong", and survives a faulting packet via the watchdog -- the AGENT loop on the
- // real NIC, not NETECHO's raw byte echo. Non-terminating; the agent IS the server.
- "(: _ (zevs (sip ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (serve fresh nic))"
+ // net-agent build (MILESTONE 4): drink kship-src (defines + leaks the agent --
+ // policy, the watchdog `help`, `drive`), THEN run the merged loop. (drive fresh nic
+ // 300) spawns a heartbeat task (a beat every ~3 s at 100 Hz) and runs the reactor in
+ // this task; the kernel scheduler's one ai_wait_fds merges {nic-fd, clock}, so the
+ // agent REACTS to UDP (decide via policy, reply on the wire, survive a faulting
+ // packet via the watchdog) AND BEATS on its own initiative with no traffic. The m3
+ // pure-reactive `serve` is still defined for comparison. Non-terminating; the agent
+ // IS the server.
+ "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (drive fresh nic 300))"
 #elif defined(NETECHO)
  // net-echo build (stage 2e gate): the agent perceives one UDP datagram off the
  // `nic` port (slurp), then acts -- writes it back to its sender (fputs+fflush).

@@ -242,15 +242,18 @@ $@(3 4)              ; 7
 ; the value must be an exact integer 0..255 (rep-blind, like `=`: 66.0 is 66); anything
 ; else is nil, like `-` on strings. SYMBOLS LEFT THE STRING ALGEBRA (the mint round):
 ; + and * on a symbol are nil -- a symbol is a point with a spelling attribute, and
-; intern/string are the explicit bridge, not operators. `*` is repeated `+`: a sequence
-; times a count repeats it, and the count SATURATES (($ c), the count law shared with
-; numeral-apply and array shapes): a non-positive count gives the empty sequence, a
-; float ceils.
+; intern/string are the explicit bridge, not operators. a BARE MINT is +'s IDENTITY
+; on lists -- nothing adjoins nothing, so `'(3) + ()` is `'(3)` either side (the zero
+; point too: it is a mint); a NAMED symbol still adjoins as an element. `*` is repeated
+; `+`: a sequence times a count repeats it, and the count SATURATES (($ c), the count
+; law shared with numeral-apply and array shapes): a non-positive count gives the empty
+; sequence, a float ceils.
 ; demo:
 "ab" + "cd"          ; "abcd"
 "x" + 66             ; "xB"      the byte law: exact 0..255 or nil
 '(1 2) + '(3 4)      ; (1 2 3 4)
 5 + '(1 2)           ; (5 1 2)   + adjoins (the measure homomorphism)
+'(3) + ()            ; (3)       a bare mint is +'s identity on lists, either side
 "ab" * 3             ; "ababab"  * is repeated +; the count saturates
 
 ; --- numeric functions --- abs and int are type-aware; the constants are e pi i; also gcd and
