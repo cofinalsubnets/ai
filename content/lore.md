@@ -37,4 +37,4 @@ ai is `top`; the crew are its faces, in dual pairs.
 - **[the blue paper](blue.html)** — the laws as propositions, each pointed at its evidence.
 - **[the crew](crew/index.html)** — the full roster.
 
-*for P B & E.*
+*for p., b. and e.*

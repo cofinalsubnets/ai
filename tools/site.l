@@ -181,7 +181,7 @@
               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
               "<title>" title "</title>\n"))
   foot (cc (L "<footer>generated from <a href=\"" mdfile "\">" mdfile "</a> by "
-              "<a href=\"tools/site.l\">tools/site.l</a>, an ai program \xc2\xb7 for P B & E"
+              "<a href=\"tools/site.l\">tools/site.l</a>, an ai program \xc2\xb7 for p., b. and e."
               "</footer>\n</body>\n</html>\n"))
 
   css (slurp (open "site.css" "r"))
