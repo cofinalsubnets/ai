@@ -82,18 +82,22 @@
 
    (revcat a b) (foldl (flip link) b a)
 
-   ; parse a charlist as ONE expression: the line is implicitly parenthesized,
-   ; so `x y z` reads as (x y z) -- a single application -- and infix works at
-   ; the prompt (`1 = 1` factors to ((= 1 1)) = 1). a lone value is unchanged
-   ; by (f) == f. returns m if the input ends inside an unfinished shape
-   ; (an unclosed paren or string), 0 for a blank line, else a one-form list.
+   ; parse a charlist as ONE expression. read EVERY top-level datum off the line:
+   ; a SINGLE datum is used as-is -- so a leading monadic like `+(-3)` keeps fusing
+   ; (wrapping it in () would put the operator in HEAD position, where it never
+   ; fuses -- the old `(+(-3))` -> `(+ -3)` bug); MULTIPLE datums become the
+   ; application `(a b c)`, so `f x` applies and `1 = 1` factors infix. returns m if
+   ; the line ends inside an unfinished shape, 0 for a blank line, else a one-form list.
+   (rdall p acc) (: r (sound p eofsym)
+                    (? (= r p)      m              ; unfinished shape -> more
+                       (= r eofsym) (rev acc)      ; eof -> the datums, in order
+                       (rdall p (link r acc))))
    (parseall cl)
-     (: p (tap (link 40 (cat cl (L 41))))
-        r (sound p eofsym)
-        (? (= r p)      m                  ; ends inside an unfinished form
-           (= r eofsym) 0                  ; unreachable: the wrap always closes
-           (id? r ())   0                  ; blank line reads 0 (the wrapped empty form)
-           (L r)))
+     (: ds (rdall (tap cl) 0)
+        (? (id? ds m)        m                     ; unfinished shape
+           !(two? ds)        0                     ; blank line: no datums
+           !(two? (cup ds))  (L (cap ds))          ; ONE datum: as-is (leading monadic preserved)
+           (L ds)))                                ; MANY: the application (a b c)
 
    ; --- editor ---
 
@@ -591,13 +595,16 @@
      (: cur (mkframe 0 (link 49 0) 0 0)
         (= (k7 0 0 0 0 (link cur 0) 0 0) (downhist k7 0 (link 49 0) 0 0 0 0 cur)))
      ; --- parseall: a line is ONE expression; floats; the more-sentinel ---
-     (= '((1 2 3)) (parseall '(49 32 50 32 51)))
-     (= '(((1 2))) (parseall '(40 49 32 50 41)))
+     ; a SINGLE datum is returned as-is in a one-list (no extra wrap), so a leading
+     ; monadic stays fused: "+(-3)" -> (mono (+ (-3))) -> -3, not the head-position (+ -3).
+     (= '((1 2 3)) (parseall '(49 32 50 32 51)))           ; "1 2 3" -> the application
+     (= '((1 2)) (parseall '(40 49 32 50 41)))             ; "(1 2)" -> the one form, as-is
+     (= -3 (ev (cap (parseall '(43 40 45 51 41)))))        ; "+(-3)" -> monadic net = -3 (the bug fix)
      (= 0 (parseall 0))
      !(two? (parseall '(40 49)))
-     (= 1.5 (cap (cap (parseall '(49 46 53)))))
-     (= 1000.0 (cap (cap (parseall '(49 101 51)))))
-     (nom? (cap (cap (parseall '(49 46 50 46 51)))))
+     (= 1.5 (cap (parseall '(49 46 53))))
+     (= 1000.0 (cap (parseall '(49 101 51))))
+     (nom? (cap (parseall '(49 46 50 46 51))))
      ; the more-sentinel: an unclosed shape is m (not two?); a complete datum is
      (nil? (two? (parseall (cat (L 40 43 32 49) 0))))   ; "(+ 1" unclosed
      (two? (parseall (cat (L 49 32 43) 0)))             ; "1 +" complete (the curry partial)
