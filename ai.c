@@ -2800,6 +2800,14 @@ static ai_inline struct ai*ioput_chain(struct ai*g, word _, uintptr_t off) {
      && chainp(B(g->sp[0])) && !chainp(BB(g->sp[0]))) {
   g = ioputc(g, '\'');                          // GC here may relocate sp[0]; read AB after
   g = ioputx(g, AB(g->sp[0]), off); }
+ // a `(mono (run datum))` chain is a GLUED MONADIC -> print the source `run`+`datum`
+ // (the reverse of opfix's fusion: *5, +(-3), $$0). a reader-built mono always reparses:
+ // the reader only fuses where it round-trips (* to a bare datum, +/- to ( ' " @ ~ #).
+ else if ((n = add_name(g, A(g->sp[0]))) && len(n) == 4 && !memcmp(txt(n), "mono", 4)
+          && chainp(B(g->sp[0])) && !chainp(BB(g->sp[0]))                                 // (mono X)
+          && chainp(AB(g->sp[0])) && chainp(B(AB(g->sp[0]))) && !chainp(BB(AB(g->sp[0])))) {  // X = (run datum)
+  g = ioputx(g, A(AB(g->sp[0])), off);          // run -- the operator symbol
+  g = ioputx(g, AB(AB(g->sp[0])), off); }       // the operand, glued (re-read fresh after run)
  else for (g = ioputc(g, '(');; g = ioputc(g, ' '), g->sp[0] = B(g->sp[0])) {
   g = ioputx(g, A(g->sp[0]), off);            // off threaded so nested tables are still tracked
   if (!chainp(B(g->sp[0]))) { g = ioputc(g, ')'); break; } }

@@ -45,4 +45,7 @@
  ((net '(1 2 3)) = (foldl (+) 0 '(1 2 3)))
  ((prod '(2 3 4)) = (prod @(2 3 4))) (24 = (prod '(2 3 4)))
  (5 = (tally (jot 5))) (10 = +(jot 5))          ; jot counts what it jots; gauss agrees
- ((fraction 5.25) = (5.25 % 1)) ((bit 9) = !!9) (!!9 = ?9))
+ ((fraction 5.25) = (5.25 % 1)) ((bit 9) = !!9) (!!9 = ?9)
+ ; a glued monadic prints back as its source -- byte-exact, like ' / ~ / @
+ ("*5" = (show (\ *5))) ("+(-3)" = (show (\ +(-3)))) ("$$0" = (show (\ $$0)))
+ ('(0 1 2 3 4) = (ev (\ *5))))                       ; ... and round-trips through show -> read -> ev
