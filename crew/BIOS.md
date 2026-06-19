@@ -7,10 +7,10 @@ carries the teaser roster + the nav.
 
 ## The members
 
-`tele.html` · `zev.html` · `wev.html` · `gwen.html` · `mow.html` · `bao.html` ·
-`aineko.html` · `cook.html` · `kship.html`
+`tele.html` · `zev.html` · `wev.html` · `bellberry.html` · `gwen.html` · `mow.html` ·
+`bao.html` · `aineko.html` · `cook.html` · `kship.html`
 
-(ev has no page — it is the action, not a member: **ev = feel ∘ sound** = wev ∘ zev.)
+(bellberry IS ev — the evaluator made a member: **ev = feel ∘ sound** = wev ∘ zev.)
 
 ## File naming & links
 
@@ -53,11 +53,15 @@ Every page, in order:
   that scopes constellations.* sees (perceives) + drives (decides) kship; still the
   telescope (tensors + reverse-mode autograd over the constellation layer).
 - **zev** — *the sounder · ♓ pisces.* creed: *sound — charms into forms.* the
-  parser-combinator vocabulary, lifted from cook's Makefile importer; the
-  character-arm of ev.
+  parser-combinator vocabulary, lifted from cook's Makefile importer; bellberry's
+  tool on the character lane.
 - **wev** — *the spinner · ♍ virgo.* creed: *feel — spin prepared source.* the
-  source prepass (macroexpand, boxfix, fold), grown into a partial evaluator; the
-  data-arm of ev.
+  source prepass (macroexpand, boxfix, fold), grown into a partial evaluator;
+  bellberry's tool on the data lane.
+- **bellberry** — *the evaluator.* creed: *compile the language, then run it.* a
+  silver rabbit, light brown ripples; she is `ev`. the sounder (zev) and the spinner
+  (wev) are her tools — she reads through one, prepares through the other:
+  ev = feel ∘ sound = wev ∘ zev, the two lanes met at one core.
 - **gwen** — *the synthesist · ♎ libra.* creed: *the human words and the ai words
   say the same thing — that is green.* keeper of the user-facing vocabulary; probes
   the binary, never a prior over a one-line experiment.

@@ -14,6 +14,7 @@ the core thread.)
 | **tele** | ♊ | the pilot — sees and drives kship; the eye that scopes constellations (tensors + autograd) | `tele/tele.l`, `port/kship/kship.l` (the `policy` seam) |
 | **zev** | ♓ | the sounder — `sound`: charms into forms, a parser-combinator vocabulary | `parse/zev.l` |
 | **wev** | ♍ | the spinner — `feel`: the source prepass (macroexpand, boxfix, fold), grown into a partial evaluator | `peval/wev.l` |
+| **bellberry** | — | the evaluator — `ev`: compiles the language and runs it (feel ∘ sound = wev ∘ zev); a silver rabbit | `ai/ev.l` |
 | **gwen** | ♎ | the synthesist — keeps the human words and the ai words in agreement | `ai/{ev,prel,egg}.l` + the docs |
 | **mow** | ♉ | the garbage collector — a catcow; tends the two-space copying collector (the litter box) | the GC cluster in `ai.c` + `ai.h` |
 | **bao** | ♋ | the shell — soft wrapper / rlwrap-style pty wrapper / debugger | `ai/bao.l`, `host/pty.c`, `boot/pty.l` |
@@ -21,9 +22,9 @@ the core thread.)
 | **cook** | ♑ | the builder — make-in-ai (builds the host from scratch, passes the corpus) | `cook/cook.l` |
 | **kship** | ♒ | the ship — the freestanding ai-kernel as a self-driving agent on bare metal | `port/kship/` |
 
-**ev is not a member** — it is the action: **ev = feel ∘ sound** (= wev ∘ zev), the
-spinner after the sounder. The two input lanes, characters and data, meet at one core
-via the copairing `[sound, id]`.
+**ev is bellberry** — the evaluator is the action made a member: **ev = feel ∘ sound**
+(= wev ∘ zev), the spinner after the sounder. The two input lanes, characters and data,
+meet at one core in her via the copairing `[sound, id]`.
 
 The personality docs are the *source of truth* for each app's design and status.
 `make install` puts the runnable ones (`aineko`, `bao`, `cook`) on `PATH` next to

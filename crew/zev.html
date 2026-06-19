@@ -42,22 +42,11 @@
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
 <h1>zev <span class="what">· the sounder · ♓ pisces</span></h1>
-
-<p class="creed">sound — charms into forms.</p>
-
-<p>zev is the sounder: <code>sound</code> reads bytes (charms) into forms — a
-parser-combinator vocabulary of tiny functions that compose. a literal, a char, a
-run; choice, sequence, repetition — nothing alone, a grammar once you stack them.
-lifted from <a href="cook.html">cook</a>'s Makefile importer so the whole crew can
-reuse it.</p>
-
-<p>zev is the character-arm of <strong>ev</strong> = feel ∘ sound (= wev ∘ zev) —
-the two input lanes, characters and data, meet at one core via the copairing
-<code>[sound, id]</code>. Ze'ev the wolf hunts in a pack, the shape of the thing.</p>
-
-<p class="lives">lives in <code>parse/zev.l</code> · the full brief is
-<a href="zev.md">crew/zev.md</a></p>
-
+<p class="creed">zev is the sounder: <code>sound</code> reads charms into forms.</p>
+<p>It is the character-arm of <strong>ev</strong> = feel ∘ sound (= wev ∘ zev); the two input lanes, characters and data, meet at one core via the copairing <code>[sound, id]</code>.</p>
+<p><code>parse/zev.l</code> is a <strong>parser-combinator library written in ai</strong>: a small, tested, reusable vocabulary for turning a string into a tree, built the way cook's Makefile importer is built — out of tiny functions that compose. cook PROVED the idea works (its <code>(\ s y n)</code> CPS parsers read real GNU Makefiles); but cook's combinators are <strong>locked inside one body-having <code>:</code></strong>, private and unreusable, reimplemented from scratch the next time anyone needs to parse a wire header or a command line. zev lifts that block out, generalizes it, and gives the whole crew <strong>one shared combinator vocabulary</strong> instead of N hand-rolled <code>(: (g i ...) ...)</code> char loops.</p>
+<p>(Ze'ev is the wolf; a wolf hunts in a pack. A combinator is nothing alone and everything composed — which is the whole of the idea, and the rest is bookkeeping.)</p>
+<p class="lives">lives in the crew · the full brief is <a href="zev.md">crew/zev.md</a></p>
 <footer>for p., b. and e.</footer>
 </body>
 </html>

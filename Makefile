@@ -267,10 +267,19 @@ cook/Cookfile: Makefile cook/cook.l $(ho)/ai
 # `make blue` refreshes just the paper (part of `all`); `make site` refreshes all three.
 # `site` is NOT in `all` yet: index.html would clobber the live repl page until the repl
 # content is extracted (content/repl.md + content/repl.tail.html), which repl.html needs.
-.PHONY: site blue
+.PHONY: site blue crew
 SITE_GEN = tools/site.l site.css $(ho)/ai
+CREW_GEN = tools/site.l crew/crew.css $(ho)/ai
+CREW = aineko bao bellberry cook gwen kship mow tele wev zev
+CREW_HTML = $(CREW:%=crew/%.html)
 blue: blue.html
 site: index.html repl.html blue.html
+# the crew bio pages, generated FROM their .md (the .md is the source of truth);
+# crew/index.html is hand-built (no single .md) and stays out. not in `all`.
+crew: $(CREW_HTML)
+crew/%.html: crew/%.md $(CREW_GEN)
+	@echo AI	$@
+	@$(ho)/ai tools/site.l crew $< > $@
 blue.html: blue.md $(SITE_GEN)
 	@echo AI	$@
 	@$(ho)/ai tools/site.l blue blue.md > $@

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>bao — the shell</title>
+<title>bao — the shell, the rlwrap, and the debugger</title>
 <style>
   /* the shared crew-bio chrome: the index palette, self-contained, no deps.
      bg #0e1014, text #c8ccd4, links #7aa2f7, the green of a proved answer
@@ -41,25 +41,15 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>bao <span class="what">· the shell · ♋ cancer (first guess)</span></h1>
-
-<p class="creed">a soft wrap around a chewy command.</p>
-
-<p>bao is a steamed bun — three things that turn out to be one. the
-<strong>interactive shell</strong>: line editing, history, a prompt, a fault-face
-that survives every raise. the <strong>rlwrap</strong>: a pty wrapper that lends any
-program bao's own editor. and the <strong>debugger</strong>: a <code>help</code>
-handler with a face, built on the condition system.</p>
-
-<p>all three are one muscle — one editor, a wrapped process, the condition machinery
-— written once, reused everywhere. bao keeps the surface small and the editor
-private. it is <a href="aineko.html">aineko</a>'s sibling (the cat pumps over a
-socket, bao through a pty), and its fault-face is kin to <a
-href="kship.html">kship</a>'s watchdog.</p>
-
-<p class="lives">lives in <code>ai/bao.l</code> + <code>host/pty.c</code> · the
-full brief is <a href="bao.md">crew/bao.md</a></p>
-
+<h1>bao <span class="what">· the shell, the rlwrap, and the debugger</span></h1>
+<p>The bao design + agent brief (see <strong>Status</strong> below for what has landed). <strong>bao</strong> (steamed bun: a soft wrapper around a chewy command) is three things that turn out to be one:</p>
+<ol>
+<li><strong>the interactive shell</strong> — line editing, history, prompt, the fault-face;</li>
+<li><strong>the rlwrap replacement</strong> — a pty wrapper that gives <em>any</em> program bao's editor;</li>
+<li><strong>the debugger</strong> — a <code>help</code> handler with a face, the condition system as a control plane.</li>
+</ol>
+<p>All three are the same muscle (an editor + a wrapped process + the condition system), so they share one tool.</p>
+<p class="lives">lives in the crew · the full brief is <a href="bao.md">crew/bao.md</a></p>
 <footer>for p., b. and e.</footer>
 </body>
 </html>

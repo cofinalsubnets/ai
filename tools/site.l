@@ -157,40 +157,112 @@
               (= tag 'hr) (: _ (o "<hr>\n") (go (cup bs) subdone tocdone))
               (go (cup bs) subdone tocdone))))
 
-  ; --- per-page chrome: one template, three pages, one site.css inlined ---
+  (go-crew bs first1?)
+     (? (! (two? bs)) 0
+        (: b (cap bs) tag (cap b) pl (cap (cup b))
+           (? (= tag 'h2) 0
+              (= tag 'h1) (: sp (emdash pl) nm (trim (cap sp)) rest (trim (cup sp))
+                             _ (o "<h1>") _ (o (inl nm)) _ (o " <span class=\"what\">\xc2\xb7 ")
+                             _ (o (inl rest)) _ (o "</span></h1>\n")
+                             (go-crew (cup bs) first1?))
+              (= tag 'p) (? (&& first1? (bold-lead? pl))
+                            (: _ (o "<p class=\"creed\">") _ (o (inl (lead-creed pl))) _ (o "</p>\n")
+                               rest (lead-rest pl)
+                               _ (? (two? rest) (: _ (o "<p>") _ (o (inl rest)) (o "</p>\n")) 0)
+                               (go-crew (cup bs) 0))
+                            (: _ (o "<p>") _ (o (inl pl)) _ (o "</p>\n") (go-crew (cup bs) 0)))
+              (= tag 'ul) (: _ (emit-list "ul" pl) (go-crew (cup bs) first1?))
+              (= tag 'ol) (: _ (emit-list "ol" pl) (go-crew (cup bs) first1?))
+              (= tag 'pre) (: _ (emit-pre pl) (go-crew (cup bs) first1?))
+              (= tag 'table) (: _ (emit-table pl) (go-crew (cup bs) first1?))
+              (= tag 'law) (: _ (emit-law pl) (go-crew (cup bs) first1?))
+              (= tag 'hr) (: _ (o "<hr>\n") (go-crew (cup bs) first1?))
+              (= tag 'h3) (: _ (o "<h3>") _ (o (inl pl)) _ (o "</h3>\n") (go-crew (cup bs) first1?))
+              (go-crew (cup bs) first1?))))
+
+  ; --- crew-mode helpers (the crew bio pages) ---
+  ; split a charlist on the first occurrence of the 3-byte em-dash "\xe2\x80\x94":
+  ; (link before after); no dash -> (link cl 0).
+  (dash3? cl) (&& (two? cl) (= (cap cl) 226)
+                  (two? (cup cl)) (= (cap (cup cl)) 128)
+                  (two? (cup (cup cl))) (= (cap (cup (cup cl))) 148))
+  (emdash cl) ((: (g cl pre) (? (dash3? cl) (link (rev pre) (drop 3 cl))
+                                (? (two? cl) (g (cup cl) (link (cap cl) pre))
+                                   (link (rev pre) 0)))) cl 0)
+  ; the middle dot " \xc2\xb7 " separates role from sign in the rest; take what's before.
+  (mdot? cl) (&& (two? cl) (= (cap cl) 194) (two? (cup cl)) (= (cap (cup cl)) 183))
+  (beforedot cl) ((: (g cl pre) (? (mdot? cl) (rev pre)
+                                   (? (two? cl) (g (cup cl) (link (cap cl) pre)) (rev pre)))) cl 0)
+  ; the member name from the md path "crew/<name>.md" -> "<name>".
+  (basename p) ((: cl (s2cl p) (? (hasb cl 47) (rev (upto (rev cl) 47)) cl)))
+  (stem cl) (? (hasb cl 46) (upto cl 46) cl)
+  ; the bold LEAD of the first paragraph is the creed: a paragraph that opens with a
+  ; "**...**" span splits into (creed-text . rest) -- the lead bold span (unwrapped)
+  ; and the prose after it (trimmed). a paragraph not opening with "**" has no creed:
+  ; (link 0 cl). (upto2/past2 carve the first "**...**" pair.)
+  (bold-lead? cl) (: t (lstrip cl) (&& (two? t) (= (cap t) 42) (two? (cup t)) (= (cap (cup t)) 42)
+                                       (has2 (drop 2 t))))
+  (lead-creed cl) (: t (lstrip cl) (upto2 (drop 2 t)))    ; the lead span's text
+  (lead-rest cl)  (: t (lstrip cl) (trim (past2 (drop 2 t))))  ; the prose after it
+
+  ; --- per-page chrome: one template, four pages, one css inlined ---
   ; invoked `out/host/ai -l ai/prel.l tools/site.l <page-id> <content.md> > <page>.html`.
-  ; the page-id (kship | repl | blue) picks the title, the active nav item, whether a
-  ; table of contents is emitted, and an optional tail file (the repl's wasm shim).
+  ; the page-id (kship | repl | blue | crew) picks the title, the active nav item,
+  ; whether a table of contents is emitted, an optional tail file (the repl's wasm
+  ; shim), and -- for crew -- a wholly different bio chrome rendered from the md.
   (cc xs) (? (two? xs) (+ (cap xs) (cc (cup xs))) "")    ; concat a list of strings
   pageid (cap (cup argv))
   mdfile (cap (cup (cup argv)))
-  title (? (= pageid "blue") "ai blue paper" (= pageid "repl") "bao \xc2\xb7 the shell" "kship")
+  crew? (= pageid "crew")
   toc?  (= pageid "blue")                                ; only the paper gets a toc
   tailf (? (= pageid "repl") "content/repl.tail.html" "")  ; the repl injects the wasm shim
   sep " \xc2\xb7 "
   nav1 (\ id href label (? (= id pageid)
                            (cc (L "<span class=\"here\">" label "</span>"))
                            (cc (L "<a href=\"" href "\">" label "</a>"))))
-  topnav (cc (L "<p class=\"topnav\">"
-                (nav1 "kship" "index.html" "kship") sep
-                (nav1 "repl"  "repl.html"  "bao")  sep
-                (nav1 "blue"  "blue.html"  "blue paper") sep
-                "<a href=\"CLAUDE.md\">the spec</a>" sep
-                "<a href=\"crew/index.html\">the crew</a></p>\n"))
+  ; the crew topnav is a fixed bar of relative links (crew pages live in crew/).
+  crewnav (+ "<p class=\"topnav\"><a href=\"../index.html\">\xe2\x86\x90 ai</a> \xc2\xb7 "
+             (+ "<a href=\"index.html\">the crew</a> \xc2\xb7 "
+                (+ "<a href=\"../blue.html\">blue paper</a> \xc2\xb7 "
+                   "<a href=\"../README.md\">readme</a></p>\n")))
+  topnav (? crew? crewnav
+            (cc (L "<p class=\"topnav\">"
+                   (nav1 "kship" "index.html" "kship") sep
+                   (nav1 "repl"  "repl.html"  "bao")  sep
+                   (nav1 "blue"  "blue.html"  "blue paper") sep
+                   "<a href=\"CLAUDE.md\">the spec</a>" sep
+                   "<a href=\"crew/index.html\">the crew</a></p>\n")))
+
+  css (slurp (open (? crew? "crew/crew.css" "site.css") "r"))
+  md (slurp (open mdfile "r"))
+  bs (parse (lines (s2cl md)))
+
+  ; for crew: derive the member name + title from the parsed h1 line.
+  h1pl (? (&& (two? bs) (= (cap (cap bs)) 'h1)) (cap (cup (cap bs))) "")
+  h1sp (emdash h1pl)
+  cname (trim (cap h1sp))                       ; "<name>"
+  crole (trim (beforedot (trim (cup h1sp))))    ; "<role>" (the rest, sign tail dropped)
+  mname (string (stem (basename mdfile)))       ; the .md filename stem, for the .md link
+  title (? crew? (cc (L (string cname) " \xe2\x80\x94 " (string crole)))
+            (= pageid "blue") "ai blue paper" (= pageid "repl") "bao \xc2\xb7 the shell" "kship")
   htop (cc (L "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
               "<title>" title "</title>\n"))
-  foot (cc (L "<footer>generated from <a href=\"" mdfile "\">" mdfile "</a> by "
-              "<a href=\"tools/site.l\">tools/site.l</a>, an ai program \xc2\xb7 for p., b. and e."
-              "</footer>\n</body>\n</html>\n"))
+  foot (? crew? "<footer>for p., b. and e.</footer>\n</body>\n</html>\n"
+            (cc (L "<footer>generated from <a href=\"" mdfile "\">" mdfile "</a> by "
+                   "<a href=\"tools/site.l\">tools/site.l</a>, an ai program \xc2\xb7 for p., b. and e."
+                   "</footer>\n</body>\n</html>\n")))
+  ; the .lives brief link (crew only), before the footer.
+  lives (cc (L "<p class=\"lives\">lives in the crew \xc2\xb7 the full brief is "
+               "<a href=\"" mname ".md\">crew/" mname ".md</a></p>\n"))
 
-  css (slurp (open "site.css" "r"))
-  md (slurp (open mdfile "r"))
-  bs (parse (lines (s2cl md)))
   _ (o htop)
   _ (o "<style>\n") _ (o css) _ (o "</style>\n")
   _ (o "</head>\n<body>\n")
+  _ (? crew? (o "\n") 0)
   _ (o topnav)
-  _ (go bs 0 (? toc? 0 1))
+  _ (? crew? (o "\n") 0)
+  _ (? crew? (: _ (go-crew bs 1) (o lives))
+       (go bs 0 (? toc? 0 1)))
   _ (? (! (= tailf "")) (o (slurp (open tailf "r"))) 0)
   (o foot))

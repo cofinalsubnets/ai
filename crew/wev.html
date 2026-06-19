@@ -42,23 +42,11 @@
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
 <h1>wev <span class="what">· the spinner · ♍ virgo</span></h1>
-
-<p class="creed">feel — spin prepared source.</p>
-
-<p>wev is the spinner: <code>feel</code> is the source prepass — macroexpand,
-boxfix, fold pure global applications (<code>(+ 1 2)</code> → <code>3</code>), mark
-apply strategy. it spins read source into prepared source, then grows the same
-machinery into a partial evaluator: specialize on what you know, leave the rest
-open.</p>
-
-<p>wev is the data-arm of <strong>ev</strong> = feel ∘ sound (= wev ∘ zev) — the
-spinner after <a href="zev.html">zev</a> the sounder. both were lifted from the same
-place, the compiler's own gut. it reduces what it can see and stops honestly at what
-it cannot; a fold that changes a meaning is a bug, not a saving.</p>
-
-<p class="lives">lives in <code>peval/wev.l</code> · the full brief is
-<a href="wev.md">crew/wev.md</a></p>
-
+<p class="creed">wev is the spinner: <code>feel</code> spins read source into prepared source</p>
+<p>(macroexpand, boxfix, fold). It is the data-arm of <strong>ev</strong> = feel ∘ sound (= wev ∘ zev), the spinner after zev the sounder. Grown into a partial evaluator:</p>
+<p><code>peval/wev.l</code> is a <strong>partial evaluator written in ai</strong>: feed it a function and <em>some</em> of its inputs, and it hands back a smaller function — the residual program, with everything statically known already computed. The pitch, like telescope's, is <strong>ai already ships most of it.</strong> The compiler's own prepass (<code>ev.l</code>'s <code>wev</code>) is a partial evaluator in miniature: it folds a pure global application whose arguments are all constant (<code>(+ 1 2)</code> → <code>3</code>), inlines a matching nif, and — in <code>aco</code> — drops a cond branch whose test folds to a constant. That is <em>constant folding</em>: the all-or-nothing corner of partial evaluation, where <strong>every</strong> argument must be known. wev-the-crew lifts that machinery out and generalizes it to the full <strong>mix</strong> — specialize on input that is only <em>partially</em> known — and follows the road that opens up: the <strong>Futamura projections</strong>.</p>
+<p>(wev is weak the way weak-head-normal-form is weak: it reduces what it can see and stops honestly at what it cannot. zev hunts a string into a tree; wev reduces a tree into a smaller tree. Both were lifted from the same place — the compiler's own gut, zev from cook's embedded parser block, wev from <code>ev</code>'s prepass — so they are litter-mates, not lovers.)</p>
+<p class="lives">lives in the crew · the full brief is <a href="wev.md">crew/wev.md</a></p>
 <footer>for p., b. and e.</footer>
 </body>
 </html>

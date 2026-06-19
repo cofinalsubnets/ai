@@ -1,10 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>cook — the make-in-ai build tool</title>
-<style>
   /* the shared crew-bio chrome: the index palette, self-contained, no deps.
      bg #0e1014, text #c8ccd4, links #7aa2f7, the green of a proved answer
      #9ece6a, the dim #6b7385. one file per member; copy this skeleton. */
@@ -35,15 +28,3 @@
   .lives { color: #6b7385; font-size: .9em; margin-top: 1.6em; }
   .lives code { background: none; border: none; padding: 0; color: #8b93a3; }
   footer { margin-top: 3em; color: #3d4354; font-size: .85em; }
-</style>
-</head>
-<body>
-
-<p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
-
-<h1>cook <span class="what">· the make-in-ai build tool</span></h1>
-<p><code>cook/cook.l</code> is a GNU-make-compatible build tool written in ai: it reads a Makefile (or a <code>Cookfile</code>), resolves recipes, and runs them — and <code>cook --emit</code> transpiles a Makefile into a flat, fully-resolved <code>Cookfile</code>. It already builds the host from scratch and passes the corpus. The man page is <code>doc/cook.1</code>.</p>
-<p class="lives">lives in the crew · the full brief is <a href="cook.md">crew/cook.md</a></p>
-<footer>for p., b. and e.</footer>
-</body>
-</html>

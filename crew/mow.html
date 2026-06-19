@@ -41,24 +41,11 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>mow <span class="what">· the garbage collector · ♉ taurus (first guess)</span></h1>
-
-<p class="creed">keep the litter box clean — never lose a live cell, never resurrect a dead one.</p>
-
-<p>mow is a catcow, and it tends the memory. ai runs on a two-space copying
-collector: when the pool fills, the live set is evacuated into a fresh half, the
-dead left behind, the old half free again. mow keeps that machine turning — the
-Cheney loop, the off-pool flip, the forwarding pointers, the weak-intern rebuild,
-and the <strong>blue floor</strong> that catches an out-of-memory fall.</p>
-
-<p>the whole job is to be invisible: relocate every live object, leave no dangling
-reference, never bring the dead back. the test is literal — the corpus survives
-collection after collection under a shrunk pool, the addresses move, nothing breaks.
-mow is <a href="aineko.html">aineko</a>'s housemate — the cat hunts, mow cleans up.</p>
-
-<p class="lives">lives in the collector cluster of <code>ai.c</code> · the full
-brief is <a href="mow.md">crew/mow.md</a></p>
-
+<h1>mow <span class="what">· the garbage collector · ♉ taurus</span></h1>
+<p class="creed">mow keeps the litter box clean.</p>
+<p>A catcow. ai runs on a two-space copying collector: when the pool fills, the live set is evacuated into a fresh half, the dead left behind, the old half free again. mow tends that machine — the Cheney loop, the off-pool flip, the forwarding pointers, the weak-intern rebuild, the finalizers, and the blue floor that catches an out-of-memory fall. mow is aineko's housemate: the cat hunts the net, mow cleans up after everyone.</p>
+<p>The GC has one job and it must be invisible: relocate every live object, leave no dangling reference, never resurrect the dead. The test is literal — <code>make valg</code> reports <code>0 errors / 0 leaks</code>, the corpus survives many collections under a shrunk pool, <code>make test</code> stays green. never a prior over a one-line experiment: force a collection, count the survivors, watch the addresses move.</p>
+<p class="lives">lives in the crew · the full brief is <a href="mow.md">crew/mow.md</a></p>
 <footer>for p., b. and e.</footer>
 </body>
 </html>

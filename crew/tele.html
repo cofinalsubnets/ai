@@ -42,23 +42,17 @@
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
 <h1>tele <span class="what">· the pilot · ♊ gemini</span></h1>
-
-<p class="creed">sees and drives kship — the eye that scopes constellations.</p>
-
-<p>tele is the one at the wheel: it <em>sees</em> (perceives) and <em>drives</em>
-(decides) <a href="kship.html">kship</a>. it is still the telescope too — a
-<strong>star</strong> is a self-netting scalar, a <strong>galaxy</strong> a set of
-stars, and tele scopes them: tensors + reverse-mode autograd over the constellation
-layer, a small <code>nn</code>/<code>optim</code> on top, reimplementing nothing the
-constellation already does.</p>
-
-<p>pure ai over that layer, so it runs on every frontend — host, wasm, and the
-bare-metal kernel — and trains a net with no OS and no libc. between perceive and
-act, tele is the policy that answers <em>which way</em>.</p>
-
-<p class="lives">lives in <code>tele/tele.l</code> · the full brief is
-<a href="tele.md">crew/tele.md</a></p>
-
+<p class="creed">tele is the pilot: it sees and drives kship</p>
+<p>— <em>sees</em> (perceives) and <em>drives</em> (decides), the policy at the helm that answers which way (the old <code>ai</code>-pilot role folded in here). it is still the telescope: a tensor + reverse-mode autograd library written in ai, with a small <code>nn</code>/<code>optim</code> layer — PyTorch's spine in a few hundred lines. <strong>tele scopes constellations.</strong></p>
+<p>The pitch: <strong>ai already ships the tensor — it calls it a constellation.</strong> A <strong>constellation</strong> is any numeric; it comes in two shapes:</p>
+<ul>
+<li>a <strong>star</strong> — a self-netting scalar (a charm/wide/big/float/complex; ai's <code>gem?</code>);</li>
+<li>a <strong>galaxy</strong> — a set of stars, i.e. a typed, n-dimensional, numpy-broadcasting</li>
+</ul>
+<p>  numeric array (ai's <code>galaxy?</code>, a numeric <code>set</code>).</p>
+<p>A constellation already has reductions (<code>asum</code>/<code>aprod</code>/<code>amax</code>/<code>amin</code>), contractions (<code>inner</code>/<code>outer</code>), and elementwise transcendentals (<code>sine</code>/<code>cosine</code>/<code>log</code>/<code>pow</code>). That is <code>torch.Tensor</code> minus one thing: the <strong>gradient</strong>. tele adds exactly that — autograd — and reimplements nothing a constellation already does. A telescope points at a constellation, focuses it through a <strong>glass</strong>, and traces the light back home.</p>
+<p>We skip what PyTorch carries that a clone doesn't need to prove the idea: CUDA, a dispatcher, TorchScript, the 2000-op ATen surface, dynamic-shape JIT. The thesis is <strong>autograd over the existing constellation algebra</strong>, plus enough <code>nn</code> to train a real net (an MLP on XOR, then MNIST-shaped digits if the kernel demo wants it).</p>
+<p class="lives">lives in the crew · the full brief is <a href="tele.md">crew/tele.md</a></p>
 <footer>for p., b. and e.</footer>
 </body>
 </html>

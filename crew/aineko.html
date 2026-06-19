@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>aineko — the cat</title>
+<title>aineko — a netcat clone in ~50 lines of ai</title>
 <style>
   /* the shared crew-bio chrome: the index palette, self-contained, no deps.
      bg #0e1014, text #c8ccd4, links #7aa2f7, the green of a proved answer
@@ -41,25 +41,10 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>aineko <span class="what">· the cat · ♌ leo (first guess)</span></h1>
-
-<p class="creed">bytes pump both ways.</p>
-
-<p>aineko is the cat — 愛猫, beloved cat — a netcat clone in about fifty lines of
-ai. <code>aineko host port</code> dials out, <code>aineko -l port</code> listens;
-once the line is up, bytes pump both ways between the socket and stdin/stdout, with
-DNS. a tiny, useful thing that does one job.</p>
-
-<p>the cat is the crew's <strong>real apps day one</strong> demo — the first proof
-ai does real host I/O. a bidirectional pump is the shape ai's cooperative scheduler
-was built for: two spawned loops, each parked on its socket, no select loop in
-sight. it is also the <strong>shared trunk</strong> — the same pump-and-teardown <a
-href="bao.html">bao</a> and <a href="kship.html">kship</a> hang off. it hunts the
-net; <a href="mow.html">mow</a>, its housemate, cleans up after.</p>
-
-<p class="lives">lives in <code>host/net.c</code> + <code>tools/aineko.l</code> ·
-the full brief is <a href="aineko.md">crew/aineko.md</a></p>
-
+<h1>aineko <span class="what">· a netcat clone in ~50 lines of ai</span></h1>
+<p>A design sketch (recon done, ready to build). <strong>aineko</strong> (neko = cat, 愛猫) is a clone of OpenBSD <code>netcat</code>: <code>aineko host port</code> opens a TCP client, <code>aineko -l port</code> listens; bytes pump both ways between the socket and stdin/stdout, with DNS. It is the <strong>flagship "real apps day one" demo</strong> — the first app that proves ai can do real host I/O — and the shared trunk the later tools (<code>bao</code>, <code>kship</code>, <code>doc/posix.md</code>) hang off of.</p>
+<p>We skip what netcat carries for completeness but a demo doesn't need: UDP, TLS, <code>-z</code> (port scan), <code>-x</code> (proxy). Client + server + DNS is the whole thing.</p>
+<p class="lives">lives in the crew · the full brief is <a href="aineko.md">crew/aineko.md</a></p>
 <footer>for p., b. and e.</footer>
 </body>
 </html>
