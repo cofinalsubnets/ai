@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>zev — the reader</title>
+<title>zev — the sounder</title>
 <style>
   /* the shared crew-bio chrome: the index palette, self-contained, no deps.
      bg #0e1014, text #c8ccd4, links #7aa2f7, the green of a proved answer
@@ -41,31 +41,23 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>zev <span class="what">· the reader</span></h1>
+<h1>zev <span class="what">· the sounder · ♓ pisces</span></h1>
 
-<p class="creed">tiny functions that compose a string into a tree.</p>
+<p class="creed">sound — charms into forms.</p>
 
-<p>zev is a parser-combinator library: a small, tested vocabulary for turning a
-string into a tree, built out of tiny functions that compose. a literal, a single
-char, a maximal run; ordered choice, sequence, repetition — each one is nothing on
-its own and everything once you stack them. that is the whole of the idea, and the
-rest is bookkeeping.</p>
+<p>zev is the sounder: <code>sound</code> reads bytes (charms) into forms — a
+parser-combinator vocabulary of tiny functions that compose. a literal, a char, a
+run; choice, sequence, repetition — nothing alone, a grammar once you stack them.
+lifted from <a href="cook.html">cook</a>'s Makefile importer so the whole crew can
+reuse it.</p>
 
-<p>the idea is already proven aboard: <a href="cook.html">cook</a>'s Makefile
-importer is built from exactly these <code>(\ s y n)</code> parsers, reading real
-GNU Makefiles. but cook keeps them locked inside one private body, reinvented the
-next time anyone needs to read a wire header or a command line. zev lifts that block
-out, generalizes it, and offers the whole crew <strong>one shared combinator
-vocabulary</strong> instead of N hand-rolled char loops.</p>
-
-<p>Ze'ev is the wolf, and a wolf hunts in a pack — which is the shape of the thing
-exactly: a combinator alone does little, a pack of them reads a grammar. zev keeps a
-careful house too, exposing just one name so it can ride the same scope as everyone
-else without ever colliding.</p>
+<p>zev is the character-arm of <strong>ev</strong> = feel ∘ sound (= wev ∘ zev) —
+the two input lanes, characters and data, meet at one core via the copairing
+<code>[sound, id]</code>. Ze'ev the wolf hunts in a pack, the shape of the thing.</p>
 
 <p class="lives">lives in <code>parse/zev.l</code> · the full brief is
 <a href="zev.md">crew/zev.md</a></p>
 
-<footer>for P B & E</footer>
+<footer>for p., b. and e.</footer>
 </body>
 </html>

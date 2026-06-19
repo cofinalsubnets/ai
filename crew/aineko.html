@@ -41,30 +41,25 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>aineko <span class="what">· the cat</span></h1>
+<h1>aineko <span class="what">· the cat · ♌ leo (first guess)</span></h1>
 
 <p class="creed">bytes pump both ways.</p>
 
 <p>aineko is the cat — 愛猫, beloved cat — a netcat clone in about fifty lines of
 ai. <code>aineko host port</code> dials out, <code>aineko -l port</code> listens;
 once the line is up, bytes pump both ways between the socket and stdin/stdout, with
-DNS to find the far end. a tiny, useful thing that does exactly one job.</p>
+DNS. a tiny, useful thing that does one job.</p>
 
 <p>the cat is the crew's <strong>real apps day one</strong> demo — the first proof
-that ai does real host I/O, not just clever arithmetic. and a bidirectional pump is
-exactly the shape ai's cooperative scheduler was built for: two spawned pump loops,
-each parked on its own socket, wake the moment their fd is ready, with no select
-loop in sight.</p>
-
-<p>aineko is also the <strong>shared trunk</strong> — the pump-and-teardown
-discipline it got right is the same one <a href="bao.html">bao</a> hangs its pty
-wrapper off, and <a href="kship.html">kship</a> its bare-metal net stack. land the
-cat cleanly and two other crew members stand on it. it hunts the net; <a
-href="sift.html">sift</a>, its housemate, cleans up after.</p>
+ai does real host I/O. a bidirectional pump is the shape ai's cooperative scheduler
+was built for: two spawned loops, each parked on its socket, no select loop in
+sight. it is also the <strong>shared trunk</strong> — the same pump-and-teardown <a
+href="bao.html">bao</a> and <a href="kship.html">kship</a> hang off. it hunts the
+net; <a href="mow.html">mow</a>, its housemate, cleans up after.</p>
 
 <p class="lives">lives in <code>host/net.c</code> + <code>tools/aineko.l</code> ·
 the full brief is <a href="aineko.md">crew/aineko.md</a></p>
 
-<footer>for P B & E</footer>
+<footer>for p., b. and e.</footer>
 </body>
 </html>

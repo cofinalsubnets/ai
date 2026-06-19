@@ -1,8 +1,10 @@
-# tele — a PyTorch clone in ai
+# tele — the pilot · ♊ gemini
 
-A design sketch (recon done, ready to build). **tele** (telescope) is a tensor +
-reverse-mode autograd library written in ai, with a small `nn`/`optim` layer on
-top — PyTorch's spine in a few hundred lines. **tele scopes constellations.**
+**tele is the pilot: it sees and drives kship** — *sees* (perceives) and *drives*
+(decides), the policy at the helm that answers which way (the old `ai`-pilot role
+folded in here). it is still the telescope: a tensor + reverse-mode autograd library
+written in ai, with a small `nn`/`optim` layer — PyTorch's spine in a few hundred
+lines. **tele scopes constellations.**
 
 The pitch: **ai already ships the tensor — it calls it a constellation.** A
 **constellation** is any numeric; it comes in two shapes:
@@ -25,7 +27,7 @@ real net (an MLP on XOR, then MNIST-shaped digits if the kernel demo wants it).
 
 ## Agent brief — you are the tele thread
 
-You build tele, in parallel with the aineko / bao / cook / kship / siri threads.
+You build tele, in parallel with the aineko / bao / cook / kship / gwen threads.
 Like cook, you have **light coupling**: tele is pure ai over the constellation
 layer, so it runs on *every* frontend (host, kernel, wasm) and needs **no entry
 change** to make progress. Unlike cook, you have a short list of **core asks**

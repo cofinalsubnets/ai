@@ -71,7 +71,7 @@ The ORIGINAL plan (kept for the record):
 Goal (user, as bao): the editor/repl internals must NOT leak as user-visible book
 globals just because the corpus tests them. **Move repl.l's content into bao.l,
 remove repl.l, move its tests, so bao becomes the shell core and the `ed*`/repl
-names leave the global namespace.** This is the bao half of [[siri-namespace-triage]]
+names leave the global namespace.** This is the bao half of [[gwen-namespace-triage]]
 release item #1.
 
 ⚠ ARCHITECTURE FINDING (probed `a8e32ad1`): `repl.l` is NOT host-only — it is the

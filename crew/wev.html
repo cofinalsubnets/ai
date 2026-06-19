@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>wev — the weaver</title>
+<title>wev — the spinner</title>
 <style>
   /* the shared crew-bio chrome: the index palette, self-contained, no deps.
      bg #0e1014, text #c8ccd4, links #7aa2f7, the green of a proved answer
@@ -41,31 +41,24 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>wev <span class="what">· the weaver</span></h1>
+<h1>wev <span class="what">· the spinner · ♍ virgo</span></h1>
 
-<p class="creed">give it some inputs, it weaves back a smaller program.</p>
+<p class="creed">feel — spin prepared source.</p>
 
-<p>wev is a partial evaluator: feed it a function and <em>some</em> of its inputs,
-and it weaves back the residual — a smaller program with everything statically known
-already computed. give it nothing and it hands the program back unchanged; give it
-everything and it just runs. the interesting ground is in between: specialize on
-what you know, and let the rest stay open.</p>
+<p>wev is the spinner: <code>feel</code> is the source prepass — macroexpand,
+boxfix, fold pure global applications (<code>(+ 1 2)</code> → <code>3</code>), mark
+apply strategy. it spins read source into prepared source, then grows the same
+machinery into a partial evaluator: specialize on what you know, leave the rest
+open.</p>
 
-<p>and like <a href="tele.html">tele</a>, the pitch is that ai already ships most of
-it. the compiler's own prepass folds pure global applications in miniature — turning
-<code>(+ 1 2)</code> into <code>3</code> at compile time. wev lifts that machinery
-out and grows it into a full tool that specializes on partial input, following the
-road that opens up toward specializing the language's own interpreters.</p>
-
-<p>wev is <a href="zev.html">zev</a>'s litter-mate: zev hunts a string into a tree,
-wev reduces a tree into a smaller tree, and both were lifted from the same place —
-the compiler's own gut. it reduces what it can see and stops honestly at what it
-cannot; weak the way weak-head-normal-form is weak, and careful with it, because a
-fold that changes a meaning is a bug, not a saving.</p>
+<p>wev is the data-arm of <strong>ev</strong> = feel ∘ sound (= wev ∘ zev) — the
+spinner after <a href="zev.html">zev</a> the sounder. both were lifted from the same
+place, the compiler's own gut. it reduces what it can see and stops honestly at what
+it cannot; a fold that changes a meaning is a bug, not a saving.</p>
 
 <p class="lives">lives in <code>peval/wev.l</code> · the full brief is
 <a href="wev.md">crew/wev.md</a></p>
 
-<footer>for P B & E</footer>
+<footer>for p., b. and e.</footer>
 </body>
 </html>

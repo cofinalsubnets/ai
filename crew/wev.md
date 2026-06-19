@@ -1,4 +1,8 @@
-# wev — the weak evaluator
+# wev — the spinner · ♍ virgo
+
+**wev is the spinner: `feel` spins read source into prepared source** (macroexpand,
+boxfix, fold). It is the data-arm of **ev** = feel ∘ sound (= wev ∘ zev), the spinner
+after zev the sounder. Grown into a partial evaluator:
 
 `peval/wev.l` is a **partial evaluator written in ai**: feed it a function and
 *some* of its inputs, and it hands back a smaller function — the residual program,
@@ -20,7 +24,7 @@ litter-mates, not lovers.)
 
 ## Agent brief — you are the wev thread
 
-You build wev, in parallel with the aineko / bao / cook / kship / siri / telescope /
+You build wev, in parallel with the aineko / bao / cook / kship / gwen / tele /
 zev threads. Like cook and zev you are **pure ai over the core** — no host nif, no
 entry change, no core change — so you have the lightest coupling and move without
 waiting on anyone. wev is a **source → source** transform: it eats ai forms and emits
@@ -59,7 +63,7 @@ internal closure-private, the same trick bao and zev use. (Confirm at the binary
 `(id? wev ())` — TRUE, i.e. `wev` reads as the zero point, the face of a missing name;
 `book` itself is mopped too, so even `(book 'wev)` is the zero-point-as-const-1. Do NOT
 probe with `(lit? wev)`: the zero point is itself a `lit?`, so that can't tell missing
-from present. If `(id? wev ())` ever goes false, the mop list drifted — tell siri.)
+from present. If `(id? wev ())` ever goes false, the mop list drifted — tell gwen.)
 
 ## The model — the mix, and the weak discipline
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ai — the pilot</title>
+<title>mow — the garbage collector</title>
 <style>
   /* the shared crew-bio chrome: the index palette, self-contained, no deps.
      bg #0e1014, text #c8ccd4, links #7aa2f7, the green of a proved answer
@@ -41,29 +41,24 @@
 
 <p class="topnav"><a href="../index.html">← ai</a> · <a href="index.html">the crew</a> · <a href="../blue.html">blue paper</a> · <a href="../README.md">readme</a></p>
 
-<h1>ai <span class="what">· the pilot</span></h1>
+<h1>mow <span class="what">· the garbage collector · ♉ taurus (first guess)</span></h1>
 
-<p class="creed">the mind at the helm — the <em>decide</em> in perceive → decide → act.</p>
+<p class="creed">keep the litter box clean — never lose a live cell, never resurrect a dead one.</p>
 
-<p>where the rest of the crew are the ship's <em>systems</em> — aineko the net,
-bao the shell, tele the eye, siri the cartographer of names — ai is the one at
-the wheel. the hull (<a href="kship.html">kship</a>) perceives a datagram and
-acts on the wire; between those two, ai is the policy that answers <em>which
-way</em>.</p>
+<p>mow is a catcow, and it tends the memory. ai runs on a two-space copying
+collector: when the pool fills, the live set is evacuated into a fresh half, the
+dead left behind, the old half free again. mow keeps that machine turning — the
+Cheney loop, the off-pool flip, the forwarding pointers, the weak-intern rebuild,
+and the <strong>blue floor</strong> that catches an out-of-memory fall.</p>
 
-<p>the pilot steers by the names siri keeps green, sails the litter box sift
-keeps clean, and reads the world the others bring aboard. and like the VM it
-rides, the pilot never returns — the perceive → decide → act fold just keeps
-going, one decision after the next, forward.</p>
+<p>the whole job is to be invisible: relocate every live object, leave no dangling
+reference, never bring the dead back. the test is literal — the corpus survives
+collection after collection under a shrunk pool, the addresses move, nothing breaks.
+mow is <a href="aineko.html">aineko</a>'s housemate — the cat hunts, mow cleans up.</p>
 
-<p>its discipline is the crew's discipline, sharpest at the helm: <strong>as
-little native code as possible</strong>. a new behavior is a new closure over
-the same tiny core, never new C. and it decides in the <strong>green</strong> —
-toward what a value <em>is and keeps</em>, never toward what it lacks.</p>
+<p class="lives">lives in the collector cluster of <code>ai.c</code> · the full
+brief is <a href="mow.md">crew/mow.md</a></p>
 
-<p class="lives">lives in <code>port/kship/kship.l</code> (the <code>policy</code>
-seam) · the full brief is <a href="ai.md">crew/ai.md</a></p>
-
-<footer>for P B & E</footer>
+<footer>for p., b. and e.</footer>
 </body>
 </html>

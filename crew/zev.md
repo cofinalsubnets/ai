@@ -1,4 +1,8 @@
-# zev — the parser combinator
+# zev — the sounder · ♓ pisces
+
+**zev is the sounder: `sound` reads charms into forms.** It is the character-arm of
+**ev** = feel ∘ sound (= wev ∘ zev); the two input lanes, characters and data, meet
+at one core via the copairing `[sound, id]`.
 
 `parse/zev.l` is a **parser-combinator library written in ai**: a small, tested,
 reusable vocabulary for turning a string into a tree, built the way cook's Makefile
