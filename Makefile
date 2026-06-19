@@ -289,13 +289,13 @@ repl.html: content/repl.md content/repl.tail.html $(SITE_GEN)
 # cleaned: ai0's own objects already depend on $(ai_h), so ai0 can't go stale.)
 $(lib_h): $(ai0)
 
+# rm the archive first: `ar r` REPLACES/ADDS but never REMOVES, so a renamed/dropped
+# source (e.g. love.c -> ai.c) would leave a stale .o in the archive -> multiple-
+# definition at link. the rm rebuilds it fresh, so a rename no longer needs `make clean`.
 $(ho)/libai.a: $(h_o)
 	@echo AR	$@
 	@mkdir -p $(dir $@)
-	@rm -f $@; ar rcs $@ $^   # rm first: `ar r` REPLACES/ADDS but never REMOVES, so a
-	                          # renamed/dropped source (e.g. love.c -> ai.c) would leave a
-	                          # stale .o in the archive -> multiple-definition at link. the
-	                          # rm rebuilds it fresh, so a rename no longer needs `make clean`.
+	@rm -f $@; ar rcs $@ $^
 
 $(ho)/libai.so: $(ho)/libai.a
 	@echo LD	$@
