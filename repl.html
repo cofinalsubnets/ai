@@ -24,7 +24,7 @@ body {
 }
 
 h1 { font-size: 2.2em; font-weight: normal; letter-spacing: .04em; }
-h1::before { content: "🔭 "; }
+h1::after { content: " 🔭"; }   /* the telescope, every page; site.l injects a per-page ::before */
 h2 { font-size: 1.15em; font-weight: normal; color: #8b91bd;
      margin: 2.4em 0 .6em; border-bottom: 1px solid #222842; padding-bottom: .3em; }
 h3 { font-size: 1em; font-weight: normal; color: #a3a9d2; margin: 1.6em 0 .5em; }
@@ -105,6 +105,7 @@ footer { margin-top: 3.5em; color: #474e72; font-size: .85em;
 .crew dt { margin-top: .7em; }
 .crew dt a { font-weight: 600; }
 .crew dd { margin: 0 0 0 1.4em; color: #8b91bd; font-size: .92em; }
+h1::before { content: "🥟 "; }
 </style>
 </head>
 <body>

@@ -215,6 +215,9 @@
   mdfile (cap (cup (cup argv)))
   crew? (= pageid "crew")
   toc?  (= pageid "blue")                                ; only the paper gets a toc
+  ; the per-page h1::before emoji (the telescope ::after is shared in site.css):
+  ; kship -> rocket, blue -> blue circle, repl(bao) -> dumpling. crew pages: none.
+  preji (? (= pageid "blue") "\xf0\x9f\x94\xb5" (= pageid "repl") "\xf0\x9f\xa5\x9f" "\xf0\x9f\x9a\x80")
   tailf (? (= pageid "repl") "content/repl.tail.html" "")  ; the repl injects the wasm shim
   sep " \xc2\xb7 "
   nav1 (\ id href label (? (= id pageid)
@@ -257,7 +260,9 @@
                "<a href=\"" mname ".md\">crew/" mname ".md</a></p>\n"))
 
   _ (o htop)
-  _ (o "<style>\n") _ (o css) _ (o "</style>\n")
+  _ (o "<style>\n") _ (o css)
+  _ (? crew? 0 (: _ (o "h1::before { content: \"") _ (o preji) (o " \"; }\n")))
+  _ (o "</style>\n")
   _ (o "</head>\n<body>\n")
   _ (? crew? (o "\n") 0)
   _ (o topnav)
