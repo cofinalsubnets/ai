@@ -1,12 +1,12 @@
 ; bao -- the shell core: the read-eval-print loop, its multi-line line editor,
-; the stream shell (zev/zevs), the floor handler (welp), and the host-only
+; the stream shell (read/reads), the floor handler (welp), and the host-only
 ; pty wrapper (wrap). bao is the BAKED shell core for all three frontends -- the
 ; host (out/host/ai), the freestanding kernel (kmain.c), and the ai0 bootstrap
 ; self-test -- loaded after the prel. (It was repl.l; the editor/repl internals
 ; used to LEAK as user-visible book globals because the corpus tested them by
 ; name. Now the editor + repl + the pty wrapper live inside one closure, so only
 ; the entry points -- shell, welp, edraw, wrap, bao, plus the stream shell
-; zev/zevs -- are book globals.)
+; read/reads -- are book globals.)
 ;
 ; parsing is delegated to the C reader: the editor's flattened charlist is
 ; implicitly parenthesized and read as ONE expression via (tap ..) + read
@@ -35,7 +35,7 @@
 ; to a recalled entry, the pristine version is restored to its slot
 ; and the buffer becomes a new entry, so the original survives.
 
-; zev: chars -> top, the reverse shell of the compiler -- the lane every shell
+; read: chars -> top, the reverse shell of the compiler -- the lane every shell
 ; ultimately feeds into. its `char` lift + `char->chars` realizer are CLOSURE-PRIVATE
 ; here (off the book). a charm is a sat (a non-negative fixnum); a CHARS is a bare
 ; charlist (eager, ends at 0); the `char` colist is the LAZY form: (cap cs) is a charm,
@@ -43,12 +43,12 @@
 ; (the coproduct, 0 the end). consumers dispatch on KIND: two? is a cell, anything else
 ; the end. `char` is the canonical lift -- chars cell by cell, a port (the HOT lane)
 ; one byte per force (-1 ends it), a colist passing through, the end lifting to itself --
-; and `char->chars` realizes a finite colist. zev takes any of these as `s`, reads ONE
+; and `char->chars` realizes a finite colist. read takes any of these as `s`, reads ONE
 ; form (structurally -- the reader knows no operators) and sends it through ev's core
 ; (opfix, feel, ana, cata): the full hull chars -> top in one call. nothing readable --
 ; empty input or an unfinished shape -- is nothing. (lit? is no use for the cell test:
 ; it names the top region -- map/fn/hot -- so a chain or string answers false anyway.)
-(: (zev s)
+(: (read s)
    (: (char s)
       (? (two? s) (: t (cup s)
                      (? (two? t) (link (cap s) (\ u (char t)))   ; chars: lift, lazy tail
@@ -62,13 +62,13 @@
          (? (two? cs) (link (cap cs) (char->chars ((cup cs) ()))) 0))
       p (tap (char->chars s)) e (nom 0) r (scan p e)
       (? (id? r e) 0 (id? r p) 0 (ev r))))
-; zevs: the stream shell -- a port is the LAZY charms, and zevs drinks it:
+; reads: the stream shell -- a port is the LAZY charms, and reads drinks it:
 ; read and eval every form until the stream ends (eof, or input ends inside
 ; an unfinished shape); the value is the last form's. ev late-binds through
 ; the book ((ev 'ev r)) so the one definition drives both of ai0's passes
 ; (c0 first, the hatched ev' second); the host's stdin runner and the
 ; ai0/kernel corpus runners are all this function now.
-(: (zevs p)
+(: (reads p)
    ((: (g e z) (: r (scan p e)
        (? (id? r e) z (id? r p) z (g e (ev 'ev r)))))
     (nom 0) 0))
@@ -623,5 +623,5 @@
 ; bao.l is DEFINE-ONLY -- loading it (egg-bake or `-l ai/bao.l`) installs the shell
 ; core but does NOT launch. The frontend launches: host/main.c evals `(bao 0)` on a
 ; tty (so `ai` on a terminal is the bao shell), a pipe stays the bare stdin runner
-; `(zevs in)`, and the kernel calls `(shell 0)`. Define-only is what makes bao
+; `(reads in)`, and the kernel calls `(shell 0)`. Define-only is what makes bao
 ; loadable for tests (load the defs, read piped forms with the bare reader).

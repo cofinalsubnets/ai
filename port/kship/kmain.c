@@ -520,7 +520,7 @@ static char const ktests[] =
 
 #if defined(KSHIP) || defined(NETAGENT) || defined(NETBRAIN)
 // The kship agent (port/kship/kship.l), baked VERBATIM by lcatv (out/lib/kship.h).
-// Bound to the global `kship-src` and drunk form-by-form through zevs at boot --
+// Bound to the global `kship-src` and drunk form-by-form through reads at boot --
 // the kernel boots straight into the self-driving heartbeat loop. See crew/kship.md.
 static char const kship_src[] =
 #include "kship.h"
@@ -569,7 +569,7 @@ void kmain(void) {
 #endif
 #if defined(KSHIP) || defined(NETAGENT) || defined(NETBRAIN)
   // bind the baked agent to the global `kship-src`; the driver below drinks it
-  // through zevs, then drops into the shell so the machine stays usable.
+  // through reads, then drops into the shell so the machine stays usable.
   g = ai_strof(g, kship_src);
   struct ai_def kd[] = {{"kship-src", ai_pop1(g)}};
   g = ai_defn(g, kd, countof(kd));
@@ -587,14 +587,14 @@ void kmain(void) {
 #include "bao.h"
 #ifdef K_TEST
  // test build: drink the baked `tests` string (string -> charlist -> tap port)
- // through zevs (ai/bao.l) -- the same stream shell as the host's stdin runner.
+ // through reads (ai/bao.l) -- the same stream shell as the host's stdin runner.
  // zz-fin.l prints the summary and (exit 1)s on failure. (`tap` builds the port;
  // `sip` is the verb that draws ONE unit -- see the vessel frame in ai/prel.l.)
- "(zevs (tap ((: (g i) (? (< i (tally tests)) (link (peep tests i 0) (g (+ 1 i))))) 0)))"
+ "(reads (tap ((: (g i) (? (< i (tally tests)) (link (peep tests i 0) (g (+ 1 i))))) 0)))"
 #elif defined(KSHIP)
  // agent build: drink the baked `kship-src` (defines the agent; demos no longer
  // auto-run), run (demos 0) to show the heartbeat/watchdog/checkpoint, then the shell.
- "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) _ (demos 0) (shell 0))"
+ "(: _ (reads (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) _ (demos 0) (shell 0))"
 #elif defined(NETAGENT)
  // net-agent build (MILESTONE 4): drink kship-src (defines + leaks the agent --
  // policy, the watchdog `help`, `drive`), THEN run the merged loop. (drive fresh nic
@@ -604,7 +604,7 @@ void kmain(void) {
  // packet via the watchdog) AND BEATS on its own initiative with no traffic. The m3
  // pure-reactive `serve` is still defined for comparison. Non-terminating; the agent
  // IS the server.
- "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (drive fresh nic 300))"
+ "(: _ (reads (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (drive fresh nic 300))"
 #elif defined(NETBRAIN)
  // net-brain build (MILESTONE 5): the OUTBOUND brain (crew/kship.md (B)). drink
  // kship-src, then build `ask1` -- a question -> its reply, via aim+say+flush+slurp to
@@ -612,7 +612,7 @@ void kmain(void) {
  // agent INITIATES a UDP round-trip on its OWN clock and narrates the reply. the decide
  // step is now REMOTE: the brain plugs in over the wire, not read+ev. a negative count
  // runs unbounded. Non-terminating; here the agent is a client, not a server.
- "(: _ (zevs (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (quest (\\ q (ask nic aim (ip4 10 0 2 2) 9999 q)) \"ping\" 300 -1))"
+ "(: _ (reads (tap ((: (g i) (? (< i (tally kship-src)) (link (peep kship-src i 0) (g (+ 1 i))))) 0))) (quest (\\ q (ask nic aim (ip4 10 0 2 2) 9999 q)) \"ping\" 300 -1))"
 #elif defined(NETECHO)
  // net-echo build (stage 2e gate): the agent perceives one UDP datagram off the
  // `nic` port (slurp), then acts -- writes it back to its sender (fputs+fflush).

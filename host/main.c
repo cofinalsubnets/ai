@@ -359,7 +359,7 @@ AI_NIF("getpid", nif_getpid);
 // self-hosted ev installed from ev.l -- so one ai0 invocation exercises both
 // compilers (and -Dai_tco=0 makes it the trampoline path). s2cldef installs
 // s2cl (string -> charlist); runner drinks the baked corpus (the global
-// `tests`) through zevs (the shell core, ai/bao.l), whose `(ev 'ev r)` indirection
+// `tests`) through reads (the shell core, ai/bao.l), whose `(ev 'ev r)` indirection
 // late-binds to whatever `ev` is now, so the same shell drives the c0 pass and
 // (after the egg) the self-hosted pass.
 static char const cli[] =
@@ -370,7 +370,7 @@ static char const tests0[] =
  ;
 static char const
  s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (tally s)) (link (peep s i 0) (g (+ 1 i))))) 0))",
- runner[] = "(zevs (tap (s2cl tests)))";   // the stream shell (ai/bao.l) drinks the baked corpus
+ runner[] = "(reads (tap (s2cl tests)))";   // the stream shell (ai/bao.l) drinks the baked corpus
 
 // With args, run the build tool (lcat / gen_data) through the CLI driver.
 // With no args, self-test: eval prel+bao (the shell core) and run the baked corpus
@@ -417,7 +417,7 @@ static char const cli[] =
 #include "cli.h"
  ;
 static char const
- rel[] = "(zevs in)";   // non-tty stdin: the stream shell (ai/bao.l) drinks the in port
+ rel[] = "(reads in)";   // non-tty stdin: the stream shell (ai/bao.l) drinks the in port
 // a tty: launch the bao shell. bao IS the baked shell core now (ai/bao.l, baked to
 // bao.h, evaled in the egg-warm below), DEFINE-ONLY -- it installs (bao _)/shell/...
 // but does not launch, so the same image serves a pipe (the bare `rel` runner) and
