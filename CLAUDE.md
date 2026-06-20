@@ -24,10 +24,10 @@
 ;   $(ai_h) and the lcat'd headers re-lay on ai0, so incremental builds stay consistent.
 ; * C files EMBED lisp the .l sweeps cannot see: ai.c (g_evals_'s driver string), main.c
 ;   (s2cl + runner), kmain.c (the K_TEST runner), wasm/. grep them on every rename.
-;   the docs EMBED rocq theorem names + ai vocab the sweeps also miss: blue.md (the
-;   blue-paper source, rendered to blue.html by tools/site.l + site.css) cites
-;   rocq/spec.v lemmas as `thm:name` chips, and index.html runs live demos -- grep
-;   blue.md + index.html on a theorem rename or a vocab change.
+;   the docs EMBED rocq theorem names + ai vocab the sweeps also miss: index.html (a
+;   single static page with its own index.css) cites rocq/spec.v lemmas as `thm:name`
+;   chips in its formal section and runs live demos -- grep index.html on a theorem
+;   rename or a vocab change.
 ; * a bare all-punct symbol mid-list captures its left operand when code compiles (the
 ;   opfix pass) -- escape it in parens ((+) is + as a value); GLUED to a datum it is
 ;   monadic instead (the valence law: space your dyadics); quoted lists are data and
@@ -39,15 +39,13 @@
 ;   missing nom or apcap is VISIBLE; the more bits keep the read protocol (port back when
 ;   incomplete, sentinel at eof). file mode stays helpless -- terminal, per the law.
 ; * python \b-sweeps treat - as a boundary: kebab names with capital segments mangle.
-; * the CREW (crew/*.md) drives dev: the apps over the core -- aineko (netcat,
-;   tools/aineko.l + host/net.c), bao (the shell/rlwrap/debugger, ai/bao.l + host/pty.c),
-;   cook (make-in-ai, cook/cook.l), kship (the freestanding agent-kernel, port/kship/).
-;   each crew/<app>.md is an AGENT BRIEF -- a personality a dedicated session is pointed
-;   at, owning a NON-OVERLAPPING file territory so the sessions run in parallel. the apps
-;   add nifs through the host/*.c glob + AI_NIF (no core edit); ai.c/ai.h/host/main.c are
-;   CORE territory -- a crew session that needs a core change stops and asks the core
-;   thread (this session), never reaches in. crew/README.md is the roster; the runnable
-;   ones install on PATH via `make install`.
+; * the APPS ride over the core -- aineko (netcat, tools/aineko.l + host/net.c), bao
+;   (the shell/rlwrap/debugger, ai/bao.l + host/pty.c), cook (make-in-ai, cook/cook.l),
+;   kship (the freestanding agent-kernel, port/kship/). each owns a NON-OVERLAPPING file
+;   territory, so a dedicated session can take one in parallel. the apps add nifs through
+;   the host/*.c glob + AI_NIF (no core edit); ai.c/ai.h/host/main.c are CORE territory --
+;   an app session that needs a core change stops and asks the core thread (this session),
+;   never reaches in. the runnable ones install on PATH via `make install`.
 
 ; --- vocabulary & house style --- the words here are a VOCABULARY -- we never say
 ; "terminology" or "nomenclature"; a vocabulary is living and chosen, warm not clinical.

@@ -187,7 +187,7 @@ curated cross-cutting verbs (`test clean valg vmret bench install`).
 cook is one of the **kship crew** -- a small crew of real programs that ride on
 **kship**, the freestanding ai kernel ([a ship in port](port/kship/)). each is a
 tiny ai layer over a handful of host nifs; on a hosted system they `make install`
-onto PATH beside `ai`. each has a personality doc under [crew/](crew/).
+onto PATH beside `ai`.
 
 - **aineko** -- a netcat clone in ~50 lines (愛猫, "beloved cat"): `aineko host
   port` is a TCP client, `aineko -l port` a server, bytes pumping both ways at
@@ -203,9 +203,6 @@ onto PATH beside `ai`. each has a personality doc under [crew/](crew/).
   self-driving agent loop, booting on bare metal with no OS, perceiving the network,
   running the language over UDP -- a bare-metal network REPL. `make kernel KSHIP=1`
   builds the bootable image. [port/kship/](port/kship/).
-- **siri** -- the synthesist: keeps the user-facing surface coherent, converging
-  the names the book exposes and mopping compiler internals out of sight, so the
-  global namespace stays a deliberate vocabulary. [crew/siri.md](crew/siri.md).
 
 ### under the hood
 - one word per value: a fixnum is a tagged odd word, anything else is a heap

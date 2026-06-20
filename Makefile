@@ -346,7 +346,7 @@ endif
 # KSHIP=1 bakes the kship agent (port/kship/kship.l) into the image and boots
 # straight into it (the heartbeat loop on the real timer tick) instead of the
 # shell -- the kernel AS the self-driving agent. Its own suffix so it never
-# clobbers the normal interactive kernel. See crew/kship.md.
+# clobbers the normal interactive kernel. See port/kship/.
 ifdef KSHIP
 ksuf := -kship
 endif
@@ -364,7 +364,7 @@ ksuf := -netagent
 endif
 # NETBRAIN=1 boots into the OUTBOUND brain (milestone 5): on its own clock the agent
 # INITIATES a UDP round-trip to a remote oracle (aim+say+flush+slurp) and acts on the
-# reply -- the (B) fork of crew/kship.md, the decide step gone remote. Own suffix.
+# reply -- the (B) fork (port/kship/), the decide step gone remote. Own suffix.
 ifdef NETBRAIN
 ksuf := -netbrain
 endif
