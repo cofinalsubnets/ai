@@ -8,6 +8,15 @@ include common.mk
 
 CCACHE ?= $(shell command -v ccache 2>/dev/null)
 
+# ai0 -- the bootstrap interpreter, PINNED to the canonical out/host tree (never
+# $(hsuf)'d like $(ho)): it bakes the lcat headers every frontend shares. Defined
+# UP HERE, not by the host-build block below, because test_ai0's prerequisite uses
+# it -- and make expands prerequisites at PARSE time, so a later definition reads as
+# empty, silently dropping test_ai0's dep on the binary. Serially that hides (the
+# earlier test_host builds ai0 transitively via host -> lib_h -> ai0); under -j,
+# test_ai0 then races ahead of the ai0 link ("out/host/ai0: No such file").
+ai0 = out/host/ai0
+
 .PHONY: all install uninstall clean distclean hooks
 .PHONY: host kernel wasm ai0
 .PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_hostnif test_extract
@@ -244,8 +253,6 @@ host_ldflags = -static
 # makes it fatal. Silence that one (harmless; gcc ignores unknown -Wno-*).
 ai_cflags += -Wno-unused-command-line-argument
 endif
-ai0 = out/host/ai0   # PINNED to the canonical tree (not $(ho)) -- see hsuf above
-
 host: $(ho)/ai $(if $(STATIC),,$(ho)/libai.so) $(ho)/ai.1
 ai0: $(ai0)
 
