@@ -21,7 +21,19 @@ ai0 = out/host/ai0
 .PHONY: host kernel wasm ai0
 .PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_hostnif test_extract
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench nettest
-test: test_host test_ai0 test_proof test_gen test_tools
+# `make test` runs its five independent phases in PARALLEL by default, via a
+# recursive -j sub-make: the bootstrap deps serialize the ai0/host build under
+# -j (see the ai0 hoist up top), so it is a pure wall-clock win (~25s -> ~7s).
+# JOBS sets the width (default: the CPU count); `make test JOBS=1` is the old
+# serial run. Phase output is grouped on GNU make 4.0+ (output-sync), else it
+# interleaves -- cosmetic only: each phase greps its OWN .out file, not the
+# merged stream. The phases are listed in the recipe, NOT as prereqs of `test`,
+# so the outer (serial) make doesn't build them before the parallel sub-make.
+JOBS  ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+osync := $(if $(filter output-sync,$(.FEATURES)),--output-sync=target,)
+test_phases = test_host test_ai0 test_proof test_gen test_tools
+test:
+	@$(MAKE) --no-print-directory -j$(JOBS) $(osync) $(test_phases)
 # test_tools (vmret + cook + tele + xor) is in the fast `test` so an app breaks the
 # gate the moment a rename lands -- the crew apps are part of the contract, not extras.
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
