@@ -47,8 +47,8 @@
 (assert
  (= 17 ((\ f (f 9)) (+ 8)))
  (= 13 (: a 9 b 7 c -3 (+ a (+ b c))))
- (: (even? n) (? (zero? n) 1 (odd? (dec n)))
-    (odd? n) (? (zero? n) 0 (even? (dec n)))
+ (: (even? n) (? (zero? n) 1 (odd? (+ -1 n)))
+    (odd? n) (? (zero? n) 0 (even? (+ -1 n)))
   (odd? 99))
 
  (= -2 (^ 1 -1))

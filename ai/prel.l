@@ -47,8 +47,7 @@
 ; X link; cap/cup -- the chain's two projections, the matched pair the string diagrams bend
 ; (lineage: cap/cup <- cap/cbp <- car/cdr) -- and the caap..cuuup compounds above are the
 ; primitives; the older names are gone.
-(: inc (+ 1) dec (+ -1) ;; FIXME pure code
- (:: a b) (pin macros a b) ;; FIXME needs a way better api
+(: (:: a b) (pin macros a b) ;; FIXME needs a way better api
    putc (put out) ;; FIXME rename to avoid f prefix
    puts (say out) ;; FIXME rm f prefix
    (putn n) (putbn out n 10) ;; FIXME rm f prefix and make preferred base user configurable

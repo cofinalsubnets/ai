@@ -14,7 +14,7 @@
  (= 4096 (* 2 3 4))                              ; binary * over-applied: ((* 2 3) 4) = (6 4) = 4 ** 6
  (= 8  (3 2))
  (= 6  (gcd 24 18))
- (= 6  (inc 5))                                  ; inc = (+ 1): a curried pure global folds
+ (= 6  ((+ 1) 5))                                ; (+ 1) -- a curried pure global folds
 
  ; --- X / A / B fold; element access is correct ---
  (= 9  (cap (link 9 8)))

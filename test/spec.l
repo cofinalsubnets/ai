@@ -22,12 +22,12 @@
  (7 = ((\ x y (x + y)) 3 4))                     ; `\ args.. body` -- a lambda, auto-curried
  ('(1 2) = (\ (1 2)))                            ; one operand: `\` is quote, so 'x is just (\ x)
  ('big = (? 0 'a (1 < 2) 'big 'else)))           ; `?` -- test/result pairs, then a final else
-(: (twice f x) (f (f x)) (assert (12 = (twice inc 10))))
+(: (twice f x) (f (f x)) (assert (12 = (twice (+ 1) 10))))
 (assert
  (id? (:) (?)) (id? (?) (\)) !(:) !(nom? (:))     ; the empty form is the head read, both lanes: the zero point (absence, NOT a nom)
- (0 = (? 0 'a)) (id? 0 (map inc ()))             ; today: a no-match `?` (and `map` of nothing) falls to fixnum 0, NOT the zero point ()
+ (0 = (? 0 'a)) (id? 0 (map (+ 1) ()))           ; today: a no-match `?` (and `map` of nothing) falls to fixnum 0, NOT the zero point ()
  ; QUEUE (bug 3): this fall-through flips to () ONLY WITH bug 1 (the reader terminator -> ()); they are
- ; ONE change -- alone it breaks (= reader-list eval-list). Then: (id? (:) (? 0 'a)) and (id? (:) (map inc ())).
+ ; ONE change -- alone it breaks (= reader-list eval-list). Then: (id? (:) (? 0 'a)) and (id? (:) (map (+ 1) ())).
  (id? (:) (: a b b 2 a)) (2 = (: a b b 2 b))     ; one scope: forward read = the condition, the point helpless
  (2 = (: x 1 x (x + 1) x)))                      ; ... the sequence law is untouched
 
@@ -195,7 +195,7 @@
  (1 = (cap '(1 2 3))) ('(2 3) = (cup '(1 2 3))) (3 = (caup '(2 3 4))) ('(1 2) = (link 1 (link 2 0)))
  !(cap 0) ("x" = (string 'x)) !(two? 'x)          ; no cap at the end of the list; a symbol is NOT a chain -- its name comes via `string`
  ('(0 1 2) = (jot 3)) !(jot 0) (3 = $(jot 3)) ; jot: the first n charms; the empty count is nothing
- ('(2 3 4) = (map inc '(1 2 3))) (24 = (foldl (*) 1 '(1 2 3 4))) (6 = (foldr (+) 0 '(1 2 3)))
+ ('(2 3 4) = (map (+ 1) '(1 2 3))) (24 = (foldl (*) 1 '(1 2 3 4))) (6 = (foldr (+) 0 '(1 2 3)))
  ('(1 3) = (filter (\ x (x % 2)) '(1 2 3 4))) ('(1 2 3) = (sort '(3 1 2))) ('(3 2 1) = (sortby (>) '(1 2 3)))
  ('(1 2 3 4) = (cat '(1 2) '(3 4))) ('(3 2 1) = (rev '(1 2 3))) ('(1 2) = (map cap (zip '(1 2) '(3 4))))
  (20 = (caup (assoc 2 (list (L 1 10) (L 2 20))))) ('(1 2) = (take 2 '(1 2 3 4))) ('(3 4) = (drop 2 '(1 2 3 4)))
@@ -294,7 +294,7 @@
 (assert
  ('ok = (unless 0 'ok)) (0 = (unless 1 'ok)) (3 = (&& 1 2 3)) !(&& 1 0 3)
  (2 = (|| 0 2 3)) ('(1 2 3) = (L 1 2 3)) (6 = (do 1 2 6)) (3 = (let a 1 b 2 (a + b)))
- (3 = (:- (a + b) a 1 b 2)) ('big = (?- 'else (1 < 2) 'big)) (9 = ((<=< inc (\ x (x * 2))) 4)))
+ (3 = (:- (a + b) a 1 b 2)) ('big = (?- 'else (1 < 2) 'big)) (9 = ((<=< (+ 1) (\ x (x * 2))) 4)))
 
 ; --- control --- ev compiles+runs; call-cc a one-shot escape; tasks hatch/wait/yield/sleep/done?;
 ; the RNG is xoshiro256++; a global `help` takes every raise (scare/more bits); a missing name

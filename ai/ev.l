@@ -37,7 +37,7 @@
    ; capture their left neighbor when this file compiles (the opfix pass).
    names (cat (L '+ '- '* '/ '% '& '| '< '<= '= '>= '>)
           '(// << >> ^
-            id? gcd modpow inc dec abs
+            id? gcd modpow abs
             link cap cup caap caup cuap cuup
             dig lidx assoc member? last rev cat
             charm? nom? two? book? lit? string? nil? gem? twin? atom?

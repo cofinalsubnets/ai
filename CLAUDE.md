@@ -107,7 +107,7 @@
 ; law); recursion among lambda bindings resolves lazily. an EMPTY form is its head's value -- (f) ==
 ; f at zero operands -- and the heads are missing, so (:) (?) (\) all read the zero point.
 ; demo:
-(: (twice f x) (f (f x)))    ; defines twice; (twice inc 10) ; 12
+(: (twice f x) (f (f x)))    ; defines twice; (twice (+ 1) 10) ; 12
 (: x 1 x (x + 1) x)          ; 2     the sequence law: a rebind reads the previous value
 (:)                          ; ()    an empty special form reads its head: the zero point
 
@@ -306,7 +306,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 ; demo:
 (cap '(1 2 3))       ; 1
 (cup '(1 2 3))       ; (2 3)
-(map inc '(1 2 3))   ; (2 3 4)
+(map (+ 1) '(1 2 3)) ; (2 3 4)
 (foldl (*) 1 '(1 2 3 4))     ; 24
 (sort '(3 1 2))      ; (1 2 3)
 (jot 3)              ; (0 1 2)   the first n charms
@@ -411,7 +411,7 @@ $"ab" + 2            ; 197     a sigil at one binds tightest: (+ ($ "ab") 2)
 (&& 1 2 3)           ; 3       short-circuiting; (&& 1 0 3) ; 0
 (|| 0 2 3)           ; 2
 (let a 1 b 2 (a + b))            ; 3
-((<=< inc (\ x (x * 2))) 4)      ; 9   the pipe
+((<=< (+ 1) (\ x (x * 2))) 4)    ; 9   the pipe
 
 ; --- control --- ev compiles and runs; call-cc is a one-shot escape; tasks are
 ; spin/catch/rest/freeze/back?/cue? ((spin f x) forks and returns an id, (catch p) blocks for the

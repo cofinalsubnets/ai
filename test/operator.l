@@ -26,9 +26,10 @@
 ; rebind: an alias at three, then at one
 (pin op-tbl '^^ (link 'L 3))
 (assert ('(1 2 3) = (1 ^^ 2 3)) ('((1 2 3) 4 5) = ((1 ^^ 2 3) ^^ 4 5)))
-(pin op-tbl '^^ (link 'inc 1))
-(assert (6 = ^^5) (7 = ^^^^5)                   ; at one: prefix; chains factor greedily
-        (0 = !^^5))                             ; mixed chain: (nil? (inc 5))
+(pin op-tbl '^^ (link 'up 1))
+(: up (+ 1)                                     ; a local 1-ary global to alias ^^ to
+ (assert (6 = ^^5) (7 = ^^^^5)                  ; at one: prefix; chains factor greedily
+         (0 = !^^5)))                           ; mixed chain: (nil? (up 5))
 
 ; restore: unpinned, ^^ no longer factors (^ is at two, can't lead a chain),
 ; so it reads as a plain symbol again

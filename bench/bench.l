@@ -13,7 +13,7 @@
 ; in bench/Makefile's lang lists or report.awk drops the column.
 ; work is a unary thunk (called as (work 0), since ai has no nullary calls)
 ; and must return a deterministic checksum the other languages reproduce.
-(: (iota1 n) (map inc (jot n))                                       ; 1..n (iota is prel now)
+(: (iota1 n) (map (+ 1) (jot n))                                     ; 1..n (iota is prel now)
    bench-lang (|| (getenv "BENCH_LANG") "ai")                         ; column key; matches lib/bench.* default-to-own-name
    bench-min-ms 200                                                   ; timing floor
    (bench-run work reps)                                              ; -> (ms . chk)

@@ -142,8 +142,8 @@
  ;     (m + n) a x == m a (n a x), so the result is a function awaiting (f x).
  ;     "1" + "1" == "2": apply (+ 1) twice to 0. ---
  (= 2 (((+ (\ f x (f x)) (\ f x (f x))) (+ 1)) 0))
- (lit? (+ inc 2))   (lit? (+ 2 inc))          ; num + fn (either order) -> a function
- (lit? (+ inc inc)))                          ; fn + fn -> a function
+ (lit? (+ (+ 1) 2))   (lit? (+ 2 (+ 1)))      ; num + fn (either order) -> a function
+ (lit? (+ (+ 1) (+ 1))))                      ; fn + fn -> a function
 
 ; ============================================================================
 ; `*` matrix (g_mul_mx): the multiplicative analog (semiring product of `+`)
@@ -228,14 +228,14 @@
  (< '(1 2) '(1 3))   (< '(1) '(1 2))   (< '(1 2) '(2))
  !(< '(1 2) '(1 2))   (<= '(1 2) '(1 2))
  ; --- CROSS-kind = the true-blue lattice (symbol < string < number < chain < lambda) ---
- (< 'a "a")   (< "a" 1)   (< 1 '(0))   (< '(0) inc)
+ (< 'a "a")   (< "a" 1)   (< 1 '(0))   (< '(0) (+ 1))
  (< "" 1.5)   (< 'z (100 2))   (< "x" ~(1 1))      ; ANY string < ANY number
  !(< 1 "a")   !(< '(0) 'z)                        ; ...and the reverses are false (chain > sym)
  ; --- LAMBDA is the top class; within it, ordered by representation hash ---
- (< 5 inc)   (> inc '(0))   (< "z" inc)                ; everything sorts below a lambda
- !(< inc inc)   (<= inc inc)   (>= inc inc)         ; reflexive: a lambda equals itself
- (= (? (< inc dec) 1 0) (? (> dec inc) 1 0))           ; antisymmetric: a < b iff b > a
- (|| (<= inc dec) (>= inc dec))                        ; total: some order holds between distinct fns
+ (< 5 (+ 1))   (> (+ 1) '(0))   (< "z" (+ 1))         ; everything sorts below a lambda
+ !(< (+ 1) (+ 1))   (<= (+ 1) (+ 1))   (>= (+ 1) (+ 1))   ; reflexive: a lambda equals itself
+ (= (? (< (+ 1) (+ -1)) 1 0) (? (> (+ -1) (+ 1)) 1 0))    ; antisymmetric: a < b iff b > a
+ (|| (<= (+ 1) (+ -1)) (>= (+ 1) (+ -1)))             ; total: some order holds between distinct fns
  ; --- all four orderings agree (<= >= include equality; > is the strict reverse) ---
  (<= 3 3)   (>= 3 3)   !(< 3 3)   !(> 3 3)   (> 5 3)   (>= 5 3)
  (<= "ab" "ab")   (> 'b 'a)   (>= '(1) '(1))
