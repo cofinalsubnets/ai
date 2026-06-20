@@ -504,7 +504,11 @@ static ai_inline word mk_wide(ai_word **hpp, intptr_t v) {
 
 // equality comparisons inline the fast identity check
 ai_noinline bool eqv(struct ai*, word, word); // this is for checking equality of non-identical values
-static ai_inline bool eql(struct ai *g, word a, word b) { return a == b || eqv(g, a, b); }
+// Two distinct ODD words can never be eqv: eqv's only cross-value bridges are the
+// numeral<->lambda ones (0/1 vs (\ _ 1)/(\ x x)), which need a heap lambda (even)
+// on one side, and its structural arms all bail on `(a|b)&1`. So skip the noinline
+// eqv call for the hot case of two unequal fixnums (charmp == oddp).
+static ai_inline bool eql(struct ai *g, word a, word b) { return a == b || (!(a & b & 1) && eqv(g, a, b)); }
 
 // Threads -- and every other variable-length heap object the GC copies by
 // sounding (continuations, task nodes, env scopes, ports) -- end with a single
