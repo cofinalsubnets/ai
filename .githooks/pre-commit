@@ -18,7 +18,7 @@ status=0
 
 # wasm/ai.js -- needs emcc; skip (with a warning) when it is absent.
 if printf '%s\n' "$staged" | grep -qE \
-  '^(love\.c|data\.c|[^/]+\.h|ai/(prel|ev|egg)\.l|wasm/(host\.c|Makefile|inc/.+\.h))$'; then
+  '^(ai\.c|[^/]+\.h|ai/(prel|ev|egg)\.l|wasm/(host\.c|Makefile|inc/.+\.h))$'; then
   if command -v emcc >/dev/null 2>&1; then
     echo "pre-commit: ai.js sources changed, rebuilding wasm/ai.js ..." >&2
     if make wasm >/dev/null 2>&1; then git add wasm/ai.js
