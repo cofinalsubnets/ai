@@ -40,7 +40,7 @@ ai has three special forms plus "operators". the forms are
 the reader is structural and knows no operator tables -- just tokens, parens,
 strings, and the value surface:
 - `'` quote (desugars to one-operand lambda)
-- `` ` `` quasiquote, `,` unquote, `,@` splice
+- `` ` `` list (the element-eval ctor: every element is evaluated, so quote the literal positions)
 - `@` at (array literal)
 - `#` hash (hash/box literal)
 - `~` twin (twin-gem/complex literal `~(re im)`; a bare `~x` lifts a gem, conjugates a twin gem)
@@ -80,6 +80,7 @@ are true too:
 - `'(2 3 4) = (map (+ 1) '(1 2 3))`
 - `'(0 1 2) = (jot 3)`
 - `10 = +(jot 5)`
+- `5 = () + 5` and `5 = () * 5` -- `()` is the **unit**, the shared identity of `+` and `*` in every lane; `0` and `1` are its two faces (the additive identity it shows in `+`, the multiplicative in `*`)
 - `'(0 0 1 3 6 10 15 21) = ((flip compose jot (map (compose sat jot))) 8)`
 
 that last is the triangular numbers, point-free: `jot` lays out `0 .. n-1`,

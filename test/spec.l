@@ -131,8 +131,12 @@
  ("ab" = "ab" + ()) ("ab" = () + "ab") (5 = 5 + ()) (5 = () + 5)      ; IDENTITY in every lane, not just on lists:
  (~(1 2) = () + ~(1 2)) ("@(1 2 3)" = show (() + @(1 2 3))) (() = () + ())  ; string/number/complex/array pass through
  (('ef + '(1 2)) = '(ef 1 2)) (0 = 'ef + 5)                  ; ... but a NAMED symbol still adjoins / has no number algebra
- ("ababab" = "ab" * 3) !('xy * 2) ('(1 2 1 2) = '(1 2) * 2) !("ab" * "cd")
- !("ab" * -3) ("ababab" = "ab" * 2.5) !('(1 2) * 0))
+ ((\ x x) = () + (\ x x)) (2 = (((\ x x) + (\ x x)) (\ n (+ n 1)) 0))   ; the TOP lane too: () + hot = hot, and
+ ("ababab" = "ab" * 3) !('xy * 2) ('(1 2 1 2) = '(1 2) * 2) !("ab" * "cd")   ; + on two hots IS church add (id+id acts as 2)
+ !("ab" * -3) ("ababab" = "ab" * 2.5) !('(1 2) * 0)         ; the count saturates; the NUMBER 0 empties
+ (5 = () * 5) (5 = 5 * ()) ("ab" = "ab" * ()) ("ab" = () * "ab")   ; () is *'s IDENTITY too -- the multiplicative-
+ ('(1 2) = '(1 2) * (mint 0)) (() = () * ()) ("@(1 2 3)" = show (() * @(1 2 3)))   ; identity FACE (1) of the unit,
+ ("" = "ab" * 0) ((\ x x) = () * (\ x x)))                  ; mirroring its + face (0); 0 stays the number; () * hot = hot too
 
 ; --- numeric functions --- abs int (type-aware); constants e pi i; gcd modpow; the only
 ; transcendental nifs are power sine cosine log; power/sqrt/exp/nth-root/tan/atan derived from

@@ -4828,6 +4828,12 @@ lvm(lvm_mul) {
   if (!__builtin_mul_overflow((intptr_t) getcharm(a), (intptr_t) getcharm(b), &t)
       && t >= fix_min && t <= fix_max)
    return *++Sp = putcharm(t), Ip++, Continue(); }
+ // a bare mint -- the zero point () too -- is *'s IDENTITY: a do-nothing UNIT, () * x =
+ // x * () = x for all x. () is treated as the unit here (not the number 0, which would
+ // ANNIHILATE), the same skip-me role it plays for + -- so it OVERRIDES the count lane:
+ // `"ab" * ()` is `"ab"` (one copy), distinct from `"ab" * 0` = "".
+ if (mintp(a)) return *++Sp = b, Ip++, Continue();
+ if (mintp(b)) return *++Sp = a, Ip++, Continue();
  return Ap(ai_mul_mx[ai_kind(a)][ai_kind(b)], g); }
 
 avm_div(fquot, /)                               // `//` fixnum fast path: truncating quotient

@@ -111,7 +111,7 @@
    (memo e mk) (: g (peep cache e 0) (? g g (: h (mk e) _ (pin cache e h) h)))
    ; auto-ev: a WHOLE-FORM lambda -> native (cached), else the base interpreter. (The
    ; creation hook -- rewriting embedded lambdas via a jit-walk -- was tried and pulled:
-   ; it's pre-macroexpansion so it can disturb a macro/quasiquote's data args, AND the
+   ; it's pre-macroexpansion so it can disturb a macro's data args, AND the
    ; compile cache makes structurally-equal closures id?-IDENTICAL, breaking love's
    ; equal-but-distinct closure semantics (!(id? (\ x E) (\ x E))). A safe creation hook
    ; needs the POST-macro opfix seam + a CODE cache (distinct cells per instance). Future.)

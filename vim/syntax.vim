@@ -52,8 +52,8 @@ syn keyword AiConst Z R C O
 syn match AiAtomMark "'"
 syn match AiAtom "'[^ \t\n()`',;#\"]\+" contains=AiAtomMark
 
-" Reader marks: `(list ctor)  ``tmpl (quasiquote)  ,unquote  ,@unquote-splice
-syn match AiQuasi ",@\|[`,]"
+" Reader mark: ` is the list ctor (evaluates each element)
+syn match AiListCtor "`"
 
 " Operator sigils: a run of operator chars that LEADS a token -- standalone
 " (+ 1 2), or glued to its datum as a monadic ($x, +'(…), <>x). The negative
@@ -96,7 +96,7 @@ hi def link AiForm           Statement
 hi def link AiFunc           Function
 hi def link AiMacro          Operator
 hi def link AiConst          Constant
-hi def link AiQuasi          Special
+hi def link AiListCtor       Special
 hi def link AiNumber         Number
 hi def link AiFloat          Float
 hi def link AiParenError     Error
@@ -106,7 +106,7 @@ hi def link AiBool           Boolean
 " Rainbow parentheses — each nesting level gets its own colour.
 " Each region contains the cluster plus the next level; level 9 wraps to 0.
 " Toggle with \r (or :AiRainbow) — controlled by g:ai_rainbow (default: 1).
-syn cluster AiListCluster contains=AiAtom,AiAtomMark,AiConst,AiComment,AiCommentTodo,AiFunc,AiNumber,AiFloat,AiSymbol,AiForm,AiString,AiMacro,AiQuasi,AiSigil
+syn cluster AiListCluster contains=AiAtom,AiAtomMark,AiConst,AiComment,AiCommentTodo,AiFunc,AiNumber,AiFloat,AiSymbol,AiForm,AiString,AiMacro,AiListCtor,AiSigil
 
 if !exists("g:ai_rainbow")
   let g:ai_rainbow = 0

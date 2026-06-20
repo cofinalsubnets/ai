@@ -481,10 +481,14 @@ Proof. exact (st_eta (Var 6)). Qed.
 (* `+` on sequences (strings, lists) is concatenation -- a MONOID: associative,
    with the empty sequence as identity ("" and () are the units, cat_nil_l/r).
    The runtime LIFTS that unit out of the sequence lane: a bare mint -- the zero
-   point () too -- nets 0 and is +'s identity in EVERY lane (() + x = x + () = x
-   for a number, string, complex, array, anything), not just on sequences. The
-   model is typed-by-sequences, so cat_nil_l/r is the witnessed fragment and the
-   scalar lanes are that same unit extended by dispatch. `*` is
+   point () too -- is the UNIT, the do-nothing element, the IDENTITY of BOTH + and
+   * in EVERY lane (() + x = () * x = x for a number, string, complex, array,
+   anything), not just on sequences. 0 and 1 are its two FACES: the unit shows 0
+   (the additive identity) in + and 1 (the multiplicative identity) in *, one
+   nothing reading as each operation's identity -- yet it stays the unit, NOT the
+   number 0 (which annihilates *: smul 0 = []). The model is typed-by-sequences,
+   so cat_nil_l/r (the + unit) and smul_one (the * unit) are the witnessed
+   fragments; the scalar lanes are that same unit extended by dispatch. `*` is
    REPEATED `+`: a sequence times a count is that many copies concatenated, and
    the count SATURATES (max 0, ceil) -- a non-positive count gives the empty
    sequence. `+` is also the MEASURE HOMOMORPHISM: the net of a concatenation
@@ -523,6 +527,11 @@ Theorem star_ab_3   : smul 3 [97;98] = [97;98;97;98;97;98].     Proof. reflexivi
 Theorem star_list_2 : smul 2 [1;2] = ([1;2;1;2] : list Z).      Proof. reflexivity. Qed. (* '(1 2)*2 *)
 Theorem star_neg    : forall (A:Type) (s:list A), smul (-3) s = [].  Proof. reflexivity. Qed. (* "ab"*-3 = "" *)
 Theorem star_zero   : forall (A:Type) (s:list A), smul 0 s = [].     Proof. reflexivity. Qed. (* '(1 2)*0 = () *)
+(* the * UNIT: 1 is *'s identity (smul 1 = id) -- the face () shows in *, as
+   the empty sequence is the face it shows in + (cat_nil_r). Contrast star_zero:
+   the number 0 ANNIHILATES *, but the unit () does not (() * x = x). *)
+Theorem smul_one    : forall (A:Type) (s:list A), smul 1 s = s.
+Proof. intros A s. unfold smul, srep, scount. simpl. apply app_nil_r. Qed.
 
 Theorem count_saturates : forall c, c <= 0 -> scount c = 0%nat.
 Proof. intros c H. unfold scount. rewrite Z.max_l by lia. reflexivity. Qed.
