@@ -1,18 +1,4 @@
-# ai
-
-every quote below evals to 1, [try them](https://cofinalsubnets.github.io/ai).
-
-- `0 x = 1`
-- `1 x = x`
-- `(x) = x`
-- `f x y = (f x) y`
-- `2 f x = f (f x)`
-- `65536 = (2 2 2 2)`
-- `-1 = (i * i)`
-- `(log -1) = (i * pi)`
-- `i = (1 / 2 -1)`
-
-## ai
+# 🔵 ai
 
 ai is kind of like `ai = (ml + apl) * (lisp / C)`.
 every value is an operator, a total function of its own type.

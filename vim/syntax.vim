@@ -55,9 +55,14 @@ syn match AiAtom "'[^ \t\n()`',;#\"]\+" contains=AiAtomMark
 " Reader marks: `(list ctor)  ``tmpl (quasiquote)  ,unquote  ,@unquote-splice
 syn match AiQuasi ",@\|[`,]"
 
-" Prefix operators: @(…) array  #(…) hash  $x sat  (the tables: book['operators],
-" book['monadics] -- glued runs are monadic, the valence law)
-syn match AiSigil "[@#$~.!?%^*+/<>=-]"
+" Operator sigils: a run of operator chars that LEADS a token -- standalone
+" (+ 1 2), or glued to its datum as a monadic ($x, +'(…), <>x). The negative
+" lookbehind for a name char (alnum/_) keeps punct that lives INSIDE a name from
+" lighting up (the kebab/?/! law: rand-next, done?, max-charm stay plain), and
+" AiNumber/AiFloat -- defined after this -- still win the sign/decimal of -3, 2.5,
+" .5 by definition order. (the valence law: glued is monadic; the runtime tables
+" are book['operators] / book['monadics].)
+syn match AiSigil "[A-Za-z0-9_]\@<![@#$~.!?%^*+/<>=-]\+"
 
 " Numbers (integer / bignum literals, possibly negative)
 syn match AiNumber "\<-\?\d\+\>"
