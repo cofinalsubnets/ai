@@ -107,22 +107,24 @@
   (Run 0 '(a b) (\\ a b (load (* (rel (est a 1)) (rel (est b 2)))))))  ; a=1 AND b=2
 )
 
-; --- DEMO: relations read as algebra. `one` ties two terms (unify); + is OR, * is AND.
-; so a relation is a polynomial in unifications -- facts SUM, sub-relations MULTIPLY. ---
-(: one (\ u v (rel (est u v)))                          ; one u with v -- the archaic verb: unite
-   ; a family db -- parent is a SUM of (a-is-X * b-is-Y) facts:
-   (parent a b) (((one a 'tom) * (one b 'bob))
-               + ((one a 'bob) * (one b 'cyd))
-               + ((one a 'bob) * (one b 'deb)))
+; --- DEMO: relations read as algebra. `===` unifies (the kanren idiom, ≡); + is OR, * is
+; AND. so a relation is a polynomial in unifications -- facts SUM, sub-relations MULTIPLY.
+; the die defines a sublanguage, so it brings its OWN operator: === wired infix below. ---
+(: === (\ u v (rel (est u v))))                          ; (a === b): unify a with b (a goal)
+(pin operators '=== 2)                                   ; === is infix at two -- governs the next form
+(: ; a family db -- parent is a SUM of (a===X * b===Y) facts:
+   (parent a b) (((a === 'tom) * (b === 'bob))
+               + ((a === 'bob) * (b === 'cyd))
+               + ((a === 'bob) * (b === 'deb)))
    (grandparent a c) (rel (\\ b (load ((parent a b) * (parent b c)))))   ; = parent * parent
-   (boolean x) ((one x 0) + (one x 1))
+   (boolean x) ((x === 0) + (x === 1))
    (assert
     (unord_eq '((k cyd) (k deb)) (Run 0 '(k) (\\ k (load (parent 'bob k)))))         ; bob's kids (OR)
     (unord_eq '((g cyd) (g deb)) (Run 0 '(g) (\\ g (load (grandparent 'tom g)))))    ; tom's grandkids
     ; SAT: a CNF formula (x|y)&(!x|z) is literally a PRODUCT of SUMS of literals
     (: sat (Run 0 '(x y z) (\\ x y z (load
               ((boolean x) * (boolean y) * (boolean z)
-                * ((one x 1) + (one y 1))
-                * ((one x 0) + (one z 1))))))
+                * ((x === 1) + (y === 1))
+                * ((x === 0) + (z === 1))))))
        _ (member? '(x 0 y 1 z 1) sat)        ; a model
        (nil? (member? '(x 0 y 0 z 1) sat)))))  ; x=0,y=0 violates (x|y) -> not a model
