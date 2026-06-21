@@ -123,10 +123,17 @@
    (id? a lvm_unc) (pro (seek -2 (peek 2 f)))
    (id? a lvm_cur) (?- f (id? lvm_unc (peek 2 f))
                           (pro (seek -2 (peek 4 f)))))))
+  ; compile-time kind WARNINGS: the analysis is `warn-kinds` (prel, pure, returns
+  ; the offending subforms -- sound by construction, an unknown kind is `top` which
+  ; never warns); feel prints them to err only when the `warns` box is on (default
+  ; off, so the bootstrap stays silent). eputs/ewarn are the err-side here.
+  (eputs s) ((: (go i) (? (< i (tally s)) (: _ (put err (s i)) (go (+ i 1))) 0)) 0)
+  (ewarn e) (eputs (+ (+ ";; warn: nil-by-kind " (show e)) "\n"))
   ; feel: source->source pre-pass before `ana` -- expands macros, constant-folds, and marks
   ; applies with their n-ary-vs-l2r strategy. Tail position is NOT tracked here -- kap detects
   ; tail by peeking the continuation for lvm_ret at analysis time.
   (feel c x) (:
+   _ (? (peep warns 0 0) (each (warn-kinds x) ewarn) 0)        ; lint when the `warns` box is on (default off)
    (wx x bnd) (?
     (atom? x) x
     (: h (cap x) (?
