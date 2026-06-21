@@ -25,26 +25,28 @@
    ; (guardz, for divide-by-zero); on deopt UNWIND d pending machine-stack operands
    ; (add rsp,8d) so the jmp-to-interp leaves rsp balanced -- else a mid-nest deopt
    ; leaks pushes and the terminator `ret` faults. deopt tail-applies interp(arg).
-   (guard d)  (+ '(113 19) (+ (+ '(72 129 196) (le4 (* 8 d))) deopt))      ; jno +19; add rsp,8d; deopt
-   (guardz d) (+ '(117 19) (+ (+ '(72 129 196) (le4 (* 8 d))) deopt))      ; jnz +19; add rsp,8d; deopt
+   (guard d)  ('(113 19 72 129 196) + (le4 (* 8 d)) + deopt)      ; jno +19; add rsp,8d; deopt
+   (guardz d) ('(117 19 72 129 196) + (le4 (* 8 d)) + deopt)      ; jnz +19; add rsp,8d; deopt
    ld-i '(76 137 208)                                                           ; loop var i (raw, in r10)
    untag '(72 209 248)                                                           ; sar rax,1
    (fetch i) (? (= i 0)        '(72 139 1)                                       ; mov rax,[rcx]       (TAGGED, no untag)
-                (< (* 8 i) 128) (+ '(72 139 65) (link (* 8 i) ()))              ; mov rax,[rcx+disp8]
-                                (+ '(72 139 129) (le4 (* 8 i))))               ; mov rax,[rcx+disp32]
+                (< (* 8 i) 128) `(72 139 65 (8 * i))              ; mov rax,[rcx+disp8]
+                                ('(72 139 129) + (le4 (* 8 i))))               ; mov rax,[rcx+disp32]
    ; FIXNUM INPUT GUARD: native arithmetic assumes fixnums (sar/imul/idiv), so a
    ; NON-fixnum arg (an even/heap word -- a list, mint, the zero point, ...) must DEOPT
    ; to the bytecode body, which dispatches generically. The overflow guard only catches
    ; a fixnum RESULT leaving range, never a bad INPUT. test al,1 (fixnum = odd); a clear
    ; low bit (even) falls through to the deopt -- structurally a guardz (jnz over it).
-   (fxv  i d) (+ (fetch i) (+ '(168 1) (+ (guardz d)    untag)))           ; nat deopt (interp value[0])
-   (fxmn i d) (+ (fetch i) (+ '(168 1) (+ (guardz-mn d) untag)))           ; natn deopt (interp body)
+   (fxv  i d) ((fetch i) + '(168 1) + (guardz d)    + untag)           ; nat deopt (interp value[0])
+   (fxmn i d) ((fetch i) + '(168 1) + (guardz-mn d) + untag)           ; natn deopt (interp body)
    push-rax '(80)   pop-r8 '(65 88)
-   epilogue (+ '(72 1 192) (+ (guard 0) (+ '(72 131 200 1) (+ '(72 137 1)   ; add rax,rax;guard;or rax,1;mov[rcx]
-              (+ '(72 131 198 16) '(72 139 6  255 224))))))                    ; add rsi,16; Continue
-   (opseq op d) (? (= op '+) (+ pop-r8 (+ '(76 1 192) (guard d)))            ; add rax,r8 ; guard
-                   (= op '*) (+ pop-r8 (+ '(73 15 175 192) (guard d)))       ; imul rax,r8 ; guard
-                   (= op '-) (+ pop-r8 (+ '(73 41 192) (+ (guard d) '(76 137 192))))  ; sub r8,rax;guard;mov rax,r8
+   epilogue
+    ; add rax,rax;guard;or rax,1;mov[rcx]
+    ; add rsi,16; Continue
+    ('(72 1 192) + (guard 0) + '(72 131 200 1 72 137 1 72 131 198 16 72 139 6 255 224))
+   (opseq op d) (? (= op '+) (pop-r8 + '(76 1 192) + (guard d))            ; add rax,r8 ; guard
+                   (= op '*) (pop-r8 + '(73 15 175 192) + (guard d))       ; imul rax,r8 ; guard
+                   (= op '-) (pop-r8 + '(73 41 192) + (guard d) + '(76 137 192))  ; sub r8,rax;guard;mov rax,r8
                    ())
    ; // and %: a in r8 (dividend), b in rax (divisor) -> rax; preserves rdx(=Hp) via
    ; the machine stack; divide-by-zero deopts (guardz). idiv truncates toward 0, the
@@ -215,5 +217,24 @@
   ; CAPTURES = partial-apply a native multi-arg; the leading param(s) are the captures.
   (: mk (jit2 '(\ n x (+ x n)))  a5 (mk 5)  a7 (mk 7)
      (&& (15 = (a5 10)) (17 = (a7 10)) ('(6 7 8) = (map a5 '(1 2 3)))                 ; native captured closure, composes
-         (16000000000000000000 = ((mk 0) 4000000000)))))                             ; ... and deopts through the capture
+         (8000000000000000000 = ((mk 4000000000000000000) 4000000000000000000))))    ; ... and deopts through the capture
+  ; --- added coverage: setcc <=/>/>=/=, multi-arg (cgn) %/&/|/cmp/?, *-fold loop, //-by-0 deopt ---
+  ; comparison RESULT codes -- only `<` reached a setcc before, 4 of 5 opcodes were dark
+  (: le (jit '(\ x (<= x 5))) (&& (1 = (le 5)) (1 = (le 3)) (0 = (le 6))))            ; setcc <=
+  (: gt (jit '(\ x (>  x 5))) (&& (1 = (gt 6)) (0 = (gt 5)) (0 = (gt 2))))            ; setcc >
+  (: ge (jit '(\ x (>= x 5))) (&& (1 = (ge 5)) (1 = (ge 9)) (0 = (ge 4))))            ; setcc >=
+  (: eq (jit '(\ x (=  x 5))) (&& (1 = (eq 5)) (0 = (eq 4)) (0 = (eq 6))))            ; setcc =
+  ; multi-arg (cgn) op dispatch -- only + - * // were exercised on the N-ary path
+  (: mdn (jit2 '(\ x y (% x y))) (&& (1 = (mdn 8 7)) (-1 = (mdn -8 7)) (0 = (mdn 14 7))))   ; idivseq-mn %
+  (: ban (jit2 '(\ x y (& x y))) (&& (8 = (ban 10 12)) (4 = (ban 4 5))))                    ; cgn -> bitseq
+  (: bon (jit2 '(\ x y (| x y))) (&& (3 = (bon 2 1)) (7 = (bon 5 3))))
+  (: ltn (jit2 '(\ x y (< x y))) (&& (1 = (ltn 3 5)) (0 = (ltn 5 3))))                      ; cgn -> cmpseq
+  (: mnn (jit2 '(\ x y (? (< x y) x y))) (&& (3 = (mnn 3 5)) (4 = (mnn 9 4))))              ; cgn -> condcode (min)
+  ; *-fold counted loop -- jitsum hardcodes +/<, so drive acc-mul + nonzero r11-init via loopcode
+  (: prodf (: psrc `('\ 'n `(`(': `('go 'i 'a) `('? `('< 'i 'n) `('go `('+ 'i 1) `('* 'a `('+ 'i 1))) 'a)) 0 1))
+              (nif (emit (loopcode '(+ i 1) 'i '* '<)) (ev psrc) psrc 1))
+     pf (\ n ((: (go i a) (? (< i n) (go (+ i 1) (* a (+ i 1))) a)) 0 1))
+     (&& (120 = (prodf 5)) (= (pf 8) (prodf 8))))                                           ; n! via a product fold
+  ; divide-by-zero takes the guardz deopt -- only nonzero divisors were tested
+  (: dz (jit '(\ x (// x 0))) (= (// 10 0) (dz 10))))                                       ; // by 0 -> deopt -> interp
  _ (puts "ai/glaze/emit: native codegen ok (arith + loop, transparent, deopt)") _ (putc 10))

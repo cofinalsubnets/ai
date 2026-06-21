@@ -19,7 +19,7 @@ ai0 = out/host/ai0
 
 .PHONY: all install uninstall clean distclean hooks
 .PHONY: host kernel wasm ai0
-.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_hostnif test_extract
+.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_hostnif test_glaze test_extract
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench nettest
 # `make test` runs its five independent phases in PARALLEL by default, via a
 # recursive -j sub-make: the bootstrap deps serialize the ai0/host build under
@@ -39,7 +39,7 @@ test:
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_ai0 test_proof test_gen test_extract test_tools test_hostnif nettest test_kernel test_wasm
+test_all: test_host test_ai0 test_proof test_gen test_extract test_tools test_hostnif test_glaze nettest test_kernel test_wasm
 # ai0 bakes prel+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prel (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
@@ -75,6 +75,25 @@ test_hostnif: host
 	  { [ $$r -eq 0 ] && grep -q ': ok' out/host/.test_hostnif.out; } \
 	    || { echo "FAIL $$s (exit $$r)"; exit 1; }; \
 	done
+# Native-codegen self-test (ai/glaze/emit.l): the x86-64 jit emitter. Like the
+# host-nif tests it needs the built binary (uses the `nat` host nif) and the
+# 00-init assert harness -- emit.l's `(assert ...)` is a NO-OP under a bare -l
+# (no `assert` in scope, so it reads as a missing nom and absorbs its args), so
+# it MUST run with 00-init prepended or it silently always-passes. x86-64 ONLY
+# (emit.l emits x86-64 machine code); skipped elsewhere. Gate = exit 0 AND the
+# "native codegen ok" sentinel (a reader-stop exits 0 without it).
+.PHONY: test_glaze
+ifeq ($a,x86_64)
+test_glaze: host
+	@echo GLAZE ai/glaze/emit.l
+	@cat test/00-init.l ai/glaze/emit.l | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
+	  cat out/host/.test_glaze.out; \
+	  { [ $$r -eq 0 ] && grep -q "native codegen ok" out/host/.test_glaze.out; } \
+	    || { echo "FAIL glaze (exit $$r)"; exit 1; }
+else
+test_glaze:
+	@echo "test_glaze: skipped (host arch $a is not x86_64)"
+endif
 # ain's two-process loopback gate: a server and a client over real TCP on
 # 127.0.0.1, full-duplex, asserting each side received what the other sent (the
 # socket nifs in host/net.c + the pump loops in tools/ain.l). In `test_all`
