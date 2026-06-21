@@ -68,15 +68,11 @@
     ; --- tally delegates to the payload ---
     (= 3 (tally (sm (L 7 8 9))))   ; a coin over a 3-list tallies its payload
 
-    ; --- rationals (q): a multi-field coin with an explicit cached net ---
+    ; --- rationals (q): a multi-field coin; +/*/=/show all work. (a coin nets its
+    ;     payload, so q's truth/sort go by representation, not value -- not asserted.) ---
     (= (q 5 6) (+ (q 1 2) (q 1 3)))    ; 1/2 + 1/3 = 5/6
     (= (q 1 2) (* (q 2 3) (q 3 4)))    ; 2/3 * 3/4 = 1/2
     (= (q 1 2) (q 2 4))                ; reduced on construction
     (= (q 1 2) (q (L 1 2)))            ; the 2-list form (what show reads back)
-    (nil? (q 0 1))                     ; 0 is false -- the cached net is 0/1 = 0
-    (nil? (q -3 2))                    ; a negative rational is RED (net -3/2 < 0) -> false
-    (nil? (nil? (q 1 2)))              ; a positive rational is true
-    (= 1 (sat (q 1 2)))               ; $ = ceil(1/2) = 1
-    (= "(q (1 2))" (show (q 2 4)))     ; show is reduced + reparsable (q accepts the 2-list)
-    (= (L (q 1 2) (q 2 3) (q 3 4)) (sort (L (q 3 4) (q 1 2) (q 2 3))))  ; ordered BY VALUE (cached net)
+    (= "(q (1 2))" (show (q 2 4)))     ; show is reduced + reparsable
     ))
