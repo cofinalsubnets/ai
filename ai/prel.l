@@ -163,26 +163,6 @@
    (star? x) (id? x (net x))
    ; (charm? -- a fixnum, the word-sized star -- is the C nif now, oddp C-side.)
    (galaxy? x) (? (tray? x) (? (nil? (= top-tray (tier x))) 1 (star? (peep x 0 0))) 0))
-; --- newtypes: a STAMP coins COINS -- user kinds that ride +/* with ()-identity ---
-; a COIN (coin?) wears a stamp over a payload; the stamp is the type descriptor (a
-; monoid/ring -- a map of slot->method). + and * dispatch through the KHot lane to the
-; stamp's plus/times, run over the LOADED payloads and re-coined; () stays their
-; identity for free (the mint-identity hoist sits above the +/* matrix). net/=/</show
-; default over the payload in the C core, so $/truth, value-equality, sort and the
-; (name payload) show form all work with no extra ceremony. plus/times take payloads.
-; (ring 'z5 plus times) / (monoid 'z5 plus) -> a constructor: payload -> coin.
-; the stamp is built with explicit tablet+pin, NOT a #(..) literal: the bootstrap c0
-; mis-builds a map literal whose values are captured params when the map is also
-; captured by closures (the entries come back empty). The raw payload-ops live in the
-; stamp (slots 5/6); every method captures only `s` (a boxfix :-binding, like the ctor)
-; and peeps the op back out. slot 0 = show-name; slots 1/2 = the coin-level +/*.
-(: (ring name plus times) (:
-      s (tablet 0)
-      _ (pin s 0 name) _ (pin s 5 plus) _ (? times (pin s 6 times) 0)
-      _ (pin s 1 (\ a b (coin s ((peep s 5 0) (load a) (load b)))))                  ; +
-      _ (? times (pin s 2 (\ a b (coin s ((peep s 6 0) (load a) (load b))))) 0)      ; * (a monoid has none)
-      (\ p (coin s p)))                                           ; the ctor: payload -> coin
-   (monoid name plus) (ring name plus 0))                         ; a monoid is a ring with no product
 (: (foldl1 f l) (foldl f (cap l) (cup l))
    (foldr1 f l) (foldr f (last l) (init l))
    ap (foldl id)
@@ -533,6 +513,23 @@
 (: (a-coll sh n acc) (? (< n 1) (: d (rev acc) (tray (a-type d) sh d))
                         (\ x (a-coll sh (- n 1) (link x acc))))
    (array s) (: sh (a-shape s) (a-coll sh (foldl (*) 1 sh) 0)))
+
+; --- newtypes: a STAMP coins COINS -- user kinds that ride +/* with ()-identity ---
+; a COIN (coin?) wears a stamp over a payload; the stamp is the type descriptor (a
+; monoid/ring -- a map of slot->method). + and * dispatch through the KHot lane to the
+; stamp's plus/times, run over the LOADED payloads and re-coined; () stays their
+; identity for free (the mint-identity hoist sits above the +/* matrix). net/=/</show
+; default over the payload in the C core, so $/truth, value-equality, sort and the
+; (name payload) show form all work with no extra ceremony. plus/times take payloads.
+; (ring 'z5 plus times) / (monoid 'z5 plus) -> a constructor: payload -> coin. LIVES HERE,
+; below the #(..) `hash` macro: a macro must precede its use in the prel, since the
+; bootstrap c0 is a single forward pass (no analysis-time macro hoist). slot 0 = show-name.
+(: (ring name plus times) (:
+      s #(0 name)                                                ; the stamp; slot 0 = show-name
+      _ (pin s 1 (\ a b (coin s (plus (load a) (load b)))))      ; slot 1 = +
+      _ (? times (pin s 2 (\ a b (coin s (times (load a) (load b))))) 0)  ; slot 2 = * (a monoid has none)
+      (\ p (coin s p)))                                          ; the ctor: payload -> coin
+   (monoid name plus) (ring name plus 0))                        ; a monoid is a ring with no product
 
 ; recursive-value boxing for `:` (the letrec* "capture by location" fix).
 ; ONE SCOPE: every name bound in a `:` resolves locally over the whole form.
