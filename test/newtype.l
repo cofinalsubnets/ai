@@ -77,4 +77,11 @@
     (= (q 1 2) (q 2 4))                ; reduced on construction
     (= (q 1 2) (q (L 1 2)))            ; the 2-list form (what show reads back)
     (= "(q (1 2))" (show (q 2 4)))     ; show is reduced + reparsable
+
+    ; --- a coin's lit?-ness is its die's call: fresh DATA by default ---
+    (nil? (lit? (q 1 2)))          ; a rational is DATA -- a value, not a reference (like a number)
+    (nil? (lit? a))                ; a mod-n residue too
+    (nil? (lit? (sm 5)))
+    (nil? (lit? (coin #(0 'd) 5))) ; a plain die -> data
+    (lit? (coin #(0 'h 4 1) 5))    ; ... but a die with DIE_HOT (slot 4) strikes lit coins
     ))

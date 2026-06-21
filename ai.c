@@ -257,8 +257,10 @@ static ai_inline word coin_die(word x) { return ((struct ai_coin*) x)->die; }
 static ai_inline word coin_load(word x) { return ((struct ai_coin*) x)->payload; }
 // die slots (fixnum keys into the descriptor map). NAME is a symbol for show;
 // ADD/MUL/APPLY are closures run INSIDE the VM (+/* and apply are lvm handlers, so
-// they can call ai code). net/=/</show/tally default over the payload in pure C.
-enum { DIE_NAME = 0, DIE_ADD = 1, DIE_MUL = 2, DIE_APPLY = 3 };
+// they can call ai code). net/=/</show/tally default over the payload in pure C. HOT,
+// if truthy, makes the die's coins lit? (a reference value); absent -> the coin is
+// fresh DATA (not lit?), like a rational -- a value, not a reference.
+enum { DIE_NAME = 0, DIE_ADD = 1, DIE_MUL = 2, DIE_APPLY = 3, DIE_HOT = 4 };
 // read a die slot, or () if absent / the die is not a map.
 static ai_inline word die_get(struct ai *g, word die, intptr_t slot) {
  return tabp(die) ? ai_mapget(g, nil, putcharm(slot), die) : nil; }
@@ -3935,7 +3937,15 @@ op11(lvm_tabp, tabp(Sp[0]) ? putcharm(1) : nil)
 // and the opaque hots cask/port/toast -- so `hot? ⟹ lit?`). NOT the fresh value-data
 // below (numbers, strings, points, chains, trays), so a missing nom's () is not lit?.
 // (the raw heap-pointer test is `lamp`, C-internal; lit? is the lattice cut, not storage.)
-op11(lvm_litp, ai_kind(Sp[0]) >= KMap ? putcharm(1) : nil)
+// A COIN dispatches via KHot but is NOT intrinsically a reference: its DIE decides --
+// DIE_HOT truthy -> lit (a mutable-backed newtype), absent -> fresh DATA (a rational is
+// a value like a number, not lit?). So lit? reads the die, not the storage kind.
+lvm(lvm_litp) {
+ word x = Sp[0];
+ bool lit = coinp(x) ? !ai_nilp(g, die_get(g, coin_die(x), DIE_HOT))   // a coin: its die decides
+                     : ai_kind(x) >= KMap;                             // else the lattice cut
+ Sp[0] = lit ? putcharm(1) : nil;
+ return Ip++, Continue(); }
 // (hotp x): is x an opaque hot handle -- a buf or a port? (a task is referenced
 // by a fixnum id, not a handle object.) a hot also answers lamp (it acts as
 // a constant function); hotp is the refinement that names the zoo.
