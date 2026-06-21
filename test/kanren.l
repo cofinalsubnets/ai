@@ -66,6 +66,17 @@
  (foldl (\ a b `((\ a b s (s_plus (a s) (b s))) a b)) x r))))
 (:: '\\ (\ a (link (link '\ a) (map (\ a `(var `('\ a))) (init a)))))
 
+; --- kanren as a RING -- a goal-coin where + is disjunction, * is conjunction ---
+; a goal is (\ s stream); the die's + interleaves the two goals' streams (s_plus,
+; disj), its * binds the first goal's stream through the second (s_star, conj). so
+; relations compose with the generic operators: (g1 + g2) is OR, (g1 * g2) is AND.
+; the goal-coin is DATA (no DIE_HOT), and `load` unwraps it back to a bare goal for Run.
+(: g-die (: d #(0 'goal)
+            _ (pin d 1 (\ A B (coin d (\ s (s_plus ((load A) s) ((load B) s))))))   ; + = disj
+            _ (pin d 2 (\ A B (coin d (\ s (s_star ((load A) s) (load B))))))         ; * = conj
+            d)
+   (rel goal) (coin g-die goal))                                                     ; wrap a goal
+
 (assert
  (unord_eq '(1 2 3) '(2 1 3))
  (unord_eq '(2 1 3) (stake 3 (sX 1 (sX 2 (sX 3 sno)))))
@@ -88,4 +99,9 @@
    (: (never s) ((vel (\ _ sno) (zz never)) s)
       (at_least n) (vel (est a n) (zz (at_least (+ n 1))))
     (vel never (est a 0) (at_least 1))))))
+ ; the ring: + is OR, * is AND over goal-coins (load unwraps the coin for Run)
+ (unord_eq '((a 1) (a 2))
+  (Run 0 '(a) (\\ a (load (+ (rel (est a 1)) (rel (est a 2)))))))      ; a=1 OR a=2
+ (= '((a 1 b 2))
+  (Run 0 '(a b) (\\ a b (load (* (rel (est a 1)) (rel (est b 2)))))))  ; a=1 AND b=2
 )

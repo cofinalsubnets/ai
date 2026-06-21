@@ -11,5 +11,8 @@
  (sit e z a) (? (two? a) (sit e (e (cap a)) (cup a)) z)
 (\ egg (:
  now (clock 0)
+ ; the DOUBLE sit is load-bearing -- don't collapse to one (removed as "redundant" before).
+ ; inner: c0-ev compiles the corpus; outer: that hatchling recompiles it -> ev self-hosted,
+ ; not c0-compiled. the Futamura move: specialize the evaluator to the corpus, twice.
  _ (mop (pin book 'ev (sit (sit ev 0 egg) 0 egg)))
  (pull (pin book 'born (clock now)) 'book 0))))
