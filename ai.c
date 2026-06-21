@@ -2128,9 +2128,9 @@ static lvm(lvm_mulh) {
 static lvm(lvm_coin_op, intptr_t slot) {
  word a = Sp[0], b = Sp[1];
  if (coinp(a) && coinp(b) && coin_die(a) != coin_die(b))
-  return *++Sp = nil, Ip++, Continue();             // two distinct newtypes: no canonical +/*
+  return *++Sp = ZeroPoint, Ip++, Continue();             // two distinct newtypes: no canonical +/*
  word f = die_get(g, coinp(a) ? coin_die(a) : coin_die(b), slot);
- if (ai_nilp(g, f)) return *++Sp = nil, Ip++, Continue();   // no method -> nil
+ if (ai_nilp(g, f)) return *++Sp = ZeroPoint, Ip++, Continue();   // no method -> nil
  Have(2);
  a = Sp[0], b = Sp[1];                              // re-read post-GC
  f = die_get(g, coinp(a) ? coin_die(a) : coin_die(b), slot);
@@ -4536,7 +4536,7 @@ lvm(lvm_link) {
  word a = Sp[0], b = Sp[1]; \
  if (arrp(a) || arrp(b)) return Ap(lvm_vbin, g, vop); \
  if (Cp(a) || Cp(b)) return Ap(lvm_cplx_bin, g, vop); \
- if (!isnum(a) || !isnum(b)) return *++Sp = nil, Ip++, Continue(); \
+ if (!isnum(a) || !isnum(b)) return *++Sp = ZeroPoint, Ip++, Continue(); \
  if (flop(a) || flop(b)) { word _res; Have(box_req); \
   ai_flo_t ad = toflo(a), bd = toflo(b); \
   emit_flo(fexpr); \
@@ -4552,7 +4552,7 @@ lvm(lvm_link) {
  word a = Sp[0], b = Sp[1]; \
  if (arrp(a) || arrp(b)) return Ap(lvm_vbin, g, vop); \
  if (Cp(a) || Cp(b)) return Ap(lvm_cplx_bin, g, vop); \
- if (!isnum(a) || !isnum(b)) return *++Sp = nil, Ip++, Continue(); \
+ if (!isnum(a) || !isnum(b)) return *++Sp = ZeroPoint, Ip++, Continue(); \
  if (flop(a) || flop(b) || b == nil) { word _res; Have(box_req); \
   ai_flo_t ad = toflo(a), bd = toflo(b); \
   emit_flo(fexpr); \
@@ -4584,7 +4584,7 @@ lvm(lvm_link) {
 #define bit_slow(n, c_op) static lvm(lvm_##n##_slow) {               \
  word a = Sp[0], b = Sp[1], _res;                                     \
  if (!(charmp(a) || widep(a)) || !(charmp(b) || widep(b)))                  \
-  return *++Sp = nil, Ip++, Continue();                               \
+  return *++Sp = ZeroPoint, Ip++, Continue();                               \
  Have(box_req);                                                       \
  emit_int(toint(a) c_op toint(b));                                    \
  return *++Sp = _res, Ip++, Continue(); }
@@ -4607,7 +4607,7 @@ static lvm(lvm_quotn) {
  word a = Sp[0], b = Sp[1];
  if (arrp(a) || arrp(b)) return Ap(lvm_vbin, g, vop_quot);
  if (Cp(a) || Cp(b)) return Ap(lvm_cplx_bin, g, vop_quot);
- if (!isnum(a) || !isnum(b)) return *++Sp = nil, Ip++, Continue();
+ if (!isnum(a) || !isnum(b)) return *++Sp = ZeroPoint, Ip++, Continue();
  if (flop(a) || flop(b) || b == nil) { word _res; Have(box_req);   // ±inf/NaN on ÷0
   ai_flo_t ad = toflo(a), bd = toflo(b);
   emit_flo(ad / bd);
@@ -4679,7 +4679,7 @@ static lvm(lvm_add_seq) {
   for (word l = lst; chainp(l); l = B(l), w++) ini_chain(w, A(l), word(w + 1));
   ini_chain(w, elt, ZeroPoint);                     // trailing (elt . ()) -- list terminator (nil-ontology)
   return *++Sp = word(base), Ip++, Continue(); }
- return *++Sp = nil, Ip++, Continue(); }          // neither is a real list (e.g. sym + sym/str/num): no algebra -> nil
+ return *++Sp = ZeroPoint, Ip++, Continue(); }          // neither is a real list (e.g. sym + sym/str/num): no algebra -> nil
 
 // --- TEXT lane: strings + symbols, name-compatible -------------------------
 // The string tower is STRING (rank 0) < UNINTERNED-SYM (1) < INTERNED-SYM (2). A
@@ -4709,9 +4709,9 @@ static ai_inline char *add_emit(struct ai *g, char *w, word x) {  // append x's 
  return *w = (char) seq_byte(x), w + 1; }               // number -> one byte (gated >= 0 by the byte law)
 static lvm(lvm_add_string) {
  word a = Sp[0], b = Sp[1];
- if (arrp(a) || arrp(b)) return *++Sp = nil, Ip++, Continue(); // array <-> string: undefined
- if (!strp(a) && !nomp(a) && seq_byte(a) < 0) return *++Sp = nil, Ip++, Continue();  // the byte law
- if (!strp(b) && !nomp(b) && seq_byte(b) < 0) return *++Sp = nil, Ip++, Continue();
+ if (arrp(a) || arrp(b)) return *++Sp = ZeroPoint, Ip++, Continue(); // array <-> string: undefined
+ if (!strp(a) && !nomp(a) && seq_byte(a) < 0) return *++Sp = ZeroPoint, Ip++, Continue();  // the byte law
+ if (!strp(b) && !nomp(b) && seq_byte(b) < 0) return *++Sp = ZeroPoint, Ip++, Continue();
  int rank = min(stringrank(g, a), stringrank(g, b));
  uintptr_t n = stringlen(g, a) + stringlen(g, b);
  if (!n) return *++Sp = rank ? nil : EmptyString, Ip++, Continue();
@@ -4725,7 +4725,7 @@ static lvm(lvm_add_string) {
       : rank == 1 ? Ap(lvm_mint, g)                  // uninterned symbol (fresh)
                   : Ap(lvm_intern, g); }               // interned symbol
 static lvm(lvm_0) {                             // unsupported mix (array <-> string)
- return *++Sp = nil, Ip++, Continue(); }
+ return *++Sp = ZeroPoint, Ip++, Continue(); }
 
 // The fundamental value kind for generic-op dispatch (enum q in ai.h): a fixnum is
 // the odd tag (KCharm), a non-data heap pointer is a text/function (KHot), else ai_typ
@@ -4762,7 +4762,7 @@ static lvm(lvm_mul_rep) {
  bool aseq = strp(a) || formp(a) || namep(a);       // a string / list / NAMED symbol repeats
  word seq = aseq ? a : b, cnt = aseq ? b : a;
  if ((!strp(seq) && !formp(seq) && !namep(seq)) || (!isnum(cnt) && !Cp(cnt)))
-  return *++Sp = nil, Ip++, Continue();             // seq not a sequence/symbol, or count not a number
+  return *++Sp = ZeroPoint, Ip++, Continue();             // seq not a sequence/symbol, or count not a number
  uintptr_t n = (uintptr_t) ai_pin(g, cnt);
  if (formp(seq)) {                                   // list -> n copies of the spine
   if (!n) return *++Sp = ZeroPoint, Ip++, Continue();   // 0 copies -> the empty list () (nil-ontology)
@@ -4800,7 +4800,7 @@ static lvm(lvm_mul_rep) {
 // cells, then 2*pairs pair cells; 3*pairs chains total, one Have.
 static lvm(lvm_mul_cart) {
  word a = Sp[0], b = Sp[1];
- if (!formp(a) || !formp(b)) return *++Sp = nil, Ip++, Continue();   // chain*chain only
+ if (!formp(a) || !formp(b)) return *++Sp = ZeroPoint, Ip++, Continue();   // chain*chain only
  uintptr_t m = llen(a), n = llen(b), pairs = m * n;
  if (!pairs) return *++Sp = ZeroPoint, Ip++, Continue();             // empty operand annihilates
  Have(3 * pairs * Width(struct ai_chain));
@@ -5023,7 +5023,7 @@ lvm(lvm_bxor) { word a = Sp[0], b = Sp[1];
 // >> : arithmetic right shift. A fixnum value only shrinks, so it keeps a
 // non-allocating fast path; a boxed value routes to the slow ap.
 static lvm(lvm_bsr_slow) { word a = Sp[0], b = Sp[1], _res;
- if (!(charmp(a) || widep(a)) || !charmp(b)) return *++Sp = nil, Ip++, Continue();
+ if (!(charmp(a) || widep(a)) || !charmp(b)) return *++Sp = ZeroPoint, Ip++, Continue();
  Have(box_req);
  emit_int(toint(a) >> getcharm(b));
  return *++Sp = _res, Ip++, Continue(); }
@@ -5036,7 +5036,7 @@ lvm(lvm_bsr) { word a = Sp[0], b = Sp[1];
 // (emit_int still demotes small results — only genuinely wide values
 // allocate). Shift done in uintptr_t for well-defined overflow.
 lvm(lvm_bsl) { word a = Sp[0], b = Sp[1], _res;
- if (!(charmp(a) || widep(a)) || !charmp(b)) return *++Sp = nil, Ip++, Continue();
+ if (!(charmp(a) || widep(a)) || !charmp(b)) return *++Sp = ZeroPoint, Ip++, Continue();
  Have(box_req);
  emit_int((intptr_t)((uintptr_t) toint(a) << getcharm(b)));
  return *++Sp = _res, Ip++, Continue(); }
@@ -5065,10 +5065,10 @@ static lvm(lvm_math2, ai_flo_t (*fn)(ai_flo_t, ai_flo_t)) {
  word a = Sp[0], b = Sp[1];
  if (arrp(a) || arrp(b)) {                               // (pow arr ..) etc. -> float array
   if ((arrp(a) && vec(a)->type == ai_C) || (arrp(b) && vec(b)->type == ai_C))
-   return *++Sp = nil, Ip++, Continue();                 // complex array undefined here
+   return *++Sp = ZeroPoint, Ip++, Continue();                 // complex array undefined here
   return Ap(lvm_vmap2, g, fn); }
  if (!isnum(a) || !isnum(b)) return
-  *++Sp = nil, Ip++, Continue();
+  *++Sp = ZeroPoint, Ip++, Continue();
  ai_flo_t ad = toflo(a), bd = toflo(b), rd = fn(ad, bd);
  Have(flo_req);
  return *++Sp = mk_flo(&Hp, rd), Ip++, Continue(); }
@@ -6138,11 +6138,11 @@ lvm(lvm_aall) {
 // rank > maxrank -> nil. a's cell is hoisted out of the inner (b) loop.
 lvm(lvm_outer) {
  word a = Sp[0], b = Sp[1];
- if (!(arrp(a) && arrp(b))) return *++Sp = nil, Ip++, Continue();
+ if (!(arrp(a) && arrp(b))) return *++Sp = ZeroPoint, Ip++, Continue();
  struct ai_vec *va = vec(a), *vb = vec(b);
- if (va->type > ai_R || vb->type > ai_R) return *++Sp = nil, Ip++, Continue();
+ if (va->type > ai_R || vb->type > ai_R) return *++Sp = ZeroPoint, Ip++, Continue();
  uintptr_t M = vec_nelem(va), N = vec_nelem(vb), n = M * N, rank = va->rank + vb->rank;
- if (rank > maxrank) return *++Sp = nil, Ip++, Continue();
+ if (rank > maxrank) return *++Sp = ZeroPoint, Ip++, Continue();
  bool fdom = va->type == ai_R || vb->type == ai_R;
  enum ai_vec_type rt = fdom ? ai_R : ai_Z;
  uintptr_t bytes = sizeof(struct ai_vec) + rank * sizeof(word) + ai_T[rt] * n;
@@ -6168,17 +6168,17 @@ lvm(lvm_outer) {
 // inner j loop vectorizes (the l contraction is the dependency, hoisted one out).
 lvm(lvm_inner) {
  word a = Sp[0], b = Sp[1];
- if (!(arrp(a) && arrp(b))) return *++Sp = nil, Ip++, Continue();
+ if (!(arrp(a) && arrp(b))) return *++Sp = ZeroPoint, Ip++, Continue();
  struct ai_vec *va = vec(a), *vb = vec(b);
  if (va->type > ai_R || vb->type > ai_R || va->rank < 1 || vb->rank < 1)
-  return *++Sp = nil, Ip++, Continue();
+  return *++Sp = ZeroPoint, Ip++, Continue();
  uintptr_t K = va->shape[va->rank - 1];
- if (K != vb->shape[0]) return *++Sp = nil, Ip++, Continue();   // contracted axes must agree
+ if (K != vb->shape[0]) return *++Sp = ZeroPoint, Ip++, Continue();   // contracted axes must agree
  uintptr_t M = 1, N = 1;
  for (uintptr_t i = 0; i + 1 < va->rank; i++) M *= va->shape[i];
  for (uintptr_t i = 1; i < vb->rank; i++) N *= vb->shape[i];
  uintptr_t rank = (va->rank - 1) + (vb->rank - 1), n = M * N;
- if (rank > maxrank) return *++Sp = nil, Ip++, Continue();
+ if (rank > maxrank) return *++Sp = ZeroPoint, Ip++, Continue();
  bool fdom = va->type == ai_R || vb->type == ai_R, ar = va->type == ai_R, br = vb->type == ai_R;
  if (n == 1) {                                  // 1D·1D dot, or any 1-cell contraction -> scalar (invariant)
   word _res;
@@ -6618,7 +6618,7 @@ lvm(lvm_vbin, int op) {
      && !(aarr && vec(a)->type == ai_O) && !(barr && vec(b)->type == ai_O))
   return Ap(lvm_cbin, g, op);
  if (!(aarr || isnum(a)) || !(barr || isnum(b)))   // each operand: array or scalar
-  return *++Sp = nil, Ip++, Continue();
+  return *++Sp = ZeroPoint, Ip++, Continue();
  if ((aarr && vec(a)->type == ai_O) || (barr && vec(b)->type == ai_O))
   return Ap(lvm_obin, g, op);                     // object array -> promoting lane
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
@@ -6635,7 +6635,7 @@ lvm(lvm_vbin, int op) {
  for (uintptr_t k = 0; k < R; k++) {
   uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
+  if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
   n *= bdim(da, db); }
  // `/` over an all-integer broadcast promotes the whole result to f64 the moment
  // any element divides inexactly (matching the scalar `/`); `//` (vop_fquot) stays
@@ -6690,13 +6690,13 @@ lvm(lvm_vmap2, ai_flo_t (*fn)(ai_flo_t, ai_flo_t)) {
  word a = Sp[0], b = Sp[1];
  bool aarr = arrp(a), barr = arrp(b);
  if (!(aarr || isnum(a)) || !(barr || isnum(b)))   // each operand: array or scalar
-  return *++Sp = nil, Ip++, Continue();
+  return *++Sp = ZeroPoint, Ip++, Continue();
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
  uintptr_t R = ra > rb ? ra : rb, n = 1;
  for (uintptr_t k = 0; k < R; k++) {               // broadcast shape, right-aligned
   uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
+  if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
   n *= bdim(da, db); }
  uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[ai_R];
  Have(b2w(bytes));
@@ -6902,7 +6902,7 @@ static ai_noinline void cplx_fill(struct ai_cplx *v, word a, word b, int vop) {
 lvm(lvm_cplx_bin, int vop) {
  word a = Sp[0], b = Sp[1];
  if (!(Cp(a) || isnum(a)) || !(Cp(b) || isnum(b)) || vop > vop_quot)
-  return *++Sp = nil, Ip++, Continue();
+  return *++Sp = ZeroPoint, Ip++, Continue();
  Have(cplx_req);
  a = Sp[0], b = Sp[1];                              // re-read post-Have
  struct ai_cplx *v = (struct ai_cplx*) Hp; v->ap = lvm_cbox; Hp += cplx_req;
@@ -6967,14 +6967,14 @@ lvm(lvm_cbin, int op) {
  // undefined on complex; only `=` survives among the comparisons (-> a mask).
  if (!(aarr || Cp(a) || isnum(a)) || !(barr || Cp(b) || isnum(b))
      || op == vop_rem || op == vop_fquot || (op >= vop_lt && op != vop_eq))
-  return *++Sp = nil, Ip++, Continue();
+  return *++Sp = ZeroPoint, Ip++, Continue();
  bool cmp = op == vop_eq;
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
  uintptr_t R = ra > rb ? ra : rb, n = 1;
  for (uintptr_t k = 0; k < R; k++) {                  // broadcast shape + conformance, right-aligned
   uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
+  if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
   n *= bdim(da, db); }
  enum ai_vec_type rt = cmp ? ai_Z : ai_C;              // compare -> i64 mask, else packed complex
  uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[rt];
@@ -7034,7 +7034,7 @@ lvm(lvm_pow) {
  word a = Sp[0], b = Sp[1];
  if (Cp(a) || Cp(b)) {
   if (!(Cp(a) || isnum(a)) || !(Cp(b) || isnum(b)))
-   return *++Sp = nil, Ip++, Continue();
+   return *++Sp = ZeroPoint, Ip++, Continue();
   Have(cplx_req);
   a = Sp[0], b = Sp[1];                              // re-read post-Have
   struct ai_cplx *v = (struct ai_cplx*) Hp; v->ap = lvm_cbox; Hp += cplx_req;
@@ -7082,13 +7082,13 @@ lvm(lvm_cplx) {
  if (aarr || barr) {
   if ((aarr && vec(a)->type >= ai_C) || (barr && vec(b)->type >= ai_C)
       || (!aarr && !isnum(a)) || (!barr && !isnum(b)))
-   return *++Sp = nil, Ip++, Continue();
+   return *++Sp = ZeroPoint, Ip++, Continue();
   uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
   uintptr_t R = ra > rb ? ra : rb, n = 1;
   for (uintptr_t k = 0; k < R; k++) {
    uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
    uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-   if (da != db && da != 1 && db != 1) return *++Sp = nil, Ip++, Continue();
+   if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
    n *= bdim(da, db); }
   uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[ai_C];
   Have(b2w(bytes));
@@ -7101,7 +7101,7 @@ lvm(lvm_cplx) {
    r->shape[R - 1 - k] = bdim(da, db); }
   cplx_build_fill(r, a, b);
   return *++Sp = word(r), Ip++, Continue(); }
- if (!isnum(a) || !isnum(b)) return *++Sp = nil, Ip++, Continue();
+ if (!isnum(a) || !isnum(b)) return *++Sp = ZeroPoint, Ip++, Continue();
  ai_flo_t re = toflo(a), im = toflo(b);             // values extracted before alloc
  Have(cplx_req);
  return *++Sp = mk_cplx(&Hp, re, im), Ip++, Continue(); }

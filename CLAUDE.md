@@ -171,7 +171,9 @@ $@(3 4)              ; 7
 ((64 2) = 2 * (63 2))        ; true   fixnum overflow -> exact bignum ((k b) = b**k)
 
 ; --- arithmetic --- + - * / // % (infix). fixnum fast path; a float makes it float; integer overflow
-; grows fixnum -> wide int -> bignum; a non-number gives nil. `/` is *true* division: an inexact
+; grows fixnum -> wide int -> bignum; a non-number gives NOTHING -- the zero point () (an UNDEFINED
+; generic op -- string - x, sym*sym, a shape mismatch -- returns (), not the number 0, so it VANISHES
+; as the +/* unit when chained, not annihilates: `(* (* 'a 'b) 5)` is 5). `/` is *true* division: an inexact
 ; integer quotient promotes to float ((/ 1 2) is 0.5), an exact one stays integer ((/ 4 2) is 2); 1/0
 ; gives IEEE infinity (ieee-inf, a float token), 0/0 gives 0 -- NaN COLLAPSES to the zero numeral, so
 ; "undefined is nothing" reaches the floats and the order stays total. inf/nan/ieee-nan are honest
