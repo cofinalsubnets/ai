@@ -354,11 +354,9 @@ lvm(lvm_gc, uintptr_t);
 // ai.c (it needs ai_typ from the generated data.h) and is shared by data.c's apply
 // sentinels. Both the `+`/`*` matrices and the apply matrix dispatch on this.
 enum q ai_kind(word);
-// Apply dispatch matrix, indexed [static: the applied data kind, ai_typ(Ip)][dynamic:
-// the argument kind, ai_kind(Sp[0])]. The data sentinels (data.c) tail-jump through
-// it; the aps + the table itself live in ai.c. Row indexed by the full kind
-// (ai_typ returns one of the five data kinds), so the first dimension is KN, not ai_data_n.
-extern lvm_t *ai_apply_mx[KN][KN];
+// (Apply is no longer a table: each data sentinel tail-jumps straight to its apply
+// handler in ai.c -- the sentinel already encodes the kind, and the apply was uniform
+// in the argument kind, so the old ai_apply_mx[ai_typ][ai_kind] was pure indirection.)
 extern union u const numap_drive[];          // [ap; swap; ret0] driver that runs (num-ap n x); shared by fixnum + data num apply
 lvm_t lvm_ap, lvm_chain, lvm_vec, lvm_sym, lvm_nom, lvm_str, lvm_big, lvm_flo, lvm_wide, lvm_cbox; // the data-kind sentinels (+ ap); defined in ai.c, read by inline predicates and ai_typ
 // ai_typ recovers a data value's kind by comparing its first word (ap) against

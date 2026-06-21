@@ -108,7 +108,7 @@ uintptr_t intern_reserve(struct ai*);
 uintptr_t hash(struct ai*, intptr_t);
 static ai_inline union u *map_fill_back(union u*, uintptr_t);
 lvm_t lvm_kcall,
- lvm_chain, lvm_vec, lvm_sym, lvm_nom, lvm_str, lvm_big, lvm_flo, // data sentinels (enum q order); apply dispatches through ai_apply_mx
+ lvm_chain, lvm_vec, lvm_sym, lvm_nom, lvm_str, lvm_big, lvm_flo, // data sentinels (enum q order); each tail-jumps to its apply handler
  lvm_putn, lvm_gauge,    lvm_clock,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_nomctor, lvm_intern, lvm_chainp,
  lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_eat1, lvm_eat2, lvm_toast, lvm_toasted,
@@ -165,21 +165,25 @@ lvm(lvm_obin, int);
 // compare against the sentinel addresses -- no generated header, no section.
 //
 // The data-kind sentinels: each is the first word (ap) of a data kind's heap
-// objects. Applying one lands here and tail-jumps through the apply matrix;
-// ai_typ (ai.h) reads the kind back off the ap. Bodies are byte-identical tail
-// calls, kept distinct only by address (ai_noicf, in the lvm macro) so ai_typ's
-// compare works. Formerly laid in the ai_data ELF section by data.c -- now just
-// plain functions (the section/stride/reflection machinery is gone).
-static lvm(data_apply) { return Ap(ai_apply_mx[ai_typ(Ip)][ai_kind(Sp[0])], g); }
-lvm(lvm_vec)   { return Ap(data_apply, g); }
-lvm(lvm_big)   { return Ap(data_apply, g); }
-lvm(lvm_str)   { return Ap(data_apply, g); }
-lvm(lvm_sym)   { return Ap(data_apply, g); }
-lvm(lvm_nom)   { return Ap(data_apply, g); }
-lvm(lvm_chain) { return Ap(data_apply, g); }
-lvm(lvm_flo)   { return Ap(data_apply, g); }
-lvm(lvm_wide)  { return Ap(data_apply, g); }
-lvm(lvm_cbox)  { return Ap(data_apply, g); }
+// objects. Each tail-jumps STRAIGHT to its apply handler -- the sentinel already
+// IS the kind, so there is no dispatch table and no ai_typ/ai_kind recovery on
+// the apply path (the apply was uniform in the argument kind anyway: a handler
+// that cares re-inspects the arg itself, e.g. data_string_apply's index test).
+// Bodies within a group are byte-identical tail calls, kept distinct only by
+// address (ai_noicf, in the lvm macro) so ai_typ's compare elsewhere still works.
+// Formerly laid in the ai_data ELF section by data.c -- now just plain functions.
+// (The handlers live far below, near the generic-op dispatchers; declared here.)
+static lvm(data_num_apply); static lvm(data_string_apply);
+static lvm(data_sym_apply); static lvm(data_pair_apply);
+lvm(lvm_vec)   { return Ap(data_num_apply, g); }
+lvm(lvm_big)   { return Ap(data_num_apply, g); }
+lvm(lvm_str)   { return Ap(data_string_apply, g); }
+lvm(lvm_sym)   { return Ap(data_sym_apply, g); }
+lvm(lvm_nom)   { return Ap(data_sym_apply, g); }
+lvm(lvm_chain) { return Ap(data_pair_apply, g); }
+lvm(lvm_flo)   { return Ap(data_num_apply, g); }
+lvm(lvm_wide)  { return Ap(data_num_apply, g); }
+lvm(lvm_cbox)  { return Ap(data_num_apply, g); }
 char const *ai_nif_name(intptr_t);
 #define vec(_) ((struct ai_vec*)(_))
 #define charmp oddp
@@ -4679,13 +4683,12 @@ static lvm(lvm_mul_rep) {
  return *++Sp = word(z), Ip++, Continue(); }
 
 // --- apply lane (the data-value `(g x)` aps; moved here from data.c) -----
-// When a data value is applied, its sentinel (data.c, pinned in the ai_data
-// section) tail-jumps through ai_apply_mx[ai_typ(Ip)][ai_kind(Sp[0])] -- the static
-// kind of the applied value and the dynamic kind of the argument. Every data kind
-// has a meaningful apply (chain = eliminator, string/symbol = byte index, numeric
-// tower = Church numeral); opaque handles (ports, buffers) behave as 0 via their
-// own lvm_* sentinel, not through here. Maps look up via lvm_map_lookup (a text
-// ap, not a data sentinel), so they do not appear in this table.
+// When a data value is applied, its sentinel (a data sentinel above) tail-jumps
+// STRAIGHT to one of these handlers -- the sentinel encodes the kind, so there is
+// no table. Every data kind has a meaningful apply (chain = eliminator,
+// string/symbol = byte index, numeric tower = Church numeral); opaque handles
+// (ports, buffers) behave as 0 via their own lvm_* sentinel, not through here.
+// Maps look up via lvm_map_lookup (a text ap, not a data sentinel).
 
 // (s k): applying a string indexes it -- k a byte offset, result the unsigned byte
 // 0..255 there, 1 if k is non-numeric or out of range (matches "" == 0: a numeric
@@ -4738,8 +4741,8 @@ static lvm(data_pair_apply) {
  Sp[0] = a, Sp[1] = fn, Sp[2] = b;           // Sp[3] = ret (was Sp[1]) stays put
  return Ip = (union u*) pair_drive, Continue(); }
 
-// === the three generic-op dispatch matrices, adjacent ======================
-// All indexed by ai_kind (ai_apply_mx's row by ai_typ, the data-kind subrange). The kind
+// === the two generic-op dispatch matrices (+ and *), adjacent ==============
+// All indexed by ai_kind. The kind
 // order (ai.h) makes each lane a contiguous block: [KCharm..KArrO] arithmetic (the
 // scalar GEM tower charm/wide/float/complex/big, the vec sentinel, then the parallel
 // array tower arrZ/arrR/arrC/arrO), then [KString..KChain] sequence, then KMap, then KHot.
@@ -4806,18 +4809,10 @@ static lvm_t *const ai_mul_mx[KN][KN] = {
 #undef MUL_MINT
 #undef MUL_H
 #undef NUMK
-// apply: [applied data kind = ai_typ(Ip)][argument kind = ai_kind(arg)]. Rows are by
-// ai_typ (the coarse data kind, so still KVec for any vec); the columns are ai_kind, so
-// arow names the gem kinds too. Every row is arg-kind-uniform today (arow fills all
-// columns); the 2-D shape is the hook for later argument-kind branching.
-#define arow(h) { [KMint]=h,[KNom]=h,[KCharm]=h,[KWide]=h,[KFlo]=h,[KCplx]=h,[KBig]=h,[KVec]=h,[KArrZ]=h,[KArrR]=h,\
-                  [KArrC]=h,[KArrO]=h,[KString]=h,[KChain]=h,[KMap]=h,[KHot]=h }
-lvm_t *ai_apply_mx[KN][KN] = {
- [KChain]  = arow(data_pair_apply), [KVec]  = arow(data_num_apply),
- [KMint]  = arow(data_sym_apply), [KNom] = arow(data_sym_apply), [KFlo]  = arow(data_num_apply),
- [KWide] = arow(data_num_apply), [KCplx] = arow(data_num_apply),
- [KString] = arow(data_string_apply), [KBig]  = arow(data_num_apply), };
-#undef arow
+// (apply is no longer a matrix: each data sentinel tail-jumps straight to its
+// handler -- see the apply lane above. The apply was uniform in the argument kind,
+// so the 2-D table was pure indirection; a handler that cares about the arg kind
+// re-inspects it itself.)
 
 // === the `+`/`*` dispatchers (fixnum fast path, then the matrix) ============
 lvm(lvm_add) {
