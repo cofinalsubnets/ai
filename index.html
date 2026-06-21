@@ -251,20 +251,21 @@ h1::before { content: "🔵 "; }
 <p>ai is a fully-curried, dynamically-kinded language whose entire surface is one operation — <strong>application</strong> — over a single generic core.
 all values are represented as one-argument total functions of a global type, called <em>operators</em>. fundamental operations such as + and * are fully
 generic. fundamental data are given function actions that define their application behavior in (hopefully) intuitive and useful ways. for example, a book (aka map)
-acts as its own getter function. numeric application is interpreted as exponentiation or iteration depending on operand type. ai also derives an unusual
-interpretation of truth value, where false corresponds to "empty or negative", and the exact 0 | 1 truth bit of <code>x</code> is given by <code>!!$x</code>,
+acts as its own getter function. numeric application is interpreted as exponentiation or iteration depending on operand type.</p>
+<p>ai develops an unusual interpretation of truth value, where false corresponds to "empty or negative", and the exact 0 | 1 truth bit of <code>x</code> is given by <code>!!$x</code>,
 where <code>$</code> (saturate) is a basic operation that homomorphically reduces any value to a bounded nonnegative integer, aka a <em>green charm</em>.
 zero is the one blue green charm, the floor of the saturation operator, and the 0 truth bit value; any non-blue green charm saturates to 1 under <code>!!</code>,
-which gives the truth value semantics. ai also derives a unusually explicit type system for a fully dynamic language, where representations are fully classified
-up front to allow efficient generic operations. the types form a global lattice that is exact for any value, which naturally extends "addition", "multiplication"
-and "exponentiation" to every operator. for example, like many language, string addition is equivalent to concatenation. unlike most languages, function
+giving the truth bit.</p>
+<p>ai also holds an unusually explicit type system for a dynamic language, where representations are fully classified
+up front to allow efficient generic operations over a minimum of different types. the types form a global lattice that's exact for any value, which
+naturally extends "addition", "multiplication" and "exponentiation" to every operator. for example, like many language, string addition is equivalent to concatenation. unlike most languages, function
 multiplication is composition, and exponentiation corresponds to application. consequently, integers in ai act transparently as iterators, and
 <code>1</code> is literally the identity function (<code>1 = (1 = (\ x x))</code> evaluates to <code>1</code> for all <code>x</code>).
+</p>
+<p>
 the language surface is most immediately influenced by lisp (s-expressions, a program is a list of atoms) ml (left-associative
 curried application) and apl (right-associative infix and prefix notation, ranked array data types).
 </p>
-<p><strong>Rocq demo.</strong>as a demo, much of the combinator / numeral / absence / measure / order / algebra core is machine-checked in <a href="rocq/spec.v">rocq/spec.v</a> over exact integers.
-the transcendental floats are demonstrated in <a href="test/spec.l">test/spec.l</a> but deliberately outside the rocq slice; §8 says exactly where the line is, and why.</p>
 <h2 id="core"><a href="#core">the combinator core</a></h2>
 <p>application is left-associative, and applying nothing at all is identity:</p>
 <div class="law"><span class="n">(1.1) Currying.</span> <code>(f x y) = ((f x) y)</code>. Evidence: <span class="thm">curry</span>.</div>
@@ -411,6 +412,8 @@ tru  v = (0 &lt;? net v)        -- !! : the truth bit
 <li><strong>Demonstrate (<a href="test/spec.l">test/spec.l</a>).</strong> every law is assert-backed and runs green on every target — host, the self-hosted bootstrap, the freestanding kernel, and wasm — exhibiting the laws at runtime across the whole tower, floats included.</li>
 <li><strong>Prove (<a href="rocq/spec.v">rocq/spec.v</a>).</strong> the combinator / numeral / absence / measure / order / algebra core is restated as theorems in <strong>universe-checked Rocq, axiom-free</strong>. these are the lemmas cited throughout.</li>
 </ol>
+<p><strong>Rocq demo.</strong> as a demo, much of the combinator / numeral / absence / measure / order / algebra core is machine-checked in <a href="rocq/spec.v">rocq/spec.v</a> over exact integers.
+the transcendental floats are demonstrated in <a href="test/spec.l">test/spec.l</a> but deliberately outside the rocq slice; §8 says exactly where the line is, and why.</p>
 <p>the caveat every formal demonstration carries is the consistency of its own metatheory. the Rocq layer lives in universe-checked Rocq, so its theorems are unconditional — "the world does not explode here." drop universe checking (type-in-type) and <code>empty</code> becomes inhabited, ex falso giving everything; the blue theorems are stated where the world does <em>not</em> explode.</p>
 <p>what is <strong>not</strong> proved in Rocq, by design, lives at the demonstrate layer: the float / complex / bignum <em>values</em> of the tower (the algebra of §1–9 is proved over exact ℤ; the tower's float/complex layer, the close of §8, is demonstrated, not proved), pointer identity <code>id?</code> (nothing is shared in the model), and the implementation invariants of §5 (the dispatch matrices, the tail-threading), which the runtime checks rather than Rocq. a fourth bridge keeps the demonstrate and prove layers in step automatically: <code>tools/spec2coq.l</code> generates Rocq straight from the spec (see also, below).</p>
 <h2 id="glance"><a href="#glance">partial list of formalizations</a></h2>
