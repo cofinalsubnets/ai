@@ -5218,7 +5218,7 @@ lvm(lvm_rng_seed) {
 #define rng_draw_req  (Width(struct ai_big) + b2w(2 * sizeof(uint32_t)))  // worst case: a 2-limb bignum
 lvm(lvm_rand_next) {
  word st = Sp[0];
- if (!rng_state_p(st)) return Sp[0] = nil, Ip++, Continue();
+ if (!rng_state_p(st)) return Sp[0] = ZeroPoint, Ip++, Continue();
  Have(rng_vec_req + rng_draw_req + Width(struct ai_chain));
  st = Sp[0];                                 // re-read post-Have
  struct ai_vec *v = rng_copy(&Hp, vec(st));
@@ -5233,7 +5233,7 @@ lvm(lvm_rand_next) {
 // (randf-next st): functional draw -> (float . st'), float in [0,1).
 lvm(lvm_randf_next) {
  word st = Sp[0], _res;
- if (!rng_state_p(st)) return Sp[0] = nil, Ip++, Continue();
+ if (!rng_state_p(st)) return Sp[0] = ZeroPoint, Ip++, Continue();
  Have(rng_vec_req + box_req + Width(struct ai_chain));
  st = Sp[0];                                 // re-read post-Have
  struct ai_vec *v = rng_copy(&Hp, vec(st));
@@ -5939,7 +5939,7 @@ lvm(lvm_tray) {
 // range constructor, so (asum (iota n)) reduces a range end to end in C.
 lvm(lvm_iota) {
  word nx = Sp[0];
- if (!charmp(nx) || getcharm(nx) < 0) return Sp[0] = nil, Ip++, Continue();
+ if (!charmp(nx) || getcharm(nx) < 0) return Sp[0] = ZeroPoint, Ip++, Continue();
  uintptr_t n = (uintptr_t) getcharm(nx);
  if (n == 1) return Sp[0] = putcharm(0), Ip++, Continue();  // @(0) singleton demotes to the scalar 0
  uintptr_t bytes = sizeof(struct ai_vec) + 1 * sizeof(word) + n * ai_T[ai_Z];
@@ -5953,19 +5953,19 @@ lvm(lvm_iota) {
 
 // --- accessors -------------------------------------------------------------
 // rank / element-type code as fixnums; nil for a non-vec. Both 0 for a scalar box.
-op11(lvm_rank, packp(Sp[0]) ? putcharm(vec(Sp[0])->rank) : nil)
-op11(lvm_atype, packp(Sp[0]) ? putcharm(vec(Sp[0])->type) : nil)
+op11(lvm_rank, packp(Sp[0]) ? putcharm(vec(Sp[0])->rank) : ZeroPoint)
+op11(lvm_atype, packp(Sp[0]) ? putcharm(vec(Sp[0])->type) : ZeroPoint)
 
 // total element count (1 for a scalar box), nil for a non-vec.
 lvm(lvm_alen) {
  word x = Sp[0];
- if (!packp(x)) return Sp[0] = nil, Ip++, Continue();
+ if (!packp(x)) return Sp[0] = ZeroPoint, Ip++, Continue();
  return Sp[0] = putcharm(vec_nelem(vec(x))), Ip++, Continue(); }
 
 // dimensions as a list (allocates rank link cells), nil for a non-vec.
 lvm(lvm_shape) {
  word x = Sp[0];
- if (!packp(x)) return Sp[0] = nil, Ip++, Continue();
+ if (!packp(x)) return Sp[0] = ZeroPoint, Ip++, Continue();
  uintptr_t r = vec(x)->rank;
  Have(r * Width(struct ai_chain));
  struct ai_vec *v = vec(Sp[0]);                 // re-read post-Have
@@ -6071,10 +6071,10 @@ static lvm(lvm_aextreme, int kind) {
   Pack(g); g = ored(g, kind);
   if (!ai_ok(g)) return ghelp(g);
   return Unpack(g), Continue(); }
- if (vec(x)->type == ai_C) return Sp[0] = nil, Ip++, Continue();   // complex: unordered
+ if (vec(x)->type == ai_C) return Sp[0] = ZeroPoint, Ip++, Continue();   // complex: unordered
  struct ai_vec *v = vec(x);
  uintptr_t n = vec_nelem(v);
- if (!n) return Sp[0] = nil, Ip++, Continue();
+ if (!n) return Sp[0] = ZeroPoint, Ip++, Continue();
  bool fdom = v->type >= ai_R, ismax = kind == 2; word _res;
  Have(box_req); v = vec(Sp[0]);
  // K=4 INDEPENDENT running extremes break the m_n<-m_n-1 latency chain. max/min
