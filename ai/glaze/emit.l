@@ -152,6 +152,23 @@
        ())
    (gargs syms ps as off OVF) (? (atom? as) ()                           ; push each call arg left->right (offset-threaded)
       (: ab (cgg syms ps (cap as) off OVF) nb (asm (L ab push-rax)) (asm (L nb (gargs syms ps (cup as) (+ off (tally nb)) OVF)))))
+   ; cggt -- compile e in TAIL position. A tail SELF-call (selfnm, matching arity) becomes TCO: shuffle
+   ; the new args through the stack into the arg regs, then `jmp Lbody` (the body-start, past saveargs/
+   ; ldargs) -- the frame is REUSED, so a counted loop is O(1) stack with NO call/ret per iteration. A
+   ; tail `?` recurses tail into both branches (the test stays non-tail). Everything else (a value, an
+   ; arith expr, a sibling/non-tail call) delegates to cgg and falls through to restargs+ret as before.
+   (cggt syms ps e off OVF selfnm Lbody)
+    (? (&& (two? e) (id? (cap e) selfnm) (= (tally (cup e)) (tally ps)))   ; TAIL SELF-CALL -> loop
+         (: as (cup e) ka (tally as) ab (gargs syms ps as off OVF)                                  ; push the new args
+            pops (foldl (\ a i (+ a (popr (- (- ka 1) i)))) () (rangeL 0 ka))                       ; pop them into the arg regs (reverse)
+            joff (+ off (+ (tally ab) (tally pops)))
+            (asm (L ab pops '(233) (le4 (- Lbody (+ joff 5))))))                                    ; jmp Lbody (reuse the frame)
+       (&& (two? e) (id? (cap e) '?))                                      ; TAIL ? -> test non-tail, branches tail
+         (: a (caup e) b (caup (cup e)) el (caup (cup (cup e)))
+            tb (cgg syms ps a off OVF) thoff (+ off (+ (tally tb) 10)) thb (cggt syms ps b thoff OVF selfnm Lbody)
+            eloff (+ thoff (+ (tally thb) 5)) elb (cggt syms ps el eloff OVF selfnm Lbody)
+            (asm (L tb '(72 131 248 0) '(15 142) (le4 (+ (tally thb) 5)) thb '(233) (le4 (tally elb)) elb)))
+       (cgg syms ps e off OVF))                                           ; any other tail expr -> value in rax, then restargs+ret
    ; --- the ARG-REGISTER ABI (k<=4): args in rbx/r13/r14/r15, r12 the shared OVF anchor. A call passes
    ;     args ON THE MACHINE STACK; the callee H saves/loads/restores its OWN k arg regs per frame, so a
    ;     caller's args survive nested calls (tak nests three). The deopt is deopt-mn (interp body); the
@@ -192,12 +209,12 @@
        ld (\ k (foldl (\ a i (+ a (ldr i (- (* 16 k) (* 8 i))))) () (rangeL 0 k)))
        re (\ k (foldl (\ a i (+ a (popr (- (- k 1) i)))) () (rangeL 0 k)))
        dummy (map (\ f (link (cap f) 0)) ord)                                                ; membership-only syms (pass 1; offsets unused)
-       rows (map (\ f (: k (nthl f 3) (cat f (L (sa k) (ld k) (re k) (tally (cgg dummy (nthl f 1) (nthl f 2) 0 Aovf)))))) ord)   ; +sa +ld +re +bodylen
+       rows (map (\ f (: k (nthl f 3) (cat f (L (sa k) (ld k) (re k) (tally (cggt dummy (nthl f 1) (nthl f 2) 0 Aovf (nthl f 0) 0)))))) ord)   ; +sa +ld +re +bodylen (cggt: TCO-aware length)
        hlen (map (\ r (+ (tally (nthl r 4)) (+ (tally (nthl r 5)) (+ (nthl r 7) (+ (tally (nthl r 6)) 1))))) rows)   ; sa+ld+body+re+ret
        offs ((: (go acc hs) (? (atom? hs) () (link acc (go (+ acc (cap hs)) (cup hs))))) Lo hlen)
        syms (map2 (\ r o (link (cap r) o)) rows offs)                                         ; dotted (name . offset)
-       Hs (map2 (\ r o (: s (nthl r 4) l (nthl r 5)
-                          (asm (L s l (cgg syms (nthl r 1) (nthl r 2) (+ o (+ (tally s) (tally l))) Aovf) (nthl r 6) '(195))))) rows offs)   ; H: save; load; BODY; restore; ret
+       Hs (map2 (\ r o (: s (nthl r 4) l (nthl r 5) bo (+ o (+ (tally s) (tally l)))                  ; bo = body start = Lbody (tail self-calls jmp here)
+                          (asm (L s l (cggt syms (nthl r 1) (nthl r 2) bo Aovf (nthl r 0) bo) (nthl r 6) '(195))))) rows offs)   ; H: save; load; BODY(tail); restore; ret
        lr (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lr (cup ds)))))))   ; defs -> (: (n p..) body .. entry)
        fb (ev (link ': (lr defs)))                                                            ; interp the WHOLE group, yield the entry closure
        elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                                     ; the entry's source lambda (value[-1], =/show)
