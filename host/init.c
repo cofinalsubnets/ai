@@ -84,7 +84,7 @@ static lvm(lvm_spawn) {
 ai_noinline static struct ai *host_reapany(struct ai *g) {
   int st;
   pid_t r = waitpid(-1, &st, WNOHANG);
-  if (r == 0) { g->sp[0] = ai_nil; return g; }               // none pending
+  if (r == 0) { g->sp[0] = ZeroPoint; return g; }            // none pending -> the real () (not charm 0)
   if (r < 0)  { g->sp[0] = putcharm(-errno); return g; }     // error (ECHILD = none alive)
   if (!ai_ok(g = ai_have(g, Width(struct ai_chain)))) return g;
   struct ai_chain *w = ini_chain((struct ai_chain*) bump(g, Width(struct ai_chain)),
@@ -136,7 +136,7 @@ static lvm(lvm_sigfd) {
 ai_noinline static struct ai *host_sigtake(struct ai *g, int fd) {
  struct signalfd_siginfo si;
  ssize_t n = (fd >= 0) ? read(fd, &si, sizeof si) : -1;
- if (n != (ssize_t) sizeof si) { g->sp[0] = ai_nil; return g; }   // EAGAIN / short read
+ if (n != (ssize_t) sizeof si) { g->sp[0] = ZeroPoint; return g; }   // none ready -> the real () (not charm 0)
  if (!ai_ok(g = ai_have(g, Width(struct ai_chain)))) return g;
  struct ai_chain *w = ini_chain((struct ai_chain*) bump(g, Width(struct ai_chain)),
                                 putcharm((intptr_t) si.ssi_signo),
