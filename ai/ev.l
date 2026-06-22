@@ -26,12 +26,14 @@
                (&& (id? lvm_cur (peek 0 v)) (id? lvm_ret0 (peek 3 v))) (link (peek 2 v) (peek 1 v))
                0)
    (hgen v op ar pure x) (: as (cup x) n (tally as)
-    (go hv a) (? (atom? a) (bake hv)             ; all args constant -> fold
+    (go hv a) (? (atom? a) (bake hv)             ; all args constant -> fold to a value
      (: cv (cval (cap a))
-      (? (&& pure (cap cv)) (go (hv (cup cv)) (cup a))
-         (? (&& op (= n ar)) (link iop (link op as))           ; matching-arity nif -> inline
-            (&& (< 1 ar) (= n ar)) (link apx (link 1 x))       ; multi-arg fn -> n-ary apply
-            (link apx (link 0 x))))))                          ; generic l2r apply
+      (? (&& pure (cap cv)) (go (hv (cup cv)) (cup a))         ; static arg: fold it into the partial
+         (&& op (= n ar)) (link iop (link op as))              ; matching-arity nif -> inline (the hot path, keep)
+         (id? hv v)                                            ; no static prefix folded -> the original apply
+          (? (&& (< 1 ar) (= n ar)) (link apx (link 1 x))      ;   multi-arg fn -> n-ary apply
+             (link apx (link 0 x)))                            ;   generic l2r apply
+         (link apx (link 0 (link (bake hv) a))))))             ; static prefix folded -> apply the partial to the rest
     (go v as))
    ; the operator symbols are quoted one by one -- bare mid-list they would
    ; capture their left neighbor when this file compiles (the opfix pass).
@@ -168,10 +170,20 @@
                   (link (L (L 'nil? ve) vc)    (L ve () vc)))   ; ((nil? ?e) ?c)     -> (?e () ?c)
    (firstr rules x) (? (atom? rules) x                ; first matching rule wins; else x
     (: r (rewrite (caap rules) (cuap rules) x) (? (id? r x) (firstr (cup rules) x) r)))
+   ; cst: a post-wx test that is a compile-time CONSTANT -> (1 . falsy?), else 0. mirrors feels'
+   ; cval (a non-symbol atom, or a (\ v) quote of one); the cond tests g_false == nil?, so the
+   ; constant's truth is exactly nil? of its value -- a folded test prunes its dead branch.
+   (cst t) (? (nom? t) 0                              ; a variable (or the () zero point): unknown
+              (atom? t) (link 1 (nil? t))             ; number/string literal: known by its net
+              (&& (id? (cap t) '\) (atom? (cuup t))) (link 1 (nil? (caup t)))   ; a quote (\ v)
+              0)
    (wxc bs bnd) (: fb (? (member? 'nil? bnd) bs (firstr cflip-rules bs))
     (? (atom? fb) (list ())                           ; clauses ran out: implicit () else (nil-ontology bug 3)
-       (atom? (cup fb)) (list (wx (cap fb) bnd))
-       (link (wx (cap fb) bnd) (link (wx (caup fb) bnd) (wxc (cuup fb) bnd)))))
+       (atom? (cup fb)) (list (wx (cap fb) bnd))      ; the lone else
+       (: t (wx (cap fb) bnd) k (cst t)               ; walk the test; is it a static constant?
+        (? (atom? k) (link t (link (wx (caup fb) bnd) (wxc (cuup fb) bnd)))   ; unknown -> keep the clause
+           (cup k)   (wxc (cuup fb) bnd)               ; statically FALSE -> drop this clause, try the rest
+                     (list (wx (caup fb) bnd))))))     ; statically TRUE  -> this result IS the cond, drop rest
    ; napof: v is a non-nif multi-arg fn whose arity matches the n>1 call args -> n-ary apply.
    ; `id?`-safe peeps (a non-fn value never matches lvm_cur); mirrors app's old `fa`/`na`.
    (napof v args) (? (charm? v) 0
