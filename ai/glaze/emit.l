@@ -221,33 +221,55 @@
    (fpop j)   (+ '(242 68 15 16) (+ (list (+ 4 (* 8 j))) '(36 72 131 196 8)))   ; movsd xmm(8+j),[rsp] ; add rsp,8
    (alook k al i) (? (atom? al) -1 (= k (cap al)) i (alook k (cup al) (+ i 1)))
    (clook k ce) (? (atom? ce) () (= k (caap ce)) (cap ce) (clook k (cup ce)))   ; counter env: name -> (name regbytes)
-   ; cgF: a FLOAT subexpr -> xmm0, over THREE envs: fe (float locals in xmm8.., fload), ce (int
-   ; loop-COUNTERS in raw regs -> cvtsi2sd), ie (int Sp params -> fxv+cvtsi2sd). xmm0/xmm1+[rsp] scratch.
-   (cgF ce ie fe e d) (? (gem? e)   (fconst e)
-                         (whole? e) (fconst (+ e 0.0))
-                         (atom? e)  (: fj (alook e fe 0)
-                            (? (< -1 fj) (fload fj)
-                               (: cb (clook e ce) (? (two? cb) (caup cb)               ; loop counter (raw reg) -> cvtsi2sd
-                                  (: ai (alook e ie 0) (? (< -1 ai) (+ (fxv ai d) '(242 72 15 42 192)) ()))))))   ; Sp param
-                         (two? e) (: op (cap e) a (caup e) b (caup (cup e))
-                            (? (member? op '(+ - * /)) (+ (cgF ce ie fe a d) (+ xpush (+ (cgF ce ie fe b (+ d 1)) (+ xpop1 (fbinop op))))) ()))
-                         ())
+   ; --- CONSTANT HOISTING: peek is mopped so a float constant costs a movabs+movq to materialize;
+   ;     re-emitting that inside a loop body is the dominant cost. so collect the DISTINCT float
+   ;     constants of a kernel, preload each into a dedicated xmm reg (xmm2..7, free -- scratch is
+   ;     xmm0/xmm1, locals xmm8..) ONCE before the loops, and reference the register (movsd xmm0,xmm_r)
+   ;     in the body. >6 distinct constants spill back to inline fconst (graceful).
+   (memv? v l) (? (atom? l) 0 (= v (cap l)) 1 (memv? v (cup l)))
+   (fcc e acc) (? (gem? e) (? (memv? e acc) acc (link e acc))                    ; collect distinct constants of e
+                  (whole? e) (: v (+ e 0.0) (? (memv? v acc) acc (link v acc)))
+                  (two? e) (fcc (caup (cup e)) (fcc (caup e) acc))
+                  acc)
+   (fccl es acc) (? (two? es) (fccl (cup es) (fcc (cap es) acc)) acc)            ; collect over a list of exprs
+   (htbl cs i) (? (atom? cs) () (> i 7) () (link (L (cap cs) i) (htbl (cup cs) (+ i 1))))   ; value -> reg (2..7)
+   (hlook v ht) (? (atom? ht) -1 (= v (caap ht)) (caup (cap ht)) (hlook v (cup ht)))
+   (hpre ht) (? (atom? ht) () (: e (cap ht)                                      ; preload: movabs bits,rax ; movq xmm_r,rax
+      (+ (+ '(72 184) (+ (le8 (fbits (cap e))) (+ '(102 72 15 110) (list (+ 192 (* 8 (caup e))))))) (hpre (cup ht)))))
+   (hcon v ht) (: r (hlook v ht) (? (< -1 r) (+ '(242 15 16) (list (+ 192 r))) (fconst v)))   ; hoisted -> movsd xmm0,xmm_r ; else inline
+   ; register-scratch spill/reload for the float-expr stack: xmm12..15 hold nesting depth 0..3 (no
+   ; memory traffic), falling back to the [rsp] xpush/xpop1 below depth 4. THIS is the win -- the
+   ; inner loop's nested operands stay in registers instead of round-tripping through memory.
+   (rpush d) (? (< d 4) (+ '(242 68 15 16) (list (+ 224 (* 8 d)))) xpush)   ; movsd xmm(12+d),xmm0 ; else sub rsp;movsd[rsp]
+   (rpop d)  (? (< d 4) (+ '(242 65 15 16) (list (+ 204 d)))       xpop1)   ; movsd xmm1,xmm(12+d) ; else movsd[rsp];add rsp
+   ; cgF: a FLOAT subexpr -> xmm0, over the hoist table ht + THREE envs: fe (float locals in xmm8..,
+   ; fload), ce (int loop-COUNTERS in raw regs -> cvtsi2sd), ie (int Sp params -> fxv+cvtsi2sd).
+   (cgF ht ce ie fe e d) (? (gem? e)   (hcon e ht)
+                            (whole? e) (hcon (+ e 0.0) ht)
+                            (atom? e)  (: fj (alook e fe 0)
+                               (? (< -1 fj) (fload fj)
+                                  (: cb (clook e ce) (? (two? cb) (caup cb)               ; loop counter (raw reg) -> cvtsi2sd
+                                     (: ai (alook e ie 0) (? (< -1 ai) (+ (fxv ai d) '(242 72 15 42 192)) ()))))))   ; Sp param
+                            (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+                               (? (member? op '(+ - * /)) (+ (cgF ht ce ie fe a d) (+ (rpush d) (+ (cgF ht ce ie fe b (+ d 1)) (+ (rpop d) (fbinop op))))) ()))
+                            ())
    (ucmp-exit op) (? (= op '<=) '(15 135) (= op '<) '(15 131) (= op '>=) '(15 134) (= op '>) '(15 130) ())   ; EXIT jcc = inverse of the continue cmp
    (loopcode-f ips finit fvars updates testexpr cmpop bound lim)
     (: nf (tally finit)  fenv (cat (map cap finit) fvars)
-       pre-d ((: (go j fs) (? (two? fs) (+ (+ (cgF () ips fenv (caup (cap fs)) 0) (fstore j)) (go (+ j 1) (cup fs))) ())) 0 finit)
+       ht (htbl (fcc bound (fccl updates (fcc testexpr (fccl (map (\ f (caup (cap f))) finit) ())))) 2)
+       pre-d ((: (go j fs) (? (two? fs) (+ (+ (cgF ht () ips fenv (caup (cap fs)) 0) (fstore j)) (go (+ j 1) (cup fs))) ())) 0 finit)
        pre-z ((: (go j) (? (< j (tally fvars)) (+ (fzero (+ nf j)) (go (+ j 1))) ())) 0)
        pre   (+ pre-d (+ pre-z '(77 49 192)))                        ; xor r8,r8  (counter it = 0)
        tint  (+ '(73 131 248) (list lim))                           ; cmp r8, lim
-       tflt  (+ (cgF () ips fenv testexpr 0) (+ xpush (+ (fconst bound) (+ xpop1 '(102 15 46 200)))))   ; mag ; bound ; ucomisd
-       ups   ((: (go us) (? (two? us) (+ (+ (cgF () ips fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
+       tflt  (+ (cgF ht () ips fenv testexpr 0) (+ (rpush 0) (+ (hcon bound ht) (+ (rpop 0) '(102 15 46 200)))))   ; mag ; bound ; ucomisd
+       ups   ((: (go us) (? (two? us) (+ (+ (cgF ht () ips fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
        pops  ((: (go j) (? (< j nf) () (+ (fpop j) (go (- j 1))))) (+ nf (- (tally fvars) 1)))
        body  (+ ups (+ pops '(73 255 192)))                         ; ... ; inc r8
        Lb (tally body)  Lt (tally tflt)
        jge (+ '(15 141) (le4 (+ (+ Lt 6) (+ Lb 5))))                ; counter exit: jge EXIT  (skip tflt+exj+body+back)
        exj (+ (ucmp-exit cmpop) (le4 (+ Lb 5)))                     ; float  exit: skip body+back
        back (+ '(233) (le4 (- 0 (+ (+ (+ (+ (+ 4 6) Lt) 6) Lb) 5))))   ; jmp TOP
-       (+ pre (+ tint (+ jge (+ tflt (+ exj (+ body (+ back '(76 137 192)))))))))   ; EXIT: mov rax,r8
+       (+ (hpre ht) (+ pre (+ tint (+ jge (+ tflt (+ exj (+ body (+ back '(76 137 192))))))))))   ; preload consts; EXIT: mov rax,r8
    ; (jitfrec src '(px py) finit fvars updates testexpr cmpop bound lim) -> native pixel kernel.
    (jitfrec lam ips finit fvars updates testexpr cmpop bound lim)
     (nif (emit (+ (loopcode-f ips finit fvars updates testexpr cmpop bound lim) epilogue-mn)) (ev lam) lam (tally ips))
@@ -259,16 +281,17 @@
    (loopcode-grid pxn pyn cxd cyd fvars updates testexpr cmpop bound lim)
     (: fenv (cat '(cx cy) fvars)
        cenv (L (L 'px '(242 73 15 42 194)) (L 'py '(242 73 15 42 195)))         ; px=cvtsi2sd r10, py=r11
-       cxb (+ (cgF cenv () fenv cxd 0) (fstore 0))                              ; cx -> xmm8
-       cyb (+ (cgF cenv () fenv cyd 0) (fstore 1))                              ; cy -> xmm9
+       ht (htbl (fcc bound (fccl updates (fcc testexpr (fcc cyd (fcc cxd ()))))) 2)   ; distinct consts -> xmm2..7
+       cxb (+ (cgF ht cenv () fenv cxd 0) (fstore 0))                           ; cx -> xmm8
+       cyb (+ (cgF ht cenv () fenv cyd 0) (fstore 1))                           ; cy -> xmm9
        ini (+ (fzero 2) (+ (fzero 3) '(77 49 192)))                            ; zx=zy=0 ; xor r8,r8 (it=0)
-       tflt (+ (cgF () () fenv testexpr 0) (+ xpush (+ (fconst bound) (+ xpop1 '(102 15 46 200)))))
-       ups ((: (go us) (? (two? us) (+ (+ (cgF () () fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
+       tflt (+ (cgF ht () () fenv testexpr 0) (+ (rpush 0) (+ (hcon bound ht) (+ (rpop 0) '(102 15 46 200)))))
+       ups ((: (go us) (? (two? us) (+ (+ (cgF ht () () fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
        pops ((: (go j) (? (< j 2) () (+ (fpop j) (go (- j 1))))) (+ 2 (- (tally fvars) 1)))
        ibody (+ ups (+ pops '(73 255 192)))                                    ; ... ; inc r8
        acc (+ '(77 1 193) (guard 0))                                           ; add r9,r8 ; jno over deopt (overflow -> bignum)
        S (tally cxb)  Y (tally cyb)  T (tally tflt)  Bd (tally ibody)  La (tally acc)
-       (+ '(77 49 201 77 49 210)                                              ; xor r9,r9 ; xor r10,r10
+       (+ (hpre ht) (+ '(77 49 201 77 49 210)                                 ; preload consts (xmm2..7); xor r9,r9; xor r10,r10
         (+ (+ '(73 131 250) (list pxn))                                       ; LPX: cmp r10, pxn
          (+ (+ '(15 141) (le4 (+ 63 (+ S (+ Y (+ T (+ Bd La)))))))            ; jge DONE
           (+ cxb (+ '(77 49 219)                                              ; cx->xmm8 ; xor r11,r11 (py=0)
@@ -283,7 +306,7 @@
                    (+ (+ '(233) (le4 (- 0 (+ 52 (+ Y (+ T (+ Bd La)))))))     ; jmp LPY
                     (+ '(73 255 194)                                          ; PXNEXT: inc r10
                      (+ (+ '(233) (le4 (- 0 (+ 73 (+ S (+ Y (+ T (+ Bd La))))))))   ; jmp LPX
-                      '(76 137 200))))))))))))))))))))))                      ; DONE: mov rax, r9
+                      '(76 137 200)))))))))))))))))))))))                     ; DONE: mov rax, r9
    ; (jitfgrid src pxn pyn cxderive cyderive fvars updates testexpr cmpop bound lim) -> native grid.
    (jitfgrid lam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim)
     (nif (emit (+ (loopcode-grid pxn pyn cxd cyd fvars updates testexpr cmpop bound lim) epilogue)) (ev lam) lam 1)
