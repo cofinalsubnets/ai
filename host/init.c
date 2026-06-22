@@ -17,16 +17,20 @@
 // terminated char** in the uncommitted heap gap at Hp (GC-invisible, holds no l
 // pointers, consumed before any further alloc), valid across the fork. The wait-
 // status decode is shared with bao via host/proc.h (proc_status).
+#define _GNU_SOURCE     // unshare / CLONE_* for newns (mirrors pty.c)
 #include "ai.h"
 #include "proc.h"
-#include <unistd.h>     // fork execvp _exit read close
+#include <unistd.h>     // fork execvp _exit read close getuid/getgid
 #include <stdio.h>      // fflush
 #include <string.h>     // memcpy
 #include <errno.h>
 #include <signal.h>     // sigprocmask, SIGCHLD/SIGTERM (sigfd)
 #include <fcntl.h>      // open, O_* (openfd, for shell redirects)
+#include <sys/stat.h>   // mkdir
 #if defined(__linux__)
 #include <sys/signalfd.h>   // signalfd, struct signalfd_siginfo (Linux only)
+#include <sys/mount.h>      // mount(2)
+#include <sched.h>          // unshare, CLONE_NEWUSER/NEWNS (newns)
 #endif
 
 // is Sp-slot x a heap stream port, and its backing fd -- as in net.c.
@@ -274,6 +278,49 @@ static lvm(lvm_shutfd) {
  Sp[0] = (fd >= 0 && close((int) fd)) ? putcharm(-errno) : ai_nil;
  return Ip++, Continue(); }
 
+// --- pid1 bringup: mount the early filesystems + cgroup dirs ----------------------
+// (mkdir path mode) -> mkdir(2). () | -errno | -1 misuse. mode is octal (493 = 0755).
+// also makes cgroup dirs (cgroup-v2 placement is then `open` + `say` the control file).
+// (mount src tgt type) -> mount(2), flags 0 / no data (enough for proc/sysfs/tmpfs).
+//   () | -errno | -1 misuse. needs privilege: run as pid1/root, or after (newns 0).
+// (newns _) -> unshare a private USER+MOUNT namespace and selfmap to root-in-ns, so
+//   (mount ...) works UNPRIVILEGED (the standard setgroups-deny + uid_map/gid_map).
+//   () | -errno. a real pid1 skips this -- it already IS root.
+// () on success, a POSITIVE errno on failure (so `!`/truthiness tells them apart --
+// the pty/net convention; -errno would net falsey like the () success).
+static lvm(lvm_mkdir) {
+ char p[4096];
+ if (!str_cbuf(Sp[0], p, sizeof p)) { Sp[1] = putcharm(EINVAL); Sp += 1; return Ip++, Continue(); }
+ intptr_t mode = (Sp[1] & 1) ? getcharm(Sp[1]) : 0755;
+ Sp[1] = mkdir(p, (mode_t) mode) ? putcharm(errno) : ai_nil;
+ Sp += 1; return Ip++, Continue(); }
+
+#if defined(__linux__)
+static lvm(lvm_mount) {
+ char src[1024], tgt[1024], typ[64];
+ if (!str_cbuf(Sp[0], src, sizeof src) || !str_cbuf(Sp[1], tgt, sizeof tgt)
+     || !str_cbuf(Sp[2], typ, sizeof typ)) { Sp[2] = putcharm(EINVAL); Sp += 2; return Ip++, Continue(); }
+ Sp[2] = mount(src, tgt, typ, 0, NULL) ? putcharm(errno) : ai_nil;
+ Sp += 2; return Ip++, Continue(); }
+
+static int ns_write(char const *path, char const *s) {
+ int fd = open(path, O_WRONLY);
+ if (fd < 0) return -1;
+ ssize_t n = write(fd, s, strlen(s));
+ return close(fd), (n < 0 ? -1 : 0); }
+static lvm(lvm_newns) {
+ long uid = (long) getuid(), gid = (long) getgid();
+ if (unshare(CLONE_NEWUSER | CLONE_NEWNS)) { Sp[0] = putcharm(errno); return Ip++, Continue(); }
+ char b[64];
+ ns_write("/proc/self/setgroups", "deny");                       // required before gid_map
+ snprintf(b, sizeof b, "0 %ld 1\n", uid); ns_write("/proc/self/uid_map", b);
+ snprintf(b, sizeof b, "0 %ld 1\n", gid); ns_write("/proc/self/gid_map", b);
+ Sp[0] = ai_nil; return Ip++, Continue(); }
+#else
+static lvm(lvm_mount) { Sp[2] = putcharm(ENOSYS); Sp += 2; return Ip++, Continue(); }   // Linux-only
+static lvm(lvm_newns) { Sp[0] = putcharm(ENOSYS); return Ip++, Continue(); }
+#endif
+
 static union u const
   nif_spawn[]   = {{lvm_spawn}, {lvm_ret0}},
   nif_reapany[] = {{lvm_reapany}, {lvm_ret0}},
@@ -285,7 +332,10 @@ static union u const
   nif_pipe[]    = {{lvm_pipe}, {lvm_ret0}},
   nif_openfd[]  = {{lvm_cur}, {.x = putcharm(2)}, {lvm_openfd}, {lvm_ret0}},
   nif_spawnio[] = {{lvm_cur}, {.x = putcharm(5)}, {lvm_spawnio}, {lvm_ret0}},
-  nif_shutfd[]  = {{lvm_shutfd}, {lvm_ret0}};
+  nif_shutfd[]  = {{lvm_shutfd}, {lvm_ret0}},
+  nif_mkdir[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_mkdir}, {lvm_ret0}},
+  nif_mount[]   = {{lvm_cur}, {.x = putcharm(3)}, {lvm_mount}, {lvm_ret0}},
+  nif_newns[]   = {{lvm_newns}, {lvm_ret0}};
 AI_NIF("spawn", nif_spawn);
 AI_NIF("reap",  nif_reapany);
 AI_NIF("sigfd", nif_sigfd);
@@ -297,3 +347,6 @@ AI_NIF("pipe",  nif_pipe);
 AI_NIF("openfd", nif_openfd);
 AI_NIF("spawnio", nif_spawnio);
 AI_NIF("shutfd", nif_shutfd);
+AI_NIF("mkdir", nif_mkdir);
+AI_NIF("mount", nif_mount);
+AI_NIF("newns", nif_newns);

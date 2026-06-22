@@ -196,6 +196,34 @@
               _ (catch hb)                               ; join the heartbeat (the orphan law)
               0))))
 
+; --- pid1 BRINGUP (Linux): mount the early filesystems + place a process in a cgroup --
+; what a real pid1 does before spawning the console shell: mount proc/sysfs/devtmpfs,
+; set up cgroup-v2, then (spawn (sh)). mounting needs privilege -- a real pid1 IS root,
+; so it just calls (mount ...). here we DEMONSTRATE it unprivileged via (newns 0) (a
+; private user+mount namespace, root-in-ns): tmpfs mounts cleanly; proc/sysfs additionally
+; need a pid-ns, so they EPERM here but work as pid1. cgroup-v2 placement is no special
+; nif -- mkdir the group, then write the pid to cgroup.procs (a plain file write via the
+; `open` port), shown against the real tree (works under root / a delegated subtree).
+(: (cg-write path s)                                     ; write s to a cgroup control file
+     (: p (open path "w") (? (hot? p) (: _ (say p s) _ (flush p) (close p) 'ok) 'denied))
+   (try-mount src tgt typ)
+     (: _ (mkdir tgt 493)
+        r (mount src tgt typ)                            ; () success, +errno failure
+        (note (+ "  mount " (+ typ (+ " on " (+ tgt
+                 (? r (+ " -> EPERM (errno " (+ (show r) ", needs root/pid-ns)")) " -> ok")))))))
+   (boot-system _)
+     (: e (newns 0)
+        _ (note (? e "-- pid1 bringup: (no unpriv userns here; a real pid1 is root) --"
+                     "-- pid1 bringup: private user+mount ns (root-in-ns) --"))
+        _ (try-mount "tmpfs" "/tmp/ai-run"  "tmpfs")       ; works unprivileged -> proves mount
+        _ (try-mount "proc"  "/tmp/ai-proc" "proc")        ; needs a pid-ns too -> EPERM here
+        _ (note "-- cgroup-v2: mkdir a group, write a pid to cgroup.procs --")
+        _ (: d "/sys/fs/cgroup/ai.demo"
+             _ (mkdir d 493)
+             r (cg-write (+ d "/cgroup.procs") (+ (show (getpid 0)) "\n"))
+             (note (+ "  place self in " (+ d (? (id? r 'ok) " -> ok" " -> needs root / a delegated subtree")))))
+        0))
+
 ; --- the demos, as a CALLABLE function (not auto-run) ---
 (: (demos _)
    (: cr (tablet 0)                                  ; per-name attempt counter for the flaky service
