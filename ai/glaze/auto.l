@@ -158,13 +158,13 @@
    ; TREE (jitrec, emit.l) -- the recursion stays native, no interpreter per call. fib is the
    ; canonical case. Returns the form UNCHANGED if no such def fits (list/other recursion passes
    ; through). ⚠ x86-64.
-   (recok? nm v e) (? (= e v) 1 (whole? e) 1
-                      (two? e) (: op (cap e)
-                         (? (id? op nm)                       (&& (= 2 (tally e)) (recok? nm v (caup e)))
-                            (member? op '(+ - * < <= > >= =)) (&& (= 3 (tally e)) (recok? nm v (caup e)) (recok? nm v (caup (cup e))))
-                            (id? op '?)                       (&& (= 4 (tally e)) (recok? nm v (caup e)) (recok? nm v (caup (cup e))) (recok? nm v (caup (cup (cup e)))))
-                            0))
-                      0)
+   (recok? nm ps e) (? (member? e ps) 1 (whole? e) 1
+                       (two? e) (: op (cap e)
+                          (? (id? op nm)                       (&& (= (tally (cup e)) (tally ps)) (foldl (\ a x (&& a (recok? nm ps x))) 1 (cup e)))   ; self-call: arity matches, all args ok
+                             (member? op '(+ - * < <= > >= =)) (&& (= 3 (tally e)) (recok? nm ps (caup e)) (recok? nm ps (caup (cup e))))
+                             (id? op '?)                       (&& (= 4 (tally e)) (recok? nm ps (caup e)) (recok? nm ps (caup (cup e))) (recok? nm ps (caup (cup (cup e)))))
+                             0))
+                       0)
    (hasself? nm e) (? (two? e) (? (id? (cap e) nm) 1 (afind (\ x (hasself? nm x)) (cup e))) 0)   ; does e make a self-call?
    (subst-rec e nm) (? (two? e) (? (id? (cap e) nm) (link 'self (map (\ x (subst-rec x nm)) (cup e))) (map (\ x (subst-rec x nm)) e)) e)   ; (nm E) -> (self E)
    (rec-rebind bs nm ng) (? (atom? (cup bs)) bs
@@ -176,10 +176,10 @@
        (! (id? (cap form) ':)) form
        (atom? (cup form)) form
        (: parsed (anat-defs (cup form)) pairs (cap parsed)
-          rp (afind (\ p (: nf (cap p) (&& (two? nf) (= 2 (tally nf)) (recok? (cap nf) (caup nf) (cup p)) (hasself? (cap nf) (cup p))))) pairs)
+          rp (afind (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (recok? (cap nf) (cup nf) (cup p)) (hasself? (cap nf) (cup p))))) pairs)   ; 1..4 args
           (? (! (two? rp)) form
-             (: nm (cap (cap rp)) v (caup (cap rp)) fbody (cup rp)
-                ng (jitrec (L '\ v (subst-rec fbody nm)))                    ; codegen on the self-converted body
+             (: nm (cap (cap rp)) ps (cup (cap rp)) k (tally ps) sl (subst-rec (cup rp) nm)   ; self-converted body
+                ng (? (= k 1) (jitrec (L '\ (cap ps) sl)) (jitrecn (link '\ (cat ps (list sl)))))   ; 1-arg fast path / multi-arg
                 (? (lit? ng) (link ': (rec-rebind (cup form) nm ng)) form)))))
    (autonat form)
     (? (! (two? form)) form
@@ -294,5 +294,8 @@
     (: rf '(: (fib n) (? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))) (fib 25))
        (&& !(id? (autorec rf) rf) (= 75025 (ev rf)) (= (base-ev rf) (ev rf))))
     (: rp '(: (p2 n) (? (< n 1) 1 (* 2 (p2 (- n 1)))) (p2 70))
-       (= (base-ev rp) (ev rp))))                              ; 2^70 overflows int64 in H -> OVF deopt -> bignum
+       (= (base-ev rp) (ev rp)))                               ; 2^70 overflows int64 in H -> OVF deopt -> bignum
+    ; MULTI-ARG recursion: tak (3 args, nested self-calls -- args survive on the machine stack) == interp
+    (: rt '(: (tak x y z) (? (< y x) (tak (tak (- x 1) y z) (tak (- y 1) z x) (tak (- z 1) x y)) z) (tak 18 12 6))
+       (&& !(id? (autorec rt) rt) (= 7 (ev rt)) (= (base-ev rt) (ev rt)))))
  _ (say err "ai/glaze/auto: ev auto-natives qualifying closures + counted loops + D-dim float grids + recursive-arith call trees (transparent)\n"))

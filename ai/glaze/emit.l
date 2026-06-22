@@ -148,6 +148,50 @@
                    hcode (asm (L '(83) '(72 137 195) hbody '(91) '(195))) ; H: push rbx; mov rbx,rax; BODY; pop rbx; ret
                    fb (ev (L ': (L 'self v) body 'self))                  ; deopt fallback: a REAL recursive interp closure (self bound to itself)
                    (nif (emit (asm (L outer hcode))) fb lam 1))           ; value[-1]=lam (self, for =/show); value[1]=fb (correct deopt)
+   ; --- MULTI-ARG recursion (jitrecn): k args (k<=4) in rbx/r13/r14/r15, r12 the OVF anchor. Args
+   ;     are PASSED ON THE MACHINE STACK and H saves/restores the arg regs per frame (callee-saved),
+   ;     so a caller's args survive across nested self-calls (tak makes three). Same OVF/deopt scheme
+   ;     as jitrec, but the deopt is deopt-mn (interp body) and the cell is arity-k (lvm_cur saturates).
+   (arx i)  (? (= i 0) '(72 137 216) (L 76 137 (+ 224 (* 8 i))))          ; mov rax, argreg_i  (rbx/r13/r14/r15)
+   (pshr i) (? (= i 0) '(83) (L 65 (+ 84 i)))                             ; push argreg_i
+   (popr i) (? (= i 0) '(91) (L 65 (+ 92 i)))                             ; pop  argreg_i
+   (ldr i d) (? (= i 0) (asm (L '(72 139 156 36) (le4 d))) (asm (L (L 76 139 (+ 164 (* 8 i)) 36) (le4 d))))   ; mov argreg_i, [rsp+d]
+   (cgrn ps e off Hh OVF)
+    (? (member? e ps) (arx (argix e ps 0))                               ; a param -> its register
+       (whole? e) (asm (L '(72 184) (le8 e)))
+       (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+          (? (= op 'self) (: as (cup e) ka (tally as) ab (rargs ps as off Hh OVF) callabs (+ off (tally ab))   ; push args; call H; pop args
+                             (asm (L ab '(232) (le4 (- Hh (+ callabs 5))) '(72 131 196) (list (* 8 ka)))))
+             (member? op '(+ - *)) (: ab (cgrn ps a off Hh OVF) po (+ off (tally ab)) bb (cgrn ps b (+ po 1) Hh OVF)
+                opb (recop op) joa (+ (+ po 1) (+ (tally bb) (+ 2 (tally opb))))
+                (asm (L ab push-rax bb pop-r8 opb '(15 128) (le4 (- OVF (+ joa 6))))))
+             (member? op '(< <= > >= =)) (: ab (cgrn ps a off Hh OVF) po (+ off (tally ab)) bb (cgrn ps b (+ po 1) Hh OVF)
+                (asm (L ab push-rax bb (cmpseq op))))
+             (= op '?) (: el (caup (cup (cup e))) tb (cgrn ps a off Hh OVF) thoff (+ off (+ (tally tb) 10)) thb (cgrn ps b thoff Hh OVF) eloff (+ thoff (+ (tally thb) 5)) elb (cgrn ps el eloff Hh OVF)
+                (asm (L tb '(72 131 248 0) '(15 142) (le4 (+ (tally thb) 5)) thb '(233) (le4 (tally elb)) elb)))
+             ()))
+       ())
+   (rargs ps as off Hh OVF) (? (atom? as) ()                             ; push each self-call arg (offset-threaded)
+      (: ab (cgrn ps (cap as) off Hh OVF) nb (asm (L ab push-rax)) (asm (L nb (rargs ps (cup as) (+ off (tally nb)) Hh OVF)))))
+   (jitrecn lam)
+    (: ps (init (cup lam)) body (last (cup lam)) k (tally ps)
+       saveargs (foldl (\ a i (+ a (pshr i))) () (rangeL 0 k))                                    ; H: save the k arg regs
+       ldargs   (foldl (\ a i (+ a (ldr i (- (* 16 k) (* 8 i))))) () (rangeL 0 k))                ; H: load args from the stack
+       restargs (foldl (\ a i (+ a (popr (- (- k 1) i)))) () (rangeL 0 k))                        ; restore (reverse)
+       pushargs (foldl (\ a i (+ a (asm (L (fetch i) '(72 209 248) push-rax)))) () (rangeL 0 k))  ; OUTER: push Sp[0..k-1] untagged
+       s6 (asm (L '(72 131 196) (list (* 8 k))))  s10 (asm (L '(72 131 200 1) '(72 137 1) '(72 131 198 16) '(72 139 6 255 224)))
+       Lr (tally restargs)
+       Acall (+ 2 (+ (tally saveargs) (+ 3 (tally pushargs))))   ; push r12(2)+saveargs+mov r12,rsp(3)+pushargs
+       Arest (+ Acall (+ 5 (tally s6)))  As8 (+ Arest Lr)  As9 (+ As8 2)  Ajmpend (+ As9 10)      ; ...call(5);s6; restores; pop r12(2); putfix
+       As10 Ajmpend  Aovf (+ As10 (tally s10))  Adeopt (+ Aovf (+ 3 (+ Lr 2)))  Hh (+ Adeopt 13)
+       callb (asm (L '(232) (le4 (- Hh (+ Acall 5)))))
+       s9 (asm (L '(72 1 192) '(113 5) '(233) (le4 (- Adeopt Ajmpend))))                          ; add rax,rax; jno PUTOK(+5); jmp DEOPT
+       s11 (asm (L '(76 137 228) restargs '(65 92)))                                              ; OVF: mov rsp,r12; restores; pop r12
+       outer (asm (L '(65 84) saveargs '(73 137 228) pushargs callb s6 restargs '(65 92) s9 s10 s11 deopt-mn))   ; push r12;saveargs;mov r12,rsp;...
+       hbody (cgrn ps body (+ Hh (+ (tally saveargs) (tally ldargs))) Hh Aovf)
+       hcode (asm (L saveargs ldargs hbody restargs '(195)))                                      ; H: save; load; BODY; restore; ret
+       fb (ev (link ': (link (link 'self ps) (link body (link 'self ())))))                       ; (: (self a..) body self)
+       (nif (emit (asm (L outer hcode))) fb lam k))
    ; --- counted fold loop: acc = (FOLD over cv<n of body(cv)), cv the counter, limit
    ; at Sp[0]. r9=n r10=cv r11=acc. FOLD is a (op . init) -- + folds from 0, * from 1 --
    ; and cmp is the loop test's comparison (the loop runs while (cmp cv n)). offsets are
