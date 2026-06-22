@@ -5,7 +5,11 @@
 ; it rides the host/init.c job-control nifs (spawn/wait/chdir/cwd) + getenv, plus the
 ; v2 plumbing (pipe/openfd/spawnio/shutfd) for | < > >>. run:
 ;   out/host/ai -l init/sh.l -e "(sh 0)"
-; line editing is the terminal's (cooked tty): -l/-e pass argv, so ai skips raw mode.
+; line editing on a real tty is bao's own editor (`edln`, the baked shell core):
+; in-line editing + up/down command history. `-l/-e` pass argv so main.c skips raw
+; mode -- sh raws the tty itself (edln owns echo) and drops back to cooked around
+; each child (programs want a normal tty), exactly the readline dance. piped /
+; non-tty input falls back to the cooked-tty line reader (no editing, no history).
 ; EOF (^D) ends the shell; the loop is tail-recursive (no stack growth across commands).
 ;
 ; v2: '...' / "..." quoting, pipes (a | b | c), redirects (< > >>). operators are
@@ -95,11 +99,28 @@
               _      (each pids   (\ p (wait p)))                 ; reap the whole pipeline
               0)))
 
-   ; --- the REPL: prompt, read, run; loop until exit / EOF (tail-recursive).
-   (sh _)
+   ; --- the REPL: a real tty gets edln (in-line editing + up/down history);
+   ; piped / non-tty input gets the cooked-tty line reader. (sh _) probes with
+   ; (raw 1): () = a tty (interactive), an errno = not a tty (cooked fallback).
+   ; both loops are tail-recursive; ^D / `exit` ends the shell.
+   (sh-cooked _)
      (: _    (say out (+ (cwd 0) "$ "))  _ (flush out)
         line (sh-getline in)
         (? (id? line 'eof) (puts "\n")
            (: words (sh-words line)
-              (? !words (sh 0)
-                 (: r (sh-run words) (? (id? r 'done) 0 (sh 0))))))))
+              (? !words (sh-cooked 0)
+                 (: r (sh-run words) (? (id? r 'done) 0 (sh-cooked 0)))))))
+   ; interactive: edln owns echo, so raw the tty for the prompt and drop to cooked
+   ; around each child. edln returns (line . nhist) -- the raw charlist + the grown
+   ; history -- or 'eof; thread nhist back in so up/down recall across commands.
+   (sh-loop hist)
+     (: r (edln in (+ (cwd 0) "$ ") hist)
+        (? (id? r 'eof) (: _ (raw 0) (puts "\n"))                 ; cooked, newline, end
+           (: line (cap r) nhist (cup r)
+              words (sh-words (slurp (tap line)))                 ; charlist -> string for the tokenizer
+              (? !words (sh-loop nhist)
+                 (: _  (raw 0)                                    ; cooked for the child
+                    rr (sh-run words)
+                    (? (id? rr 'done) (raw 0)
+                       (: _ (raw 1) (sh-loop nhist))))))))         ; re-raw for the next prompt
+   (sh _) (: ok (raw 1) (? (nil? ok) (sh-loop ()) (sh-cooked 0))))
