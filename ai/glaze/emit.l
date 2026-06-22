@@ -220,23 +220,27 @@
    (fzero j)  (+ '(102 69 15 87) (list (+ 192 (* 9 j))))             ; xorpd xmm(8+j), xmm(8+j)
    (fpop j)   (+ '(242 68 15 16) (+ (list (+ 4 (* 8 j))) '(36 72 131 196 8)))   ; movsd xmm(8+j),[rsp] ; add rsp,8
    (alook k al i) (? (atom? al) -1 (= k (cap al)) i (alook k (cup al) (+ i 1)))
-   (cgF ie fe e d) (? (gem? e)   (fconst e)
-                      (whole? e) (fconst (+ e 0.0))
-                      (atom? e)  (: fj (alook e fe 0)
-                         (? (< -1 fj) (fload fj)
-                            (: ai (alook e ie 0) (? (< -1 ai) (+ (fxv ai d) '(242 72 15 42 192)) ()))))   ; int param -> cvtsi2sd
-                      (two? e) (: op (cap e) a (caup e) b (caup (cup e))
-                         (? (member? op '(+ - * /)) (+ (cgF ie fe a d) (+ xpush (+ (cgF ie fe b (+ d 1)) (+ xpop1 (fbinop op))))) ()))
-                      ())
+   (clook k ce) (? (atom? ce) () (= k (caap ce)) (cap ce) (clook k (cup ce)))   ; counter env: name -> (name regbytes)
+   ; cgF: a FLOAT subexpr -> xmm0, over THREE envs: fe (float locals in xmm8.., fload), ce (int
+   ; loop-COUNTERS in raw regs -> cvtsi2sd), ie (int Sp params -> fxv+cvtsi2sd). xmm0/xmm1+[rsp] scratch.
+   (cgF ce ie fe e d) (? (gem? e)   (fconst e)
+                         (whole? e) (fconst (+ e 0.0))
+                         (atom? e)  (: fj (alook e fe 0)
+                            (? (< -1 fj) (fload fj)
+                               (: cb (clook e ce) (? (two? cb) (caup cb)               ; loop counter (raw reg) -> cvtsi2sd
+                                  (: ai (alook e ie 0) (? (< -1 ai) (+ (fxv ai d) '(242 72 15 42 192)) ()))))))   ; Sp param
+                         (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+                            (? (member? op '(+ - * /)) (+ (cgF ce ie fe a d) (+ xpush (+ (cgF ce ie fe b (+ d 1)) (+ xpop1 (fbinop op))))) ()))
+                         ())
    (ucmp-exit op) (? (= op '<=) '(15 135) (= op '<) '(15 131) (= op '>=) '(15 134) (= op '>) '(15 130) ())   ; EXIT jcc = inverse of the continue cmp
    (loopcode-f ips finit fvars updates testexpr cmpop bound lim)
     (: nf (tally finit)  fenv (cat (map cap finit) fvars)
-       pre-d ((: (go j fs) (? (two? fs) (+ (+ (cgF ips fenv (caup (cap fs)) 0) (fstore j)) (go (+ j 1) (cup fs))) ())) 0 finit)
+       pre-d ((: (go j fs) (? (two? fs) (+ (+ (cgF () ips fenv (caup (cap fs)) 0) (fstore j)) (go (+ j 1) (cup fs))) ())) 0 finit)
        pre-z ((: (go j) (? (< j (tally fvars)) (+ (fzero (+ nf j)) (go (+ j 1))) ())) 0)
        pre   (+ pre-d (+ pre-z '(77 49 192)))                        ; xor r8,r8  (counter it = 0)
        tint  (+ '(73 131 248) (list lim))                           ; cmp r8, lim
-       tflt  (+ (cgF ips fenv testexpr 0) (+ xpush (+ (fconst bound) (+ xpop1 '(102 15 46 200)))))   ; mag ; bound ; ucomisd xmm0,xmm1
-       ups   ((: (go us) (? (two? us) (+ (+ (cgF ips fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
+       tflt  (+ (cgF () ips fenv testexpr 0) (+ xpush (+ (fconst bound) (+ xpop1 '(102 15 46 200)))))   ; mag ; bound ; ucomisd
+       ups   ((: (go us) (? (two? us) (+ (+ (cgF () ips fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
        pops  ((: (go j) (? (< j nf) () (+ (fpop j) (go (- j 1))))) (+ nf (- (tally fvars) 1)))
        body  (+ ups (+ pops '(73 255 192)))                         ; ... ; inc r8
        Lb (tally body)  Lt (tally tflt)
@@ -247,6 +251,42 @@
    ; (jitfrec src '(px py) finit fvars updates testexpr cmpop bound lim) -> native pixel kernel.
    (jitfrec lam ips finit fvars updates testexpr cmpop bound lim)
     (nif (emit (+ (loopcode-f ips finit fvars updates testexpr cmpop bound lim) epilogue-mn)) (ev lam) lam (tally ips))
+   ; --- NESTED grid owner: own the WHOLE 2D nest (px,py int loops + inner escape loop) as ONE
+   ;     native kernel -- one boundary crossing per grid, not 4096. px->r10, py->r11 (raw counters,
+   ;     cvtsi2sd into the float lane); cx,cy in xmm8,9; zx,zy in xmm10,11; acc in r9. the acc add is
+   ;     GUARDED (the lane law -- it deopts to the interp grid on overflow -> bignum); the counters
+   ;     are bounded so they need none. arity 1 (a dummy arg), integer checksum out. offsets COMPUTED.
+   (loopcode-grid pxn pyn cxd cyd fvars updates testexpr cmpop bound lim)
+    (: fenv (cat '(cx cy) fvars)
+       cenv (L (L 'px '(242 73 15 42 194)) (L 'py '(242 73 15 42 195)))         ; px=cvtsi2sd r10, py=r11
+       cxb (+ (cgF cenv () fenv cxd 0) (fstore 0))                              ; cx -> xmm8
+       cyb (+ (cgF cenv () fenv cyd 0) (fstore 1))                              ; cy -> xmm9
+       ini (+ (fzero 2) (+ (fzero 3) '(77 49 192)))                            ; zx=zy=0 ; xor r8,r8 (it=0)
+       tflt (+ (cgF () () fenv testexpr 0) (+ xpush (+ (fconst bound) (+ xpop1 '(102 15 46 200)))))
+       ups ((: (go us) (? (two? us) (+ (+ (cgF () () fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
+       pops ((: (go j) (? (< j 2) () (+ (fpop j) (go (- j 1))))) (+ 2 (- (tally fvars) 1)))
+       ibody (+ ups (+ pops '(73 255 192)))                                    ; ... ; inc r8
+       acc (+ '(77 1 193) (guard 0))                                           ; add r9,r8 ; jno over deopt (overflow -> bignum)
+       S (tally cxb)  Y (tally cyb)  T (tally tflt)  Bd (tally ibody)  La (tally acc)
+       (+ '(77 49 201 77 49 210)                                              ; xor r9,r9 ; xor r10,r10
+        (+ (+ '(73 131 250) (list pxn))                                       ; LPX: cmp r10, pxn
+         (+ (+ '(15 141) (le4 (+ 63 (+ S (+ Y (+ T (+ Bd La)))))))            ; jge DONE
+          (+ cxb (+ '(77 49 219)                                              ; cx->xmm8 ; xor r11,r11 (py=0)
+           (+ (+ '(73 131 251) (list pyn))                                    ; LPY: cmp r11, pyn
+            (+ (+ '(15 141) (le4 (+ 42 (+ Y (+ T (+ Bd La))))))               ; jge PXNEXT
+             (+ cyb (+ ini                                                    ; cy->xmm9 ; zero zx,zy,it
+              (+ (+ '(73 131 248) (list lim))                                 ; LTOP: cmp r8, lim
+               (+ (+ '(15 141) (le4 (+ 11 (+ T Bd))))                         ; jge ESC
+                (+ tflt (+ (+ (ucmp-exit cmpop) (le4 (+ 5 Bd)))               ; mag test ; <exit> ESC
+                 (+ ibody (+ (+ '(233) (le4 (- 0 (+ 21 (+ T Bd)))))           ; body ; jmp LTOP
+                  (+ acc (+ '(73 255 195)                                     ; ESC: acc += it (guarded) ; inc r11
+                   (+ (+ '(233) (le4 (- 0 (+ 52 (+ Y (+ T (+ Bd La)))))))     ; jmp LPY
+                    (+ '(73 255 194)                                          ; PXNEXT: inc r10
+                     (+ (+ '(233) (le4 (- 0 (+ 73 (+ S (+ Y (+ T (+ Bd La))))))))   ; jmp LPX
+                      '(76 137 200))))))))))))))))))))))                      ; DONE: mov rax, r9
+   ; (jitfgrid src pxn pyn cxderive cyderive fvars updates testexpr cmpop bound lim) -> native grid.
+   (jitfgrid lam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim)
+    (nif (emit (+ (loopcode-grid pxn pyn cxd cyd fvars updates testexpr cmpop bound lim) epilogue)) (ev lam) lam 1)
    ; --- self-test (x86-64): native == interpreted, transparent, deopts ---------
    (isum n) ((: (go i a) (? (< i n) (go (+ i 1) (+ a (* i 7))) a)) 0 0)
    f (jit '(\ x (+ (* x 3) 1)))   g (jitsum '(* i 7))
@@ -338,5 +378,15 @@
                  '(+ (* zx zx) (* zy zy)) '<= 4.0 100)
      mi (ev msrc)
      (&& (= (mi 0 0) (mp 0 0)) (= (mi 32 32) (mp 32 32)) (= (mi 20 40) (mp 20 40))                  ; native == interp
-         (= (mi 63 63) (mp 63 63)) (= (mi 10 50) (mp 10 50)) (= (mi 45 18) (mp 45 18)))))
+         (= (mi 63 63) (mp 63 63)) (= (mi 10 50) (mp 10 50)) (= (mi 45 18) (mp 45 18))))
+  ; --- NESTED grid owner: native whole-grid mandelbrot == interpreter (checksum 87130) ---
+  (: gsrc '(\ _ (: (mand cx cy zx zy it) (? (&& (< it 100) (<= (+ (* zx zx) (* zy zy)) 4.0))
+                       (mand cx cy (+ (- (* zx zx) (* zy zy)) cx) (+ (* (* 2.0 zx) zy) cy) (+ it 1)) it)
+                   (col px py acc) (? (< py 64) (col px (+ py 1) (+ acc (mand (- (* px 0.046875) 2.0) (- (* py 0.046875) 1.5) 0.0 0.0 0))) acc)
+                   (grid px acc) (? (< px 64) (grid (+ px 1) (+ acc (col px 0 0))) acc)
+                 (grid 0 0)))
+     mg (jitfgrid gsrc 64 64 '(- (* px 0.046875) 2.0) '(- (* py 0.046875) 1.5)
+                  '(zx zy) '((+ (- (* zx zx) (* zy zy)) cx) (+ (* (* 2.0 zx) zy) cy))
+                  '(+ (* zx zx) (* zy zy)) '<= 4.0 100)
+     (&& (= 87130 (mg 0)) (= ((ev gsrc) 0) (mg 0)))))
  _ (puts "ai/glaze/emit: native codegen ok (arith + loop, transparent, deopt)") _ (putc 10))
