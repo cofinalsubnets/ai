@@ -109,6 +109,45 @@
    (jitn lam) (: ps (init (cup lam))  body (last (cup lam))
                  (nif (emit (+ (cgn ps body 0) epilogue-mn)) (ev lam) lam (tally ps)))
    (jit2 lam) (jitn lam)                                                  ; arity-2 alias (self-test/auto.l)
+   ; --- RECURSIVE native (own the CALL TREE): a single-arg self-recursive arithmetic fn (\ n E),
+   ;     E := n | int | (op E E) | (cmp E E) | (? E E E) | (self E). The recursion STAYS NATIVE --
+   ;     `self` compiles to `call H` (a rel32 to the helper entry), n lives in rbx (saved per frame),
+   ;     the result in rax, spills on the machine stack. The OUTER reads Sp[0], calls H, putfixes (a
+   ;     result exceeding fixnum DEOPTS to the interp -> bignum). SOUND: every H arithmetic op carries
+   ;     a `jo -> OVF` (int64 overflow); OVF does `mov rsp,r12` (r12 = an anchor the OUTER set to the
+   ;     post-prologue rsp) to abandon ALL the native frames at once, restores the VM's rbx/r12, and
+   ;     tail-deopts to the interp fallback -- so a fn whose intermediate exceeds int64 (factorial 21+,
+   ;     fib 93+) is never WRONG, just interpreted. arity 1. x86-64 only.
+   (recop op) (? (= op '+) '(76 1 192) (= op '*) '(73 15 175 192) (= op '-) (asm (L '(73 41 192) '(76 137 192))) ())   ; add/imul/sub rax,r8
+   ; cgr: an expr over {v (the recursion var, in rbx) ; int ; self} -> rax. OVF = the abs offset of the
+   ; overflow handler (arith ops jo there); Hh = the helper entry (self calls there). off = abs offset.
+   (cgr v e off Hh OVF) (? (= e v) '(72 137 216)                         ; mov rax, rbx  (the recursion var)
+                           (whole? e) (asm (L '(72 184) (le8 e)))        ; movabs rax, e
+                           (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+                              (? (= op 'self) (: ab (cgr v a off Hh OVF) cs (+ off (tally ab)) (asm (L ab '(232) (le4 (- Hh (+ cs 5))))))   ; arg->rax ; call H
+                                 (member? op '(+ - *)) (: ab (cgr v a off Hh OVF) po (+ off (tally ab)) bb (cgr v b (+ po 1) Hh OVF)
+                                    opb (recop op) joa (+ (+ po 1) (+ (tally bb) (+ 2 (tally opb))))   ; abs offset of the jo
+                                    (asm (L ab push-rax bb pop-r8 opb '(15 128) (le4 (- OVF (+ joa 6))))))   ; A;push;B;pop r8;op;jo OVF
+                                 (member? op '(< <= > >= =)) (: ab (cgr v a off Hh OVF) po (+ off (tally ab)) bb (cgr v b (+ po 1) Hh OVF)
+                                    (asm (L ab push-rax bb (cmpseq op))))
+                                 (= op '?) (: el (caup (cup (cup e))) tb (cgr v a off Hh OVF) thoff (+ off (+ (tally tb) 10)) thb (cgr v b thoff Hh OVF) eloff (+ thoff (+ (tally thb) 5)) elb (cgr v el eloff Hh OVF)
+                                    (asm (L tb '(72 131 248 0) '(15 142) (le4 (+ (tally thb) 5)) thb '(233) (le4 (tally elb)) elb)))   ; cmp rax,0; jle else; then; jmp end; else
+                                 ()))
+                           ())
+   ; (jitrec '(\ n E)) -- compile a single-arg self-recursive arithmetic closure to a native call tree.
+   ; OUTER+OVF+DEOPT is a fixed 64-byte prologue/epilogue (offsets below are computed once); H follows.
+   (jitrec lam) (: v (caup lam) body (caup (cup lam))
+                   p1 (asm (L '(72 139 1) '(72 209 248) '(65 84) '(83) '(73 137 228)))   ; mov rax,[rcx];sar;push r12;push rbx;mov r12,rsp  [12]
+                   p2 (asm (L '(91) '(65 92) '(72 1 192) '(113 5) '(233) (le4 22)         ; pop rbx;pop r12;add rax,rax;jno PUTOK(+5);jmp DEOPT
+                            '(72 131 200 1) '(72 137 1) '(72 131 198 16) '(72 139 6 255 224)   ; PUTOK: or rax,1;mov[rcx];add rsi,16;mov rax,[rsi];jmp
+                            '(76 137 228) '(91) '(65 92)                                   ; OVF: mov rsp,r12; pop rbx; pop r12
+                            deopt))                                                        ; DEOPT: tail-apply the interp fallback  [12]
+                   OVF (+ 17 (- (tally p2) 18)) Hh (+ 17 (tally p2))      ; OVF = the mov rsp,r12 (18 bytes before p2's end); Hh = right after DEOPT
+                   outer (asm (L p1 '(232) (le4 (- Hh 17)) p2))          ; call H (rel = Hh - 17)
+                   hbody (cgr v body (+ Hh 4) Hh OVF)
+                   hcode (asm (L '(83) '(72 137 195) hbody '(91) '(195))) ; H: push rbx; mov rbx,rax; BODY; pop rbx; ret
+                   fb (ev (L ': (L 'self v) body 'self))                  ; deopt fallback: a REAL recursive interp closure (self bound to itself)
+                   (nif (emit (asm (L outer hcode))) fb lam 1))           ; value[-1]=lam (self, for =/show); value[1]=fb (correct deopt)
    ; --- counted fold loop: acc = (FOLD over cv<n of body(cv)), cv the counter, limit
    ; at Sp[0]. r9=n r10=cv r11=acc. FOLD is a (op . init) -- + folds from 0, * from 1 --
    ; and cmp is the loop test's comparison (the loop runs while (cmp cv n)). offsets are

@@ -153,6 +153,34 @@
     (? (atom? (cup bs)) bs
        (: nm (cap bs) bd (caup bs)
           (link nm (link (? (&& (two? nm) (id? (cap nm) outernm)) (L ng 0) bd) (anat-rebind (cuup bs) outernm ng)))))
+   ; --- a RECURSIVE ARITHMETIC function: a 1-arg def (name v) BODY over {v ; int ; (op E E) ;
+   ; (cmp E E) ; (? E E E) ; (name E) -- self-calls}. autorec rewrites the binding to a native CALL
+   ; TREE (jitrec, emit.l) -- the recursion stays native, no interpreter per call. fib is the
+   ; canonical case. Returns the form UNCHANGED if no such def fits (list/other recursion passes
+   ; through). ⚠ x86-64.
+   (recok? nm v e) (? (= e v) 1 (whole? e) 1
+                      (two? e) (: op (cap e)
+                         (? (id? op nm)                       (&& (= 2 (tally e)) (recok? nm v (caup e)))
+                            (member? op '(+ - * < <= > >= =)) (&& (= 3 (tally e)) (recok? nm v (caup e)) (recok? nm v (caup (cup e))))
+                            (id? op '?)                       (&& (= 4 (tally e)) (recok? nm v (caup e)) (recok? nm v (caup (cup e))) (recok? nm v (caup (cup (cup e)))))
+                            0))
+                      0)
+   (hasself? nm e) (? (two? e) (? (id? (cap e) nm) 1 (afind (\ x (hasself? nm x)) (cup e))) 0)   ; does e make a self-call?
+   (subst-rec e nm) (? (two? e) (? (id? (cap e) nm) (link 'self (map (\ x (subst-rec x nm)) (cup e))) (map (\ x (subst-rec x nm)) e)) e)   ; (nm E) -> (self E)
+   (rec-rebind bs nm ng) (? (atom? (cup bs)) bs
+                            (: nf (cap bs) bd (caup bs)
+                               (? (&& (two? nf) (id? (cap nf) nm)) (link nm (link ng (rec-rebind (cuup bs) nm ng)))   ; (name v) BODY -> name <native>
+                                  (link nf (link bd (rec-rebind (cuup bs) nm ng))))))
+   (autorec form)
+    (? (! (two? form)) form
+       (! (id? (cap form) ':)) form
+       (atom? (cup form)) form
+       (: parsed (anat-defs (cup form)) pairs (cap parsed)
+          rp (afind (\ p (: nf (cap p) (&& (two? nf) (= 2 (tally nf)) (recok? (cap nf) (caup nf) (cup p)) (hasself? (cap nf) (cup p))))) pairs)
+          (? (! (two? rp)) form
+             (: nm (cap (cap rp)) v (caup (cap rp)) fbody (cup rp)
+                ng (jitrec (L '\ v (subst-rec fbody nm)))                    ; codegen on the self-converted body
+                (? (lit? ng) (link ': (rec-rebind (cup form) nm ng)) form)))))
    (autonat form)
     (? (! (two? form)) form
        (! (id? (cap form) ':)) form
@@ -201,7 +229,7 @@
                      (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li))))))
                         (: ln (loopinfo-n e)
                            (? ln (memo e (\ l (njit-loop-n l (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))))))
-                              (base-ev (autonat e)))))))    ; fall-through: glaze the mandelbrot grid nest if it fits, else interpret
+                              (base-ev (autorec (autonat e))))))))    ; fall-through: glaze a float-grid nest / a recursive-arith fn if either fits, else interpret
    ev auto-ev                                                  ; rebind the global: ev is now auto-native
  _ (assert
     ((\ x (+ (* x 2) 3)) = (ev '(\ x (+ (* x 2) 3))))          ; leaf: native, =-identical
@@ -260,5 +288,11 @@
               (ly px py acc) (? (< py 8) (ly px (+ py 1) (+ acc (lz px py 0 0))) acc)
               (lx px acc) (? (< px 8) (lx (+ px 1) (+ acc (ly px 0 0))) acc)
             (lx 0 0))
-       (&& !(id? (autonat g3) g3) (= (base-ev g3) (ev g3)))))
- _ (say err "ai/glaze/auto: ev auto-natives qualifying closures + counted loops + D-dimensional float-recurrence grids (transparent)\n"))
+       (&& !(id? (autonat g3) g3) (= (base-ev g3) (ev g3))))
+    ; RECURSIVE ARITHMETIC: naive fib auto-glazed to a native call tree -- native == interp, and an
+    ; int64-overflowing recursion (pow2) deopts to the interp fallback -> the exact bignum (sound)
+    (: rf '(: (fib n) (? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))) (fib 25))
+       (&& !(id? (autorec rf) rf) (= 75025 (ev rf)) (= (base-ev rf) (ev rf))))
+    (: rp '(: (p2 n) (? (< n 1) 1 (* 2 (p2 (- n 1)))) (p2 70))
+       (= (base-ev rp) (ev rp))))                              ; 2^70 overflows int64 in H -> OVF deopt -> bignum
+ _ (say err "ai/glaze/auto: ev auto-natives qualifying closures + counted loops + D-dim float grids + recursive-arith call trees (transparent)\n"))
