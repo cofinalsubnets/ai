@@ -408,6 +408,32 @@
           '(77 141 81 8 73 193 234 3 73 131 194 3 74 141 20 210)                ; r10=total_words ; lea rdx,[rdx+r10*8]  (Hp += total*8)
           '(72 137 1 72 131 198 16 72 139 6 255 224))))                         ; mov [rcx],rax ; add rsi,16 ; Continue (NO putfix)
         (ev lam) lam 1))
+   ; --- CASK-BACKED string BUILDER (sketch): (jitsb '(\ s <byte-map loop>) K) -- the O(n) PRODUCER lane.
+   ;     the cask insight: allocate the RESULT once (sized N=len s; ONE room-guard-or-deopt), then a native
+   ;     pin-LOOP writes out[i] = low8((peep s i 0)+K) with ZERO per-iteration allocation -- so no GC fires
+   ;     in the loop (the whole wall), and it is O(n), not the immutable-append O(n^2). a non-string s
+   ;     deopts to the interpreter. NO GC tag word (the cheney scan derives a string's size from len, so
+   ;     unlike a tagged thread a string carries none -- this is the right framing jitba's surplus tag had
+   ;     wrong). BOUNDED output only: out len == in len (a 1:1 byte map). K is the per-byte add, masked to
+   ;     a byte by the low-8 store (matching (& (+ b K) 255)). The body is offset-independent. ⚠ x86-64.
+   (jitsb lam K)
+    (: kind (apof "")
+       (nif (emit (asm (L
+          '(76 139 1) (L 65 246 192 1 116 (tally deopt)) deopt                  ; mov r8,[rcx](=s); test r8b,1; jz+; deopt (fixnum)
+          '(77 139 16 73 187) (le8 kind) (L 77 57 218 116 (tally deopt)) deopt   ; mov r10,[r8]; movabs r11,lvm_str; cmp; je+; deopt (non-str)
+          '(77 139 72 8)                                                        ; mov r9,[r8+8]  (N = output len = input len)
+          '(77 141 81 7 73 193 234 3 73 131 194 2)                              ; r10 = total = 2 + ((N+7)>>3)   (b2w(N), no tag)
+          '(78 141 20 210 73 131 194 64)                                        ; r10 = Hp + total*8 + floor(64)
+          (L 76 57 209 115 (tally deopt)) deopt                                 ; cmp rcx,r10; jae+; deopt (heap full)
+          '(76 137 26 76 137 74 8)                                              ; mov [rdx],r11 (kind); mov [rdx+8],r9 (len=N)
+          '(49 192)                                                             ; xor eax,eax  (i=0)
+          '(76 57 200 15 141 23 0 0 0)                                          ; LOOP: cmp rax,r9 ; jge DONE(+23)
+          '(69 15 182 84 0 16) (L 65 129 194) (le4 K)                           ; movzx r10d,[r8+rax+16] ; add r10d, K
+          '(68 136 84 2 16 72 255 192 235 224)                                  ; mov [rdx+rax+16],r10b (low8 = &255) ; inc rax ; jmp LOOP(-32)
+          '(72 137 208)                                                         ; DONE: mov rax,rdx  (result)
+          '(77 141 81 7 73 193 234 3 73 131 194 2 74 141 20 210)                ; r10=total ; lea rdx,[rdx+r10*8]  (Hp += total*8)
+          '(72 137 1 72 131 198 16 72 139 6 255 224))))                         ; mov [rcx],rax ; add rsi,16 ; Continue (NO putfix)
+        (ev lam) lam 1))
    ; --- FLOAT RECURRENCE LOOP OWNER (the mandelbrot escape-loop class) ----------
    ; owns a numeric escape loop end to end: FIXNUM inputs (pixel coords) -> derived
    ; floats (computed once) -> a float recurrence over loop-vars in xmm8.. with an
@@ -714,7 +740,21 @@
          (= (+ 5 66) (ba 5)) (= (+ '(1 2) 66) (ba '(1 2)))))                                 ; non-string s -> kind guard deopts -> generic +
   (: ba (jitba '(\ s (+ s 90)))  b (ba "hello")  _ (tally (jot 200000))  (= "helloZ" b))     ; the string box survives a forced GC
   (: ba (jitba '(\ s (+ s 33)))  xs (map (\ i (string (L (+ 97 (% i 26))))) (jot 1500))      ; 1500 strings ++ '!' under GC pressure == interp
-     (= (map (\ s (+ s 33)) xs) (map ba xs)))   ; non-string -> guard deopts == interp
+     (= (map (\ s (+ s 33)) xs) (map ba xs)))
+  ; CASK-BACKED BUILDER (jitsb, sketch): O(n) string producer -- map each byte b -> (b+K)&255, == interp
+  (: bsrc '(\ s ((: (go i acc) (? (< i (tally s)) (go (+ i 1) (+ acc (& (+ (peep s i 0) 1) 255))) acc)) 0 ""))
+     sb (jitsb bsrc 1)  isb (ev bsrc)
+     (&& (string? (sb "abc")) (= "bcd" (sb "abc")) (= (isb "abc") (sb "abc"))                ; +1 byte-map: abc->bcd, == interp
+         (= "" (sb "")) (3 = (tally (sb "abc")))                                             ; empty -> empty; length preserved
+         (= isb sb)                                                                          ; =-identical to its interpreted twin (same source)
+         (= (map isb (L "Hello!" "xyz" "")) (map sb (L "Hello!" "xyz" "")))                  ; composes == interp
+         (= (isb 5) (sb 5))))                                                                ; non-string s -> deopt -> interp
+  (: sb (jitsb '(\ s ((: (go i acc) (? (< i (tally s)) (go (+ i 1) (+ acc (& (+ (peep s i 0) 3) 255))) acc)) 0 "")) 3)
+     b (sb "hello")  _ (tally (jot 200000))  (= "khoor" b))                                  ; +3 build survives a forced GC (no tag needed)
+  (: bs '(\ s ((: (go i acc) (? (< i (tally s)) (go (+ i 1) (+ acc (& (+ (peep s i 0) 1) 255))) acc)) 0 ""))
+     sb (jitsb bs 1)  isb (ev bs)
+     xs (map (\ i (string (L (+ 97 (% i 26)) (+ 65 (% i 7))))) (jot 1500))                   ; 1500 2-char strings, +1 byte-map under GC pressure == interp
+     (= (map isb xs) (map sb xs)))   ; non-string -> guard deopts == interp
   ; --- added coverage: setcc <=/>/>=/=, multi-arg (cgn) %/&/|/cmp/?, *-fold loop, //-by-0 deopt ---
   ; comparison RESULT codes -- only `<` reached a setcc before, 4 of 5 opcodes were dark
   (: le (jit '(\ x (<= x 5))) (&& (1 = (le 5)) (1 = (le 3)) (0 = (le 6))))            ; setcc <=
