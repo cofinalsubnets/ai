@@ -242,6 +242,65 @@
              (: sub (\ e (foldl (\ b pr (subst-sym (cap pr) (cup pr) b)) e consts))
                 keep (afilter (\ pr (! (&& (symp (cap pr)) (whole? (cup pr))))) pairs)
                 (link ': (unpair (map (\ pr (link (cap pr) (sub (cup pr)))) keep) (sub body)))))))
+   ; --- DEFORESTATION: fuse a map/filter pipeline under a foldl into ONE pass, then lower a
+   ;     foldl-over-(iota N) to the named-let LOOP `lift` already glazes -- so a combinator pipeline
+   ;     compiles to native. The rewrite-level companion to the codegen recognizers; the standalone
+   ;     spec + the foldr/each/all/any consumers live in doc/proto/forest.l (this is the glaze-path
+   ;     subset: foldl consumer, map/filter producers, iota source). Transducer view of shortcut
+   ;     fusion -- map f: elem|->(f elem); filter p: step|->(? (p elem) step acc). `dsimp` then beta-
+   ;     inlines the unary stage lambdas + flattens curried operator heads to a FIRST-ORDER step. Step
+   ;     binders are fresh gensym noms (hygienic substitution). `defoliate` is a NO-OP (id-identical)
+   ;     on any form with no pipeline -- so every non-pipeline glaze form is byte-unchanged.
+   (dsub old new B) (? (id? B old) new (two? B) (link (dsub old new (cap B)) (dsub old new (cup B))) B)
+   (dquote? x) (&& (two? x) (id? (cap x) '\) (= 2 (tally x)))                  ; (\ datum) -> a quote, never descend
+   (dmap? P)   (&& (two? P) (id? (cap P) 'map))
+   (dfilt? P)  (&& (two? P) (id? (cap P) 'filter))
+   (dprod? P)  (|| (dmap? P) (dfilt? P))
+   (dsfn P)    (caup P)  (dssrc P) (caup (cup P))                              ; (map f P') -> f / P'
+   (dpeel B e a P)                                                            ; thread step body B over (elem e, acc-skip a) through the chain
+    (? (dmap? P)  (dpeel (dsub e (L (dforest (dsfn P)) e) B) e a (dssrc P))    ; e := (f e)
+       (dfilt? P) (dpeel (L '? (L (dforest (dsfn P)) e) B a) e a (dssrc P))    ; (? (p e) B a)
+       (L B (dforest P)))                                                     ; base list (forest nested pipelines)
+   (dforest x)
+    (? (atom? x)   x
+       (dquote? x) x
+       (&& (id? (cap x) 'foldl) (= 4 (tally x)) (|| (dprod? (caup (cuup x))) (djot? (caup (cuup x)))))   ; (foldl c z P), P a producer or jot -> name the step (so dlower can build the loop)
+          (: c (caup x) z (cap (cuup x)) P (caup (cuup x))                     ; c=arg0, z=arg1, P=arg2
+             e (nom 'e) a (nom 'a) r (dpeel (L c a e) e a P)
+             (L 'foldl (L '\ a e (cap r)) (dforest z) (caup r)))
+       (link (cap x) (map dforest (cup x))))
+   (dspecial? h) (|| (id? h '?) (|| (id? h '\) (id? h ':)))
+   (dsimp x)                                                                  ; reduce to first-order: beta unary lambdas, flatten curried heads
+    (? (atom? x)   x
+       (dquote? x) x
+       (: y (link (dsimp (cap x)) (map dsimp (cup x))) h (cap y) as (cup y)
+          (? (atom? h) y
+             (&& (id? (cap h) '\) (&& (= 3 (tally h)) (= 1 (tally as)))) (dsimp (dsub (caup h) (cap as) (cap (cuup h))))
+             (&& (atom? (cap h)) (! (dspecial? (cap h))))                 (dsimp (link (cap h) (cat (cup h) as)))
+             y)))
+   ; (jot N) is the LIST source -- the materialized chain (0 .. N-1) foldl/map iterate; the loop never
+   ; builds it. (NOT iota -- that is the ARRAY @(0..N-1), which foldl/map (chain ops) do NOT iterate,
+   ; so a foldl over iota interprets to z; lowering THAT would be unsound. jot only.)
+   (djot? s) (&& (two? s) (id? (cap s) 'jot) (= 2 (tally s)))                 ; (jot N)
+   (dstep? f) (&& (two? f) (id? (cap f) '\) (= 4 (tally f)))                  ; (\ A E BODY)
+   (dlower1 e)                                                                ; (foldl (\ A E BODY) Z (jot N)) -> ((: (go E A) (? (< E N) (go (+ E 1) BODY) A)) 0 Z)
+    (: STEP (caup e) Z (cap (cuup e)) SRC (caup (cuup e))                     ; STEP=arg0, Z=arg1, SRC=arg2
+       (? (&& (dstep? STEP) (djot? SRC))
+          (: A (caup STEP) E (cap (cuup STEP)) BODY (caup (cuup STEP)) N (caup SRC) go (nom 'go)
+             (L (L ': (L go E A) (L '? (L '< E N) (L go (L '+ E 1) BODY) A)) 0 Z))
+          e))
+   (dlower x) (? (atom? x) x (dquote? x) x
+                 (&& (id? (cap x) 'foldl) (= 4 (tally x))) (dlower1 (link 'foldl (map dlower (cup x))))
+                 (link (cap x) (map dlower (cup x))))
+   (glazey-foldl? x) (&& (id? (cap x) 'foldl) (= 4 (tally x)) (: s (caup (cuup x)) (|| (dprod? s) (djot? s))))
+   (has-pipe? x) (? (atom? x) 0  (dquote? x) 0  (dprod? x) 1  (glazey-foldl? x) 1  (any has-pipe? (cup x)))
+   (defol-body b) (? (has-pipe? b) (dlower (dsimp (dforest b))) b)            ; fuse+lower a pipeline body, else leave it
+   (defol-bs bl) (? (atom? (cup bl)) (L (defol-body (cap bl)))                ; trailing body
+                    (link (cap bl) (link (defol-body (caup bl)) (defol-bs (cuup bl)))))   ; (name value ..) -> transform each value
+   (defoliate form)
+    (? (! (has-pipe? form)) form                                             ; NO pipeline anywhere -> byte-identical (every legacy form)
+       (! (&& (two? form) (id? (cap form) ':) (! (atom? (cup form))))) (dlower (dsimp (dforest form)))
+       (link ': (defol-bs (cup form))))
    (clook2 nm al) (? (atom? al) -1 (id? nm (caap al)) (caup (cap al)) (clook2 nm (cup al)))   ; (name arity) alist -> arity (-1 absent)
    (groupok? cands ps e)                                                                      ; is e in the fragment over cands (a (name arity) list)?
     (? (member? e ps) 1  (whole? e) 1
@@ -265,7 +324,7 @@
     (? (! (two? form0)) form0
        (! (id? (cap form0) ':)) form0
        (atom? (cup form0)) form0
-       (: form (lift (fold-consts form0))      ; lambda-lift named-let bodies first (primes' loops -> flat group fns)
+       (: form (lift (defoliate (fold-consts form0)))   ; deforest pipelines -> loops, THEN lambda-lift named-let bodies (primes' loops + fused folds -> flat group fns)
           parsed (anat-defs (cup form)) pairs (cap parsed)
           fns (afilter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all symp (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
           (? (! (two? fns)) form0                                                            ; no candidate functions -> original
@@ -428,6 +487,26 @@
                data (string (L 72 105 90 33 65))
                (strhash data))
        (&& !(id? (autogroup rss) rss) (69709145 = (ev rss)) (= (base-ev rss) (ev rss))))
+    ; DEFORESTATION: a map/filter/fold pipeline over (jot N) -- defoliate FUSES the producers into the
+    ; foldl step (one pass, no intermediate lists) and LOWERS foldl-over-jot to the named-let LOOP `lift`
+    ; already glazes, so the whole combinator pipeline compiles to a native counted loop. == interp.
+    (: dq '(: (sumsq n) (foldl (+) 0 (map (\ x (* x x)) (jot n))) (sumsq 100))
+       (&& !(id? (autogroup dq) dq) (328350 = (ev dq)) (= (base-ev dq) (ev dq))))      ; sum i^2 for i<100
+    ; map after FILTER: the filter guards the fused step; map-after-map composes the element subs
+    (: dpf '(: (f n) (foldl (+) 0 (map (+ 1) (filter (\ x (> x 2)) (jot n)))) (f 10))
+       (&& !(id? (autogroup dpf) dpf) (49 = (ev dpf)) (= (base-ev dpf) (ev dpf))))      ; keep>2, +1, sum = 49
+    (: dmm '(: (sm n) (foldl (+) 0 (map (* 2) (map (+ 1) (jot n)))) (sm 5))
+       (&& !(id? (autogroup dmm) dmm) (30 = (ev dmm)) (= (base-ev dmm) (ev dmm))))      ; (*2).(+1) over 0..4 = 30
+    ; a BARE foldl over jot (no producers) lowers straight to the loop
+    (: dj '(: (s n) (foldl (+) 0 (jot n)) (s 100))
+       (&& !(id? (autogroup dj) dj) (4950 = (ev dj)) (= (base-ev dj) (ev dj))))         ; sum 0..99 = 4950
+    ; SOUNDNESS: a foldl over (iota N) is the ARRAY -- foldl/map (chain ops) don't iterate it, so it is
+    ; degenerate (=z); fusion preserves that (both sides z) and it is NOT lowered (djot? only) -> == interp
+    (: di '(: (h n) (foldl (+) 0 (map (\ x (* x x)) (iota n))) (h 100))
+       (= (base-ev di) (ev di)))                                                         ; iota: degenerate to 0, transparent
+    ; a foldl over a list PARAM can't lower (no jot) -> interpreted, value still correct (defoliate no-op)
+    (: dl '(: (g l) (foldl (+) 0 l) (g (jot 5)))
+       (= (base-ev dl) (ev dl)))                                                         ; 0+1+2+3+4 = 10
     ; a fn that calls OUT of the fragment (into `link`) drops the whole group -> form unchanged, interpreted
     (: ro '(: (build n) (? (< n 1) () (link n (build (- n 1)))) (build 3))
        (&& (id? (autogroup ro) ro) ('(3 2 1) = (ev ro)))))   ; left interpreted; base () -> a clean ()-terminated (3 2 1)
