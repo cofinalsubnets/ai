@@ -177,6 +177,15 @@ struct ai {
                                           // against allocation, so floating dead tenured objects are swept periodically
                                           // (occupancy alone never triggers it: dead old garbage dies in place) and the
                                           // pool can SHRINK. See gen_please.
+ uintptr_t win_alloc, win_copied;         // a sliding window (words) for the DETERMINISTIC minor-resize ratio: young
+                                          // allocated vs survivors copied since the last resize. overhead = copied/alloc
+                                          // (the GC's share of the work, in words not clock ticks); grow the nursery while
+                                          // it exceeds 1/ratio, shrink when far below. Accumulating smooths the spikes a
+                                          // per-collection ratio would chase. Reset on a resize. See gen_please.
+ uintptr_t budget;                        // total memory CAP in words (2*minor + 2*major, both two-space); 0 = unbounded.
+                                          // Appel's rule: the nursery gets the free budget after the major pool. Inited from
+                                          // the ai_budget tunable (the Teensy knob) but a field, so it can be set at runtime
+                                          // like the g->alloc hook. See gen_please.
 #endif
  union {
   intptr_t v0;

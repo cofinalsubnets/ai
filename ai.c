@@ -68,6 +68,14 @@ _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size"
 #ifndef ai_major0
 # define ai_major0 (1u << 16)      // ~512 KB major-pool half; grows much less often than the minor pool
 #endif
+// ai_budget: the TOTAL memory budget, in words -- the cap on what the runtime reserves (2*minor + 2*major,
+// both pools two-space). 0 = UNBOUNDED (a host: the budget grows on demand). A small device sets it to
+// its RAM (-Dai_budget=131072 for a 1 MB Teensy). The minor pool is then sized by APPEL'S RULE -- the
+// nursery gets the free budget after the major pool -- so one knob governs the whole footprint, and the
+// schedule is deterministic (a function of the live set + budget, never the wall clock). See gen_please.
+#ifndef ai_budget
+# define ai_budget 0
+#endif
 _Static_assert(-1 >> 1 == -1, "sign extended shift");
 // nilp: structural test for the nil word (the only false scalar). Distinct from
 // ai_nilp below (the language falsy predicate, which also counts an all-zero vec);
@@ -863,6 +871,7 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  g->major_len = ai_major0;                                         // initial major half (configurable); grows in gen_major, much less often than the minor
  g->major_pool = malloc(2 * g->major_len * sizeof(word));
  g->major_base = g->major_hp = g->major_pool;                          // active = first half, empty
+ g->budget = ai_budget;                                          // total memory cap (words); 0 = unbounded. Settable at runtime.
 #endif
  // book + macro maps (lookup-lambdas) then the main task thread.
  if (ai_ok(g = map_new(g)) && ai_ok(g = map_new(g)) && ai_ok(g = ai_have(g, 6))) {
@@ -1325,11 +1334,9 @@ static struct ai *gen_grow(struct ai *g, uintptr_t len1) {
 
 // gen_please: the generational GC entry. A MINOR (cheap, frequent) unless something dirtied the
 // major in place or the major lacks headroom for a worst-case drain -- then a MAJOR (drain +
-// compact). The minor ends empty; then resize it on its OWN cost model (the v-ratio + the
-// request), DECOUPLED from the major (which grows in gen_major and far less often).
+// compact). The minor ends empty; then size it by Appel's rule against the memory budget (below),
+// DECOUPLED from the major (which grows in gen_major and far less often).
 static struct ai *gen_please(struct ai *g, uintptr_t req0) {
- enum { v_lo = 4, v_hi = v_lo * v_lo };
- uintptr_t t0 = g->t0, t1 = ai_clock();
  uintptr_t seen_young = (uintptr_t)(g->hp - g->end);
  uintptr_t major_free = (uintptr_t)((g->major_base + g->major_len) - g->major_hp);
  g->since_major += seen_young;                                  // young allocated (∝ scanned) since the last major
@@ -1347,19 +1354,34 @@ static struct ai *gen_please(struct ai *g, uintptr_t req0) {
   gen_major(g), g->n_gc += 1;
   g->since_major = 0, g->major_live0 = (uintptr_t)(g->major_hp - g->major_base);   // reset the amortization window
  } else gen_minor(g), g->n_gc += 1, g->n_minor += 1;
+ uintptr_t copied = major ? (uintptr_t)(g->major_hp - g->major_base) : (uintptr_t)(g->major_hp - before);
  g->n_seen += seen_young;
- g->n_evac += major ? (uintptr_t)(g->major_hp - g->major_base) : (uintptr_t)(g->major_hp - before);
+ g->n_evac += copied;
  g->rem_n = 0, g->dirty = 0;
  { uintptr_t e = (uintptr_t)(g->major_hp - g->major_base); if (e > g->max_heap) g->max_heap = e; }
- // MINOR resize -- the heap is empty now, so `used` is just core + stack. Grow if a collection is
- // too costly relative to the work between them (v < v_lo) or the request won't fit; shrink if oversized.
- uintptr_t used = g->len - avail(g), req = req0 + used + (used >> 2), t2 = ai_clock();
- uintptr_t len1 = g->len, v = (t2 == t1) ? (uintptr_t) v_hi : (t2 - t0) / (t2 - t1);
- if (len1 < req || v < v_lo) do len1 <<= 1, v <<= 1; while (len1 < req || v < v_lo);
- else if (len1 > 2 * req && v > v_hi) do len1 >>= 1, v >>= 1; while (len1 > 2 * req && v > v_hi);
- else return g->t0 = t2, g;                  // right size
- g = gen_grow(g, len1);
- return ai_ok(g) ? (g->t0 = ai_clock(), g) : g; }
+ // MINOR resize -- DETERMINISTIC, no wall clock. Keep the GC's COPY OVERHEAD (words copied / words
+ // allocated) inside a band, the word-for-word analogue of the old time ratio -- so the schedule is
+ // reproducible, immune to machine load, and a slow major can't feed back into the size. The ratio is
+ // accumulated over a sliding window (reset on a resize), which smooths the per-collection spikes a live
+ // multiple would chase. ai_budget (0 = unbounded) caps the whole footprint -- Appel's rule: the nursery
+ // gets the free budget after the major pool. One knob bounds a small device.
+ enum { ratio = 8 };                            // target band: grow above 1/ratio overhead, shrink below 1/(4*ratio)
+ g->win_alloc += seen_young, g->win_copied += copied;
+ uintptr_t used = g->len - avail(g), req = req0 + used + (used >> 2), len1 = g->len, arena = len1;
+ if (g->win_copied * ratio > g->win_alloc) {                   // overhead > 1/ratio: nursery too small
+  uintptr_t wa = g->win_alloc | 1;                             // grow until the PROJECTED overhead lands in band (| 1: guarantee progress)
+  while (g->win_copied * ratio > wa) arena <<= 1, wa <<= 1;     // (doubling the pool ~doubles alloc-between-GCs)
+  g->win_alloc = g->win_copied = 0;
+ } else if (g->win_copied * (ratio * 4) < g->win_alloc) {       // overhead < 1/(4*ratio): oversized
+  arena = len1 >> 1;                                           // shrink ONE step (gentle -- multi-step collapses on a lucky GC)
+  g->win_alloc = g->win_copied = 0;
+ } else if (g->win_alloc > 8 * len1) g->win_alloc = g->win_copied = 0;   // in band: cap the window so it stays responsive
+ if (g->budget) {                                              // Appel cap: nursery <= free budget / 2
+  uintptr_t two_major = 2 * g->major_len, room = g->budget > two_major ? (g->budget - two_major) / 2 : 0;
+  if (arena > room) arena = room; }
+ if (arena < (uintptr_t) ai_minor0) arena = ai_minor0;         // floor
+ if (arena < req) arena = req;                                 // hard floor: hold the pending allocation
+ return arena == len1 ? g : gen_grow(g, arena); }
 #endif
 
 ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
