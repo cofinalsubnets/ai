@@ -103,10 +103,10 @@ endif
 # Gate = exit 0 AND the sentinel (a reader-stop or a strict-assert scare both miss it).
 .PHONY: test_sat
 test_sat: host
-	@echo "SAT sat/sat.l"; \
-	  $m sat/sat.l > out/host/.test_sat.out 2>&1; r=$$?; \
+	@echo "SAT sat/sat.l + sat/dimacs.l"; \
+	  cat sat/sat.l sat/dimacs.l | $m > out/host/.test_sat.out 2>&1; r=$$?; \
 	  cat out/host/.test_sat.out; \
-	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out; } \
+	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out && grep -q "sat/dimacs: ok" out/host/.test_sat.out; } \
 	    || { echo "FAIL sat (exit $$r)"; exit 1; }
 # ain's two-process loopback gate: a server and a client over real TCP on
 # 127.0.0.1, full-duplex, asserting each side received what the other sent (the
