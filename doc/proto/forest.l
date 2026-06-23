@@ -18,7 +18,13 @@
 ;
 ; the consumers recognized: foldl foldr each all any, and a BARE producer chain (its result IS a list,
 ; rebuilt in one foldr/link pass). the producers: map filter. everything else is traversed into (so a
-; pipeline nested inside a stage function, the fold seed, or the base list is fused too).
+; pipeline nested inside a stage function, the fold seed, or the base list is fused too). the glaze-path
+; subset (foldl consumer, map/filter producers, jot source) is now WIRED INTO ai/glaze/auto.l (defoliate):
+; a numeric map/jot/fold pipeline compiles to a native counted loop, == interp.
+;
+; run:    out/host/ai doc/proto/forest.l              (the demo; standalone `assert` is lenient -- it
+;                                                       RETURNS a value, does not halt, so eyeball the shown forms)
+; strict: cat test/00-init.l doc/proto/forest.l | out/host/ai   (00-init makes `assert` enforce -- the real gate)
 ;
 ; HYGIENE: the step's element/acc binders are fresh gensym noms ((nom 'e)/(nom 'a)) -- unforgeable, so
 ; the naive symbol substitution `sub` can never capture a name in the user's stage source (which only
@@ -152,15 +158,16 @@
  H '(foldl (+) 0 (filter (\ x (> x 4)) (map (* 2) (map (+ 1) '(1 2 3)))))   ; +1(2 3 4)*2(4 6 8) keep>4 (6 8)=14
  _ (assert (ok? H) "deep chain (filter . map . map) fuses end to end")
 
- ; glaze composition: a numeric fold-over-map fuses to a single first-order accumulator loop --
- ; (foldl (\ a e (+ a (* e e))) 0 (iota N)) -- exactly the SHAPE the glaze targets. the rewrite layer
- ; hands the codegen layer a loop it could never have seen through the map combinator; lowering this
- ; foldl (inline foldl-over-iota to a named-let, then the existing lift/loop recognizers fire) is the
- ; wiring step that closes deforest -> glaze, the same way mix -> glaze closes specialization.
- I '(foldl (+) 0 (map (\ x (* x x)) (iota 100)))                           ; sum of squares 0..99 = 328350
+ ; glaze composition (NOW WIRED -- ai/glaze/auto.l `defoliate`): a numeric fold-over-map fuses to a
+ ; single first-order accumulator loop -- (foldl (\ a e (+ a (* e e))) 0 (jot N)) -- which auto.l lowers
+ ; to the named-let LOOP its existing lift/group recognizers compile to a NATIVE counted loop. So a
+ ; map/jot/fold pipeline glazes end to end (== interp, ~19x faster at N=2e5: the intermediate lists are
+ ; gone). The source must be `jot` (the materialized list foldl/map iterate), NOT `iota` (the ARRAY,
+ ; which chain-ops don't traverse -- a foldl over it is degenerate, so it is left interpreted).
+ I '(foldl (+) 0 (map (\ x (* x x)) (jot 100)))                            ; sum of squares 0..99 = 328350
  _ (assert (= 328350 (ev I)) "interp baseline for the glaze-shape pipeline")
- _ (assert (ok? I) "fold/map over (iota N) fuses to a first-order loop")
- _ (assert (firstorder? (deforest I)) "...producer- & redex-free: the loop shape the glaze targets")
+ _ (assert (ok? I) "fold/map over (jot N) fuses to a first-order loop")
+ _ (assert (firstorder? (deforest I)) "...producer- & redex-free: the loop auto.l glazes")
 
  _ (. ";; doc/proto/forest.l: deforestation self-checks pass -- ")
  _ (. "map/filter pipelines fuse to one first-order pass (value-preserving, producer- & redex-free)\n")
