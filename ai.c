@@ -1261,14 +1261,19 @@ static void gen_minor(struct ai *g) {
 static void gen_major(struct ai *g) {
  word const *p0 = g->major_base, *t0 = g->major_hp;              // from-range 1: major active
  // size the to-space for the WORST CASE: all of major-active AND all of the minor survive (the
- // major promotes both). Doubling major_len alone is unsafe -- the minor can dwarf the major half.
+ // major promotes both -- the minor can dwarf the major half, so size for both, never just double).
  uintptr_t used = (uintptr_t)(g->major_hp - g->major_base), young = (uintptr_t)(g->hp - (word*) g->end);
- uintptr_t need = used + young, to_len = g->major_len;
- while (to_len < need + (need >> 2) + 16) to_len <<= 1;      // grow until it fits, +25% headroom
+ uintptr_t need = used + young;
+ // grow/shrink by a whole STEP (= ai_major0): snap NEED + 25% headroom up to a step multiple. One step
+ // at a time prevents thrash; snapping DOWN when `need` collapses keeps the pool small -- a churn
+ // workload that floated dead promotions between majors reclaims them here, rather than doubling forever.
+ uintptr_t step = ai_major0, want = need + (need >> 2) + 16;
+ uintptr_t to_len = ((want + step - 1) / step) * step;
+ if (to_len < step) to_len = step;
  word *spare = (g->major_base == g->major_pool) ? g->major_pool + g->major_len : g->major_pool;  // the same-size other half
- word *to, *grown = 0;
- if (to_len != g->major_len) {                                 // a bigger pair is needed
-  if ((grown = malloc(2 * to_len * sizeof(word)))) to = grown; else to_len = g->major_len, to = spare;  // OOM -> spare, hope it fits
+ word *to, *resized = 0;
+ if (to_len != g->major_len) {                                 // a different-size pair: malloc it, free the old
+  if ((resized = malloc(2 * to_len * sizeof(word)))) to = resized; else to_len = g->major_len, to = spare;  // OOM -> spare, hope it fits
  } else to = spare;
  g->gc_gen = 1;
  g->major_hp = to, g->cp = to;
@@ -1284,7 +1289,7 @@ static void gen_major(struct ai *g) {
  g->symbols = major_symbols_rebuild(g, om);
  major_run_finalizers(g);
  g->gc_f2lo = g->gc_f2hi = 0;                                // the minor range is consumed
- if (grown) free(g->major_pool), g->major_pool = grown, g->major_len = to_len;
+ if (resized) free(g->major_pool), g->major_pool = resized, g->major_len = to_len;
  g->major_base = to;                                           // flip: active = the to-space
  g->hp = g->end;                                             // the minor's young was promoted: reset it
  g->gc_gen = 0; }
@@ -1327,10 +1332,21 @@ static struct ai *gen_please(struct ai *g, uintptr_t req0) {
  uintptr_t t0 = g->t0, t1 = ai_clock();
  uintptr_t seen_young = (uintptr_t)(g->hp - g->end);
  uintptr_t major_free = (uintptr_t)((g->major_base + g->major_len) - g->major_hp);
- bool major = g->dirty || major_free < (uintptr_t) g->len + req0 + 16;   // major too full to hold a promotion -> compact
+ g->since_major += seen_young;                                  // young allocated (∝ scanned) since the last major
+ // a MAJOR (else a minor): forced by an in-place mutation (dirty); or the major can't hold a worst-case
+ // promotion; or we've allocated the post-major live set + 4 minor-pools' worth since the last major --
+ // the amortization rule that periodically traces, so floating DEAD tenured objects (which never grow
+ // occupancy -- they die in place, invisible to a minor) get swept and the pool can shrink back. The
+ // 4*minor-pool floor keeps majors the minority (>= 4 minors between them) even when little is tenured;
+ // the major_live0 term amortizes major cost against allocation as the tenured set grows.
+ bool major = g->dirty
+   || major_free < (uintptr_t) g->len + req0 + 16
+   || g->since_major > g->major_live0 + 4 * (uintptr_t) g->len;
  word *before = g->major_hp;
- if (major) gen_major(g), g->n_gc += 1;
- else       gen_minor(g), g->n_gc += 1, g->n_minor += 1;
+ if (major) {
+  gen_major(g), g->n_gc += 1;
+  g->since_major = 0, g->major_live0 = (uintptr_t)(g->major_hp - g->major_base);   // reset the amortization window
+ } else gen_minor(g), g->n_gc += 1, g->n_minor += 1;
  g->n_seen += seen_young;
  g->n_evac += major ? (uintptr_t)(g->major_hp - g->major_base) : (uintptr_t)(g->major_hp - before);
  g->rem_n = 0, g->dirty = 0;
@@ -4135,11 +4151,12 @@ op11(lvm_clock, putcharm(ai_clock() - getcharm(Sp[0])))
 //   [9] rem_miss  Σ old->young edges the write barrier FAILED to record (retired; stays 0)
 //  [10] rem_hi    peak remembered-set size (distinct old objects with a young field)
 //  [11] n_minor   MINOR collections so far (majors = n_gc - n_minor)
+//  [12] major_cap the major pool's reserved footprint: 2*major_len words (both halves), 0 if non-gen
 // derive: mortality = (n_seen - n_evac)/n_seen ; copy-amp = n_evac/max_heap ; young = heap - core.
-// Indices [3..7],[9..11] read 0 unless built -DAI_STAT ([8] is always live). An array (not a list):
+// Indices [3..7],[9..12] read 0 unless built -DAI_STAT ([8] is always live). An array (not a list):
 // every field is a charm, so a flat numeric tray is the natural rep -- compact, net/max apply directly.
 lvm(lvm_gauge) {
- enum { N = 12 };
+ enum { N = 13 };
  uintptr_t const bytes = sizeof(struct ai_vec) + 1 * sizeof(word) + N * ai_T[ai_Z];
  Have(b2w(bytes));
  struct ai_vec *v = (struct ai_vec*) Hp;
@@ -4159,9 +4176,10 @@ lvm(lvm_gauge) {
  vec_put_int(v, 10, (intptr_t) g->rem_hi);
  vec_put_int(v, 11, (intptr_t) g->n_minor);
  vec_put_int(v, 8, (intptr_t) (g->major_pool ? g->major_hp - g->major_base : g->minor - (word*) g->end));  // major live (gen), else [end,minor)
+ vec_put_int(v, 12, (intptr_t) (g->major_pool ? 2 * g->major_len : 0));  // major pool capacity (both halves), words
 #else
  for (int i = 3; i < 8; i++) vec_put_int(v, i, 0);              // gc instrumentation gated off (-DAI_STAT to keep it)
- vec_put_int(v, 9, 0), vec_put_int(v, 10, 0), vec_put_int(v, 11, 0);
+ vec_put_int(v, 9, 0), vec_put_int(v, 10, 0), vec_put_int(v, 11, 0), vec_put_int(v, 12, 0);
  vec_put_int(v, 8, (intptr_t) (g->minor - (word*) g->end));   // old (tenured) set, words -- always live
 #endif
  return Sp[0] = word(v), Ip++, Continue(); }

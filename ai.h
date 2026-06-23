@@ -172,6 +172,11 @@ struct ai {
  ai_word *gc_f2lo, *gc_f2hi;              // a SECOND from-space range (0 = unused); a major traces {major ∪ minor} in one pass
  uintptr_t gc_gen;                        // !=0 during a generational collection: bump() targets major_hp, not hp
  uintptr_t n_minor;                       // MINOR collections so far (majors = n_gc - n_minor)
+ uintptr_t since_major, major_live0;      // young words scanned since the last major; major-pool live right after it.
+                                          // A major fires once since_major > major_live0 + 4*minor-pool -- majors amortized
+                                          // against allocation, so floating dead tenured objects are swept periodically
+                                          // (occupancy alone never triggers it: dead old garbage dies in place) and the
+                                          // pool can SHRINK. See gen_please.
 #endif
  union {
   intptr_t v0;

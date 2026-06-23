@@ -199,11 +199,17 @@ the minor.
    oracle: the whole test corpus runs **byte-identical** with minors, majors, and both
    grows firing; `make test` stays green (AI_STAT-gated). (The pools were called the
    *nursery* and the *elder* through stage 3; renamed to the **minor pool** / **major pool**.)
-4. **tune / graduate** — (a) major-pool sizing: keep it small, grow by one step (not
-   doubling), shrink when the live set collapses *(in progress)*; (b) runtime-pluggable
-   sizing (today compile-time `ai_minor0` / `ai_major0`); (c) two-level pause/promotion
-   heuristics; (d) lifting the minor out of AI_STAT into the kernel/host (a pool-backed rem
-   set, since the kernel can't malloc).
+4. **tune / graduate** — (a) major-pool sizing + a major TRIGGER *(done)*: the pool grows/shrinks
+   by a whole step (`ai_major0`, never doubling) so it tracks the live set both ways, and a major
+   fires once allocation since the last one exceeds `major_live0 + 4·minor-pool` — an amortization
+   rule that periodically sweeps floating DEAD tenured objects (which die in place, invisible to a
+   minor) and lets the pool shrink. Result: the major-pool live set collapsed on every workload
+   (revbig 12.4M→414k words, mapchurn 8.2M→714k), majors stay the minority (~67% minors), corpus
+   byte-identical. Open wart: a single huge allocation balloons the minor pool (the wall-clock minor
+   resize), which then over-sizes the worst-case major to-space — rooted in (c). (b) runtime-pluggable
+   sizing (today compile-time `ai_minor0` / `ai_major0`); (c) two-level pause/promotion heuristics
+   (incl. making the minor resize deterministic, not wall-clock-driven); (d) lifting the minor out of
+   AI_STAT into the kernel/host (a pool-backed rem set, since the kernel can't malloc).
 
 ## As built (stage 3)
 
@@ -229,11 +235,10 @@ and the **major pool** (was "elder"), reaped by minor and major collections resp
 - **Independent growth (decoupled).** The minor pool resizes on its own GC/mutator ratio
   (`gen_grow`, which moves core+stack — safe because **`()` is `ZeroPoint`, an out-of-pool
   const, not the core**; the old "() IS the core" + the `gcg` core-flop are vestigial). The
-  major pool grows only at a major, far less often. Initial sizes are **configurable** like
-  the custom allocator (`ai_minor0`/`ai_major0`): a Teensy picks small + accepts more GCs, a
-  host picks roomy + boots in a few. *(Stage-4 note: the major pool currently only ever
-  grows — `to_len` doubles and never shrinks — which floats garbage on churn workloads; the
-  sizing heuristic addresses this.)*
+  major pool grows only at a major, far less often, and (stage 4) grows/SHRINKS by a whole step
+  (`ai_major0`) so it tracks the live set — never doubling, never sticking at a high-water mark.
+  Initial sizes are **configurable** like the custom allocator (`ai_minor0`/`ai_major0`): a Teensy
+  picks small + accepts more GCs, a host picks roomy + boots in a few.
 - All of it is `AI_STAT`-gated; the normal build and the kernel are byte-for-byte
   unchanged. (Also: the GC's tagged-object kind was renamed `text` → `thread`.)
 
