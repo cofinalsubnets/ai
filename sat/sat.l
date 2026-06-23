@@ -63,12 +63,11 @@
    (php-vars h) (* (+ h 1) h)
 
    ; ===========================================================================
-   ; CDCL engine (Stage 2): mutable trail + 1-UIP clause learning + backjump.
-   ; State `s` is one map of sub-maps; assignment now carries decision LEVEL and
-   ; REASON (the clause that forced each var) so a conflict can be analysed. BCP
-   ; here is scan-based (correct, O(clauses) per step -- two-watched literals is a
-   ; later perf pass); the learning/backjump is the real CDCL core. Differentially
-   ; fuzz-tested against the DPLL oracle on random 3-SAT below.
+   ; CDCL engine (Stage 2): mutable trail + 1-UIP clause learning + backjump,
+   ; propagating through TWO-WATCHED LITERALS (the `prop-lit` block below). State `s`
+   ; is one map of sub-maps; assignment carries decision LEVEL and REASON (the clause
+   ; that forced each var) so a conflict can be analysed. Differentially fuzz-tested
+   ; against the DPLL oracle on random 3-SAT below.
    ; ===========================================================================
    (vmap s k)   (peep s k ())                               ; a named sub-map of the state
    (val-of s v) (peep (vmap s 'val) v 0)                    ; var's truth (1/-1), 0 = unassigned
@@ -82,22 +81,53 @@
    (mk formula nvars)                                       ; build solver state from a formula
     (: s (tablet 0)
        _ (pin s 'nvars nvars) _ (pin s 'val (tablet 0)) _ (pin s 'lvl (tablet 0))
-       _ (pin s 'reason (tablet 0)) _ (pin s 'trail (tablet 0)) _ (pin s 'top 0)
+       _ (pin s 'reason (tablet 0)) _ (pin s 'trail (tablet 0)) _ (pin s 'top 0) _ (pin s 'qhead 0)
        _ (pin s 'level 0) _ (pin s 'cls (tablet 0)) _ (pin s 'ncls 0) _ (pin s 'act (tablet 0))
+       _ (pin s 'watch (tablet 0)) _ (pin s 'wl (tablet 0)) _ (pin s 'bad 0)
        _ (pin s 'phase (tablet 0)) _ (pin s 'vinc 1.0) _ (pin s 'nconf 0) _ (pin s 'rnum 1) _ (pin s 'climit 100)
-       _ (foldl (\ _ c (add-clause s c)) 0 formula) s)
-   ; clause status under the current trail: 'sat / 'conflict / a forced literal (unit) / 'none
-   (cstatus s c) (? (any (\ l (= 1 (lit-val s l))) c) 'sat
-                    (: free (filter (\ l (= 0 (lit-val s l))) c)
-                       (? (atom? free) 'conflict  (atom? (cup free)) (cap free)  'none)))
-   (propagate s)                                            ; saturate units; return a conflicting clause id, or -1
-    ((: (go i)
-        (? (>= i (peep s 'ncls 0)) -1
-           (: c (peep (vmap s 'cls) i ()) st (cstatus s c)
-              (? (id? st 'conflict) i
-                 (id? st 'sat)  (go (+ i 1))
-                 (id? st 'none) (go (+ i 1))
-                 (: _ (assign s st i) (go 0)))))) 0)        ; a unit forces st (reason = clause i); restart the scan
+       _ (foldl (\ _ c (load-clause s c)) 0 formula) s)
+   ; --- TWO-WATCHED-LITERALS BCP -----------------------------------------------
+   ; Each clause watches two of its literals; watch[l] lists the clauses watching l;
+   ; wl[cid] is the watched pair (a . b). A clause is touched ONLY when a watched
+   ; literal becomes FALSE -- then we slide that watch to any other non-false literal,
+   ; or (none left) the clause is unit (propagate the other watch) or a conflict. The
+   ; invariant survives backtracking untouched (unassigning only relaxes), so backjump
+   ; just rewinds qhead. This is the O(touched), not O(clauses), propagation core.
+   (enqueue s lit cid)                                      ; level-0 / forced literal: assign if free, () ok, 'conflict if already false
+    (: lv (lit-val s lit) (? (= lv 1) 0  (= lv -1) 'conflict  (: _ (assign s lit cid) 0)))
+   (watch2 s cid a b)                                       ; register clause cid as watching literals a and b
+    (: _ (pin (vmap s 'wl) cid (link a b))
+       _ (pin (vmap s 'watch) a (link cid (peep (vmap s 'watch) a ())))
+       _ (pin (vmap s 'watch) b (link cid (peep (vmap s 'watch) b ()))) 0)
+   (dedup-lits c) (? (atom? c) () (member? (cap c) (cup c)) (dedup-lits (cup c)) (link (cap c) (dedup-lits (cup c))))   ; drop duplicate literals
+   (taut? c) (? (atom? c) 0 (member? (neg (cap c)) (cup c)) 1 (taut? (cup c)))   ; contains a literal AND its negation?
+   (load-clause s c0)                                       ; add a source clause to the DB + watches (clean it first: dedupe, drop tautologies)
+    (? (= 1 (taut? c0)) 0                                                        ; tautology -> always satisfied, skip
+       (: c (dedup-lits c0)
+          (? (atom? c) (pin s 'bad 1)                                            ; empty clause -> UNSAT
+             (atom? (cup c)) (: cid (add-clause s c) (? (id? (enqueue s (cap c) cid) 'conflict) (pin s 'bad 1) 0))   ; unit -> level-0 fact
+             (: cid (add-clause s c) (watch2 s cid (cap c) (caup c))))))         ; >=2 distinct lits -> watch the first two
+   (find-watch s cid wo)                                    ; a literal of clause cid other than wo and not currently false, else 0
+    ((: (go ls) (? (atom? ls) 0 (: l (cap ls) (? (&& (! (= l wo)) (! (= (lit-val s l) -1))) l (go (cup ls)))))) (peep (vmap s 'cls) cid ()))
+   (prop-lit s f)                                           ; literal f just became FALSE: re-examine watch[f]; -> conflict cid or -1
+    (: res ((: (go cs kept)                                                      ; kept = clauses that keep watching f; rebuild watch[f]
+               (? (atom? cs) (link -1 kept)
+                  (: cid (cap cs) rest (cup cs) pr (peep (vmap s 'wl) cid ())
+                     wo (? (= (cap pr) f) (cup pr) (cap pr))                      ; the OTHER watched literal
+                     (? (= (lit-val s wo) 1) (go rest (link cid kept))           ; satisfied by wo -> keep watching f
+                        (: k (find-watch s cid wo)
+                           (? (! (= k 0))                                         ; slide the watch f -> k
+                              (: _ (pin (vmap s 'wl) cid (link wo k))
+                                 _ (pin (vmap s 'watch) k (link cid (peep (vmap s 'watch) k ())))
+                                 (go rest kept))                                  ; cid no longer watches f
+                              (= (lit-val s wo) 0) (: _ (assign s wo cid) (go rest (link cid kept)))   ; unit -> force wo
+                              (link cid (cat kept (link cid rest)))))))))         ; wo false -> CONFLICT; f keeps cid + the unprocessed rest
+            (peep (vmap s 'watch) f ()) ())
+       _ (pin (vmap s 'watch) f (cup res)) (cap res))
+   (propagate s)                                            ; drain the trail queue through the watches; -> conflict cid or -1
+    ((: (loop _) (? (>= (peep s 'qhead 0) (peep s 'top 0)) -1
+                   (: p (peep (vmap s 'trail) (peep s 'qhead 0) ()) _ (pin s 'qhead (+ 1 (peep s 'qhead 0)))
+                      confl (prop-lit s (neg p)) (? (> confl -1) confl (loop 0))))) 0)
    ; --- 1-UIP conflict analysis -----------------------------------------------
    ; absorb a reason clause's literals into (counter . learnt): mark each unseen
    ; level>0 var, count those at the conflict level, collect the rest as the
@@ -114,6 +144,13 @@
            acc c)
    (find-seen tr seen idx) (? (= 0 (peep seen (vof (peep tr idx ())) 0)) (find-seen tr seen (- idx 1)) idx)
    (bj-level s learnt) (foldl (\ m l (: lv (peep (vmap s 'lvl) (vof l) 0) (? (> lv m) lv m))) 0 learnt)
+   ; the learnt clause's 2nd watch MUST be its highest-level literal, else a backtrack could unassign
+   ; an unwatched literal and the clause would go unit/conflict undetected. So reorder learnt so [1]
+   ; is the max-level tail literal (learnt[0] stays the asserting literal).
+   (rem-lit x ls) (? (atom? ls) () (= (cap ls) x) (cup ls) (link (cap ls) (rem-lit x (cup ls))))
+   (max-lit s ls) (foldl (\ b l (? (> (peep (vmap s 'lvl) (vof l) 0) (peep (vmap s 'lvl) (vof b) 0)) l b)) (cap ls) (cup ls))
+   (reorder-watch s learnt) (? (atom? (cup learnt)) learnt
+                               (: a0 (cap learnt) rest (cup learnt) mx (max-lit s rest) (link a0 (link mx (rem-lit mx rest)))))
    (analyze s confl)                                        ; -> (learnt-clause . backjump-level); learnt[0] is the asserting literal
     (: dl (peep s 'level 0) seen (tablet 0) tr (vmap s 'trail) cls (vmap s 'cls) reason (vmap s 'reason)
        a0 (absorb s seen dl 0 (peep cls confl ()) (link 0 ()))
@@ -135,7 +172,7 @@
                        (: _ (pin ph v (peep val v 1)) _ (pull val v 0) _ (pull lm v 0) _ (pull rs v 0) (go (- t 1)))   ; save phase before unassigning
                        t))))
            (peep s 'top 0))
-       _ (pin s 'top nt) _ (pin s 'level lvl) 0)
+       _ (pin s 'top nt) _ (pin s 'qhead nt) _ (pin s 'level lvl) 0)   ; rewind the propagation queue to the new top
    ; --- VSIDS: bump a var's activity by the current increment; decay grows the
    ;     increment each conflict (so recent conflicts weigh more); rescale keeps
    ;     activities finite. pick-branch takes the highest-activity FREE var, and
@@ -160,9 +197,11 @@
         (: confl (propagate s)
            (? (> confl -1)
               (? (= 0 (peep s 'level 0)) 'unsat              ; conflict at level 0 -> UNSAT
-                 (: res (analyze s confl) cid (add-clause s (cap res))
+                 (: res (analyze s confl) learnt (reorder-watch s (cap res)) cid (add-clause s learnt)
                     _ (decay s) _ (pin s 'nconf (+ 1 (peep s 'nconf 0)))
-                    _ (backjump s (cup res)) _ (assign s (cap (cap res)) cid) (loop 0)))
+                    _ (backjump s (cup res))
+                    _ (? (atom? (cup learnt)) 0 (watch2 s cid (cap learnt) (caup learnt)))   ; watch the learnt clause (unit learnt: a level-0 fact, unwatched)
+                    _ (assign s (cap learnt) cid) (loop 0)))
               (&& (> (peep s 'level 0) 0) (>= (peep s 'nconf 0) (peep s 'climit 0)))    ; Luby restart: keep learnt clauses, jump to level 0
                  (: _ (backjump s 0) _ (next-restart s) (loop 0))
               (: v (pick-branch s)                            ; decide: highest-activity free var, saved phase
@@ -170,7 +209,9 @@
                     (: _ (pin s 'level (+ 1 (peep s 'level 0)))
                        _ (assign s (* v (peep (vmap s 'phase) v -1)) -1) (loop 0))))))) 0)
    (extract-model s nvars) (map (\ v (link v (val-of s v))) (rng 1 (+ nvars 1)))
-   (cdcl formula nvars) (: s (mk formula nvars) r (search s) (? (id? r 'unsat) 'unsat (extract-model s nvars)))
+   (cdcl formula nvars) (: s (mk formula nvars)
+                           (? (= 1 (peep s 'bad 0)) 'unsat                       ; empty clause / contradictory units at construction
+                              (: r (search s) (? (id? r 'unsat) 'unsat (extract-model s nvars)))))
    ; --- model COUNTING via the CDCL solver: solve, BLOCK the model, repeat until UNSAT. A real #SAT
    ;     technique; the count is solver-INDEPENDENT (a fact), so count-cdcl (cyclic n) == Lucas n. -----
    (block model) (map (\ vv (neg (* (cup vv) (cap vv)))) model)        ; clause excluding exactly this model
