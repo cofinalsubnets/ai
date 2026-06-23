@@ -197,20 +197,33 @@
    ; mkouter -- the entry's OUTER (prologue + putfix-epilogue + shared OVF handler + deopt-mn) for arity
    ; k. The called H_entry sits RIGHT AFTER it (offset Lo = the OUTER's length), so jitgroup lays the
    ; entry first among the H's. (This is the old single-fn outer, now factored out.) Returns (outer Aovf).
-   (mkouter k smask)
+   ; mkguards -- the string-param TYPE GUARD (soundness): for each string param (smask), check Sp[i] is a
+   ; PLAIN string (kind == strkind, the `apof` of a reference string); a fixnum or any other kind (cask,
+   ; list, map, ...) jumps to the OVF handler -> deopt to the interp fallback (which handles every type).
+   ; Without it a non-string arg would deref a bad pointer. off = guards' start offset; Aovf = the handler.
+   (mkguards ms strkind off Aovf)
+    (? (atom? ms) ()
+       (: i (cap ms) f (fetch i) jnz-end (+ off (+ (tally f) 8)) jne-end (+ jnz-end 22)
+          g (asm (L f '(168 1) '(15 133) (le4 (- Aovf jnz-end))                                  ; mov rax,Sp[i]; test al,1; jnz Aovf (fixnum)
+                    '(76 139 0) '(72 184) (le8 strkind) '(73 57 192) '(15 133) (le4 (- Aovf jne-end))))   ; mov r8,[rax]; movabs rax,strkind; cmp r8,rax; jne Aovf
+          (asm (L g (mkguards (cup ms) strkind jne-end Aovf)))))
+   (mkouter k smask strkind)
     (: dpt (? (= k 1) deopt deopt-mn)                                                             ; arity 1 applies fb directly; >=2 enters its body past the lvm_cur
        saveargs (foldl (\ a i (+ a (pshr i))) () (rangeL 0 k))                                    ; save the k arg regs (callee-saved)
        restargs (foldl (\ a i (+ a (popr (- (- k 1) i)))) () (rangeL 0 k))                        ; restore (reverse)
        pushargs (foldl (\ a i (+ a (asm (L (fetch i) (? (member? i smask) () '(72 209 248)) push-rax)))) () (rangeL 0 k))  ; push Sp[0..k-1]; untag (sar) UNLESS a string param (smask = raw pointer)
        s6 (asm (L '(72 131 196) (list (* 8 k))))  s10 (asm (L '(72 131 200 1) '(72 137 1) '(72 131 198 16) '(72 139 6 255 224)))
        Lr (tally restargs)
-       Acall (+ 2 (+ (tally saveargs) (+ 3 (tally pushargs))))
+       Aguard (+ 2 (+ (tally saveargs) 3))                                                       ; guards sit after push r12(2)+saveargs+mov r12,rsp(3)
+       Lg (tally (mkguards smask strkind 0 0))                                                    ; guard length (offset-independent; 0 when no string params)
+       Acall (+ Aguard (+ Lg (tally pushargs)))
        Arest (+ Acall (+ 5 (tally s6)))  As8 (+ Arest Lr)  As9 (+ As8 2)  Ajmpend (+ As9 10)
        As10 Ajmpend  Aovf (+ As10 (tally s10))  Adeopt (+ Aovf (+ 3 (+ Lr 2)))  Hh (+ Adeopt (tally dpt))
+       guards (mkguards smask strkind Aguard Aovf)                                               ; real guards (jump to Aovf on a non-string)
        callb (asm (L '(232) (le4 (- Hh (+ Acall 5)))))                                            ; call H_entry (right after the OUTER)
        s9 (asm (L '(72 1 192) '(113 5) '(233) (le4 (- Adeopt Ajmpend))))                          ; add rax,rax; jno PUTOK(+5); jmp DEOPT
        s11 (asm (L '(76 137 228) restargs '(65 92)))                                              ; OVF: mov rsp,r12; restores; pop r12
-       (L (asm (L '(65 84) saveargs '(73 137 228) pushargs callb s6 restargs '(65 92) s9 s10 s11 dpt)) Aovf))
+       (L (asm (L '(65 84) saveargs '(73 137 228) guards pushargs callb s6 restargs '(65 92) s9 s10 s11 dpt)) Aovf))
    ; jitgroup -- compile a GROUP of mutually-recursive integer fns (each a dotted (nameform . body)) to
    ; native, exposing `entry` as the applicable value (its arity). Layout: the entry's OUTER, then
    ; H_entry, then the other H's, in ONE buffer. TWO passes -- measure each H body's length (offset-
@@ -238,7 +251,7 @@
        ord  (link efn (gfilt (\ f (! (id? (cap f) entry))) info))                            ; entry FIRST (H_entry sits at Lo)
        smap0 (map (\ f (link (cap f) (gfilt (\ k (suse? (nthl f 2) (nthl (nthl f 1) k))) (rangeL 0 (nthl f 3))))) info)   ; per-fn DIRECT string params
        smask (gsm entry (smfix info smap0))                                                   ; entry's STRING params, propagated to a fixpoint -> raw pointer, no sar
-       OU (mkouter (nthl efn 3) smask) outer (cap OU) Aovf (caup OU) Lo (tally outer)
+       OU (mkouter (nthl efn 3) smask (apof "")) outer (cap OU) Aovf (caup OU) Lo (tally outer)   ; (apof "") = the plain-string kind, for the type guard
        sa (\ k (foldl (\ a i (+ a (pshr i))) () (rangeL 0 k)))
        ld (\ k (foldl (\ a i (+ a (ldr i (- (* 16 k) (* 8 i))))) () (rangeL 0 k)))
        re (\ k (foldl (\ a i (+ a (popr (- (- k 1) i)))) () (rangeL 0 k)))
@@ -628,6 +641,13 @@
   ; the // and % integer ops in the GROUP lane (trial-division residue), with /-by-0 deopt
   (: gmod (jitgroup (L (link '(r n d) '(% n d))) 'r) (&& (1 = (gmod 10 3)) (0 = (gmod 12 4)) (= (% 7 0) (gmod 7 0))))
   (: gdiv (jitgroup (L (link '(q n d) '(// n d))) 'q) (&& (3 = (gdiv 10 3)) (-3 = (gdiv -10 3))))
+  ; STRING LANE: native (peep s i) on a plain string (s passed RAW, byte at s+16); the apof TYPE GUARD
+  ; deopts a non-string (fixnum / cask / nil) to the interp fallback -- never a bad deref. glazed == interp.
+  (: gsb (jitgroup (L (link '(sb s i) '(? (< i 0) 0 (+ (peep s i 0) (sb s (- i 1)))))) 'sb)
+     isb (ev '(: (sb s i) (? (< i 0) 0 (+ (peep s i 0) (sb s (- i 1)))) sb))
+     d (string (L 72 105 90 33 65))
+     (&& (365 = (gsb d 4)) (= (isb d 4) (gsb d 4))                                                ; string: native byte-sum == interp
+         (= (isb 5 4) (gsb 5 4)) (= (isb (cask 3) 4) (gsb (cask 3) 4)) (= (isb () 4) (gsb () 4))))   ; non-string -> guard deopts == interp
   ; --- added coverage: setcc <=/>/>=/=, multi-arg (cgn) %/&/|/cmp/?, *-fold loop, //-by-0 deopt ---
   ; comparison RESULT codes -- only `<` reached a setcc before, 4 of 5 opcodes were dark
   (: le (jit '(\ x (<= x 5))) (&& (1 = (le 5)) (1 = (le 3)) (0 = (le 6))))            ; setcc <=
