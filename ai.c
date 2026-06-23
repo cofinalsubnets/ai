@@ -5804,6 +5804,22 @@ static struct ai *ai_bmul_setup(struct ai *g) {
  return g; }
 
 lvm(lvm_bmul_start) {
+ // SMALL-PRODUCT FAST PATH. The resumable apparatus (ai_bmul_setup: promote BOTH operands to
+ // heap bignums, allocate the result buffer + tag, lay out a 5-word work frame) exists so a
+ // product big enough to span many chunks can YIELD between them -- a peer task (the repl's
+ // Ctrl-C poller, the scheduler) must be able to interrupt a huge multiply. But when the whole
+ // product fits in ONE chunk (na*nb <= bmul_chunk) the resumable loop runs exactly once and
+ // never yields, so the setup is pure overhead -- and that is the common case (every fixnum
+ // overflow, every big*small step of a factorial/Bell tower). Run those one-shot through
+ // ai_big_binop, the same schoolbook the array lane uses. (na,nb >= 1 here: at least one operand
+ // is a bignum or two fixnums overflowed, so the division can't divide by zero, and writing the
+ // bound as na <= chunk/nb keeps na*nb from overflowing int on a 32-bit port.)
+ word a = Sp[0], b = Sp[1];
+ int na = bigp(a) ? big_nlimbs(a) : 2, nb = bigp(b) ? big_nlimbs(b) : 2;
+ if (na <= bmul_chunk / nb) {
+  Pack(g); g = ai_big_binop(g, vop_mul);
+  if (!ai_ok(g)) return ghelp(g);
+  return Unpack(g), Continue(); }
  Pack(g); g = ai_bmul_setup(g);
  if (!ai_ok(g)) return ghelp(g);
  return Unpack(g), Continue(); }
