@@ -3009,38 +3009,24 @@ static ai_inline struct ai*ioput_str(struct ai*g, word _) {
  return ai_pop(ioputc(g, '"'), 1); }
 
 // A bare mint (KMint) is nameless: () is the core (the face of absence), and
-// every other point prints `$<serial>` -- the serial in base 36, the mint's
-// GC-stable identity AND its `<` order key, so distinct mints wear distinct
-// faces that sort like the values. The `$` is a DIAGNOSTIC sigil, not a
-// reparse: a mint cannot round-trip (identity is its whole being, no spelling
-// carries it), so the face only has to DISTINGUISH, which the serial does. A
-// NAMED symbol is no longer here -- it is the (name . mint) chain, printed bare
-// by ioput_chain.
-//
-// Why this is safe -- the four loads this face must bear, and why each holds:
-//  1. NON-REPARSE IS NOT A REGRESSION. `show` is diagnostic, not serialization;
-//     nothing in the system rebuilds a mint from its printed form. The OLD face
-//     `(mint 0)` did not round-trip either -- it re-read to a FRESH point (a new
-//     serial), so identity was already lost. We trade a fresh-mint reparse for a
-//     distinguishing one; no caller depended on the reparse.
-//  2. THE READ IS TOTAL, NEVER A TRAP. `$je` re-reads (valence law) as the data
-//     (mono ($ je)), which opfix factors to the glued monadic (sat je); `je` is a
-//     missing name -> the zero point -> (sat ()) = 0. A defined, terminating
-//     value -- never a crash, never a loop, and never a forged mint (it cannot
-//     resurrect the identity it never carried). [probed: both ($je) and ($0)
-//     evaluate to 0]
-//  3. STABLE WITHIN A RUN. The serial rides the GC copy (ini_missing forwards
-//     src->code), so (show m) = (show m) for a live mint across any collection --
-//     the face is a function of identity, not of a moving address. (An address
-//     would FAIL this: two-space copying relocates the object every cycle.)
-//  4. NEVER ASSERTED AS A LITERAL. The serial counts mints stream-wide, so it is
-//     non-deterministic across runs / corpus order. Tests therefore assert the
-//     SHAPE only (leading $, stable, distinct-mints-distinct), never an exact
-//     face. And `$0` can never appear: the core is serial 0 and the guard above
-//     prints it as () -- so the absence face and a mint face never collide.
+// every other point prints `(mint <serial>)` -- the serial in decimal, the mint's
+// GC-stable identity AND its `<` order key, so distinct mints wear distinct faces
+// that sort like the values. The face is DIAGNOSTIC, not a reparse: a mint cannot
+// round-trip (identity is its whole being, no spelling carries it; `(mint N)` re-
+// reads to a FRESH point, a new serial -- mint ignores its arg), so the face only
+// has to DISTINGUISH, which the serial does. A NAMED symbol is no longer here --
+// it is the (name . mint) chain, printed bare by ioput_chain. Notes:
+//  - non-reparse is not a regression: `show` is diagnostic, not serialization;
+//    nothing rebuilds a mint from its printed form.
+//  - stable within a run: the serial rides the GC copy (ini_missing forwards
+//    src->code), so (show m) = (show m) for a live mint across any collection.
+//  - never asserted as a literal: the serial counts mints stream-wide (non-
+//    deterministic across runs/corpus order), so tests assert the SHAPE only
+//    (leading "(mint ", stable, distinct-mints-distinct). serial 0 is the core,
+//    printed () by the guard above, so the absence face never collides with a mint.
 static ai_inline struct ai*ioput_sym(struct ai*g, word _) {
  if (_ == ZeroPoint) return ioputcs(g, "()");  // the face of absence
- return ioputn(ioputcs(g, "$$"), (intptr_t) sym(_)->code, 36); }   // $$<serial base36>: factors back out to the $$ mint maker (diagnostic, not an exact reparse)
+ return ioputcs(ioputn(ioputcs(g, "(mint "), (intptr_t) sym(_)->code, 10), ")"); }   // (mint <serial>): the serial is the mint's identity/order key (diagnostic, not an exact reparse)
 // a named point prints its bare name (the spelling), no sigil -- it reparses to itself.
 // Park the nom: ioputc may GC and MOVE both the nom and its name, so re-derive each step.
 static ai_inline struct ai*ioput_nom(struct ai*g, word _) {

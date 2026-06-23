@@ -360,7 +360,7 @@ i                    ; ~(0.0 1.0)   i = ~(0 1)
 (intern "asdf")      ; asdf
 (string 'asdf)       ; "asdf"      the explicit bridge to the raw spelling ('a + 'b is 'ab, re-interned)
 ("abc" 0)            ; 97          a string indexes its bytes
-(mint 0)             ; $$<serial>  a fresh nameless point ($(mint 0) ; 0); the $$<serial> face is diagnostic, not an exact reparse
+(mint 0)             ; (mint <serial>)  a fresh nameless point ($(mint 0) ; 0); the (mint <serial>) face is diagnostic, not an exact reparse
 (string (nom 'x))    ; "x"         a nom is a named point (KNom), not a chain; read its name with string
 
 ; --- hashes --- #(k v ..) or (hash ..) build; the empty hash is (tablet 0) (and prints so); mutable.

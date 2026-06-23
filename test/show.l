@@ -18,16 +18,16 @@
 
   ; interned symbols print as their name
   (= "foo" (show 'foo))
-  ; a mint prints $$<serial> -- the serial in base 36, factoring back out to the
-  ; $$ mint maker. NOT an exact round-trip: $$<serial> re-reads as `($$ <serial>)`,
-  ; a FRESH mint, since identity is the mint's whole product and no spelling carries
-  ; it -- the face only has to distinguish, which the serial does. the serial is
-  ; non-deterministic, so we assert the SHAPE: a leading $$, stable, distinct.
-  (= "$$" (snip (show (mint 0)) 0 2))
+  ; a mint prints (mint <serial>) -- the serial in decimal, the mint's identity. NOT an
+  ; exact round-trip: (mint <serial>) re-reads to a FRESH mint (mint ignores its arg),
+  ; since identity is the mint's whole product and no spelling carries it -- the face only
+  ; has to distinguish, which the serial does. the serial is non-deterministic, so we
+  ; assert the SHAPE: a leading "(mint ", stable, distinct.
+  (= "(mint " (snip (show (mint 0)) 0 6))
   (: m (mint 0) ((show m) = (show m)))             ; stable: same mint, same face
   (: a (mint 0) b (mint 0) !((show a) = (show b))) ; distinct mints, distinct faces
   (nom? (mint 0))
-  (= "$" (snip (show (mint 'bar)) 0 1))            ; (mint 'bar) ignores its arg -- still a bare mint
+  (= "(mint " (snip (show (mint 'bar)) 0 6))       ; (mint 'bar) ignores its arg -- still a bare mint
 
   ; quote sugar: a chain (` x) prints as 'x
   (= "'foo"      (show ''foo))
