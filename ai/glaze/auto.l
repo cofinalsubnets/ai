@@ -446,6 +446,81 @@
     (? (! (has-pipe? form)) form                                             ; NO pipeline anywhere -> byte-identical (every legacy form)
        (! (&& (two? form) (id? (cap form) ':) (! (atom? (cup form))))) (dlower (dsimp (dforest form)))
        (link ': (defol-bs (cup form))))
+   ; --- LOOP-CLOSER (loopclose): collapse a polynomial accumulation `(foldl/foldr (+) z SRC)` to its
+   ;     CLOSED FORM in the (possibly symbolic) bound -- work INDEPENDENT of the trip count, the sequel
+   ;     to deforestation, a layer above mix (which only unfolds). Runs BEFORE defoliate (it wants the
+   ;     raw fold, not the lowered loop); the standalone spec is doc/proto/close.l. ENGINE: finite
+   ;     differences in EXACT integers -- the body's forward differences c_k = Δ^k g(0) (Newton-Gregory)
+   ;     + the hockey-stick identity Σ_{i<N} C(i,k) = C(N,k+1), so Σ_{i<N} g(i) = Σ_k c_k C(N,k+1),
+   ;     emitted as PURE ARITHMETIC (falling factorial / k!), no runtime helper. The body is a BLACK-BOX
+   ;     ORACLE we SAMPLE (base-ev, no glaze re-entry) -- a closure-building body closes like a bare line.
+   ;     SOUNDNESS: map F / filter P must `qual` (pure arithmetic over one param -> no capture of the
+   ;     bound), AND the difference table must DIE (top difference EXACTLY 0 -- `=0`, not `nil?`, which
+   ;     also fires on a negative leading term). FILTERS: a period-2 predicate (odd/even) reparametrizes
+   ;     to the dense kept index (k=2j+1 / 2j) -- the SCEV-beating `deforest` case; other predicates
+   ;     DECLINE to defoliate. Byte-identical on any form with no closeable fold.
+   (lcfd ys)    (? (atom? (cup ys)) () (link (- (caup ys) (cap ys)) (lcfd (cup ys))))         ; one forward difference
+   (lclead ys)  (? (atom? ys) () (link (cap ys) (lclead (lcfd ys))))                          ; leading diagonal c_0..c_d
+   (lctopfd ys) (? (atom? (cup ys)) (cap ys) (lctopfd (lcfd ys)))                             ; last entry: Δ^(L-1) g(0)
+   (lcsamp g d) (: (go i) (? (<= i d) (link (g i) (go (+ i 1))) ()) (go 0))                   ; (g 0)..(g d)
+   (lcdeg g cp) (: (go d) (? (>= d cp) -1 (? (= 0 (lctopfd (lcsamp g (+ d 1)))) d (go (+ d 1)))) (go 0))   ; degree, -1 if not polynomial within cp
+   (lcfac r)    (: (go k a) (? (< k 2) a (go (- k 1) (* a k))) (go r 1))                      ; r! (a literal at glaze time)
+   (lcsub N j)  (? (= j 0) N (L '- N j))                                                      ; (N - j), or N when j=0
+   (lcff N j r) (? (= j (- r 1)) (lcsub N j) (L '* (lcsub N j) (lcff N (+ j 1) r)))           ; falling factorial N(N-1)..(N-r+1) as source
+   (lccbn N r)  (? (= r 1) N (L '// (lcff N 0 r) (lcfac r)))                                  ; C(N,r) as source (r consecutive ints / r!, exact)
+   (lcmul c t)  (? (= c 1) t (L '* c t))
+   (lcadd a b)  (? (= b 0) a (L '+ a b))
+   (lcsum cks N) (: (go ks k) (? (atom? ks) 0 (: rest (go (cup ks) (+ k 1)) (? (= (cap ks) 0) rest (lcadd (lcmul (cap ks) (lccbn N (+ k 1))) rest)))) (go cks 0))   ; Σ_k c_k C(N,k+1), nonzero terms
+   (lcfinal z sum) (? (= z 0) sum (L '+ z sum))
+   (lcemit z g M) (: d (lcdeg g 8) (? (< d 0) () (L (lcfinal z (lcsum (lclead (lcsamp g d)) M)))))   ; sample -> degree -> closed source, wrapped; () declines
+   (lcjot? s)   (&& (two? s) (id? (cap s) 'jot)    (= 2 (tally s)))
+   (lcmap? s)   (&& (two? s) (id? (cap s) 'map)    (= 3 (tally s)))
+   (lcfilt? s)  (&& (two? s) (id? (cap s) 'filter) (= 3 (tally s)))
+   (lcplus? f)  (|| (id? f '+) (&& (two? f) (id? (cap f) '+) (= 1 (tally f))))                ; + or (+)
+   (lcfold? x)  (&& (two? x) (member? (cap x) '(foldl foldr)) (= 4 (tally x)) (lcplus? (opd x 0)))
+   (lcsrc s)                                                                                  ; SRC -> (Fsrc Psrc Nexpr) | () ; F/P = () when absent
+    (? (lcjot? s)  (L () () (opd s 0))
+       (lcfilt? s) (: in (opd s 1) (? (lcjot? in) (L () (opd s 0) (opd in 0)) ()))
+       (lcmap? s)  (: in (opd s 1) (? (lcjot? in) (L (opd s 0) () (opd in 0))
+                                       (&& (lcfilt? in) (lcjot? (opd in 1))) (L (opd s 0) (opd in 0) (opd (opd in 1) 0))
+                                       ()))
+       ())
+   ; SOUNDNESS: only close a body that is a PURE POLYNOMIAL (+ - * over the param + int consts) -- a
+   ; genuine polynomial, so the difference table dies EXACTLY at its degree (a body with //, %, <, or ?
+   ; can fit a low-degree polynomial on the first samples yet break later -- sampling can't prove it).
+   (lc1lam? f)   (&& (two? f) (id? (cap f) '\) (= 3 (tally f)) (name? (opd f 0)))               ; (\ v BODY)
+   (lcpoly? v e) (? (id? e v) 1 (whole? e) 1
+                    (&& (two? e) (member? (cap e) '(+ - *)) (= 3 (tally e))) (&& (lcpoly? v (opd e 0)) (lcpoly? v (opd e 1)))
+                    0)
+   (lcpolyf? f)  (&& (lc1lam? f) (lcpoly? (opd f 0) (opd f 1)))
+   ; and recognize the filter predicate STRUCTURALLY (odd/even over (% v 2)) -- not by sampling, which
+   ; a longer-period predicate could fool. canonical forms: (% v 2)/(= 1 (% v 2)) odd, (= 0 (% v 2)) even.
+   (lcmod2? e v) (&& (two? e) (id? (cap e) '%) (= 3 (tally e)) (id? (opd e 0) v) (= (opd e 1) 2))
+   (lcoddp? f)   (? (! (lc1lam? f)) ()                                                          ; -> 'odd | 'even | ()
+                    (: v (opd f 0) b (opd f 1)
+                       (? (lcmod2? b v) 'odd
+                          (&& (two? b) (id? (cap b) '=) (= 3 (tally b)))
+                             (: a (opd b 0) c (opd b 1)
+                                (? (&& (= a 1) (lcmod2? c v)) 'odd  (&& (= c 1) (lcmod2? a v)) 'odd
+                                   (&& (= a 0) (lcmod2? c v)) 'even (&& (= c 0) (lcmod2? a v)) 'even ()))
+                          ())))
+   (lcclose1 x)                                                                               ; (foldl/foldr (+) z SRC) -> (closed-source) | () decline
+    (: z (opd x 1) p (lcsrc (opd x 2))
+       (? (atom? p) ()
+          (: Fsrc (cap p) Psrc (caup p) N (caup (cup p))
+             Fc (? (id? Fsrc ()) (\ i i) (? (lcpolyf? Fsrc) (base-ev Fsrc) ()))              ; identity if no map; else F must be a pure polynomial
+             (? (id? Fc ()) ()
+                (id? Psrc ()) (lcemit z Fc N)                                                 ; no filter: g = F over [0,N)
+                (: pat (lcoddp? Psrc)                                                         ; else need a recognized odd/even filter
+                   (? (id? pat 'odd)  (lcemit z (\ j (Fc (+ 1 (* 2 j)))) (L '// N 2))         ; k=2j+1, M=N//2
+                      (id? pat 'even) (lcemit z (\ j (Fc (* 2 j))) (L '// (L '+ N 1) 2))      ; k=2j,   M=(N+1)//2
+                      ()))))))
+   (lcquote? x) (&& (two? x) (id? (cap x) '\) (= 2 (tally x)))
+   (lcwalk x) (? (atom? x) x (lcquote? x) x
+                 (: c (? (lcfold? x) (lcclose1 x) ())
+                    (? (atom? c) (link (cap x) (map lcwalk (cup x))) (cap c))))               ; () decline -> recurse; (src) -> the residual
+   (lc-has-fold? x) (? (atom? x) 0 (lcquote? x) 0 (lcfold? x) 1 (any lc-has-fold? (cup x)))
+   (loopclose form) (? (lc-has-fold? form) (lcwalk form) form)                                ; byte-identical when no closeable fold
    (clook2 nm al) (? (atom? al) -1 (id? nm (caap al)) (caup (cap al)) (clook2 nm (cup al)))   ; (name arity) alist -> arity (-1 absent)
    (groupok? cands ps e)                                                                      ; is e in the fragment over cands (a (name arity) list)?
     (? (member? e ps) 1  (whole? e) 1
@@ -469,7 +544,7 @@
     (? (! (two? form0)) form0
        (! (id? (cap form0) ':)) form0
        (atom? (cup form0)) form0
-       (: form (lift (delet (defoliate (autospec (debool (fold-consts form0))))))   ; lower &&/||/min/max/abs to ?, specialize interp-over-static-data, deforest pipelines -> loops, inline value-lets in fn bodies, THEN lambda-lift named-let bodies -> flat group fns
+       (: form (lift (delet (defoliate (loopclose (autospec (debool (fold-consts form0)))))))   ; lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets in fn bodies, THEN lambda-lift named-let bodies -> flat group fns
           parsed (anat-defs (cup form)) pairs (cap parsed)
           fns (afilter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
           (? (! (two? fns)) form0                                                            ; no candidate functions -> original
@@ -658,6 +733,25 @@
        (&& !(id? (autogroup dr) dr) (328350 = (ev dr)) (= (base-ev dr) (ev dr))))        ; foldr +.map sq, sum i^2 for i<100
     (: drf '(: (f n) (foldr (+) 0 (filter (\ x (= 1 (% x 2))) (jot n))) (f 20))
        (&& !(id? (autogroup drf) drf) (100 = (ev drf)) (= (base-ev drf) (ev drf))))      ; foldr +.filter odd, 1+3+..+19 = 100
+    ; LOOP-CLOSER (loopclose): a polynomial fold over jot (optionally odd/even-filtered) collapses to a
+    ; CLOSED FORM in the bound (no loop), == interp. Runs before defoliate, so the jot-fold cases above
+    ; (dq/dj/dr/drf) now close HERE; non-period-2 filters (dpf) and map-of-map (dmm) still defoliate.
+    (: lcsq '(: (f n) (foldl (+) 0 (map (\ x (* x x)) (jot n))) (f 100))
+       (&& !(id? (autogroup lcsq) lcsq) (328350 = (ev lcsq)) (= (base-ev lcsq) (ev lcsq))))   ; Σ i^2 for i<100, closed
+    (: lcid '(: (f n) (foldl (+) 0 (jot n)) (f 100))
+       (&& !(id? (autogroup lcid) lcid) (4950 = (ev lcid)) (= (base-ev lcid) (ev lcid))))     ; Σ i for i<100 = C(100,2)
+    ; the SCEV-beating `deforest` case: Σ of the odd squares, the odd-filter reparametrized k=2j+1
+    (: lcodd '(: (f n) (foldl (+) 0 (map (\ x (* x x)) (filter (\ x (= 1 (% x 2))) (jot n)))) (f 20000))
+       (&& !(id? (autogroup lcodd) lcodd) (1333333330000 = (ev lcodd)) (= (base-ev lcodd) (ev lcodd))))   ; Σ odd k^2 -> a literal, SCEV keeps the loop
+    ; SYMBOLIC bound: the closed form is a polynomial in n, exact at MULTIPLE n (not one folded point)
+    (: lcvar '(: (f n) (foldl (+) 0 (map (\ x (* x x)) (jot n))) (+ (f 7) (* 1000 (f 13))))
+       (= (base-ev lcvar) (ev lcvar)))                                                        ; f(7)+1000*f(13), the closed form reused at two n
+    ; DECLINE 1: a non-period-2 filter (>2) is left to defoliate; value preserved
+    (: lcdec '(: (f n) (foldl (+) 0 (map (\ x (+ x 1)) (filter (\ x (> x 2)) (jot n)))) (f 10))
+       (= (base-ev lcdec) (ev lcdec)))                                                        ; keep>2,+1 -> defoliate
+    ; DECLINE 2: a piecewise body quals but is NOT polynomial -> the difference table never dies -> declines
+    (: lcnp '(: (f n) (foldl (+) 0 (map (\ x (? (< x 5) (* x x) 0)) (jot n))) (f 12))
+       (= (base-ev lcnp) (ev lcnp)))                                                          ; 0+1+4+9+16 = 30, defoliated/interpreted
     ; all/any: a short-circuit predicate -> an early-exit loop returning the truth BITS 0/1 (== interp, which
     ; now returns bits too). a clean run-off and an early short-circuit both glaze, with or without a producer.
     (: dall '(: (f n) (all (\ x (< x n)) (jot n)) (f 10))
