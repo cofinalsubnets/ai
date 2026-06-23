@@ -28,4 +28,19 @@ if printf '%s\n' "$staged" | grep -qE \
   fi
 fi
 
+# bench/bench.html -- the results page. Rebuild when something that moves the
+# numbers is touched (the core, the egg layers, the glaze, the benches, the
+# harness). `make -C bench html` re-renders from the cached out/bench/*.txt,
+# re-running only the STALE columns (ai, when the binary changed) and reusing
+# the cache for the rest -- so a warm cache makes this seconds, not minutes.
+# NON-FATAL: a cold cache or a missing language runtime must not block a commit.
+# (bench.html itself is excluded from the trigger so committing the page can't loop.)
+if printf '%s\n' "$staged" | grep -qE \
+  '^(ai\.c|[^/]+\.h|ai/(prel|ev)\.l|ai/glaze/[^/]+\.l|bench/(benches/.+|bench\.l|run\.sh|mkhtml\.sh|report\.awk|Makefile))$'; then
+  echo "pre-commit: bench sources changed, rebuilding bench/bench.html ..." >&2
+  if make -C bench html >/dev/null 2>&1; then git add bench/bench.html
+  else echo "pre-commit: 'make -C bench html' failed (cold cache?) -- bench.html may lag (commit with --no-verify to skip)" >&2
+  fi
+fi
+
 exit $status
