@@ -7,6 +7,9 @@
 ; OP in + - * // % & | ^ < <= > >= =):
 ;   LEAF1 (\ x E)            -- E over x
 ;   LEAFN (\ p0 .. p_{n-1} E) -- E over the params, any arity n>=2 (currying via lvm_cur; natn)
+;   FLEAF (\ x F)            -- F a FLOAT body (cgf's +-*/ over a fixnum param + consts); the
+;         RESULT is a heap-boxed gem (jitfr). Sound ONLY when the param is floated at first use
+;         (allsafe) -- else the interpreter keeps an int subexpr exact and native rounds early.
 ;   LOOP  (\ n ((: (go i a) (? (< i n) (go (+ i 1) (+ a B)) a)) 0 0))  -- a native counted
 ;         loop summing B(i) for i<n; B in the same grammar over i. Owning the LOOP is
 ;         where the big win is (cf. the leaf's ~6%): the back-edge stays native.
@@ -101,6 +104,26 @@
                       (two? (cup (cup inner))) !(two? (cup (cup (cup inner))))            ; INNER = (\ q E), q != p
                       (exprn `(p (caup inner)) (caup (cup inner)))))
    (flatc lam) (: inner (caup (cup lam)) `('\ (caup lam) (caup inner) (caup (cup inner))))  ; (\ p (\ q E)) -> (\ p q E)
+   ; --- FLOAT-RESULT leaf (\ x <fexpr>) -> jitfr (emit.l): a body that BOXES a gem, over cgf's +-*/
+   ;     grammar (a fixnum param + float/int consts). SOUNDNESS vs the interpreter turns on WHEN the
+   ;     param is floated: the native lane cvtsi2sd's it at EVERY use, but the interpreter keeps an
+   ;     INTEGER subexpression exact (a bignum, even) until a float forces promotion -- so (+ (* x 3) 1.5)
+   ;     DIVERGES at x=2^53+1 (native rounds the param early). `fty` types each node F / I / 0(reject);
+   ;     `allsafe` demands the param NEVER sit inside an I-typed COMPOUND (it must meet a float at first
+   ;     contact), so native's per-use flotation lands on the interpreter's promotion point exactly.
+   (fty e v) (? (= e v) 'I  (gem? e) 'F  (whole? e) 'I                                           ; param/int = I, float const = F
+                (&& (two? e) (= 3 (tally e)) (member? (cap e) '(+ - * /)))                       ; a binary +-*/ form
+                  (: op (cap e) ta (fty (caup e) v) tb (fty (caup (cup e)) v)
+                     (? (|| (id? ta 0) (id? tb 0)) 0                                             ; an operand rejected -> reject
+                        (member? op '(+ - *)) (? (|| (id? ta 'F) (id? tb 'F)) 'F 'I)            ; +-*: float iff an operand is float
+                        (|| (id? ta 'F) (id? tb 'F)) 'F  0))                                     ; /: float-division ok; int/int is value-dependent -> reject
+                0)
+   (allsafe e v) (? (! (occurs? v e)) 1  (! (two? e)) 1  (id? (fty e v) 'I) 0                    ; an I-typed COMPOUND holding the param -> late promotion -> reject
+                    (&& (allsafe (caup e) v) (allsafe (caup (cup e)) v)))
+   (qualfr lam) (&& (two? lam) (= (cap lam) '\) (two? (cup lam)) (symp (caup lam))
+                    (two? (cup (cup lam))) !(two? (cup (cup (cup lam))))                         ; (\ v BODY), one param + one body
+                    (: v (caup lam) body (caup (cup lam))
+                       (&& (id? (fty body v) 'F) (allsafe body v))))                             ; BODY is a float RESULT, param floated everywhere
    ; --- the GRID NEST (general, D-dimensional): a letrec of D counted-loop functions wrapping a
    ; FLOAT RECURRENCE -- the inner def self-recurses with an (&& (< it LIM) (cmp TEST BOUND)) escape
    ; test; each loop def is (? (< cnt N) (self ..outer.. (+ cnt 1) ..(+ acc INNERCALL)..) acc), the
@@ -296,6 +319,7 @@
    (auto-ev e) (? (qual e)  (memo e njit)
                   (qualn e) (memo e jitn)
                   (qualc e) (memo e (\ l (jitn (flatc l))))
+                  (qualfr e) (memo e jitfr)                       ; float-RESULT leaf -> heap-boxed gem (sound: param floated at first use)
                   (: li (loopinfo e)
                      (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li))))))
                         (: ln (loopinfo-n e)
@@ -338,7 +362,16 @@
        (&& (13 = (a3 1 3 3)) (13 = ((a3 1 3) 3)) (13 = ((a3 1) 3 3)) ((\ x y z (+ (+ x y) (* z 3))) = a3)))
     ; captured-closure constructor auto-natived: captures transparent (= interp)
     (: adder (ev '(\ n (\ x (+ x n))))  a5 (adder 5)
-       (&& (15 = (a5 10)) ('(6 7 8) = (map a5 '(1 2 3))) (= a5 ((\ n (\ x (+ x n))) 5)))))
+       (&& (15 = (a5 10)) ('(6 7 8) = (map a5 '(1 2 3))) (= a5 ((\ n (\ x (+ x n))) 5))))
+    ; FLOAT-RESULT leaf auto-natived -> a heap-boxed gem, == interp, transparent
+    (: fr (ev '(\ x (+ (* x 1.5) 2.0)))
+       (&& (gem? (fr 4)) (8.0 = (fr 4)) (= ((base-ev '(\ x (+ (* x 1.5) 2.0))) 7) (fr 7))
+           ((\ x (+ (* x 1.5) 2.0)) = fr)))                     ; =-identical to source
+    (qualfr '(\ x (/ (+ x 1.0) 2.0)))                          ; float-division leaf: param floated at first use -> SOUND
+    !(qualfr '(\ x (+ (* x 3) 1.5)))                           ; param inside an INT subexpr (* x 3) -> late promotion diverges -> rejected
+    !(qualfr '(\ x (/ x 2)))                                   ; int/int division: result type value-dependent -> rejected
+    !(qualfr '(\ x (+ (* x 2) 3)))                             ; an all-INTEGER leaf is no float result (qual handles it)
+    (: ii (ev '(\ x (+ (* x 2) 3))) (&& (7 = (ii 2)) !(gem? (ii 2)))))   ; ... and stays a fixnum (qualfr did not steal it)
  _ (assert    ; D-DIMENSIONAL float-recurrence GRIDS auto-glazed from SOURCE -> native whole-grid kernel, bit-exact (== interp)
     ; D=2 -- the mandelbrot 64x64 grid (M=2 invariants, N=2 fvars), the canonical instance -> checksum 87130
     (: g2 '(: (mand cx cy zx zy it)

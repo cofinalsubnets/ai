@@ -331,8 +331,8 @@
    ; the float lane carries NO overflow guard (doubles saturate to inf, never promote
    ; to bignum); only the INTEGER lane keeps the jno->deopt that preserves bignum
    ; promotion. this first cut: a float PREDICATE leaf (\ x (cmp <fexpr> <fexpr>)) over
-   ; a FIXNUM arg -> 0/1 -- no gem args (deferred: needs the lvm_flo type guard), no
-   ; float result (deferred: needs a Have-checked box). a non-fixnum arg DEOPTS (fxv).
+   ; a FIXNUM arg -> 0/1 -- no gem args (deferred: needs the lvm_flo type guard); a
+   ; float RESULT is now `jitfr` below (the Have-checked box). a non-fixnum arg DEOPTS (fxv).
    (fbits x)                                                          ; finite double -> its IEEE-754 u64 bits
     (? (= x 0.0) 0
        (: s (? (< x 0.0) 1 0) ax (? (< x 0.0) (- 0.0 x) x)
@@ -363,6 +363,23 @@
          (+ '(102 15 46 200) (+ (fsetcc op) '(72 15 182 192))))))))   ; ucomisd xmm0,xmm1 ; setcc al ; movzx rax,al
    ; (jitf '(\ x (cmp <fexpr> <fexpr>))) -- a float predicate over a fixnum arg -> native 0/1.
    (jitf lam) (: v (caup lam) (nif (emit (+ (cgfp v (caup (cup lam)) 0) epilogue)) (ev lam) lam 1))
+   ; --- HEAP RESULT (the deferred "Have-checked box"): (jitfr '(\ x <fexpr>)) returns a GEM, not 0/1.
+   ; the lane never allocates because it can't GC (its raw regs aren't roots) -- so it does the alloc
+   ; twin of the overflow guard: a ROOM GUARD (Sp - Hp >= flo_req+floor words) DEOPTS to interp when
+   ; the heap is too full to fit the box, exactly as `jo` deopts when a fixnum result leaves range.
+   ; fast path (room proven): write [Hp]=lvm_flo (apof's kind const, ASLR-captured at emit like the
+   ; string guard), the double at [Hp+8] with NaN->0 (flo_put's law), return Hp UNTAGGED (an even heap
+   ; ptr IS the gem), bump Hp by flo_req. the epilogue stores the POINTER (NO putfix) and threads the
+   ; advanced Hp on through Continue, so the box is live to the next op and the GC at the next safepoint.
+   floflo '(72 141 66 80  72 57 193)                                 ; lea rax,[rdx+80](=Hp+(flo_req+floor)w); cmp rcx,rax (Sp ? room)
+   (jitfr lam)
+    (: v (caup lam)  kind (apof 1.5)                                 ; lvm_flo's address, captured now (code never moves)
+       roomg (asm (L floflo (L 115 (tally deopt)) deopt))            ; jae +|deopt| (room) ; else deopt-to-interp (heap full)
+       nanc  '(102 15 46 192  123 4  102 15 87 192)                  ; ucomisd xmm0,xmm0 ; jnp +4 ; xorpd xmm0,xmm0  (NaN -> 0.0)
+       boxw  (asm (L '(73 184) (le8 kind) '(76 137 2)                ; movabs r8,kind ; mov [rdx],r8       (box header = lvm_flo)
+                     '(242 15 17 66 8) '(72 137 208) '(72 131 194 16)))   ; movsd [rdx+8],xmm0 ; mov rax,rdx ; add rdx,16
+       epifr '(72 137 1  72 131 198 16  72 139 6  255 224)           ; mov [rcx],rax ; add rsi,16 ; Continue  (NO putfix: rax IS the gem)
+       (nif (emit (asm (L (cgf v (caup (cup lam)) 0) roomg nanc boxw epifr))) (ev lam) lam 1))
    ; --- FLOAT RECURRENCE LOOP OWNER (the mandelbrot escape-loop class) ----------
    ; owns a numeric escape loop end to end: FIXNUM inputs (pixel coords) -> derived
    ; floats (computed once) -> a float recurrence over loop-vars in xmm8.. with an
@@ -647,7 +664,19 @@
      isb (ev '(: (sb s i) (? (< i 0) 0 (+ (peep s i 0) (sb s (- i 1)))) sb))
      d (string (L 72 105 90 33 65))
      (&& (365 = (gsb d 4)) (= (isb d 4) (gsb d 4))                                                ; string: native byte-sum == interp
-         (= (isb 5 4) (gsb 5 4)) (= (isb (cask 3) 4) (gsb (cask 3) 4)) (= (isb () 4) (gsb () 4))))   ; non-string -> guard deopts == interp
+         (= (isb 5 4) (gsb 5 4)) (= (isb (cask 3) 4) (gsb (cask 3) 4)) (= (isb () 4) (gsb () 4))))
+  ; HEAP RESULT (jitfr): a float-result leaf BOXES on the heap -- a gem out, == interp, transparent, deopts
+  (: fr (jitfr '(\ x (+ (* x 1.5) 2.0)))  ifr (\ x (+ (* x 1.5) 2.0))
+     (&& (gem? (fr 4)) (8.0 = (fr 4)) (= (ifr 7) (fr 7))                  ; a FLOAT box; 4*1.5+2=8.0; == interp
+         (lit? fr) ((\ x (+ (* x 1.5) 2.0)) = fr)                         ; applicable + =-IDENTICAL to source
+         (= (map ifr '(1 2 3)) (map fr '(1 2 3)))                         ; composes with map, == interp
+         (= (ifr (:)) (fr (:)))))                                         ; non-fixnum arg -> fxv deopt -> interp
+  (: frz (jitfr '(\ x (/ (- x x) (- x x)))) (&& (gem? (frz 5)) (0.0 = (frz 5))))   ; 0/0 -> NaN -> 0.0 (flo_put's law)
+  ; GC-SAFETY: a native-written box is a normal ai_flo (kind=lvm_flo, 2 words) -> the cheney copier
+  ; traces/moves it like any gem. hold one across a big alloc (forces GC), and box thousands under
+  ; pressure -- if the box were malformed or the bump corrupted Sp's region, these would diverge/crash.
+  (: gfr (jitfr '(\ x (+ (* x 1.5) 2.0)))  b (gfr 4)  _ (tally (jot 200000))  (8.0 = b))   ; the box survives a forced GC
+  (: gfr (jitfr '(\ x (+ (* x 1.5) 2.0)))  ys (map gfr (jot 4000))  zs (map (\ x (+ (* x 1.5) 2.0)) (jot 4000)) (= ys zs))  ; 4000 boxes under GC pressure == interp   ; non-string -> guard deopts == interp
   ; --- added coverage: setcc <=/>/>=/=, multi-arg (cgn) %/&/|/cmp/?, *-fold loop, //-by-0 deopt ---
   ; comparison RESULT codes -- only `<` reached a setcc before, 4 of 5 opcodes were dark
   (: le (jit '(\ x (<= x 5))) (&& (1 = (le 5)) (1 = (le 3)) (0 = (le 6))))            ; setcc <=
