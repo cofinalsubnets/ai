@@ -179,7 +179,7 @@
               (&& (atom? (cup t)) (atom? (cap t)) (nil? (nom? (cap t)))) (link 1 (nil? (cap t)))  ; (c) == c: a folded monadic (opfix wraps (! e) -> ((nil? e)), so a folded test lands wrapped)
               0)
    (wxc bs bnd) (: fb (? (member? 'nil? bnd) bs (firstr cflip-rules bs))
-    (? (atom? fb) (list ())                           ; clauses ran out: implicit () else (nil-ontology bug 3)
+    (? (atom? fb) (list ())                           ; clauses ran out: implicit () else (nil-ontology)
        (atom? (cup fb)) (list (wx (cap fb) bnd))      ; the lone else
        (: t (wx (cap fb) bnd) k (cst t)               ; walk the test; is it a static constant?
         (? (atom? k) (link t (link (wx (caup fb) bnd) (wxc (cuup fb) bnd)))   ; unknown -> keep the clause
@@ -235,9 +235,11 @@
     (id? (cap x) '\) (cplam x se)
     (id? (cap x) ':) (link ': (cpbinds (cup x) se))
     (id? (cap x) '?) (link '? (map (\ e (cprop e se)) (cup x)))                       ; no prune here -- wxc does it
-    (: h (cap x) as (map (\ e (cprop e se)) (cup x))
-       (? (&& (nom? h) (inop h opval) (allk as)) (foldc h as)                         ; pure-op on consts -> fold
-          (link h as))))
+    (: h (cap x) m (? (nom? h) (macros h) 0)                                          ; macro head? expand on RAW args -- a structural
+       (? m (cprop (m (cup x)) se)                                                    ; macro (assert's quoted msg, a two?/cap probe) must
+          (: as (map (\ e (cprop e se)) (cup x))                                      ; see SOURCE, not a pre-folded constant; then cprop
+             (? (&& (nom? h) (inop h opval) (allk as)) (foldc h as)                   ; the expansion (so do/let/&& fold exactly as before)
+                (link h as))))))
    (wx (cprop x ()) 0))
   ; a bare symbol is a variable reference -- EXCEPT the zero point, which reads as a
   ; nom? literal (the `()` a (\ _ ()) / failed parse / `('x) tail evaluates to).

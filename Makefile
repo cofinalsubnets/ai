@@ -67,7 +67,7 @@ test_host: host
 # test/00-init.l assert harness (which exits 1 on the first failure), so the gate
 # checks BOTH exit 0 AND the sentinel -- a silent reader-stop exits 0 without it.
 # Add a thread's smoke script to hostnif_tests (ain: boot/net.l, &c).
-hostnif_tests = boot/pty.l boot/net.l boot/baoedit.l boot/baotest.l
+hostnif_tests = boot/pty.l boot/net.l boot/baoedit.l boot/baotest.l boot/init.l
 test_hostnif: host
 	@for s in $(hostnif_tests); do echo "HOSTNIF $$s"; \
 	  cat test/00-init.l $$s | $m > out/host/.test_hostnif.out 2>&1; r=$$?; \
@@ -75,21 +75,26 @@ test_hostnif: host
 	  { [ $$r -eq 0 ] && grep -q ': ok' out/host/.test_hostnif.out; } \
 	    || { echo "FAIL $$s (exit $$r)"; exit 1; }; \
 	done
-# Native-codegen self-test (ai/glaze/emit.l): the x86-64 jit emitter. Like the
-# host-nif tests it needs the built binary (uses the `nat` host nif) and the
-# 00-init assert harness -- emit.l's `(assert ...)` is a NO-OP under a bare -l
-# (no `assert` in scope, so it reads as a missing nom and absorbs its args), so
-# it MUST run with 00-init prepended or it silently always-passes. x86-64 ONLY
-# (emit.l emits x86-64 machine code); skipped elsewhere. Gate = exit 0 AND the
-# "native codegen ok" sentinel (a reader-stop exits 0 without it).
+# Native-codegen self-tests (the ai/glaze/ x86-64 jit): emit (the SSE emitter),
+# auto (ev's source-recognizer: counted loops, float grids, recursive arith
+# groups), hook (ev.l's ala creation-hook, native-backing every qualifying
+# closure). Each needs the built binary (the `nat` host nif). They NO LONGER
+# need 00-init: prel now ships a strict `assert` that SCARES on a false claim
+# (terminal, exit 1), so each file gates ITSELF -- a failure raises before its
+# "ai/glaze/<name>:" sentinel prints, a pass reaches it. auto and hook build on
+# emit's codegen, so each runs with emit.l prepended (alone they correctly scare
+# on the missing deps). x86-64 ONLY (real machine code); skipped elsewhere.
+# Gate per file = exit 0 AND its sentinel (a reader-stop exits 0 without it).
 .PHONY: test_glaze
 ifeq ($a,x86_64)
 test_glaze: host
-	@echo GLAZE ai/glaze/emit.l
-	@cat test/00-init.l ai/glaze/emit.l | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
+	@for s in emit auto hook; do echo "GLAZE ai/glaze/$$s.l"; \
+	  if [ $$s = emit ]; then src="ai/glaze/emit.l"; else src="ai/glaze/emit.l ai/glaze/$$s.l"; fi; \
+	  cat $$src | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
 	  cat out/host/.test_glaze.out; \
-	  { [ $$r -eq 0 ] && grep -q "native codegen ok" out/host/.test_glaze.out; } \
-	    || { echo "FAIL glaze (exit $$r)"; exit 1; }
+	  { [ $$r -eq 0 ] && grep -q "ai/glaze/$$s:" out/host/.test_glaze.out; } \
+	    || { echo "FAIL glaze/$$s (exit $$r)"; exit 1; }; \
+	done
 else
 test_glaze:
 	@echo "test_glaze: skipped (host arch $a is not x86_64)"
@@ -559,7 +564,20 @@ k_qemu_aarch64 = -M virt,gic-version=2 -cpu cortex-a72 -serial stdio $(k_qemu_ri
 k_qemu = qemu-system-$a -m 256M $(k_qemu_$a) \
   -drive if=pflash,unit=0,format=raw,file=$(dl)/edk2-ovmf/ovmf-code-$a.fd,readonly=on
 
-.PHONY: run run-hdd run-$a run-hdd-$a run-headless
+# --- live-NIC agent boots (x86_64 only -- the virtio-net driver is port/kship/x86_64/net.c).
+# net.c probes for a TRANSITIONAL virtio-net (legacy PCI id 0x1000 with an I/O BAR), so
+# disable-modern=on is REQUIRED: a modern-only device (id 0x1040, no I/O BAR) is invisible to
+# it. SLIRP user networking seats the guest at 10.0.2.15, the host/gateway at 10.0.2.2.
+k_net = -device virtio-net-pci,netdev=n0,disable-modern=on
+# inbound (NETAGENT): forward host udp 5555 -> guest 5555, so you can drive the agent:
+#   printf '(* 6 7)' | nc -u -w1 127.0.0.1 5555    ->  42   (first datagram is lost to ARP)
+k_net_in = -netdev user,id=n0,hostfwd=udp::5555-:5555 $(k_net)
+# outbound (NETBRAIN): plain user net; the agent DIALS 10.0.2.2:9999 on its own clock, so
+# stand up a UDP server on the host :9999 first -- it receives each datagram and whatever it
+# replies is what the agent narrates (`oracle <- ...`). That server is the seam for a real brain.
+k_net_out = -netdev user,id=n0 $(k_net)
+
+.PHONY: run run-hdd run-$a run-hdd-$a run-headless run-kship run-netagent run-netbrain
 run: run-$a
 run-hdd: run-hdd-$a
 run-$a: $(ko)/ai-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
@@ -568,6 +586,38 @@ run-hdd-$a: $(ko)/ai-$a.hdd $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	exec $(k_qemu) -hda $<
 run-headless: $(ko)/ai-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	exec $(k_qemu) -cdrom $< -display none -no-reboot
+
+# Boot the baked kship agent. KSHIP = heartbeat/watchdog/checkpoint demos then a serial shell
+# (no NIC); NETAGENT = the inbound ai-REPL over the wire; NETBRAIN = the outbound brain that
+# dials an oracle on its own clock. Each (re)builds its own-suffixed iso, then boots headless
+# with serial on stdio so you watch the agent narrate in this terminal (Ctrl-C to stop).
+run-kship:
+	@$(MAKE) -s KSHIP=1 $(ko)/ai-$a-kship.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+	exec $(k_qemu) -cdrom $(ko)/ai-$a-kship.iso -display none -no-reboot
+ifeq ($a,x86_64)
+run-netagent:
+	@$(MAKE) -s NETAGENT=1 $(ko)/ai-$a-netagent.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+	exec $(k_qemu) $(k_net_in) -cdrom $(ko)/ai-$a-netagent.iso -display none -no-reboot
+run-netbrain:
+	@$(MAKE) -s NETBRAIN=1 $(ko)/ai-$a-netbrain.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+	exec $(k_qemu) $(k_net_out) -cdrom $(ko)/ai-$a-netbrain.iso -display none -no-reboot
+else
+run-netagent run-netbrain:
+	@echo "$@: x86_64 only (virtio-net driver is port/kship/x86_64/net.c); host arch is $a"
+endif
+
+# Boot init AS PID 1 in a container -- the Linux altitude of "ai as the system".
+# A private pid+user+mount namespace (unprivileged, no daemon/image/root): --pid
+# --fork makes the entrypoint pid 1, --user --map-root-user makes it root-in-ns so
+# mount works, --mount-proc gives it a fresh /proc reflecting the namespace. ai then
+# IS init: getpid 1, mounts the early filesystems, and reaps a reparented orphan
+# (pid 1's defining duty). (pid1 0) is the deterministic tour; swap in (perceive 0)
+# for the live signalfd supervisor. Needs unshare (util-linux) + unprivileged userns.
+.PHONY: init-container
+init-container: host
+	@command -v unshare >/dev/null || { echo "init-container: needs unshare (util-linux)"; exit 1; }
+	@echo "-- ai as PID 1 in a pid+user+mount namespace --"
+	unshare --pid --fork --mount-proc --user --map-root-user -- $m -l init/init.l -e "(pid1 0)"
 
 # --- headless serial test (wired into test_all; x86_64 + qemu only) ------------
 # The K_TEST kernel boots, runs the baked corpus through the self-hosted ev, and
