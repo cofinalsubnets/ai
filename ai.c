@@ -53,6 +53,21 @@ _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size"
 #include <stdlib.h>          // malloc for the generational write-barrier audit's remembered set (host-only)
 #define AI_REM_CAP (1u << 16)
 #endif
+// INITIAL generation sizes, in words per half. CONFIGURABLE like the custom allocator (g->alloc):
+// both dipools GROW on demand, so these are only a starting point -- a tiny device overrides them
+// small (-Dai_nursery0=... -Dai_elder0=...) and accepts more collections; a host leaves them roomy
+// and boots in few. (Compile-time for now; the runtime-pluggable form rides the init API once the
+// minor graduates out of AI_STAT.) ai_nursery0 also sizes the non-generational main pool.
+#ifndef ai_nursery0
+# ifdef AI_STAT
+#  define ai_nursery0 (1u << 14)   // ~128 KB: the generational dev host boots fast
+# else
+#  define ai_nursery0 (1u << 10)   // the non-gen pool grows via gcg, so a small seed is fine
+# endif
+#endif
+#ifndef ai_elder0
+# define ai_elder0 (1u << 16)      // ~512 KB elder half; grows much less often than the nursery
+#endif
 _Static_assert(-1 >> 1 == -1, "sign extended shift");
 // nilp: structural test for the nil word (the only false scalar). Distinct from
 // ai_nilp below (the language falsy predicate, which also counts an all-zero vec);
@@ -842,6 +857,12 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  g->nursery = g->end;                  // generational watermark: nothing tenured yet (the first collection sets it)
 #ifdef AI_STAT
  g->rem = malloc(AI_REM_CAP * sizeof(ai_word)), g->rem_cap = g->rem ? AI_REM_CAP : 0;  // write-barrier audit (host-only)
+ // the ELDER dipool: a separate two-space region for tenured objects. Born empty; the first
+ // collection drains the whole boot live set into it. Grows (at a major) when the live set won't
+ // fit. If malloc fails, old_pool stays 0 and ai_please falls back to the non-generational gcg.
+ g->old_len = ai_elder0;                                         // initial elder half (configurable); grows in gen_major, much less often than the nursery
+ g->old_pool = malloc(2 * g->old_len * sizeof(word));
+ g->old_base = g->old_hp = g->old_pool;                          // active = first half, empty
 #endif
  // book + macro maps (lookup-lambdas) then the main task thread.
  if (ai_ok(g = map_new(g)) && ai_ok(g = map_new(g)) && ai_ok(g = ai_have(g, 6))) {
@@ -892,7 +913,8 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  return g; }
 
 struct ai *ai_ini_m(void *(*al)(struct ai*, void*, size_t)) {
- uintptr_t const len0 = 1 << 10;
+ uintptr_t const len0 = ai_nursery0;   // initial NURSERY (the main pool); GROWS on demand (gen_grow), so a
+                                       // tiny device overrides ai_nursery0 small and scales up only as needed
  struct ai *g = al(NULL, NULL, 2 * len0 * sizeof(word));
  return g == NULL ? encode(g, ai_status_scare) : ai_ini_0(g, len0, al); }
 
@@ -992,9 +1014,13 @@ static ai_inline void evac_nom(struct ai*g, word const*const p0, word const*cons
  w->name = gcp(g, w->name, p0, t0); }
 
 static ai_inline void evac_thread(struct ai *g, word const *const p0, word const*const t0) {
-  // terminator payloads point into the new pool (the copied object's home);
+  // terminator payloads point into the copied object's home (the to-space);
   // a stray 2-byte-aligned external content word is rejected by the range
+#ifdef AI_STAT
+  word const *lo = g->gc_to_lo, *hi = g->gc_to_hi;   // to-space = elder/spare/new pool, where the scanned copy lives
+#else
   word const *lo = ptr(g), *hi = ptr(g) + g->len;
+#endif
   for (g->cp += 1; !tagp(g->cp[-1], lo, hi); g->cp[-1] = gcp(g, g->cp[-1], p0, t0), g->cp++); }
 
 static ai_inline void evac_data(struct ai *g, word const *const p0, word const*const t0) {
@@ -1064,6 +1090,9 @@ static ai_noinline struct ai *gcg(struct ai*h, struct ai *p1, uintptr_t len1, st
  // per-pointer check -- there is only ONE core, so the existing evacuation carries it.
  ((union u*) g)->ap = (lvm_t*) h;
  h->hp = h->cp = h->end;
+#ifdef AI_STAT
+ h->gc_gen = 0, h->gc_to_lo = ptr(h), h->gc_to_hi = ptr(h) + len1, h->gc_fwd = ptr(h);  // to-space = the whole new pool
+#endif
  h->ip = cell(gcp(h, word(h->ip), p0, t0));
  h->tasks = cell(gcp(h, word(h->tasks), p0, t0));
  h->symbols = 0;                               // the WEAK intern map: rebuilt below, after the fixpoint
@@ -1099,8 +1128,8 @@ static ai_noinline struct ai *gcg(struct ai*h, struct ai *p1, uintptr_t len1, st
 // The ADDRESS is the generation (ai objects carry no age bit).
 static ai_inline bool ai_young(struct ai *g, word p) {
  return lamp(p) && ptr(p) >= g->nursery && ptr(p) < g->hp; }
-static ai_inline bool ai_old_cell(struct ai *g, word *c) {       // a heap cell already tenured (in [end, nursery))
- return c >= (word*) g->end && c < g->nursery; }
+static ai_inline bool ai_old_cell(struct ai *g, word *c) {       // a tenured cell: inside the elder dipool
+ return (ai_word*) c >= g->old_base && (ai_word*) c < g->old_hp; }
 static bool gen_remembered(struct ai *g, word obj) {
  for (uintptr_t i = 0; i < g->rem_n; i++) if (g->rem[i] == obj) return true;
  return false; }
@@ -1117,48 +1146,204 @@ static ai_inline void gen_wb(struct ai *g, word src, word p) {
 // the COMPILER barrier: a non-map write to an old cell -> dirty (forces a major).
 static ai_inline void gen_dirty(struct ai *g, word *cell) {
  if (ai_old_cell(g, cell)) g->dirty = 1; }
-// the AUDIT (runs only when dirty is clear -- i.e. a minor would run): the SOUNDNESS
-// claim is "every REACHABLE old object's young-pointing fields are remembered" => a
-// minor (scanning roots + rem) loses no live young object. So DFS the live graph from
-// the true GC roots (the same set gcg traces: ip, tasks, core vars, stack, C roots),
-// recurse through everything reachable, and at each reachable OLD object check its
-// young fields against the rem set. DEAD objects (orphaned map backings from grows)
-// are never reached -> no false positive. The WEAK INTERN MAP (g->symbols) is excluded
-// -- rebuilt wholesale by symbols_rebuild, never via the rem set. Allocates a seen-set
-// + worklist per call (host/AI_STAT only); on OOM it skips the audit rather than lie.
-static void gen_audit(struct ai *g) {
- word *base = ptr(g), *top = base + g->len;
- uintptr_t plen = g->len;
- char *seen = calloc(plen, 1);
- word *wl = seen ? malloc(plen * sizeof(word)) : 0;          // worklist of reachable object addresses
- if (!wl) { free(seen); return; }
- uintptr_t wn = 0;
- word const *lo = base, *hi = top;
- word sb = g->symbols ? map_back(g->symbols) : 0;
-# define PUSH(X) do { word _x = (X); word *_p = (word*) _x; \
-   if (lamp(_x) && _p >= base && _p < top && !seen[_p - base]) seen[_p - base] = 1, wl[wn++] = _x; } while (0)
- PUSH((word) g->ip); PUSH((word) g->tasks);                  // seed the live roots gcg traces
- for (word i = 0; i < g->end - &g->v0; i++) PUSH((&g->v0)[i]);   // core vars
- for (word *s = g->sp; s < top; s++) PUSH(*s);                  // stack
- for (struct ai_r *r = g->root; r; r = r->n) PUSH(*r->x);       // C live variables
- while (wn) {
-  word obj = wl[--wn];
-  word *p = (word*) obj;
-  bool old = p >= (word*) g->end && p < g->nursery;
-  bool skip = old && (obj == g->symbols || obj == sb);
-# define FLD(f) do { word _f = (f); if (old && !skip && ai_young(g, _f) && !gen_remembered(g, obj)) g->rem_miss++; PUSH(_f); } while (0)
-  if (datp(obj)) switch (typ(obj)) {
-   case KChain: { struct ai_chain *w = (struct ai_chain*) p; FLD(w->a); FLD(w->b); break; }
-   case KVec: { struct ai_vec *v = (struct ai_vec*) p;
-                if (v->type == ai_O) for (uintptr_t i = 0, ne = vec_nelem(v); i < ne; i++) FLD(vec_get_obj(v, i)); break; }
-   case KNom: { struct ai_nom *w = (struct ai_nom*) p; FLD(w->name); break; }
-   default: break;                                            // KMint/KString/KBig/KFlo/KWide/KCplx: pointer-free leaves
-  } else { word *q = p + 1;                                    // thread object: ap + content words to the tag terminator
-           while (q < top && !tagp(*q, lo, hi)) { FLD(*q); q++; } }
-# undef FLD
+// (Stage 2's reachability AUDIT -- which proved the rem set complete for a hypothetical
+// minor -- is retired here: its old-region was [end, nursery), which the dipool layout
+// replaces, and the live MINOR below is itself verified end-to-end by the differential
+// oracle (the whole corpus runs byte-identical with minors firing). rem_miss stays 0.)
+//
+// gen_scan_inplace: an ELDER object that points into the young set (a remembered map
+// backing/header, a task-ring node, or the weak intern map) is NOT moved by a minor --
+// it stays tenured. But its young fields must be promoted, so gcp each outgoing pointer
+// IN PLACE, rewriting the field to its promoted address. This is evac_* without the
+// relocation; a thread's terminator sits in the elder (the to-space, gc_to_{lo,hi}).
+static void gen_scan_inplace(struct ai *g, word obj, word const *p0, word const *t0) {
+ union u *p = cell(obj);
+ if (datp(obj)) switch (typ(obj)) {
+  case KChain: { struct ai_chain *w = two(obj);
+                 w->a = gcp(g, w->a, p0, t0), w->b = gcp(g, w->b, p0, t0); break; }
+  case KVec:   { struct ai_vec *v = vec(p); if (v->type == ai_O) { word *e = (word*) vec_data(v);
+                 for (uintptr_t i = 0, ne = vec_nelem(v); i < ne; i++) e[i] = gcp(g, e[i], p0, t0); } break; }
+  case KNom:   { nom(p)->name = gcp(g, nom(p)->name, p0, t0); break; }
+  default: break;                                  // KMint/KString/KBig/KFlo/KWide/KCplx: pointer-free leaves
+ } else { word const *lo = g->gc_to_lo, *hi = g->gc_to_hi;     // a thread: every word to the tag terminator,
+          for (union u *q = p; !tagp(q->x, lo, hi); q++) q->x = gcp(g, q->x, p0, t0); } }
+          // INCLUDING word0 -- a normal thread's ap is out-of-pool (gcp no-op) but a task-ring node's
+          // word0 is its `next` pointer, the very old->young edge the rem set exists to chase.
+
+// gen_fz_relocate: after a drain's cheney fixpoint, any finalizer NODE that lived in the
+// (now-dead) nursery is copied to the elder (bump -> old_hp, past the scanned frontier,
+// like run_finalizers bumps post-fixpoint). Its `p` target was already promoted in the
+// root phase. A minor/drain never RUNS a finalizer; that waits for a major's compact.
+static void gen_fz_relocate(struct ai *g) {
+ struct ai_fz **link = &g->fz;
+ for (struct ai_fz *fz = *link; fz; ) {
+  struct ai_fz *next = fz->next;
+  if ((word*) fz >= (word*) g->end && (word*) fz < g->hp) {   // node was in the nursery -> relocate
+   struct ai_fz *nn = bump(g, Width(struct ai_fz));           // gc_gen set -> elder
+   nn->p = fz->p, nn->fn = fz->fn, nn->next = next;
+   *link = nn, link = &nn->next;
+  } else link = &fz->next;
+  fz = next; } }
+
+// elder_symbols_rebuild / elder_run_finalizers: the weak-table sweep and finalizer pass of
+// a MAJOR's compact -- exactly symbols_rebuild / run_finalizers, but bumping into the elder
+// to-space (gc_gen redirects bump -> old_hp) and testing survival against gc_to_{lo,hi}
+// (the spare/new half) instead of the main pool. Run after the compact's cheney fixpoint.
+static word elder_symbols_rebuild(struct ai *g, word om) {
+ if (!om) return 0;
+ uintptr_t cap = map_cap(om), mask = cap - 1, n = 0;
+ union u *b = map_fill_back(bump(g, 4 + 2 * cap), cap), *hd = bump(g, 3);
+ hd[0].ap = lvm_map_lookup, hd[1].x = (word) b, tagthread(hd, 2);
+ word *os = map_slots(om), *ns = &b[3].x;
+ word const *lo = g->gc_to_lo, *hi = g->gc_to_hi;
+ for (uintptr_t j = 0; j < cap; j++) {
+  word k = os[2 * j];
+  if (k == map_gap) continue;
+  word fwd = cell(os[2 * j + 1])->x;            // the atom's first word: its forward, if it survived
+  if (!(lamp(fwd) && lo <= ptr(fwd) && ptr(fwd) < hi)) continue;
+  word nk = nom(fwd)->name;
+  uintptr_t i = hash(g, nk) & mask;
+  while (ns[2 * i] != map_gap) i = (i + 1) & mask;
+  ns[2 * i] = nk, ns[2 * i + 1] = fwd, n++; }
+ b[1].x = putcharm(n);
+ return (word) hd; }
+static void elder_run_finalizers(struct ai *g) {
+ struct ai_fz *new_fz = NULL;
+ for (struct ai_fz *fz = g->fz; fz; fz = fz->next) {
+  word fwd = fz->p->x;
+  if (lamp(fwd) && g->gc_to_lo <= ptr(fwd) && ptr(fwd) < g->gc_to_hi) {
+   struct ai_fz *nn = bump(g, Width(struct ai_fz));
+   nn->p = cell(fwd), nn->fn = fz->fn, nn->next = new_fz, new_fz = nn;
+  } else fz->fn(fz->p); }
+ g->fz = new_fz; }
+
+// gen_drain: the MINOR. Evacuate the nursery [end, hp) into the elder ACTIVE half (append at
+// old_hp), then reset hp = end. The cheney scan starts at the append point (old_hp), so it walks
+// only the freshly-promoted survivors -- never the existing elder -- and relies on the rem set
+// (+ a strong scan of the weak intern map) for the elder->young edges. gc_fwd = the pre-drain
+// old_hp, so a forwarded young object (word0 >= gc_fwd) is told from a pointer to a pre-existing
+// elder object (< gc_fwd, left in place). No linear walk of the elder: a minor never reads a dead
+// or non-object word.
+static void gen_drain(struct ai *g) {
+ word const *p0 = (word const*) g->end, *t0 = g->hp;          // nursery from-range
+ g->gc_gen = 1, g->gc_f2lo = 0;
+ g->gc_to_lo = g->old_base, g->gc_to_hi = g->old_base + g->old_len;
+ g->gc_fwd = g->old_hp;
+ g->cp = g->old_hp;
+ g->ip = cell(gcp(g, word(g->ip), p0, t0));
+ g->tasks = cell(gcp(g, word(g->tasks), p0, t0));
+ for (word i = 0; i < g->end - &g->v0; i++) (&g->v0)[i] = gcp(g, (&g->v0)[i], p0, t0);   // core vars
+ for (word *s = g->sp; s < topof(g); s++) *s = gcp(g, *s, p0, t0);                       // stack
+ for (struct ai_r *r = g->root; r; r = r->n) *r->x = gcp(g, *r->x, p0, t0);              // C roots
+ // The weak intern map is NOT a normal root (it is its own field), so promote its STRUCTURE by
+ // hand or it is lost. Its ENTRIES stay weak: a major rebuilds the table, dropping dead atoms.
+ // While the header is itself young (the first collections) gcp it and let the cheney scan chase
+ // the backing + atoms; once it is tenured, scan its (possibly young) backing in place.
+ if (g->symbols) {
+  if (ai_young(g, g->symbols)) g->symbols = gcp(g, g->symbols, p0, t0);
+  else gen_scan_inplace(g, g->symbols, p0, t0), gen_scan_inplace(g, map_back(g->symbols), p0, t0);
  }
-# undef PUSH
- free(seen), free(wl); }
+ for (uintptr_t i = 0; i < g->rem_n; i++) gen_scan_inplace(g, g->rem[i], p0, t0);        // elder->young edges
+ for (struct ai_fz *fz = g->fz; fz; fz = fz->next) fz->p = cell(gcp(g, word(fz->p), p0, t0));
+ while (g->cp < g->old_hp) (datp(g->cp) ? evac_data : evac_thread)(g, p0, t0);
+ if (g->fz) gen_fz_relocate(g);
+ g->hp = g->end;                                              // nursery emptied
+ g->gc_gen = 0; }
+
+// gen_major: a full collection, by REACHABILITY (never a linear sweep, so dead objects and their
+// stale pointers are simply ignored). One Cheney pass from the real roots over BOTH from-spaces --
+// the elder ACTIVE half (p0/t0) and the nursery (gc_f2{lo,hi}) -- copying every reachable object,
+// young or old, into the spare half (or a fresh pair twice the size when the elder is over half
+// full). This subsumes the dirty case: tracing from roots finds every LIVE old->young edge with no
+// rem set. Then rebuild the weak intern map + run finalizers into the to-space, flip, and reset the
+// (now fully promoted) nursery. The core stays put in the main pool, so -- unlike gcg -- there is no
+// core-flop: nil is ZeroPoint (an out-of-pool const), not the core.
+static void gen_major(struct ai *g) {
+ word const *p0 = g->old_base, *t0 = g->old_hp;              // from-range 1: elder active
+ // size the to-space for the WORST CASE: all of elder-active AND all of the nursery survive (the
+ // major promotes both). Doubling old_len alone is unsafe -- the nursery can dwarf the elder half.
+ uintptr_t used = (uintptr_t)(g->old_hp - g->old_base), young = (uintptr_t)(g->hp - (word*) g->end);
+ uintptr_t need = used + young, to_len = g->old_len;
+ while (to_len < need + (need >> 2) + 16) to_len <<= 1;      // grow until it fits, +25% headroom
+ word *spare = (g->old_base == g->old_pool) ? g->old_pool + g->old_len : g->old_pool;  // the same-size other half
+ word *to, *grown = 0;
+ if (to_len != g->old_len) {                                 // a bigger pair is needed
+  if ((grown = malloc(2 * to_len * sizeof(word)))) to = grown; else to_len = g->old_len, to = spare;  // OOM -> spare, hope it fits
+ } else to = spare;
+ g->gc_gen = 1;
+ g->old_hp = to, g->cp = to;
+ g->gc_to_lo = to, g->gc_to_hi = to + to_len, g->gc_fwd = to;   // fresh to-space: every copy is a forward
+ g->gc_f2lo = (word*) g->end, g->gc_f2hi = g->hp;            // from-range 2: the nursery (promote young in the same pass)
+ g->ip = cell(gcp(g, word(g->ip), p0, t0));
+ g->tasks = cell(gcp(g, word(g->tasks), p0, t0));
+ for (word i = 0; i < g->end - &g->v0; i++) (&g->v0)[i] = gcp(g, (&g->v0)[i], p0, t0);
+ for (word *s = g->sp; s < topof(g); s++) *s = gcp(g, *s, p0, t0);
+ for (struct ai_r *r = g->root; r; r = r->n) *r->x = gcp(g, *r->x, p0, t0);
+ word om = g->symbols; g->symbols = 0;                       // weak: rebuilt after the fixpoint
+ while (g->cp < g->old_hp) (datp(g->cp) ? evac_data : evac_thread)(g, p0, t0);
+ g->symbols = elder_symbols_rebuild(g, om);
+ elder_run_finalizers(g);
+ g->gc_f2lo = g->gc_f2hi = 0;                                // the nursery range is consumed
+ if (grown) free(g->old_pool), g->old_pool = grown, g->old_len = to_len;
+ g->old_base = to;                                           // flip: active = the to-space
+ g->hp = g->end;                                             // the nursery's young was promoted: reset it
+ g->gc_gen = 0; }
+
+// gen_grow: resize the NURSERY (the main pool) to len1 -- its own copy/growth, decoupled from the
+// elder. Called right after a collection, so the nursery heap is EMPTY: only the core + stack move,
+// to a fresh pool. The elder + the weak intern map ride through untouched (they live outside the
+// from-space [ptr(g), ptr(g)+len)). Safe because () is ZeroPoint (an immortal const), NOT the core:
+// nothing in the elder points at the moving core, so no fix-up is needed -- the core-flop here only
+// catches a (vestigial) root that is literally (word)g.
+static struct ai *gen_grow(struct ai *g, uintptr_t len1) {
+ struct ai *h = g->alloc(g, NULL, len1 * 2 * sizeof(word));
+ if (!h) return encode(g, ai_status_scare);
+ memcpy(h, g, sizeof(struct ai));
+ h->pool = (void*) h, h->len = len1;
+ word const *p0 = ptr(g), *t0 = ptr(g) + g->len, *sp0 = g->sp;
+ word sh = t0 - sp0;
+ h->sp = ptr(h) + len1 - sh;
+ ((union u*) g)->ap = (lvm_t*) h;            // core moves: forward any (word)g root (vestigial -- () is ZeroPoint)
+ h->hp = h->cp = h->end;
+ h->gc_gen = 0, h->gc_to_lo = ptr(h), h->gc_to_hi = ptr(h) + len1, h->gc_fwd = ptr(h), h->gc_f2lo = 0;
+ h->ip = cell(gcp(h, word(h->ip), p0, t0));
+ h->tasks = cell(gcp(h, word(h->tasks), p0, t0));
+ // h->symbols + the elder were memcpy'd and live outside [p0,t0): untouched, NOT rebuilt
+ for (word i = 0; i < h->end - &h->v0; i++) (&h->v0)[i] = gcp(h, (&h->v0)[i], p0, t0);   // core vars
+ for (word n = 0; n < sh; n++) h->sp[n] = gcp(h, sp0[n], p0, t0);                        // stack
+ for (struct ai_r *s = h->root; s; s = s->n) *s->x = gcp(h, *s->x, p0, t0);              // C roots
+ while (h->cp < h->hp) (datp(h->cp) ? evac_data : evac_thread)(h, p0, t0);               // heap empty -> ~nothing
+ h->nursery = h->end;
+ if (h->len > h->max_len) h->max_len = h->len;
+ g->alloc(g, g->pool, 0);                    // free the old main pool
+ return h; }
+
+// gen_please: the generational GC entry. A MINOR (cheap, frequent) unless something dirtied the
+// elder in place or the elder lacks headroom for a worst-case drain -- then a MAJOR (drain +
+// compact). The nursery ends empty; then resize it on its OWN cost model (the v-ratio + the
+// request), DECOUPLED from the elder (which grows in gen_compact and far less often).
+static struct ai *gen_please(struct ai *g, uintptr_t req0) {
+ enum { v_lo = 4, v_hi = v_lo * v_lo };
+ uintptr_t t0 = g->t0, t1 = ai_clock();
+ uintptr_t seen_young = (uintptr_t)(g->hp - g->end);
+ uintptr_t elder_free = (uintptr_t)((g->old_base + g->old_len) - g->old_hp);
+ bool major = g->dirty || elder_free < (uintptr_t) g->len + req0 + 16;   // elder too full to hold a promotion -> compact
+ word *before = g->old_hp;
+ if (major) gen_major(g), g->n_gc += 1;
+ else       gen_drain(g), g->n_gc += 1, g->n_minor += 1;
+ g->n_seen += seen_young;
+ g->n_evac += major ? (uintptr_t)(g->old_hp - g->old_base) : (uintptr_t)(g->old_hp - before);
+ g->rem_n = 0, g->dirty = 0;
+ { uintptr_t e = (uintptr_t)(g->old_hp - g->old_base); if (e > g->max_heap) g->max_heap = e; }
+ // NURSERY resize -- the heap is empty now, so `used` is just core + stack. Grow if a collection is
+ // too costly relative to the work between them (v < v_lo) or the request won't fit; shrink if oversized.
+ uintptr_t used = g->len - avail(g), req = req0 + used + (used >> 2), t2 = ai_clock();
+ uintptr_t len1 = g->len, v = (t2 == t1) ? (uintptr_t) v_hi : (t2 - t0) / (t2 - t1);
+ if (len1 < req || v < v_lo) do len1 <<= 1, v <<= 1; while (len1 < req || v < v_lo);
+ else if (len1 > 2 * req && v > v_hi) do len1 >>= 1, v >>= 1; while (len1 > 2 * req && v > v_hi);
+ else return g->t0 = t2, g;                  // right size
+ g = gen_grow(g, len1);
+ return ai_ok(g) ? (g->t0 = ai_clock(), g) : g; }
 #endif
 
 ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
@@ -1169,8 +1354,8 @@ ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
  // find alternate pool
  struct ai *h = off_pool(g);
 #ifdef AI_STAT
- uintptr_t seen = g->hp - g->end;   // from-space occupancy entering this collection (live + dead), words
- if (!g->dirty) gen_audit(g);       // dirty clear -> a minor would run -> verify it would lose no old->young edge
+ if (g->old_pool) return gen_please(g, req0);   // GENERATIONAL: minor (or major) into the elder dipool
+ uintptr_t seen = g->hp - g->end;   // (fallback: elder malloc failed -> today's whole-pool gcg below)
 #endif
  g = gcg(h, g->pool, g->len, g);
 #ifdef AI_STAT
@@ -1297,14 +1482,30 @@ static ai_inline word copy_thread(struct ai *g, union u *src, word const *const 
  return (word) (tagthread(dst, d - dst) + (src - ini)); }
 
 static ai_noinline intptr_t gcp(struct ai *g, word x, word const *p0, word const *t0) {
- // if it's a number or it's outside managed memory then return it
- if (charmp(x) || ptr(x) < p0 || ptr(x) >= t0) return x;
+ // if it's a number it stays; else find which FROM-space range holds it (a major traces two:
+ // the elder-active half AND the nursery -- gc_f2{lo,hi} -- in one reachability pass). lo/hi end up
+ // the range that CONTAINS x, so copy_thread's terminator scan uses x's own home.
+ if (charmp(x)) return x;
+ word const *lo = p0, *hi = t0;
+ if (!(ptr(x) >= lo && ptr(x) < hi)) {
+#ifdef AI_STAT
+  if (g->gc_f2lo && ptr(x) >= g->gc_f2lo && ptr(x) < g->gc_f2hi) lo = g->gc_f2lo, hi = g->gc_f2hi;
+  else return x;
+#else
+  return x;
+#endif
+ }
  union u *src = cell(x);
  x = src->x; // get its contents
- // if it contains a pointer to the new space then return the pointer
- return lamp(x) && ptr(g) <= ptr(x) && ptr(x) < ptr(g) + g->len ? x :
-        in_data((void*) x) ? copy_data(g, src, p0, t0) :
-                                copy_thread(g, src, p0, t0); }
+ // if it contains a pointer to the new space then return the pointer (already forwarded)
+#ifdef AI_STAT
+ word const *flo = g->gc_fwd, *fhi = g->gc_to_hi;   // forwarding window of THIS collection (elder/spare/new pool)
+#else
+ word const *flo = ptr(g), *fhi = ptr(g) + g->len;
+#endif
+ return lamp(x) && flo <= ptr(x) && ptr(x) < fhi ? x :
+        in_data((void*) x) ? copy_data(g, src, lo, hi) :
+                                copy_thread(g, src, lo, hi); }
 
 // ============================================================================
 // ev
@@ -3930,14 +4131,15 @@ op11(lvm_clock, putcharm(ai_clock() - getcharm(Sp[0])))
 //   [5] max_heap  peak live heap after a collection (words)
 //   [6] n_seen    Σ heap occupancy entering each collection (scanned = live + dead, words)
 //   [7] n_evac    Σ heap survivors copied out each collection (live, words)
-//   [8] old       the tenured set: words in [end, nursery) -- carried by the last collection (always on)
-//   [9] rem_miss  Σ old->young edges the write barrier FAILED to record (audit; must stay 0)
+//   [8] old       the tenured set: words live in the elder dipool (-DAI_STAT), else [end, nursery)
+//   [9] rem_miss  Σ old->young edges the write barrier FAILED to record (retired; stays 0)
 //  [10] rem_hi    peak remembered-set size (distinct old objects with a young field)
-// derive: mortality = (n_seen - n_evac)/n_seen ; copy-amp = n_evac/max_heap ; young = heap - old - core.
-// Indices [3..7],[9..10] read 0 unless built -DAI_STAT ([8] is always live). An array (not a list):
+//  [11] n_minor   MINOR collections so far (majors = n_gc - n_minor)
+// derive: mortality = (n_seen - n_evac)/n_seen ; copy-amp = n_evac/max_heap ; young = heap - core.
+// Indices [3..7],[9..11] read 0 unless built -DAI_STAT ([8] is always live). An array (not a list):
 // every field is a charm, so a flat numeric tray is the natural rep -- compact, net/max apply directly.
 lvm(lvm_gauge) {
- enum { N = 11 };
+ enum { N = 12 };
  uintptr_t const bytes = sizeof(struct ai_vec) + 1 * sizeof(word) + N * ai_T[ai_Z];
  Have(b2w(bytes));
  struct ai_vec *v = (struct ai_vec*) Hp;
@@ -3955,11 +4157,13 @@ lvm(lvm_gauge) {
  vec_put_int(v, 7, (intptr_t) g->n_evac);
  vec_put_int(v, 9, (intptr_t) g->rem_miss);
  vec_put_int(v, 10, (intptr_t) g->rem_hi);
+ vec_put_int(v, 11, (intptr_t) g->n_minor);
+ vec_put_int(v, 8, (intptr_t) (g->old_pool ? g->old_hp - g->old_base : g->nursery - (word*) g->end));  // elder live (gen), else [end,nursery)
 #else
  for (int i = 3; i < 8; i++) vec_put_int(v, i, 0);              // gc instrumentation gated off (-DAI_STAT to keep it)
- vec_put_int(v, 9, 0), vec_put_int(v, 10, 0);
-#endif
+ vec_put_int(v, 9, 0), vec_put_int(v, 10, 0), vec_put_int(v, 11, 0);
  vec_put_int(v, 8, (intptr_t) (g->nursery - (word*) g->end));   // old (tenured) set, words -- always live
+#endif
  return Sp[0] = word(v), Ip++, Continue(); }
 
 // (apof x): x's kind pointer (cell[0]) as a fixnum, 0 for a fixnum/immediate. The string-lane glaze

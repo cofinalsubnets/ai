@@ -1,9 +1,9 @@
 # A generational nursery over the Cheney core
 
-A design study (NOT built) for adding a **young generation** to ai's copying
-collector — a cheap *minor* collection that scavenges only fresh allocation,
-leaving the tenured set untouched, with today's full collection demoted to a
-rare *major*.
+A **young generation** over ai's copying collector — a cheap *minor* that scavenges
+only fresh allocation, leaving the tenured set untouched, with the full collection
+demoted to a rare *major*. **Built (stage 3), AI_STAT-gated** — see "As built" below;
+the rest of this study is the reasoning that led there, kept for the why.
 
 A runnable ai model lives in [`doc/proto/gengc.l`](proto/gengc.l) — a world is
 `(nur old rem roots next)`, and its asserts pin the invariants (most pointedly:
@@ -191,10 +191,45 @@ the minor.
    full test corpus + benches; pure compute + map mutation 0 over many GCs. The
    barrier/flag/audit are AI_STAT-gated, so the normal build & `make test` are
    unchanged. *(done)*
-3. **the real minor** — `gcp` with nursery bounds, roots ∪ rem, promote into old;
-   major stays `gcg`; a `dirty` collection forces a major. Differential oracle: the
-   GC-stress test (1500 strings under pressure == interp) the glaze string lanes lean on.
-4. **tune** — the two-level sizing.
+3. **the real minor + the elder dipool** *(done; see "As built" below)* — the design
+   inverted from Option A: the NURSERY is the existing main pool (no allocation-path
+   change), the ELDER is a separate two-space dipool. A minor evacuates the nursery into
+   the elder; a major is one **reachability** pass over {elder ∪ nursery} (no linear
+   sweep). Both dipools grow independently, on configurable initial sizes. Differential
+   oracle: the whole test corpus runs **byte-identical** with minors, majors, and both
+   grows firing; `make test` stays green (AI_STAT-gated).
+4. **tune / graduate** — runtime-pluggable sizing (today compile-time `ai_nursery0` /
+   `ai_elder0`), two-level pause/promotion heuristics, and lifting the minor out of
+   AI_STAT into the kernel/host (a pool-backed rem set, since the kernel can't malloc).
+
+## As built (stage 3)
+
+The shipped shape differs from the sketch above, steered by what the binary and the
+"() IS the core" archaeology actually showed:
+
+- **Two dipools, core/stack with the nursery.** The NURSERY is the main pool —
+  `[core | heap→ … ←stack]`, allocations bump `hp` *unchanged*, the whole heap is young.
+  The ELDER (`old_pool`) is a separate two-space region holding only tenured heap. This is
+  the opposite of Option A (which put old in the main pool) and needs **no** `Have`/`bump`
+  surgery.
+- **Minor** (`!dirty`, elder has headroom): Cheney the nursery → the elder active half
+  (append), then `hp = end`. Roots ∪ the **rem set** (old→young edges) ∪ a strong scan of
+  the weak intern map. The scan starts at the append point, so a minor never reads a dead
+  or non-object word.
+- **Major** (`dirty`, or the elder can't hold a worst-case promotion): one **reachability**
+  Cheney over BOTH from-spaces — the elder active half and the nursery (`gcp`'s second
+  range) — into the elder spare half (or a fresh pair sized to *elder-live + nursery-young*),
+  then rebuild symbols + run finalizers, flip, reset the nursery. Reachability means dead
+  objects (and their stale pointers) are simply never visited — the fix for the linear
+  sweep that crashed on dead task-ring nodes.
+- **Independent growth (decoupled).** The nursery resizes on its own GC/mutator ratio
+  (`gen_grow`, which moves core+stack — safe because **`()` is `ZeroPoint`, an out-of-pool
+  const, not the core**; the old "() IS the core" + the `gcg` core-flop are vestigial). The
+  elder grows only at a major, far less often. Initial sizes are **configurable** like the
+  custom allocator (`ai_nursery0`/`ai_elder0`): a Teensy picks small + accepts more GCs, a
+  host picks roomy + boots in a few.
+- All of it is `AI_STAT`-gated; the normal build and the kernel are byte-for-byte
+  unchanged. (Also: the GC's tagged-object kind was renamed `text` → `thread`.)
 
 ## Verification
 
