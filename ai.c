@@ -588,6 +588,7 @@ static ai_inline word mk_wide(ai_word **hpp, intptr_t v) {
 
 // equality comparisons inline the fast identity check
 ai_noinline bool eqv(struct ai*, word, word); // this is for checking equality of non-identical values
+static bool eqv_at(struct ai*, word, word, word*); // eqv with an explicit worklist base (for re-entrant calls from the beta bridge)
 // eqv has no value-equality for two distinct fixnums (odd; its only cross-value
 // bridge, 0/1 <-> (\ _ 1)/(\ x x), needs a heap lambda) nor for two distinct POINTS
 // (mints/noms -- identity is their whole equality: interned syms collapse per
@@ -4526,6 +4527,7 @@ static ai_noinline uintptr_t hash_two(struct ai *g, word x) {
 
 // general hashing method...
 struct arib; static uintptr_t shash(struct ai *g, word x, struct arib *env);  // α-invariant source hash
+static bool clo_nfhash(struct ai *g, word x, uintptr_t *out);  // partial-app -> capture-substitution normal-form hash (the beta bridge)
 uintptr_t hash(struct ai *g, intptr_t x) {
  if (charmp(x)) return rot(x*mix);
  if (!datp(x)) {
@@ -4535,8 +4537,10 @@ uintptr_t hash(struct ai *g, intptr_t x) {
    // length. All GC-stable (buckets survive copy).
    if (!in_heap(g, x)) return rot(x * mix);             // a tenured closure lives in the major pool, still in-heap
    union u *k = cell(x); struct ai_tag *tg = ttag(g, k);
-   if (tag_head(tg) < k) return shash(g, k[-1].x, 0);
-   uintptr_t r = mix;
+   if (tag_head(tg) < k) return shash(g, k[-1].x, 0);   // no-capture lambda: α-invariant source hash
+   uintptr_t nf;                                        // partial-app over a SOURCED base: hash its capture-substitution
+   if (clo_nfhash(g, x, &nf)) return nf;                // normal form, so the beta bridge stays hash-consistent (=-equal -> same hash)
+   uintptr_t r = mix;                                   // else (continuation / handle / bif-based partial-app): by object length
    for (union u *y = k; y < (union u*) tg; y++) r ^= r * mix;
    return r; }
  switch (typ(x)) {
@@ -5763,6 +5767,126 @@ static uintptr_t shash(struct ai *g, word x, struct arib *env) {
   struct arib r = { p, p, n, n, env };
   return (mix * (uintptr_t) (n + 7)) ^ (shash(g, body, &r) * mix); }
  return (mix ^ (shash(g, A(x), env) * mix)) ^ (shash(g, B(x), env) * mix); }
+
+// --- the beta bridge: a closure VALUE compares up to the capture-substitution `ev`
+// already performed to build it. A partial-app (a held beta-redex: base function + the
+// captured args) IS the no-capture lambda whose source is the base body with those args
+// substituted for the leading binders -- so (adder 5) = (\ x (+ x 5)). `=` (salpha) and the
+// α-hash (shash) deliberately stop at α+structural on SOURCE terms; this lifts the SAME
+// reduction `ev` baked into the value into both, so the order/hash stay consistent.
+//
+// Done WITHOUT allocating (eqv/hash are GC-sensitive hot paths): we walk the base source
+// virtually. The base outer \-group's leading binders split FILLED (the first `fn`, bound to
+// a captured value) and REMAINING (genuine params of the residual). A filled binder resolves
+// to its captured value -- which, as the substituted literal, hashes/compares exactly as that
+// value -- and a remaining binder takes its POST-substitution de Bruijn position (so the
+// residual's coordinates match a no-capture lambda's). Nested \-groups inside the body are
+// genuine (cap-substitution touches only the outer group), so they recurse as plain shash/salpha
+// with the filled env threaded through (an inner binder of the same name SHADOWS a filled one --
+// the rib is consulted before the filled env). SOUND by construction (true only when genuinely
+// equal); a captured closure vs a source lambda stays unbridged (conservative -- incomplete, but
+// nf_hash mirrors shash so consistency is exact: =-equal closures always hash equal).
+enum { nf_maxcap = 64 };                                  // cap the captured-arg count we bridge; deeper -> fall back
+struct clonf { word body, rem, fsyms; int nr, fn; word fv[nf_maxcap]; };  // residual: body, remaining-binder list (nr), filled-binder list (fn) + values
+// Load a closure value's capture-substitution residual. A partial-app over a sourced base, or a
+// no-capture lambda (fn = 0). Returns false for a source-less base (a bif) or a quote -- caller falls back.
+static bool clo_load(struct ai *c, word v, struct clonf *o) {
+ if (!lamp(v) || datp(v) || !in_heap(c, v)) return false;
+ union u *k = cell(v);
+ word s; int na = 0;
+ if (fn_partialp(k)) {
+  union u *bk = fn_base(k, &na);
+  if (na < 0 || na > nf_maxcap) return false;
+  word base = (word) bk;
+  s = fn_src(c, cell(base), base);
+  for (int i = 0; i < na; i++) o->fv[i] = fn_arg(k, i, na);
+ } else s = fn_src(c, k, v);
+ if (!s || !lam_isp(c, s)) return false;                  // source-less base / quote: not bridged here
+ word p = B(s);                                           // (b0 b1 .. body): binder list then body
+ int nb = 0; word t = p;
+ for (; chainp(B(t)); t = B(t)) nb++;
+ if (na >= nb) return false;                              // captures consume the whole group (shouldn't for a partial-app): bail safe
+ word rem = p;
+ for (int i = 0; i < na; i++) rem = B(rem);               // remaining binders start past the filled ones
+ o->body = A(t); o->rem = rem; o->nr = nb - na; o->fsyms = p; o->fn = na;
+ return true; }
+// α-invariant hash of a residual's body, mirroring shash exactly: a genuine binder by its
+// (rib-depth, position) coordinate, a FILLED binder by its captured value's hash (= the
+// substituted literal), a free var by its symbol. The (fs, fn, fv) filled env is constant
+// through the structural recursion (nested \-groups push genuine ribs, consulted first).
+static uintptr_t nf_hash(struct ai *g, word x, struct arib *env, word fs, int fn, word *fv) {
+ if (nomp(x)) {
+  int d = 0;
+  for (struct arib *r = env; r; r = r->up, d++) {
+   int i = arib_pos(x, r->la, r->na);
+   if (i >= 0) return rot((uintptr_t) (d * 131 + i + 1) * mix); }   // genuine binder
+  int j = arib_pos(x, fs, fn);
+  if (j >= 0) return hash(g, fv[j]);                      // filled binder: the captured value as a literal
+  return hash(g, x); }                                    // free var
+ if (!chainp(x)) return hash(g, x);
+ if (ai_isbs(g, A(x))) {
+  word p = B(x);
+  if (!chainp(B(p))) return hash(g, x);                   // quote: data
+  int n = 0; word t = p;
+  for (; chainp(B(t)); t = B(t)) n++;
+  word body = A(t);
+  struct arib r = { p, p, n, n, env };
+  return (mix * (uintptr_t) (n + 7)) ^ (nf_hash(g, body, &r, fs, fn, fv) * mix); }
+ return (mix ^ (nf_hash(g, A(x), env, fs, fn, fv) * mix)) ^ (nf_hash(g, B(x), env, fs, fn, fv) * mix); }
+static bool clo_nfhash(struct ai *g, word x, uintptr_t *out) {
+ struct clonf o;
+ if (!clo_load(ai_core_of(g), x, &o) || !o.fn) return false;   // o.fn == 0: a no-capture lambda, already hashed via shash upstream
+ struct arib r = { o.rem, o.rem, o.nr, o.nr, 0 };
+ *out = (mix * (uintptr_t) (o.nr + 7)) ^ (nf_hash(g, o.body, &r, o.fsyms, o.fn, o.fv) * mix);
+ return true; }
+// Does runtime value V equal the meaning of source term b (under b's ribs rb + filled env cb)?
+// b a filled binder -> compare the two captured values; b a literal atom -> compare value to literal;
+// b a param / free var / compound -> not equal (conservative: we never EVALUATE a free reference).
+static bool val_vs_src(struct ai *g, word V, word b, struct arib *rb, struct clonf *cb, word *scratch) {
+ if (nomp(b)) {
+  for (struct arib *r = rb; r; r = r->up) if (arib_pos(b, r->la, r->na) >= 0) return false;  // a remaining param
+  int j = arib_pos(b, cb->fsyms, cb->fn);
+  return j >= 0 ? eqv_at(g, V, cb->fv[j], scratch) : false; }   // filled: both values | free: conservative false
+ if (!chainp(b)) return eqv_at(g, V, b, scratch);               // literal atom (number / string)
+ return false; }                                               // compound source (app / lambda): conservative
+// α + value equality of two residual bodies, walked in lockstep (parallel to salpha). A nom on
+// either side is classified BOUND (genuine binder, by coordinate), FILLED (a captured value),
+// FREE (by symbol), or NOTNOM (a non-nom term). The genuine structure stays lockstep, so a BOUND
+// nom's (depth, position) is comparable across sides; a FILLED nom crosses to value-vs-source.
+static bool nf_walk(struct ai *g, word a, struct arib *ra, struct clonf *ca,
+                                  word b, struct arib *rb, struct clonf *cb, word *scratch) {
+ if (nomp(a) || nomp(b)) {
+  int ka = 3; intptr_t ac = 0; word av = 0;              // 0 BOUND, 1 FILLED, 2 FREE, 3 NOTNOM
+  if (nomp(a)) {
+   int d = 0; ka = 2;
+   for (struct arib *r = ra; r; r = r->up, d++) { int i = arib_pos(a, r->la, r->na); if (i >= 0) { ka = 0; ac = (intptr_t) d * 4096 + i; break; } }
+   if (ka == 2) { int j = arib_pos(a, ca->fsyms, ca->fn); if (j >= 0) { ka = 1; av = ca->fv[j]; } } }
+  int kb = 3; intptr_t bc = 0; word bv = 0;
+  if (nomp(b)) {
+   int d = 0; kb = 2;
+   for (struct arib *r = rb; r; r = r->up, d++) { int i = arib_pos(b, r->la, r->na); if (i >= 0) { kb = 0; bc = (intptr_t) d * 4096 + i; break; } }
+   if (kb == 2) { int j = arib_pos(b, cb->fsyms, cb->fn); if (j >= 0) { kb = 1; bv = cb->fv[j]; } } }
+  if (ka == 0 || kb == 0) return ka == 0 && kb == 0 && ac == bc;   // a bound var matches only the same-coordinate bound var
+  if (ka == 1 && kb == 1) return eqv_at(g, av, bv, scratch);       // two captured values
+  if (ka == 1) return val_vs_src(g, av, b, rb, cb, scratch);
+  if (kb == 1) return val_vs_src(g, bv, a, ra, ca, scratch);
+  if (ka == 2 && kb == 2) return a == b;                           // two free vars
+  return false; }                                                  // FREE vs NOTNOM
+ if (!chainp(a) || !chainp(b)) return eqv_at(g, a, b, scratch);
+ if (ai_isbs(g, A(a)) && ai_isbs(g, A(b))) {
+  word pa = B(a), pb = B(b);
+  if (!chainp(B(pa)) || !chainp(B(pb))) return eqv_at(g, a, b, scratch);   // quote: data
+  int na = 0, nb = 0; word t = pa;
+  for (; chainp(B(t)); t = B(t)) na++; word ba = A(t);
+  for (t = pb; chainp(B(t)); t = B(t)) nb++; word bb = A(t);
+  if (na != nb) return false;
+  struct arib rA = { pa, pa, na, na, ra }, rB = { pb, pb, nb, nb, rb };
+  return nf_walk(g, ba, &rA, ca, bb, &rB, cb, scratch); }
+ return nf_walk(g, A(a), ra, ca, A(b), rb, cb, scratch) && nf_walk(g, B(a), ra, ca, B(b), rb, cb, scratch); }
+static bool clo_eq(struct ai *g, struct clonf *ca, struct clonf *cb, word *scratch) {  // residual α+value equality
+ if (ca->nr != cb->nr) return false;                                   // different residual arity
+ struct arib rA = { ca->rem, ca->rem, ca->nr, ca->nr, 0 }, rB = { cb->rem, cb->rem, cb->nr, cb->nr, 0 };
+ return nf_walk(g, ca->body, &rA, ca, cb->body, &rB, cb, scratch); }
 // The numeral<->lambda `=` bridges: 1 is the identity numeral ((1 z) = z) and
 // 0 is const-1 ((0 z) = 1), so a one-binder lambda whose body is that binder
 // equals 1, and one whose body is the literal 1 equals 0. All a-variants count;
@@ -5782,8 +5906,12 @@ static bool id_lam(struct ai *c, word v) {             // (\ x x): body IS the b
 static bool k1_lam(struct ai *c, word v) {             // (\ _ 1): body is the literal 1
  word ops = lam_src1(c, v);
  return ops && A(B(ops)) == putcharm(1); }
-ai_noinline bool eqv(struct ai *g, word a, word b) {
- word *base = off_pool(g), *top = base + g->len, *w = base;
+// `base` is where THIS frame's worklist starts. The public eqv passes off_pool; a re-entrant call
+// from the beta bridge (clo_eq -> nf_walk) passes the CALLER's live worklist top, so the nested
+// comparison's scratch sits ABOVE the pending pairs instead of clobbering them. `top` stays the one
+// absolute ceiling (off_pool + len) either way.
+static bool eqv_at(struct ai *g, word a, word b, word *base) {
+ word *top = off_pool(g) + g->len, *w = base;
  struct ai *c = ai_core_of(g);
  for (;;) {
   if (a != b) {
@@ -5794,23 +5922,29 @@ ai_noinline bool eqv(struct ai *g, word a, word b) {
     if (coinp(a) && coinp(b) && coin_die(a) == coin_die(b)) {
      a = coin_load(a), b = coin_load(b); continue; }
     return false; }
-   // Function values: structural equality of compiled lambdas/closures. A no-capture
-   // lambda parks its source \-expr (fn_src) -> compare those structurally. A closure
-   // is a partial-application chain (fn_partialp) -> compare the base function and each
-   // captured arg pairwise, so (\ y (+ x y))[x=1] != [x=2]. Bifs / source-less / maps /
-   // ports / mixed fall through to identity (a==b already failed -> false).
+   // Function values: equality up to the beta the runtime already ran (the bridge). Each side
+   // loads to its capture-substitution residual -- a no-capture lambda's source, or a partial-app's
+   // base body with the captured args substituted for the leading binders -- and we α+value-compare
+   // those, so (adder 5) = (\ x (+ x 5)) and (adder 5) != (adder 6) alike. A source-less base (a
+   // bif-based partial-app like (+ 1)) can't residualize: fall back to the structural pairwise
+   // chain (base + captured args). Maps / ports / mixed fall to identity (a==b already failed).
    if (lamp(a) && lamp(b) && !datp(a) && !datp(b)) {
     union u *ka = cell(a), *kb = cell(b);
-    if (fn_partialp(ka) && fn_partialp(kb)) {
+    bool pa = fn_partialp(ka), pb = fn_partialp(kb);
+    if (!pa && !pb) {                                      // common case: two no-capture lambdas -> α-compare sources
+     word sa = fn_src(c, ka, a), sb = fn_src(c, kb, b);
+     if (sa && sb) { if (!salpha(g, sa, sb, 0)) return false; a = b; continue; }
+     return false; }                                      // a source-less function value -> identity (already failed)
+    struct clonf ra_, rb_;                                // a partial-app is in play: bridge via the capture-substitution residual
+    if (clo_load(c, a, &ra_) && clo_load(c, b, &rb_)) {
+     if (!clo_eq(g, &ra_, &rb_, w)) return false;         // w = the live worklist top: the bridge's re-entrant eqv scratches above it
+     a = b; continue; }                                   // residuals equal -> drain worklist
+    if (pa && pb) {                                        // source-less base (a bif): compare base + captures pairwise
      int na, nb; union u *ba = fn_base(ka, &na), *bb = fn_base(kb, &nb);
      if (na != nb) return false;
      if (top - w < 2 * (na + 1)) __builtin_trap();        // worklist overflow / cycle
      for (int i = 0; i < na; i++) *w++ = fn_arg(ka, i, na), *w++ = fn_arg(kb, i, nb);
      a = (word) ba, b = (word) bb; continue; }
-    word sa = fn_src(c, ka, a), sb = fn_src(c, kb, b);
-    if (sa && sb && !fn_partialp(ka) && !fn_partialp(kb)) {
-     if (!salpha(g, sa, sb, 0)) return false;             // α-equivalence of source \-exprs
-     a = b; continue; }                                   // equal -> drain worklist
     return false; }
    // The numerals 1 and 0 bridge to their lambdas extensionally: (\ x x), (\ _ 1).
    if ((a == putcharm(1) && id_lam(c, b)) || (b == putcharm(1) && id_lam(c, a))) { a = b; continue; }
@@ -5846,6 +5980,7 @@ ai_noinline bool eqv(struct ai *g, word a, word b) {
      break; } }
   if (w == base) return true;              // worklist drained: all equal
   b = *--w, a = *--w; } }
+ai_noinline bool eqv(struct ai *g, word a, word b) { return eqv_at(g, a, b, off_pool(g)); }
 
 // (= a b) — value-equality with numeric promotion across the numeric tower
 // (fixnum / boxed float / boxed wide int). With a float operand we compare as

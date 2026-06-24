@@ -368,8 +368,19 @@ Theorem unit_lt_zero : forall z, lt (Osym z) (Onum 0).  Proof. intros. left. cbn
    indices alpha-equivalence IS syntactic equality (the names are gone), so it
    is DECIDABLE and structural -- exactly the spec's claim. The numerals
    bridge: 1 = (\ x x) is the identity, 0 = (\ _ 1) is const-1 (and ONLY that).
-   eta/beta are NOT bridged: a closure (\ x (f x)) and its operator f stay
-   distinct (Lam .. vs the bare operator). *)
+
+   Where the line sits, precisely (it is NOT "never reduce"): `=` cannot chase
+   GENERAL beta -- beta-equality of lambda terms is undecidable (a common reduct
+   may never appear), and `=` is total -- so on two SOURCE terms it stays α+structural
+   and reduces nothing. eta likewise stays unbridged: (\ x (f x)) /= f (eta_not_bridged
+   below), since bridging it means REDUCING an unreduced term, off the decidable side.
+   BUT a CLOSURE VALUE is `ev`'s already-reduced artifact -- a partial-app is a held
+   beta-redex with its argument captured RIGHT THERE -- so closure `=` (and the α-hash a
+   map keys by) sees the ONE reduction `ev` performed to build it: (adder 5) = (\ x (+ x 5)).
+   That is decidable (the redex is already contracted in the value -- finite captures, no
+   search) and adds no reduction power: it is exactly st_beta surfaced into `=`
+   (closure_beta_bridge, in the reduction section). So `=` never reduces on its OWN; it
+   just declines to pretend the capture isn't there. *)
 
 Open Scope nat_scope.
 Inductive tm := Var (n : nat) | Lam (b : tm) | App (f a : tm).
@@ -460,6 +471,15 @@ Proof. intro a. exact (st_beta (Var 0) a). Qed.
 (* (\ _ 1) a ~> 1 -- const-1 drops its argument (spec.l: ((\ _ 1) 9) ; up to alpha) *)
 Theorem beta_const : forall a, step (App tm_zero a) tm_one.
 Proof. intro a. exact (st_beta (Lam (Var 0)) a). Qed.
+
+(* THE BETA BRIDGE that closure `=` observes (ai.c clo_eq / nf_hash): a held redex --
+   a partial-app (App (Lam b) a), the captured arg a sitting in the closure -- and its
+   contractum (subst 0 a b, the no-capture residual) are identified by value `=` and the
+   α-hash. This is SOUND and decidable precisely because it is ONE st_beta step, already in
+   the calculus: the value `=` agreeing with the reduction `ev` ran, never reducing on its
+   own (so general beta / eta stay unbridged -- eta_not_bridged). The proof IS st_beta. *)
+Theorem closure_beta_bridge : forall b a, step (App (Lam b) a) (subst 0 a b).
+Proof. intros. apply st_beta. Qed.
 
 (* nested: (\ x x) ((\ x x) a) ~>* a -- the closure reduces all the way down *)
 Theorem beta_nested : forall a, steps (App tm_one (App tm_one a)) a.
@@ -1002,7 +1022,8 @@ Print Assumptions numap_floor.       (* the count-law floor (count side, same $)
 Print Assumptions gunit_times_l.     (* () is the identity of BOTH monoids, + and * *)
 Print Assumptions unit_lt_zero.      (* () < 0: the floor below value-false (order side) *)
 Print Assumptions le_total.          (* the total order *)
-Print Assumptions eta_not_bridged.   (* = is alpha+structural, no further *)
+Print Assumptions eta_not_bridged.   (* = is alpha+structural on source, no further *)
+Print Assumptions closure_beta_bridge. (* ... but value = sees the one beta ev already ran *)
 Print Assumptions beta_id.           (* the reduction layer ev runs *)
 Print Assumptions cnilp_real.        (* the complex net agrees with the real one *)
 Print Assumptions world_unique.      (* the i/o faces are a coproduct (faces of top) *)
