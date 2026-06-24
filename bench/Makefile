@@ -16,6 +16,8 @@
 #                          e.g. make chez / make pypy / make rust
 #   make BENCHES=fib …  restrict the workload set (then clean to refresh files)
 #   make TIMEOUT=60 …   per-bench wall-clock cutoff in seconds (default 30)
+#   make SAMPLES=5 …    timed windows per bench; the median ms/it is reported
+#                          (default 5; SAMPLES=1 = the old single-shot, fast but noisy)
 #   make raw            cat the raw "<name> <lang> <reps> <ms> <chk>" lines
 #   make clean          remove out/bench/
 #
@@ -31,6 +33,7 @@ GL   := $(R)/out/host/ai
 HARN := bench.l
 BDIR := $(R)/out/bench
 TIMEOUT ?= 30
+SAMPLES ?= 5
 
 # workloads, in display order; override with `make BENCHES="fib primes"`.
 BENCHES := fib tak sum mapfilter deforest polysum primes bell strcat strscan hash sort tree float closure sat
@@ -118,7 +121,7 @@ $(BDIR):
 # target just formats it, alongside ai for contrast (ai shows only itself).
 define LANG_rule
 $$(BDIR)/$(1).txt: $(HARN_$(1)) $$(wildcard benches/*.$(EXT_$(1))) run.sh $(EXTRA_$(1)) | $$(BDIR)
-	@./run.sh $(1) "$$(BENCHES)" $$(TIMEOUT) "$$(SKIP)" > $$@
+	@./run.sh $(1) "$$(BENCHES)" $$(TIMEOUT) "$$(SKIP)" $$(SAMPLES) > $$@
 
 $(1): $$(call txt,$(1)) $(if $(filter ai,$(1)),,$$(call txt,ai))
 	@awk -v langs='$(if $(filter ai,$(1)),ai,ai $(1))' -f report.awk $$^
