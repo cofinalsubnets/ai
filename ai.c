@@ -6098,11 +6098,14 @@ lvm(lvm_same) {
 // bignum (it demotes to nil), so every bignum has |slen| >= 1 limbs.
 //
 // All multi-limb work lives in ai_noinline magnitude helpers operating on raw
-// uint32_t arrays (no l pointers, no allocation), so the VM-facing entry
-// points keep their tail calls and the GC never sees a half-built object. The
-// arithmetic uses 32-bit limbs with a uint64_t accumulator on every target:
-// limb products fit a uint64_t and Knuth divmod's 2-limb/1-limb step needs no
-// __int128 (not guaranteed on freestanding 32-bit ports). Schoolbook mul +
+// ai_limb arrays (no l pointers, no allocation), so the VM-facing entry points
+// keep their tail calls and the GC never sees a half-built object. Limbs are
+// NATIVE word width (64-bit on a 64-bit host/kernel, 32-bit on the wasm shim);
+// ai_dlimb is the double-limb accumulator for products/carries (unsigned __int128
+// at 64-bit, uint64_t at 32-bit). A 64x64->128 product is the hardware mulq (one
+// operand stays a limb -- never __multi3), and the divmod's 2-limb/1-limb step is
+// the hardware divq via div2by1 (never __udivti3) -- both soft routines the
+// -nostdlib freestanding port has no compiler-rt to supply. Schoolbook mul +
 // Knuth Algorithm D divmod -- Karatsuba/Toom are a later speed diff.
 
 
@@ -6174,11 +6177,35 @@ static ai_noinline int mag_mul_add_small(ai_limb *a, int n, ai_limb mul, ai_limb
  if (c) a[n++] = (ai_limb) c;
  return n; }
 
+// 128/64 -> 64-bit quotient + 64-bit remainder, where the CALLER guarantees the quotient fits a limb
+// (hi < d). On x86-64 the hardware `divq` does it in one instruction -- the divide-side twin of mag_mul's
+// mulq-not-__multi3 trick, AVOIDING __udivti3/__umodti3, the __int128 soft-divide the -nostdlib
+// freestanding port has no compiler-rt to supply. Off x86-64 (or with 32-bit limbs) the plain double-limb
+// divide is a 64/32 (wasm) or links via libgcc (a hosted non-x86 build).
+static ai_inline ai_limb div2by1(ai_limb hi, ai_limb lo, ai_limb d, ai_limb *rem) {
+#if defined(__x86_64__) && limb_bits == 64
+ ai_limb q;
+ __asm__("divq %[d]" : "=a"(q), "=d"(*rem) : [d] "rm"(d), "a"(lo), "d"(hi));
+ return q;
+#else
+ ai_dlimb num = ((ai_dlimb) hi << limb_bits) | lo;
+ return *rem = (ai_limb) (num % d), (ai_limb) (num / d);
+#endif
+}
+// 128/64 -> FULL quotient (up to limb_bits+1 bits, a double-limb) + remainder, for the q-hat step where
+// the high limb can reach the divisor. Two divq-safe steps: divide the high limb (giving the high quotient
+// limb), then the (partial-remainder : low limb) pair whose high < d fits a limb. The single-limb 64/64
+// divides need no __int128.
+static ai_inline ai_dlimb div128by64(ai_limb hi, ai_limb lo, ai_limb d, ai_limb *rem) {
+ ai_limb qhi = hi / d, r1 = hi % d;
+ ai_limb qlo = div2by1(r1, lo, d, rem);
+ return ((ai_dlimb) qhi << limb_bits) | qlo; }
+
 // a /= d in place (d != 0), returning the remainder. Used by the printer.
 static ai_noinline ai_limb mag_divmod_small(ai_limb *a, int n, ai_limb d) {
- ai_dlimb rem = 0;
- for (int i = n - 1; i >= 0; i--) { ai_dlimb cur = (rem << limb_bits) | a[i]; a[i] = (ai_limb) (cur / d); rem = cur % d; }
- return (ai_limb) rem; }
+ ai_limb rem = 0;
+ for (int i = n - 1; i >= 0; i--) { ai_limb r; a[i] = div2by1(rem, a[i], d, &r); rem = r; }
+ return rem; }
 
 // Knuth Algorithm D long division (Hacker's Delight `divmnu`). Divides u (m
 // limbs) by v (n limbs, v[n-1] != 0, m >= n): q gets the m-n+1 quotient limbs,
@@ -6190,9 +6217,9 @@ static ai_noinline void mag_divmod(ai_limb *q, ai_limb *r,
   ai_limb const *u, int m, ai_limb const *v, int n, ai_limb *un, ai_limb *vn) {
  ai_dlimb const B = limb_base;
  if (n == 1) {                                  // single-limb divisor: simple
-  ai_dlimb rem = 0;
-  for (int j = m - 1; j >= 0; j--) { ai_dlimb cur = (rem << limb_bits) | u[j]; q[j] = (ai_limb) (cur / v[0]); rem = cur % v[0]; }
-  r[0] = (ai_limb) rem; return; }
+  ai_limb rem = 0;
+  for (int j = m - 1; j >= 0; j--) { ai_limb rr; q[j] = div2by1(rem, u[j], v[0], &rr); rem = rr; }
+  r[0] = rem; return; }
  int s = limb_clz(v[n-1]);                       // normalize so v[n-1] has its top bit set
  for (int i = n - 1; i > 0; i--) vn[i] = (v[i] << s) | (s ? (ai_dlimb) v[i-1] >> (limb_bits - s) : 0);
  vn[0] = v[0] << s;
@@ -6200,8 +6227,8 @@ static ai_noinline void mag_divmod(ai_limb *q, ai_limb *r,
  for (int i = m - 1; i > 0; i--) un[i] = (u[i] << s) | (s ? (ai_dlimb) u[i-1] >> (limb_bits - s) : 0);
  un[0] = u[0] << s;
  for (int j = m - n; j >= 0; j--) {
-  ai_dlimb num = ((ai_dlimb) un[j+n] << limb_bits) | un[j+n-1];
-  ai_dlimb qhat = num / vn[n-1], rhat = num % vn[n-1];
+  ai_limb rr;                                   // 128/64 q-hat: divq-safe two-step, no __udivti3
+  ai_dlimb qhat = div128by64(un[j+n], un[j+n-1], vn[n-1], &rr), rhat = rr;
   while (qhat >= B || qhat * vn[n-2] > ((rhat << limb_bits) | un[j+n-2])) {
    qhat--; rhat += vn[n-1];
    if (rhat >= B) break; }
