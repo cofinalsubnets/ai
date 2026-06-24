@@ -273,6 +273,17 @@
           extradefs (foldl (\ a r (cat a (caup r))) () results)
           (? (atom? extradefs) form
              (link ': (unpair (cat (map cap results) extradefs) body)))))
+   ; --- MAP LANE (mapfix): a group fn's param that is `peep`'d but never `tally`'d is a MAP, not a string
+   ;     (strscan's `s` is BOTH peep'd and tally'd; hash's `h` is peep'd, never tally'd). Rewrite that
+   ;     param's `(peep h k d)` to `(mpeep h k d)` so the emitter lays an open-addressed map probe (and
+   ;     types the param map-kind: raw pointer + a mapkind entry guard). The guard backstops the heuristic
+   ;     -- a non-map arg deopts to interp. The string lane is untouched (tally'd peep-params stay peep).
+   (puse? e P) (? (two? e) (? (&& (id? (cap e) 'peep) (id? (caup e) P)) 1 (foldl (\ a x (|| a (puse? x P))) 0 (cup e))) 0)   ; P used as (peep P k d)?
+   (tuse? e P) (? (two? e) (? (&& (id? (cap e) 'tally) (id? (caup e) P)) 1 (foldl (\ a x (|| a (tuse? x P))) 0 (cup e))) 0)   ; P used as (tally P)?
+   (peep->mpeep P e) (? (two? e) (? (&& (id? (cap e) 'peep) (id? (caup e) P)) (link 'mpeep (map (\ x (peep->mpeep P x)) (cup e))) (map (\ x (peep->mpeep P x)) e)) e)
+   (mapfix-def def) (: nf (cap def) body (cup def)
+      mps (gfilt (\ P (&& (puse? body P) (! (tuse? body P)))) (cup nf))                              ; this fn's MAP params (peep'd, not tally'd)
+      (link nf (foldl (\ b P (peep->mpeep P b)) body mps)))
    ; --- STRING-BUILDER fusion (castbuild): a string-accumulator LOOP -- (: (g v.. s ..) (? COND (g u.. (+ s X) ..) s)
    ;     (g i.. "" ..)) builds a string by repeated append; each `+` copies the whole prefix, so the build is
    ;     O(n^2). Two rewrites: the clean single-byte counted case lowers to a NATIVE cask-fill (cbcask, below);
@@ -673,6 +684,7 @@
              (id? op '?)                                  (&& (= 4 (tally e)) (groupok? cm cands cps ps (caup e)) (groupok? cm cands cps ps (caup (cup e))) (groupok? cm cands cps ps (caup (cup (cup e)))))
              (id? op 'tally)                              (&& (= 2 (tally e)) (member? (caup e) ps))                                          ; (tally STR): STR a param (string lane)
              (id? op 'peep)                               (&& (= 4 (tally e)) (member? (caup e) ps) (groupok? cm cands cps ps (caup (cup e))) (whole? (caup (cup (cup e)))))   ; (peep STR i d): STR param, i ok, d const
+             (id? op 'mpeep)                              (&& (= 4 (tally e)) (member? (caup e) ps) (groupok? cm cands cps ps (caup (cup e))) (whole? (caup (cup (cup e)))))   ; (mpeep MAP k d): MAP param, key ok, d const (the map lane -- mapfix rewrote a map-valued peep here)
              (id? op 'pin)                                (&& (= 4 (tally e)) (member? (caup e) ps) (groupok? cm cands cps ps (caup (cup e))) (groupok? cm cands cps ps (caup (cup (cup e)))))   ; (pin BUF i V): BUF a raw-buf param, i ok, V ok
              (id? op 'two?)                               (&& (= 2 (tally e)) (cok? cm cands cps ps (caup e)))               ; (two? CE): CE chain-valued; result int 0/1 (TOTAL -- a non-chain reads false)
              0))                                                                               ; bare cap/cup are CHAIN-valued -> not admitted in an int position (cok? carries them)
@@ -693,7 +705,7 @@
     (? (! (two? form0)) form0
        (! (id? (cap form0) ':)) form0
        (atom? (cup form0)) form0
-       (: form (lift (delet (defoliate (loopclose (autospec (debool (dehof (fold-consts form0))))))))   ; inline lambda-const HOFs to first-order, lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets in fn bodies, THEN lambda-lift named-let bodies -> flat group fns
+       (: form (plift (lift (delet (defoliate (loopclose (autospec (debool (dehof (fold-consts form0)))))))))   ; inline lambda-const HOFs to first-order, lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets, lambda-lift named-let bodies, THEN plift read-only loops out of nested lets (hash's scan) -> flat group fns
           parsed (anat-defs (cup form)) pairs (cap parsed)
           fns (afilter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
           (? (! (two? fns)) form0                                                            ; no candidate functions -> original
@@ -701,7 +713,7 @@
                 grp (grpfix fns armap)                                                        ; the closed glazeable subset
                 (? (atom? grp) form0                                                          ; nothing survives the fixpoint -> original (un-lifted)
                    (: gnames (map cap grp)
-                      gdefs (afilter (\ p (member? (cap (cap p)) gnames)) fns)                ; the (nameform . body) defs of the group
+                      gdefs (map mapfix-def (afilter (\ p (member? (cap (cap p)) gnames)) fns))   ; the group's (nameform . body) defs, with map-valued peeps rewritten to mpeep
                       (link ': (rewrite-bindings (cup form) gnames gdefs))))))))              ; each binding of the LIFTED form -> its native
    (autonat form)
     (? (! (two? form)) form
@@ -884,6 +896,25 @@
        pl (plift rpl)
        (&& !(id? pl rpl) (900 = (base-ev rpl)) (900 = (base-ev pl))                       ; fired + source->source semantic equivalence
            (member? 'hash-run_scan (map (\ pr (? (two? (cap pr)) (caap pr) (cap pr))) (cap (anat-defs (cup pl)))))))   ; scan HOISTED to a top-level sibling
+    ; MAP LANE: a read-only map probe glazes from SOURCE -- `h` a MAP param (raw pointer, mapkind entry
+    ; guard; the native hashes the key 0x9e37.. then linear-probes the open-addressed backing -- regs
+    ; rax/r8-r11 only, NEVER rcx=Sp or rdx=Hp, both LIVE for the interp after Continue). mapfix rewrites
+    ; (peep h k 0)->(mpeep h k 0) because h is peep'd but never tally'd (strscan's s is BOTH -> stays a
+    ; string). == interp; a non-map arg deopts via the guard.
+    (: rmap '(: (msum m i acc) (? (< i 5) (msum m (+ i 1) (+ acc (peep m (+ 1 (* 97 i)) 0))) acc)
+                h (tablet 0) _ (pin h 1 10) _ (pin h 98 20) _ (pin h 195 30) _ (pin h 292 40) _ (pin h 389 50)
+                (msum h 0 0))
+       (&& !(id? (autogroup rmap) rmap) (150 = (ev rmap)) (= (base-ev rmap) (ev rmap))))
+    ; THE HASH BENCH, glazed END TO END: plift hoists the read-only `scan` out of hash-run to a top-level
+    ; hash-run_scan(n h i acc), mapfix maps its peep, the allocating ins/bump + the pins stay interpreted.
+    ; == interp (hash-run(N) = N^2). The map lane owns the read; the build stays on the collector.
+    (: rhash '(: (hash-run n) (: h (tablet 0)
+                  (ins i)      (? (< i n) (: _ (pin h (+ 1 (* 97 i)) i) (ins (+ i 1))) h)
+                  (scan i acc) (? (< i n) (scan (+ i 1) (+ acc (peep h (+ 1 (* 97 i)) 0))) acc)
+                  (bump i)     (? (< i n) (: k (+ 1 (* 97 i)) _ (pin h k (+ 1 (peep h k 0))) (bump (+ i 1))) h)
+                  _ (ins 0) a (scan 0 0) __ (bump 0) (+ a (scan 0 0)))
+                (hash-run 50))
+       (&& !(id? (autogroup rhash) rhash) (2500 = (ev rhash)) (= (base-ev rhash) (ev rhash))))   ; hash-run(50) = 2500
     ; DEFORESTATION: a map/filter/fold pipeline over (jot N) -- defoliate FUSES the producers into the
     ; foldl step (one pass, no intermediate lists) and LOWERS foldl-over-jot to the named-let LOOP `lift`
     ; already glazes, so the whole combinator pipeline compiles to a native counted loop. == interp.

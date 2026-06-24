@@ -20,37 +20,49 @@ cat <<'HEAD'
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ai benchmarks</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; margin: 1.5rem; }
-  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
-  .note { color: #777; font-size: .85rem; max-width: 64ch; margin: .25rem 0 1rem; }
-  .bar { margin: 0 0 1rem; display: flex; gap: .75rem; align-items: baseline; }
-  button { font: inherit; padding: .4rem .85rem; cursor: pointer;
-           border: 1px solid #aaa; border-radius: 7px; background: Canvas; }
-  button:hover { background: color-mix(in srgb, Canvas 85%, gray); }
-  #mode { color: #777; font-size: .85rem; }
-  .wrap { overflow: auto; max-height: 86vh; }
+  /* tokyo-night, matching the site (style.css): periwinkle on polar-night blue,
+     the self-hosted DOS/V bitmap font, green = a kept (fastest) answer. */
+  @font-face {
+    font-family: "Web437 DOS/V TWN16";
+    src: url("../fonts/Web437_DOS-V_TWN16.woff2") format("woff2"),
+         url("../fonts/Web437_DOS-V_TWN16.woff") format("woff");
+    font-display: swap;
+  }
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background: #04060e; color: #a9b1d6;
+         font-family: "Web437 DOS/V TWN16", "Px437 IBM VGA8", "DejaVu Sans Mono",
+                      ui-monospace, Menlo, Consolas, monospace;
+         font-size: 16px; line-height: 1.5; font-variant-ligatures: none;
+         -webkit-font-smoothing: none; font-smooth: never;
+         margin: 0; padding: 1.6em 1.2em 4em; }
+  h1 { font-size: 1.5em; font-weight: normal; letter-spacing: .04em; color: #c0caf5; margin: 0 0 .3em; }
+  .note { color: #565f89; font-size: .9em; max-width: 64ch; margin: .3em 0 1.2em; }
+  .bar { margin: 0 0 1em; display: flex; gap: .75rem; align-items: baseline; }
+  button { font: inherit; padding: .35em .85em; cursor: pointer; color: #a9b1d6;
+           border: 1px solid #3b4261; border-radius: 4px; background: #1f2335; }
+  button:hover { background: #292e42; }
+  #mode { color: #565f89; font-size: .9em; }
+  .wrap { overflow: auto; max-height: 86vh; border: 1px solid #292e42; border-radius: 6px; }
   table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { padding: .26rem .6rem; text-align: right; border: 1px solid #ddd;
-           white-space: nowrap; }
-  td { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-  thead th { position: sticky; top: 0; background: Canvas;
-             box-shadow: inset 0 -1px #ccc; }
-  tbody th { text-align: left; position: sticky; left: 0; background: Canvas;
-             box-shadow: inset -1px 0 #ccc; font-weight: 600; }
-  td.miss { color: #bbb; }
-  td.fast { color: #0a7d2c; font-weight: 700; }
-  .ai { background: color-mix(in srgb, gold 22%, Canvas) !important; }
-  th.ai { background: color-mix(in srgb, gold 36%, Canvas) !important; }
-  td.okc, .okrow td { color: #0a7d2c; font-weight: 600; }
-  td.bad, .okrow td.bad { color: #c0392b; }
+  th, td { padding: .28em .7em; text-align: right; border: 1px solid #292e42; white-space: nowrap; }
+  thead th { position: sticky; top: 0; background: #1f2335; color: #737aa2; font-weight: normal;
+             box-shadow: inset 0 -1px #3b4261; }
+  tbody th { text-align: left; position: sticky; left: 0; background: #1f2335; color: #9aa5ce;
+             box-shadow: inset -1px 0 #3b4261; font-weight: normal; }
+  td.miss { color: #3b4261; }
+  td.fast { color: #9ece6a; font-weight: bold; }              /* a kept answer: the green */
+  .ai { background: #241f10 !important; }                     /* the ai axis, tinted amber for dark */
+  th.ai { background: #3a3018 !important; color: #e0af68 !important; }
+  td.okc, .okrow td { color: #9ece6a; }
+  td.bad, .okrow td.bad { color: #f7768e; }
 </style>
 </head>
 <body>
 <h1>ai benchmarks &mdash; milliseconds per iteration</h1>
 <p class="note">Lower is better. Each language self-times its inner loop (reps
 auto-scaled past a 200&nbsp;ms floor, so startup is excluded). The fastest cell
-per bench is <b style="color:#0a7d2c">green</b>; the <span class="ai"
+per bench is <b style="color:#9ece6a">green</b>; the <span class="ai"
 style="padding:0 .3em">ai</span> axis is tinted; a dot means no implementation
 (or an unavailable toolchain). <b>ok</b> = every language's checksum agrees.</p>
 <div class="bar">
@@ -97,14 +109,15 @@ cat <<'TAIL'
 const fmt = x => x == null ? "·"
   : x < 1 ? x.toFixed(4) : x < 100 ? x.toFixed(3) : x.toFixed(1);
 
-// column order: ai FIRST, then the rest by NET time ascending -- Σ of a
-// language's per-bench ms/it EXCLUDING bell (luajit/rust lack a bell impl, so
-// counting it would skew them fast). A language with no data sorts last.
+// column order: every language (ai included -- its HONEST position) by NET time
+// ascending -- Σ of a language's per-bench ms/it EXCLUDING bell and sat. Both are
+// single-implementation benches (luajit/rust lack bell; sat is ai-only), so
+// counting either gives the languages that skip it a free 0 and skews the net.
+// ai is still TINTED (the gold column) wherever it lands. No-data langs sort last.
 const NET = l => BENCHES.reduce((s, b) => s +
-  (b === "bell" ? 0 : (PER[b] && PER[b][l] != null ? PER[b][l] : 0)), 0);
+  ((b === "bell" || b === "sat") ? 0 : (PER[b] && PER[b][l] != null ? PER[b][l] : 0)), 0);
 const HAS = l => BENCHES.some(b => PER[b] && PER[b][l] != null);
 const LANGORD = LANGS.slice().sort((a, b) =>
-  a === "ai" ? -1 : b === "ai" ? 1 :
   (HAS(a) ? NET(a) : Infinity) - (HAS(b) ? NET(b) : Infinity));
 
 // default arrangement: benches down the side, languages across; the button

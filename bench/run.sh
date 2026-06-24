@@ -37,10 +37,12 @@ case $lang in
   # strcat's O(n^2) string-accumulator loop rebuilt to a native O(n) cask-fill while its rolling hash glazes
   # via the string lane; closure's curried HOFs (twice/adder) INLINED to a first-order recurrence by dehof;
   # tree's binary-tree node-count TRAVERSE (ck) compiled to a native chain fold via the chain lane -- (two? t)/
-  # (cap t)/(cup t) lowered inline, the build half (mk, which allocates) staying interpreted),
-  # the ai analogue of LuaJIT auto-JITting Lua. The glaze self-tests print to stderr
+  # (cap t)/(cup t) lowered inline, the build half (mk, which allocates) staying interpreted; hash's read-only
+  # sum-lookup SCAN PARTIAL-LIFTED out of hash-run (plift) to a top-level fn taking the map as a param, its
+  # (peep h k) compiled to a native open-addressed map probe via the map lane, the allocating ins/bump staying
+  # interpreted), the ai analogue of LuaJIT auto-JITting Lua. The glaze self-tests print to stderr
   # (discarded here); other benches stay interpreted (the glaze matches only these).
-  ai)            ext=l;    bin=../out/host/ai;  cmd='cat $({ [ "$b" = float ] || [ "$b" = fib ] || [ "$b" = tak ] || [ "$b" = primes ] || [ "$b" = strscan ] || [ "$b" = strcat ] || [ "$b" = deforest ] || [ "$b" = polysum ] || [ "$b" = closure ] || [ "$b" = tree ]; } && [ "$(uname -m)" = x86_64 ] && printf "%s %s " ../ai/glaze/emit.l ../ai/glaze/auto.l; [ "$b" = sat ] && printf "%s " ../sat/sat.l) bench.l benches/$b.l | ../out/host/ai' ;;
+  ai)            ext=l;    bin=../out/host/ai;  cmd='cat $({ [ "$b" = float ] || [ "$b" = fib ] || [ "$b" = tak ] || [ "$b" = primes ] || [ "$b" = strscan ] || [ "$b" = strcat ] || [ "$b" = deforest ] || [ "$b" = polysum ] || [ "$b" = closure ] || [ "$b" = tree ] || [ "$b" = hash ]; } && [ "$(uname -m)" = x86_64 ] && printf "%s %s " ../ai/glaze/emit.l ../ai/glaze/auto.l; [ "$b" = sat ] && printf "%s " ../sat/sat.l) bench.l benches/$b.l | ../out/host/ai' ;;
   chez)         ext=ss;   bin=chez;       cmd='chez --script benches/$b.ss' ;;
   sbcl)         ext=lisp; bin=sbcl;       cmd='sbcl --script benches/$b.lisp' ;;
   elixir)       ext=exs;  bin=elixir;     cmd='elixir benches/$b.exs' ;;

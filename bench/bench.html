@@ -5,37 +5,49 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ai benchmarks</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; margin: 1.5rem; }
-  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
-  .note { color: #777; font-size: .85rem; max-width: 64ch; margin: .25rem 0 1rem; }
-  .bar { margin: 0 0 1rem; display: flex; gap: .75rem; align-items: baseline; }
-  button { font: inherit; padding: .4rem .85rem; cursor: pointer;
-           border: 1px solid #aaa; border-radius: 7px; background: Canvas; }
-  button:hover { background: color-mix(in srgb, Canvas 85%, gray); }
-  #mode { color: #777; font-size: .85rem; }
-  .wrap { overflow: auto; max-height: 86vh; }
+  /* tokyo-night, matching the site (style.css): periwinkle on polar-night blue,
+     the self-hosted DOS/V bitmap font, green = a kept (fastest) answer. */
+  @font-face {
+    font-family: "Web437 DOS/V TWN16";
+    src: url("../fonts/Web437_DOS-V_TWN16.woff2") format("woff2"),
+         url("../fonts/Web437_DOS-V_TWN16.woff") format("woff");
+    font-display: swap;
+  }
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background: #04060e; color: #a9b1d6;
+         font-family: "Web437 DOS/V TWN16", "Px437 IBM VGA8", "DejaVu Sans Mono",
+                      ui-monospace, Menlo, Consolas, monospace;
+         font-size: 16px; line-height: 1.5; font-variant-ligatures: none;
+         -webkit-font-smoothing: none; font-smooth: never;
+         margin: 0; padding: 1.6em 1.2em 4em; }
+  h1 { font-size: 1.5em; font-weight: normal; letter-spacing: .04em; color: #c0caf5; margin: 0 0 .3em; }
+  .note { color: #565f89; font-size: .9em; max-width: 64ch; margin: .3em 0 1.2em; }
+  .bar { margin: 0 0 1em; display: flex; gap: .75rem; align-items: baseline; }
+  button { font: inherit; padding: .35em .85em; cursor: pointer; color: #a9b1d6;
+           border: 1px solid #3b4261; border-radius: 4px; background: #1f2335; }
+  button:hover { background: #292e42; }
+  #mode { color: #565f89; font-size: .9em; }
+  .wrap { overflow: auto; max-height: 86vh; border: 1px solid #292e42; border-radius: 6px; }
   table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { padding: .26rem .6rem; text-align: right; border: 1px solid #ddd;
-           white-space: nowrap; }
-  td { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-  thead th { position: sticky; top: 0; background: Canvas;
-             box-shadow: inset 0 -1px #ccc; }
-  tbody th { text-align: left; position: sticky; left: 0; background: Canvas;
-             box-shadow: inset -1px 0 #ccc; font-weight: 600; }
-  td.miss { color: #bbb; }
-  td.fast { color: #0a7d2c; font-weight: 700; }
-  .ai { background: color-mix(in srgb, gold 22%, Canvas) !important; }
-  th.ai { background: color-mix(in srgb, gold 36%, Canvas) !important; }
-  td.okc, .okrow td { color: #0a7d2c; font-weight: 600; }
-  td.bad, .okrow td.bad { color: #c0392b; }
+  th, td { padding: .28em .7em; text-align: right; border: 1px solid #292e42; white-space: nowrap; }
+  thead th { position: sticky; top: 0; background: #1f2335; color: #737aa2; font-weight: normal;
+             box-shadow: inset 0 -1px #3b4261; }
+  tbody th { text-align: left; position: sticky; left: 0; background: #1f2335; color: #9aa5ce;
+             box-shadow: inset -1px 0 #3b4261; font-weight: normal; }
+  td.miss { color: #3b4261; }
+  td.fast { color: #9ece6a; font-weight: bold; }              /* a kept answer: the green */
+  .ai { background: #241f10 !important; }                     /* the ai axis, tinted amber for dark */
+  th.ai { background: #3a3018 !important; color: #e0af68 !important; }
+  td.okc, .okrow td { color: #9ece6a; }
+  td.bad, .okrow td.bad { color: #f7768e; }
 </style>
 </head>
 <body>
 <h1>ai benchmarks &mdash; milliseconds per iteration</h1>
 <p class="note">Lower is better. Each language self-times its inner loop (reps
 auto-scaled past a 200&nbsp;ms floor, so startup is excluded). The fastest cell
-per bench is <b style="color:#0a7d2c">green</b>; the <span class="ai"
+per bench is <b style="color:#9ece6a">green</b>; the <span class="ai"
 style="padding:0 .3em">ai</span> axis is tinted; a dot means no implementation
 (or an unavailable toolchain). <b>ok</b> = every language's checksum agrees.</p>
 <div class="bar">
@@ -47,49 +59,50 @@ style="padding:0 .3em">ai</span> axis is tinted; a dot means no implementation
 const LANGS=["ai","go","rust","java","julia","luajit","pypy","node","elixir","chez","sbcl"];
 const BENCHES=["fib","tak","sum","mapfilter","deforest","polysum","primes","bell","strcat","strscan","hash","sort","tree","float","closure","sat"];
 const PER={},OK={};
-PER["fib"]={"ai":3.2344,"go":3.6089,"rust":1.9109,"java":2.5671,"julia":4.3037,"luajit":7.3805,"pypy":8.2715,"node":7.2925,"elixir":7.1411,"chez":5.7500,"sbcl":10.9072};
+PER["fib"]={"ai":3.2656,"go":3.7940,"rust":1.9919,"java":2.5978,"julia":4.4285,"luajit":7.2590,"pypy":8.2508,"node":7.1700,"elixir":6.9793,"chez":5.8594,"sbcl":11.0322};
 OK["fib"]=true;
-PER["tak"]={"ai":0.4785,"go":0.4366,"rust":0.3280,"java":0.3034,"julia":0.6341,"luajit":1.3027,"pypy":2.2845,"node":0.9373,"elixir":0.8134,"chez":0.5469,"sbcl":3.9691};
+PER["tak"]={"ai":0.4824,"go":0.4563,"rust":0.3432,"java":0.3090,"julia":0.6845,"luajit":1.3362,"pypy":2.3009,"node":0.9251,"elixir":0.8075,"chez":0.6074,"sbcl":4.0628};
 OK["tak"]=true;
-PER["sum"]={"ai":0.0667,"go":0.1144,"rust":0.0491,"java":0.1896,"julia":0.0812,"luajit":0.0696,"pypy":0.2735,"node":0.7451,"elixir":0.4769,"chez":0.4648,"sbcl":0.6817};
+PER["sum"]={"ai":0.0657,"go":0.1053,"rust":0.0518,"java":0.1958,"julia":0.0843,"luajit":0.0696,"pypy":0.2586,"node":0.7428,"elixir":0.4797,"chez":0.4922,"sbcl":0.7032};
 OK["sum"]=true;
-PER["mapfilter"]={"ai":0.0879,"go":0.0212,"rust":0.0049,"java":0.0055,"julia":0.0139,"luajit":0.0304,"pypy":0.0933,"node":0.2103,"elixir":0.2396,"chez":0.1035,"sbcl":0.0947};
+PER["mapfilter"]={"ai":0.0906,"go":0.0214,"rust":0.0050,"java":0.0056,"julia":0.0141,"luajit":0.0306,"pypy":0.0907,"node":0.2086,"elixir":0.2426,"chez":0.1055,"sbcl":0.0964};
 OK["mapfilter"]=true;
-PER["deforest"]={"ai":0.0535,"go":0.0462,"rust":0.0146,"java":0.0130,"julia":0.0177,"luajit":0.0605,"pypy":0.1485,"node":1.1701,"elixir":0.4371,"chez":0.2295,"sbcl":0.2295};
+PER["deforest"]={"ai":0.0540,"go":0.0452,"rust":0.0150,"java":0.0134,"julia":0.0179,"luajit":0.0608,"pypy":0.1464,"node":1.1832,"elixir":0.4436,"chez":0.2354,"sbcl":0.2373};
 OK["deforest"]=true;
-PER["polysum"]={"ai":0.0001,"go":0.0387,"rust":0.0098,"java":0.0066,"julia":0.0138,"luajit":0.0597,"pypy":0.1461,"node":1.1667,"elixir":0.4046,"chez":0.1914,"sbcl":0.1973};
+PER["polysum"]={"ai":0.0001,"go":0.0387,"rust":0.0100,"java":0.0068,"julia":0.0145,"luajit":0.0598,"pypy":0.1464,"node":1.1752,"elixir":0.4088,"chez":0.1919,"sbcl":0.2031};
 OK["polysum"]=true;
-PER["primes"]={"ai":0.9961,"go":0.8897,"rust":0.7709,"java":0.7549,"julia":0.8813,"luajit":0.7970,"pypy":1.3050,"node":0.7576,"elixir":2.2933,"chez":1.6016,"sbcl":4.6410};
+PER["primes"]={"ai":1.0000,"go":0.8985,"rust":0.7771,"java":0.7723,"julia":0.8952,"luajit":0.8013,"pypy":1.3022,"node":0.7764,"elixir":2.2513,"chez":1.6875,"sbcl":4.7817};
 OK["primes"]=true;
-PER["bell"]={"ai":49.2500,"go":24.3498,"java":36.5609,"julia":74.0605,"pypy":24.2373,"node":27.7789,"elixir":32.7639,"chez":63.5000,"sbcl":50.2545};
+PER["bell"]={"ai":49.6250,"go":24.5733,"java":34.5015,"julia":75.7190,"pypy":24.2535,"node":28.3709,"elixir":32.9438,"chez":67.0000,"sbcl":52.0045};
 OK["bell"]=true;
-PER["strcat"]={"ai":0.0264,"go":0.8918,"rust":0.0171,"java":1.6665,"julia":1.4594,"luajit":1.3921,"pypy":0.1702,"node":0.1097,"elixir":0.0428,"chez":1.3086,"sbcl":4.3285};
+PER["strcat"]={"ai":0.0270,"go":0.8986,"rust":0.0173,"java":1.4579,"julia":1.5431,"luajit":1.3867,"pypy":0.1650,"node":0.1146,"elixir":0.0429,"chez":1.3516,"sbcl":4.5160};
 OK["strcat"]=true;
-PER["strscan"]={"ai":0.0754,"go":0.0641,"rust":0.0635,"java":0.0633,"julia":0.0636,"luajit":0.1289,"pypy":0.0619,"node":0.3834,"elixir":0.0978,"chez":0.1235,"sbcl":0.1665};
+PER["strscan"]={"ai":0.0769,"go":0.0642,"rust":0.0639,"java":0.0644,"julia":0.0646,"luajit":0.1291,"pypy":0.0626,"node":0.3913,"elixir":0.0991,"chez":0.1304,"sbcl":0.1709};
 OK["strscan"]=true;
-PER["hash"]={"ai":3.0625,"go":0.5517,"rust":0.7418,"java":0.5398,"julia":0.4641,"luajit":0.9840,"pypy":0.4271,"node":0.6999,"chez":0.7363,"sbcl":0.9141};
+PER["hash"]={"ai":2.5000,"go":0.5484,"rust":0.7342,"java":0.2920,"julia":0.4783,"luajit":0.9951,"pypy":0.4295,"node":0.7274,"chez":0.7930,"sbcl":0.9337};
 OK["hash"]=true;
-PER["sort"]={"ai":0.9883,"go":0.3571,"rust":0.0636,"java":0.1601,"julia":0.0588,"luajit":1.1449,"pypy":0.3548,"node":0.9797,"elixir":0.7422,"chez":0.3945,"sbcl":0.5899};
+PER["sort"]={"ai":0.9883,"go":0.3561,"rust":0.0640,"java":0.1666,"julia":0.0600,"luajit":1.1623,"pypy":0.3547,"node":1.0116,"elixir":0.7462,"chez":0.4258,"sbcl":0.5899};
 OK["sort"]=true;
-PER["tree"]={"ai":2.5625,"go":1.5806,"rust":4.5344,"java":0.4013,"julia":3.0270,"luajit":3.4780,"pypy":1.8633,"node":1.3508,"elixir":0.9745,"chez":0.5977,"sbcl":1.4689};
+PER["tree"]={"ai":2.3750,"go":1.5823,"rust":4.6465,"java":0.4045,"julia":3.1515,"luajit":3.5409,"pypy":1.9398,"node":1.4106,"elixir":0.9533,"chez":0.6152,"sbcl":1.4611};
 OK["tree"]=true;
-PER["float"]={"ai":0.2930,"go":0.1961,"rust":0.1842,"java":0.1794,"julia":0.1808,"luajit":0.2104,"pypy":0.3040,"node":0.1861,"elixir":4.3804,"chez":3.1250,"sbcl":5.1254};
+PER["float"]={"ai":0.2949,"go":0.1974,"rust":0.1863,"java":0.1819,"julia":0.1830,"luajit":0.2113,"pypy":0.3077,"node":0.1881,"elixir":4.4388,"chez":3.1406,"sbcl":5.2505};
 OK["float"]=true;
-PER["closure"]={"ai":0.0747,"go":0.0233,"rust":0.0231,"java":0.0301,"julia":0.0097,"luajit":13.0104,"pypy":0.0735,"node":0.7819,"elixir":2.0105,"chez":0.9727,"sbcl":1.9846};
+PER["closure"]={"ai":0.0754,"go":0.0234,"rust":0.0242,"java":0.0310,"julia":0.0107,"luajit":13.1328,"pypy":0.0742,"node":0.7902,"elixir":2.0329,"chez":1.0000,"sbcl":2.0158};
 OK["closure"]=true;
 PER["sat"]={"ai":43.7500};
 OK["sat"]=true;
 const fmt = x => x == null ? "·"
   : x < 1 ? x.toFixed(4) : x < 100 ? x.toFixed(3) : x.toFixed(1);
 
-// column order: ai FIRST, then the rest by NET time ascending -- Σ of a
-// language's per-bench ms/it EXCLUDING bell (luajit/rust lack a bell impl, so
-// counting it would skew them fast). A language with no data sorts last.
+// column order: every language (ai included -- its HONEST position) by NET time
+// ascending -- Σ of a language's per-bench ms/it EXCLUDING bell and sat. Both are
+// single-implementation benches (luajit/rust lack bell; sat is ai-only), so
+// counting either gives the languages that skip it a free 0 and skews the net.
+// ai is still TINTED (the gold column) wherever it lands. No-data langs sort last.
 const NET = l => BENCHES.reduce((s, b) => s +
-  (b === "bell" ? 0 : (PER[b] && PER[b][l] != null ? PER[b][l] : 0)), 0);
+  ((b === "bell" || b === "sat") ? 0 : (PER[b] && PER[b][l] != null ? PER[b][l] : 0)), 0);
 const HAS = l => BENCHES.some(b => PER[b] && PER[b][l] != null);
 const LANGORD = LANGS.slice().sort((a, b) =>
-  a === "ai" ? -1 : b === "ai" ? 1 :
   (HAS(a) ? NET(a) : Infinity) - (HAS(b) ? NET(b) : Infinity));
 
 // default arrangement: benches down the side, languages across; the button

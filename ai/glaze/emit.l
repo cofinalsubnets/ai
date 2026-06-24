@@ -137,6 +137,8 @@
    ; made the integer lane lag a register machine (e.g. primes' (* d d), (< n ..), (= 0 ..) every iter).
    (pregn i) (nthl '(3 13 14 15) i)                                                 ; arg-slot i -> x86 reg num
    chainkind (apof (link 0 0))                                                      ; lvm_chain's ap sentinel, for the inline two?/cap/cup kind test (cf. (apof "") for the string lane)
+   mapkind (apof (tablet 0))                                                        ; lvm_map_lookup's sentinel, for the map-param entry guard + the (mpeep ..) probe
+   mapmix 11400714819323198485                                                      ; the hash multiplier 0x9e3779b97f4a7c15 (= ai.c's map hash mult), for the inline probe
    (rrm reg) (+ 192 (% reg 8))                                                      ; ModRM mod11: reg-field=rax, rm=reg
    (rrr reg) (+ 192 (* 8 (% reg 8)))                                                ; ModRM mod11: reg-field=reg, rm=rax
    (rexb reg) (? (< reg 8) 72 73)                                                   ; REX.W (+B if reg extended, in rm)
@@ -197,6 +199,14 @@
                 defb (asm (L '(72 184) (le8 (? (whole? d) d 0)))) load '(65 15 182 68 0 16)
                 (asm (L ib push-rax (arx (argix a ps 0)) '(73 137 192) '(88) '(73 59 64 8)                        ; i;push; STR->rax; r8=STR; pop i; cmp i,[r8+8] len
                        (L 114 (+ (tally defb) 2)) defb (L 235 (tally load)) load)))                               ; jb IN; OOB: movabs rax,d; jmp; IN: movzx eax,[r8+rax+16]
+             (&& (= op 'mpeep) (member? a ps))                                                                    ; (mpeep MAP k d): native open-addressed map probe -- hash k, linear-probe the backing for the value
+                (: kb (cgg syms ps b off OVF) d (caup (cup (cup e)))                                               ; k->rax(untagged); regs rax/r8/r9/r10/r11 ONLY (rcx=Sp, rdx=Hp are LIVE for the interp after Continue)
+                   (asm (L kb '(76 141 92 0 1) (arx (argix a ps 0))                                                 ; lea r11,[rax+rax+1] (tagged key); rax=MAP
+                          '(76 139 64 8 77 139 72 16 73 209 233 73 255 201 73 129 192 24 0 0 0)                     ; r8=[rax+8]=backing; r9=[r8+16]=cap; shr; dec(=mask); r8+=24=&slots
+                          '(72 184) (le8 mapmix)                                                                    ; movabs rax, mix
+                          '(73 15 175 195 72 193 192 32 76 33 200 73 137 194 75 141 4 18 73 139 4 192 76 57 216 15 132 39 0 0 0 72 247 192 1 0 0 0 15 132 11 0 0 0 73 255 194 77 33 202 233 215 255 255 255)  ; rax=rot(mix*tagkey)&mask=I->r10; loop: rax=slot key; cmp r11; je hit; test gap; je miss; I=(I+1)&mask; jmp loop (gap terminates; no budget)
+                          '(72 184) (le8 (? (whole? d) d 0))                                                        ; miss: movabs rax, default
+                          '(233 12 0 0 0 75 141 4 18 73 139 68 192 8 72 209 248))))                                ; jmp end; hit: rax=slot value(+8); sar (untag)
              (&& (= op 'tally) (member? a ps)) (asm (L (arx (argix a ps 0)) '(72 139 64 8)))                      ; (tally STR): rax=STR; rax=[rax+8] = len
              (&& (= op 'pin) (member? a ps))                                                                       ; (pin C i V): native byte store into a raw buf-param C, returns C
                 (: idx (caup (cup e)) val (caup (cup (cup e))) creg (pregn (argix a ps 0))
@@ -247,27 +257,28 @@
    ; PLAIN string (kind == strkind, the `apof` of a reference string); a fixnum or any other kind (cask,
    ; list, map, ...) jumps to the OVF handler -> deopt to the interp fallback (which handles every type).
    ; Without it a non-string arg would deref a bad pointer. off = guards' start offset; Aovf = the handler.
-   (mkguards ms bufmask strkind bufkind off Aovf)                                                ; a raw param's kind: a pin-param (bufmask) must be a CASK, else a plain STRING
+   (mkguards ms bufmask mmask strkind bufkind off Aovf)                                          ; a raw param's kind: a MAP-param (mmask) a map, a pin-param (bufmask) a CASK, else a plain STRING
     (? (atom? ms) ()
-       (: i (cap ms) f (fetch i) kind (? (member? i bufmask) bufkind strkind)
+       (: i (cap ms) f (fetch i) kind (? (member? i mmask) mapkind (member? i bufmask) bufkind strkind)
           jnz-end (+ off (+ (tally f) 8)) jne-end (+ jnz-end 22)
           g (asm (L f '(168 1) '(15 133) (le4 (- Aovf jnz-end))                                  ; mov rax,Sp[i]; test al,1; jnz Aovf (fixnum)
                     '(76 139 0) '(72 184) (le8 kind) '(73 57 192) '(15 133) (le4 (- Aovf jne-end))))   ; mov r8,[rax]; movabs rax,kind; cmp r8,rax; jne Aovf
-          (asm (L g (mkguards (cup ms) bufmask strkind bufkind jne-end Aovf)))))
-   (mkouter k smask bufmask cmask strkind)
+          (asm (L g (mkguards (cup ms) bufmask mmask strkind bufkind jne-end Aovf)))))
+   (mkouter k smask bufmask cmask mmask strkind)
     (: bufkind (apof (cask 1))                                                                    ; a cask's kind, for a pin (buf) param's type guard
+       gmask (cat smask mmask)                                                                    ; the entry-GUARDED raw params: strings + maps (disjoint by construction)
        dpt (? (= k 1) deopt deopt-mn)                                                             ; arity 1 applies fb directly; >=2 enters its body past the lvm_cur
        saveargs (foldl (\ a i (+ a (pshr i))) () (rangeL 0 k))                                    ; save the k arg regs (callee-saved)
        restargs (foldl (\ a i (+ a (popr (- (- k 1) i)))) () (rangeL 0 k))                        ; restore (reverse)
-       pushargs (foldl (\ a i (+ a (asm (L (fetch i) (? (|| (member? i smask) (member? i cmask)) () '(72 209 248)) push-rax)))) () (rangeL 0 k))  ; push Sp[0..k-1]; untag (sar) UNLESS a string (smask) or chain (cmask) param -- both pass a raw pointer
+       pushargs (foldl (\ a i (+ a (asm (L (fetch i) (? (|| (member? i smask) (|| (member? i cmask) (member? i mmask))) () '(72 209 248)) push-rax)))) () (rangeL 0 k))  ; push Sp[0..k-1]; untag (sar) UNLESS a string (smask) / chain (cmask) / map (mmask) param -- all pass a raw pointer
        s6 (asm (L '(72 131 196) (list (* 8 k))))  s10 (asm (L '(72 131 200 1) '(72 137 1) '(72 131 198 16) '(72 139 6 255 224)))
        Lr (tally restargs)
        Aguard (+ 2 (+ (tally saveargs) 3))                                                       ; guards sit after push r12(2)+saveargs+mov r12,rsp(3)
-       Lg (tally (mkguards smask bufmask strkind bufkind 0 0))                                                    ; guard length (offset-independent; 0 when no string params)
+       Lg (tally (mkguards gmask bufmask mmask strkind bufkind 0 0))                                              ; guard length (offset-independent; 0 when no raw params)
        Acall (+ Aguard (+ Lg (tally pushargs)))
        Arest (+ Acall (+ 5 (tally s6)))  As8 (+ Arest Lr)  As9 (+ As8 2)  Ajmpend (+ As9 10)
        As10 Ajmpend  Aovf (+ As10 (tally s10))  Adeopt (+ Aovf (+ 3 (+ Lr 2)))  Hh (+ Adeopt (tally dpt))
-       guards (mkguards smask bufmask strkind bufkind Aguard Aovf)                                               ; real guards (jump to Aovf on a non-string)
+       guards (mkguards gmask bufmask mmask strkind bufkind Aguard Aovf)                                          ; real guards (jump to Aovf on a wrong-kind raw arg)
        callb (asm (L '(232) (le4 (- Hh (+ Acall 5)))))                                            ; call H_entry (right after the OUTER)
        s9 (asm (L '(72 1 192) '(113 5) '(233) (le4 (- Adeopt Ajmpend))))                          ; add rax,rax; jno PUTOK(+5); jmp DEOPT
        s11 (asm (L '(76 137 228) restargs '(65 92)))                                              ; OVF: mov rsp,r12; restores; pop r12
@@ -281,6 +292,7 @@
    (suse? e P) (? (two? e) (? (&& (member? (cap e) '(peep tally pin)) (id? (caup e) P)) 1 (foldl (\ a x (|| a (suse? x P))) 0 (cup e))) 0)   ; P used DIRECTLY as (peep P..)/(tally P)/(pin P..)?
    (buse? e P) (? (two? e) (? (&& (id? (cap e) 'pin) (id? (caup e) P)) 1 (foldl (\ a x (|| a (buse? x P))) 0 (cup e))) 0)   ; P used as a CASK -- (pin P..) -- so its guard wants the buf kind, not str
    (cuse? e P) (? (two? e) (? (&& (member? (cap e) '(cap cup two?)) (id? (caup e) P)) 1 (foldl (\ a x (|| a (cuse? x P))) 0 (cup e))) 0)   ; P used as a CHAIN -- (cap P)/(cup P)/(two? P) -- raw pointer, NO entry guard (two? is total: a non-chain reads false)
+   (muse? e P) (? (two? e) (? (&& (id? (cap e) 'mpeep) (id? (caup e) P)) 1 (foldl (\ a x (|| a (muse? x P))) 0 (cup e))) 0)   ; P used as a MAP -- (mpeep P k d) -- raw pointer, guarded as a map (the recognizer rewrites a map-valued (peep ..) to mpeep)
    ; INTERPROCEDURAL string-param inference: a param is a string if used in peep/tally OR passed as the arg
    ; to a sibling's string param. (strhash's `s` is a string because it flows into strhash_go's peep.) A
    ; deduped fixpoint over the group's (name . smask) map -- smasks only grow, so the size stabilizes.
@@ -303,7 +315,8 @@
        smask (gsm entry (smfix info smap0))                                                   ; entry's STRING params, propagated to a fixpoint -> raw pointer, no sar
        bufmask (gfilt (\ k (buse? (nthl efn 2) (nthl (nthl efn 1) k))) (rangeL 0 (nthl efn 3)))   ; entry params used as a CASK (pin) -> guard with the buf kind, not str
        cmask (gfilt (\ k (cuse? (nthl efn 2) (nthl (nthl efn 1) k))) (rangeL 0 (nthl efn 3)))   ; entry params used as a CHAIN (cap/cup/two?) -> raw pointer, no entry guard
-       OU (mkouter (nthl efn 3) smask bufmask cmask (apof "")) outer (cap OU) Aovf (caup OU) Lo (tally outer)   ; (apof "") = the plain-string kind for the type guard; bufmask overrides to buf
+       mmask (gfilt (\ k (muse? (nthl efn 2) (nthl (nthl efn 1) k))) (rangeL 0 (nthl efn 3)))   ; entry params used as a MAP (mpeep) -> raw pointer, guarded as a map
+       OU (mkouter (nthl efn 3) smask bufmask cmask mmask (apof "")) outer (cap OU) Aovf (caup OU) Lo (tally outer)   ; (apof "") = the plain-string kind for the type guard; bufmask->buf, mmask->map
 
        sa (\ k (foldl (\ a i (+ a (pshr i))) () (rangeL 0 k)))
        ld (\ k (foldl (\ a i (+ a (ldr i (- (* 16 k) (* 8 i))))) () (rangeL 0 k)))
@@ -316,7 +329,7 @@
        Hs (map2 (\ r o (: s (nthl r 4) l (nthl r 5) bo (+ o (+ (tally s) (tally l)))                  ; bo = body start = Lbody (tail self-calls jmp here)
                           (asm (L s l (cggt syms (nthl r 1) (nthl r 2) bo Aovf (nthl r 0) bo) (nthl r 6) '(195))))) rows offs)   ; H: save; load; BODY(tail); restore; ret
        lr (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lr (cup ds)))))))   ; defs -> (: (n p..) body .. entry)
-       fb (ev (link ': (lr defs)))                                                            ; interp the WHOLE group, yield the entry closure
+       fb (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (lr defs)))))            ; interp the WHOLE group (mpeep = a local peep, so the deopt path reads the map faithfully)
        elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                                     ; the entry's source lambda (value[-1], =/show)
        (nif (emit (asm (link outer Hs))) fb elam (nthl efn 3)))
    ; --- counted fold loop: acc = (FOLD over cv<n of body(cv)), cv the counter, limit
