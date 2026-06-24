@@ -111,25 +111,21 @@ static lvm(lvm_reapany) {
 // story for {signals, clock}), then sigtake reads the record. SIGCHLD coalesces, so a
 // 'chld wake still loops `reap` to harvest every zombie.
 #if defined(__linux__)
-static lvm(lvm_sigfd) {
+ai_noinline static struct ai *host_sigfd(struct ai *g) {
  sigset_t m;
  sigemptyset(&m);
  sigaddset(&m, SIGCHLD);
  sigaddset(&m, SIGTERM);
- if (sigprocmask(SIG_BLOCK, &m, NULL)) goto fail;
+ if (sigprocmask(SIG_BLOCK, &m, NULL)) return g->sp[0] = ZeroPoint, g;
  int fd = signalfd(-1, &m, SFD_NONBLOCK | SFD_CLOEXEC);
- if (fd < 0) goto fail;
- Pack(g);
+ if (fd < 0) return g->sp[0] = ZeroPoint, g;
  struct ai *r = ai_io_alloc(g, fd);
- if (!ai_ok(r)) { close(fd); goto fail; }    // OOM -> nil (cf. net.c lvm_listen)
+ if (!ai_ok(r)) return close(fd), g->sp[0] = ZeroPoint, g;    // OOM -> nil (cf. net.c lvm_listen)
  g = r;
- Unpack(g);
- Sp[1] = Sp[0];                              // port over the dummy arg
- Sp += 1; Ip += 1;
- return Continue();
- fail:
- Sp[0] = ZeroPoint; Ip += 1;
- return Continue(); }
+ return g->sp[1] = g->sp[0], g->sp += 1, g; }                 // port over the dummy arg
+static lvm(lvm_sigfd) {
+ Pack(g); g = host_sigfd(g); Unpack(g);     // host_sigfd folds every failure to nil, so no ghelp
+ return Ip++, Continue(); }
 
 // read one signalfd_siginfo (non-blocking) into (signo . pid). signo is the raw
 // number (Linux: SIGCHLD 17, SIGTERM 15); pid is ssi_pid (the dead child on SIGCHLD).
@@ -164,13 +160,15 @@ static lvm(lvm_sigtake) { Sp[0] = ZeroPoint; return Ip++, Continue(); }
 //                 owns the terminal and the prompt returns only when it is done.
 // (chdir path) -> () ok | -errno | -1 misuse. the `cd` builtin.
 // (cwd _)      -> the current directory as a string, or () on failure. for the prompt.
-static lvm(lvm_waitpid) {
- intptr_t pid = (Sp[0] & 1) ? getcharm(Sp[0]) : 0;
+// The syscall body lives in an ai_noinline helper so the lvm_ wrapper stays a pure tail-jump (no ret):
+// the syscall + any stack buffer would otherwise block the sibcall to Continue() and trip `make vmret`.
+ai_noinline static ai_word host_waitpid(ai_word arg) {
+ intptr_t pid = (arg & 1) ? getcharm(arg) : 0;
  int st;
  pid_t r;
  do r = waitpid((pid_t) pid, &st, 0); while (r < 0 && errno == EINTR);
- Sp[0] = (r < 0) ? putcharm(-errno) : putcharm(proc_status(st));
- return Ip++, Continue(); }
+ return (r < 0) ? putcharm(-errno) : putcharm(proc_status(st)); }
+static lvm(lvm_waitpid) { Sp[0] = host_waitpid(Sp[0]); return Ip++, Continue(); }
 
 // copy an ai string into a NUL-terminated C buffer; false on non-string / too long.
 static bool str_cbuf(ai_word x, char *buf, size_t cap) {
@@ -181,21 +179,22 @@ static bool str_cbuf(ai_word x, char *buf, size_t cap) {
  buf[s->len] = 0;
  return true; }
 
-static lvm(lvm_chdir) {
+ai_noinline static ai_word host_chdir(ai_word arg) {
  char buf[4096];
- if (!str_cbuf(Sp[0], buf, sizeof buf)) { Sp[0] = putcharm(-1); return Ip++, Continue(); }
- Sp[0] = chdir(buf) ? putcharm(-errno) : ZeroPoint;
- return Ip++, Continue(); }
+ if (!str_cbuf(arg, buf, sizeof buf)) return putcharm(-1);
+ return chdir(buf) ? putcharm(-errno) : ZeroPoint; }
+static lvm(lvm_chdir) { Sp[0] = host_chdir(Sp[0]); return Ip++, Continue(); }
 
-static lvm(lvm_cwd) {
+ai_noinline static struct ai *host_cwd(struct ai *g) {
  char buf[4096];
- if (!getcwd(buf, sizeof buf)) { Sp[0] = ZeroPoint; return Ip++, Continue(); }
- Pack(g);
- if (!ai_ok(g = ai_strof(g, buf))) return ghelp(g);
+ if (!getcwd(buf, sizeof buf)) return g->sp[0] = ZeroPoint, g;
+ if (!ai_ok(g = ai_strof(g, buf))) return g;            // OOM -> !ok, wrapper ghelps
+ return g->sp[1] = g->sp[0], g->sp += 1, g; }           // cwd string over the dummy arg
+static lvm(lvm_cwd) {
+ Pack(g); g = host_cwd(g);
+ if (!ai_ok(g)) return ghelp(g);
  Unpack(g);
- Sp[1] = Sp[0];                 // cwd string over the dummy arg
- Sp += 1; Ip += 1;
- return Continue(); }
+ return Ip++, Continue(); }
 
 // --- pipes + redirects (the fd plumbing a shell pipeline needs) ------------------
 // (pipe _)       -> (readfd . writefd) of a fresh pipe (raw fds), or -errno.
@@ -207,14 +206,16 @@ static lvm(lvm_cwd) {
 //                   sees EOF), then execvp. The parent keeps its fds and closes the
 //                   pipe ends itself with shutfd. -errno on a fork/marshal failure.
 // (shutfd fd)    -> close a raw fd (the parent's pipe ends). () ok | -errno.
-static lvm(lvm_pipe) {
+ai_noinline static struct ai *host_pipe(struct ai *g) {
  int fds[2];
- if (pipe(fds)) { Sp[0] = putcharm(-errno); return Ip++, Continue(); }
- Pack(g);
- if (!ai_ok(g = ai_have(g, Width(struct ai_chain)))) { close(fds[0]); close(fds[1]); return ghelp(g); }
+ if (pipe(fds)) return g->sp[0] = putcharm(-errno), g;
+ if (!ai_ok(g = ai_have(g, Width(struct ai_chain)))) return close(fds[0]), close(fds[1]), g;   // OOM -> !ok
  struct ai_chain *w = ini_chain((struct ai_chain*) bump(g, Width(struct ai_chain)),
                                 putcharm(fds[0]), putcharm(fds[1]));
- g->sp[0] = word(w);
+ return g->sp[0] = word(w), g; }
+static lvm(lvm_pipe) {
+ Pack(g); g = host_pipe(g);
+ if (!ai_ok(g)) return ghelp(g);
  Unpack(g);
  return Ip++, Continue(); }
 
@@ -296,12 +297,12 @@ static lvm(lvm_mkdir) {
  Sp += 1; return Ip++, Continue(); }
 
 #if defined(__linux__)
-static lvm(lvm_mount) {
+ai_noinline static ai_word host_mount(ai_word a, ai_word b, ai_word c) {
  char src[1024], tgt[1024], typ[64];
- if (!str_cbuf(Sp[0], src, sizeof src) || !str_cbuf(Sp[1], tgt, sizeof tgt)
-     || !str_cbuf(Sp[2], typ, sizeof typ)) { Sp[2] = putcharm(EINVAL); Sp += 2; return Ip++, Continue(); }
- Sp[2] = mount(src, tgt, typ, 0, NULL) ? putcharm(errno) : ZeroPoint;
- Sp += 2; return Ip++, Continue(); }
+ if (!str_cbuf(a, src, sizeof src) || !str_cbuf(b, tgt, sizeof tgt) || !str_cbuf(c, typ, sizeof typ))
+  return putcharm(EINVAL);
+ return mount(src, tgt, typ, 0, NULL) ? putcharm(errno) : ZeroPoint; }
+static lvm(lvm_mount) { Sp[2] = host_mount(Sp[0], Sp[1], Sp[2]); Sp += 2; return Ip++, Continue(); }
 
 static int ns_write(char const *path, char const *s) {
  int fd = open(path, O_WRONLY);
