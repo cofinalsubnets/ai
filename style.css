@@ -40,6 +40,11 @@ h3 { font-size: 1em; font-weight: normal; color: #9aa5ce; margin: 1.6em 0 .5em; 
 h2 a, h3 a { color: inherit; }
 h2 a:hover, h3 a:hover { text-decoration: none; }
 h2 a:hover::after, h3 a:hover::after { content: " #"; color: #545c7e; }
+details.dump > summary { cursor: pointer; list-style: none; }
+details.dump > summary::-webkit-details-marker { display: none; }
+details.dump > summary > h3 { display: inline-block; }
+details.dump > summary > h3::before { content: "\25B8\00a0"; color: #545c7e; }
+details.dump[open] > summary > h3::before { content: "\25BE\00a0"; }
 
 p { margin: .7em 0; text-align: justify; hyphens: auto; }
 a { color: #7aa2f7; text-decoration: none; }
