@@ -222,25 +222,84 @@
    (inop k s) (? (cnul? s) 0 (id? k (caap s)) 1 (inop k (cup s)))                     ; is k a key of the op table?
    (opget h) (: e (assq h opval) (? (atom? e) 0 (caup e)))
    (foldc h as) (cbake (foldl (\ g a (g a)) (opget h) (map kval as)))                 ; apply the nif to the consts
-   (cplam x se) (? (atom? (cuup x)) x                                                 ; (\ v) quote -> leave
-    (: r (lp x) ps (cap r) (link '\ (cat ps (list (cprop (cup r) (strip ps se)))))))  ; params shadow
-   (cpbinds bs se) (?
+   ; --- the known-lambda INLINER (cprop's beta-reduction lane) ----------------------------
+   ; beta-reduce an application whose (resolved) head is a statically-known lambda. SOUND by
+   ; three gates: the lambda is INLINABLE (non-recursive, body is bsub-safe `simple?`, and
+   ; CLOSED -- every free var a global, so it means the same at the call site), the args are
+   ; PURE (`allp` -- so duplicating/dropping them is unobservable), and a FUEL bound caps the
+   ; reduction cascade (omega-style self-application would otherwise loop). The cascade runs
+   ; through cprop's normal recursion: (adder i) reduces to a lambda VALUE, which becomes
+   ; (twice ..)'s arg, whose body's f-applications then reduce -- collapsing curried HOFs to
+   ; first-order arithmetic the back end (and the glaze) can take native. See doc/proto/inl.l.
+   ; SOUNDNESS, the subtle part: beta IS NOT bridged by `=` on closures (the spec), so a
+   ; beta-PRODUCED closure must never ESCAPE to where =/id?/show could observe it. So we
+   ; thread an operator-position flag `op`: a beta result that is itself a lambda is committed
+   ; only when CONSUMED (op=1, an enclosing application's head); at a VALUE position (op=0) we
+   ; REVERT to the un-inlined source, preserving the capturing closure. ((twice (adder i)) i)
+   ; collapses to 3i (a value -> fine); ((\ n ..) 5) stays a capturing closure (it escapes).
+   (allp as se) (? (cnul? as) 1 (? (purep (cap as) se) (allp (cup as) se) 0))          ; all args effect-free?
+   (purep a se) (?                                                                     ; effect-free -> duplicable/droppable
+    (atom? a) 1                                                                         ; nom / number / string
+    (id? (cap a) '\) 1                                                                  ; a lambda value (pure to build)
+    (id? (cap a) '?) (allp (cup a) se)                                                  ; cond: pure iff every limb is
+    (nom? (cap a)) (: e (assq (cap a) se)                                               ; a known pure lambda OR a pure op, applied to pure args
+       (? (&& (two? e) (lambp (caup e))) (allp (cup a) se) (inop (cap a) opval) (allp (cup a) se) 0))
+    0)
+   (smpl? x) (?                                                                        ; bsub-safe body: no : / macro head
+    (atom? x) 1
+    (id? (cap x) ':) 0
+    (id? (cap x) '\) (? (atom? (cuup x)) 1 (smpl? (last x)))
+    (nom? (cap x)) (? (macros (cap x)) 0 (all smpl? x))
+    (all smpl? x))
+   (fvs x bs) (?                                                                       ; free vars of a simple term
+    (nom? x) (? (|| (id? x ()) (member? x bs)) () (list x))
+    (atom? x) ()
+    (id? (cap x) '\) (? (atom? (cuup x)) () (: r (lp x) (fvs (last x) (cat (cap r) bs))))
+    (foldl (\ a e (cat a (fvs e bs))) () x))
+   (closedl? lam) (all (\ v (! (! (book v)))) (fvs lam ()))                            ; every free var a global (means the same elsewhere)
+   (pbody? x bnd) (?                                                                   ; body is PURE: every call head a pure op or a param
+    (atom? x) 1
+    (id? (cap x) '?) (all (\ e (pbody? e bnd)) (cup x))
+    (id? (cap x) '\) (? (atom? (cuup x)) 1 (: r (lp x) (pbody? (last x) (cat (cap r) bnd))))
+    (nom? (cap x)) (&& (|| (inop (cap x) opval) (member? (cap x) bnd)) (all (\ e (pbody? e bnd)) (cup x)))
+    (all (\ e (pbody? e bnd)) x))
+   (inlinable? nm lam) (&& (lambp lam) (smpl? lam) (closedl? lam) (pbody? lam ()) (! (w nm lam 0 0 0)))
+   (rmkeys ps env) (filter (\ p (! (member? (cap p) ps))) env)                         ; drop shadowed substitutions
+   (bsub env x) (?                                                                     ; capture-avoiding substitution
+    (nom? x) (: p (assoc x env) (? (two? p) (cup p) x))
+    (atom? x) x
+    (id? (cap x) '\) (? (atom? (cuup x)) x
+       (: r (lp x) ps (cap r) ren (map (\ p (link p (nom 0))) ps)                      ; rename binders to fresh -> no capture
+          (link '\ (cat (map cup ren) (list (bsub (cat ren (rmkeys ps env)) (last x)))))))
+    (map (\ e (bsub env e)) x))
+   (beta lam as) (: r (lp lam) ps (cap r) np (tally ps)                               ; apply a lambda to args (curried)
+    (? (< (tally as) np) (link lam as)                                                 ; under-saturated -> leave a partial
+       (: bd2 (bsub (zip ps (take np as)) (last lam)) rest (drop np as)
+          (? (two? rest) (link bd2 rest) bd2))))
+   (cplam x se fl op) (? (atom? (cuup x)) x                                           ; (\ v) quote -> leave
+    (: r (lp x) ps (cap r) (link '\ (cat ps (list (cprop (cup r) (strip ps se) fl 0)))))) ; the body is a value -> op 0
+   (cpbinds bs se fl op) (?
     (atom? bs) bs
-    (atom? (cup bs)) (list (cprop (cap bs) se))                                       ; the lone body
-    (: nd (dsug (cap bs) (caup bs)) nm (cap nd) v1 (cprop (cup nd) se)                ; desugar like wxb
-       se2 (? (propk? v1) (link (list nm v1) (rmq nm se)) (rmq nm se))               ; extend or shadow se (consts)
-       (link nm (link v1 (cpbinds (cuup bs) se2)))))
-   (cprop x se) (?
-    (atom? x) (? (nom? x) (: e (assq x se) (? (atom? e) x (caup e))) x)               ; const-bound var -> value
-    (id? (cap x) '\) (cplam x se)
-    (id? (cap x) ':) (link ': (cpbinds (cup x) se))
-    (id? (cap x) '?) (link '? (map (\ e (cprop e se)) (cup x)))                       ; no prune here -- wxc does it
+    (atom? (cup bs)) (list (cprop (cap bs) se fl op))                                  ; the let's BODY inherits the let's op
+    (: nd (dsug (cap bs) (caup bs)) nm (cap nd) v1 (cprop (cup nd) se fl 0)           ; a binding value is a value -> op 0
+       se2 (? (|| (propk? v1) (inlinable? nm v1))                                      ; a const OR a known pure lambda enters se
+              (link (list nm v1) (rmq nm se)) (rmq nm se))
+       (link nm (link v1 (cpbinds (cuup bs) se2 fl op)))))
+   (cprop x se fl op) (?
+    (atom? x) (? (nom? x) (: e (assq x se) (? (atom? e) x (caup e))) x)               ; const/known-lambda var -> value
+    (id? (cap x) '\) (cplam x se fl op)
+    (id? (cap x) ':) (link ': (cpbinds (cup x) se fl op))
+    (id? (cap x) '?) (link '? (map (\ e (cprop e se fl op)) (cup x)))                  ; no prune here -- wxc does it
     (: h (cap x) m (? (nom? h) (macros h) 0)                                          ; macro head? expand on RAW args -- a structural
-       (? m (cprop (m (cup x)) se)                                                    ; macro (assert's quoted msg, a two?/cap probe) must
-          (: as (map (\ e (cprop e se)) (cup x))                                      ; see SOURCE, not a pre-folded constant; then cprop
-             (? (&& (nom? h) (inop h opval) (allk as)) (foldc h as)                   ; the expansion (so do/let/&& fold exactly as before)
-                (link h as))))))
-   (wx (cprop x ()) 0))
+       (? m (cprop (m (cup x)) se fl op)                                               ; macro (assert's quoted msg, a two?/cap probe) must
+          (: as (map (\ e (cprop e se fl 0)) (cup x))                                  ; ARGS are values -> op 0 (escape mode)
+             hr (? (nom? h) (: e (assq h se) (? (atom? e) h (caup e))) (cprop h se fl 1)) ; HEAD is consumed -> op 1
+             (? (&& (< 0 fl) (lambp hr) (allp as se))
+                  (: red (cprop (beta hr as) se (- fl 1) op)                           ; KNOWN LAMBDA -> beta, re-cprop (fuel-bounded)
+                     (? (|| op (! (lambp red))) red (link h as)))                      ; escaping lambda result -> REVERT (keep the closure)
+                (&& (nom? h) (inop h opval) (allk as)) (foldc h as)                    ; pure-op on consts -> fold (as before)
+                (link h as))))))                                                       ; else rebuild with the RAW head (source unchanged)
+   (wx (cprop x () 64 0) 0))
   ; a bare symbol is a variable reference -- EXCEPT the zero point, which reads as a
   ; nom? literal (the `()` a (\ _ ()) / failed parse / `('x) tail evaluates to).
   ; routing it to ava treats it as a free var and captures it as a SPURIOUS import:

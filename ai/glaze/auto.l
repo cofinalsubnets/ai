@@ -317,6 +317,21 @@
              (: sub (\ e (foldl (\ b pr (subst-sym (cap pr) (cup pr) b)) e consts))
                 keep (afilter (\ pr (! (&& (name? (cap pr)) (whole? (cup pr))))) pairs)
                 (link ': (unpair (map (\ pr (link (cap pr) (sub (cup pr)))) keep) (sub body)))))))
+   ; --- HOF INLINE (dehof): inline a top-level `:`'s non-recursive lambda-CONSTANT bindings -- a plain-name
+   ;     binding to a (\ ..) value, like the closure bench's twice/adder -- into every body, then `dsimp`
+   ;     beta-collapses the now-LITERAL curried application. So a higher-order recurrence ((twice (adder i)) i)
+   ;     reduces to first-order arithmetic (3i) that lift+autogroup glaze; the inlined lambdas are dropped
+   ;     (like fold-consts). dsimp is the same hygienic beta engine deforestation uses; the closed-lambda /
+   ;     distinct-loop-var common case is capture-safe. No-op on any `:` with no lambda-const binding.
+   (dehof-lam? pr) (&& (name? (cap pr)) (: v (cup pr) (&& (two? v) (id? (cap v) '\) (< 2 (tally v)) (! (dcount (cap pr) v)))))
+   (dehof form)
+    (? (! (&& (two? form) (id? (cap form) ':) (! (atom? (cup form))))) form
+       (: parsed (anat-defs (cup form)) pairs (cap parsed) body (caup parsed)
+          lamcs (afilter dehof-lam? pairs)
+          (? (atom? lamcs) form
+             (: sub (\ e (dsimp (foldl (\ b pr (subst-sym (cap pr) (cup pr) b)) e lamcs)))   ; inline each lamc, then beta-collapse
+                keep (afilter (\ pr (! (dehof-lam? pr))) pairs)
+                (link ': (unpair (map (\ pr (link (cap pr) (sub (cup pr)))) keep) (sub body)))))))
    ; --- LOCAL LET (delet): inline a fn body that is a PURE value-let -- (: n1 v1 .. result), every binding
    ;     a plain symbol (no local fn -> that is norm-let/lift's job), names distinct -- into ONE fragment
    ;     expression by ordered substitution, so a fn that names its intermediates joins the group. The
@@ -620,7 +635,7 @@
     (? (! (two? form0)) form0
        (! (id? (cap form0) ':)) form0
        (atom? (cup form0)) form0
-       (: form (lift (delet (defoliate (loopclose (autospec (debool (fold-consts form0)))))))   ; lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets in fn bodies, THEN lambda-lift named-let bodies -> flat group fns
+       (: form (lift (delet (defoliate (loopclose (autospec (debool (dehof (fold-consts form0))))))))   ; inline lambda-const HOFs to first-order, lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets in fn bodies, THEN lambda-lift named-let bodies -> flat group fns
           parsed (anat-defs (cup form)) pairs (cap parsed)
           fns (afilter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
           (? (! (two? fns)) form0                                                            ; no candidate functions -> original
