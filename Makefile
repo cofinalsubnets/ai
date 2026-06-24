@@ -449,7 +449,11 @@ k_S_o = $(k_S:$(R)/%.S=$(k_odir)/%.o)
 k_asm_o = $(k_asm:$(R)/%.asm=$(k_odir)/%.o)
 k_o = $(k_shared_o) $(k_arch_o) $(k_free_o) $(k_S_o) $(k_asm_o)
 
-kcflags = $(ai_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
+# -DAI_NOGEN: the freestanding targets stay on the single-pool gcg collector for now. The generational
+# minor graduated as the host default, but on a constrained device it must be BOUNDED (set g->budget to
+# the available RAM -- the Appel knob) or its two growing pools exhaust kmallocw / blow the gate timeout.
+# Wiring that budget from the limine memmap is the kship port's call; until then the kernel runs gcg.
+kcflags = $(ai_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC -DAI_NOGEN \
   -ffunction-sections -fdata-sections
 kldflags := -static -nostdlib --gc-sections -T $(R)/port/kship/$a/$a.lds -z max-page-size=0x1000
 kcppflags := \

@@ -41,6 +41,15 @@
 #define ai_tco 1
 #endif
 
+// The generational collector GRADUATED out of AI_STAT: it is the default runtime on every frontend
+// whose g->alloc can supply the major pool (host + the kship kernel both malloc; a fixed-arena embedded
+// target falls back to gcg). AI_STAT thus defaults ON -- it no longer gates the mechanism, only names
+// the (always-cheap) instrumentation `gauge` reports. `-DAI_NOGEN` keeps the major pool unallocated, so
+// ai_please runs the single-pool gcg everywhere (the escape hatch / A-B switch); see ai_ini_0.
+#ifndef AI_STAT
+#define AI_STAT
+#endif
+
 #if ai_tco
 #define _lvm(n, ...) struct ai *n(struct ai *restrict g, union u *Ip, ai_word *Hp, ai_word *restrict Sp, ##__VA_ARGS__)
 #define Ap(fn, g, ...) fn(g, Ip, Hp, Sp, ##__VA_ARGS__)
@@ -144,8 +153,11 @@ struct ai {
                         // pointer (like hp/sp/cp), NOT a traced value -- recomputed every collection, never
                         // forwarded. Stage 1: maintained + observed (gauge `old`); the minor that reaps the
                         // young set lands later. See doc/gengc.md.
-#ifdef AI_STAT
- uintptr_t n_gc, max_len, max_heap, // gc instrumentation (cycles, peak pool len, peak live heap; words) -- build -DAI_STAT to keep them; off, the core is leaner and gauge reports 0 for them
+ // GENERATIONAL collector state -- ALWAYS present (the minor graduated out of AI_STAT). The mechanism
+ // activates when major_pool != 0 (the frontend's g->alloc supplied it; a fixed-arena embedded target
+ // leaves it 0 and runs gcg). The counters are cheap (a handful of adds per collection, which is rare)
+ // and `gauge` reports them; -DAI_STAT no longer gates them. -DAI_NOGEN forces gcg (no major pool).
+ uintptr_t n_gc, max_len, max_heap, // gc instrumentation (cycles, peak pool len, peak live heap; words)
            n_seen, n_evac;          // Σ over collections: heap occupancy entering each (scanned = live+dead) and survivors copied out (live). mortality = (n_seen-n_evac)/n_seen; copy-amp = n_evac/max_heap -- the generational-GC justifier (does the same live set get recopied every cycle?)
  // generational write-barrier AUDIT (stage 2): the remembered set -- old objects that hold a young
  // pointer (recorded by the barrier at ai_mapput/map_grow). A malloc'd buffer: AI_STAT is host-only,
@@ -186,7 +198,6 @@ struct ai {
                                           // Appel's rule: the nursery gets the free budget after the major pool. Inited from
                                           // the ai_budget tunable (the Teensy knob) but a field, so it can be set at runtime
                                           // like the g->alloc hook. See gen_please.
-#endif
  union {
   intptr_t v0;
   struct {
@@ -433,9 +444,7 @@ uintptr_t hash(struct ai*, word), ai_vec_bytes(struct ai_vec*);
 #define two(_) ((struct ai_chain*)(_))
 static ai_inline bool chainp(word _) { return lamp(_) && cell(_)->ap == lvm_chain; }
 static ai_inline void *bump(struct ai *g, uintptr_t n) {
-#ifdef AI_STAT
-  if (g->gc_gen) { void *x = g->major_hp; g->major_hp += n; return x; }   // promoting into the major
-#endif
+  if (g->gc_gen) { void *x = g->major_hp; g->major_hp += n; return x; }   // a generational collection is promoting into the major pool (gc_gen==0 during normal mutation: one predictable branch)
   if (avail(g) < n) __builtin_trap();
   void *x = g->hp; g->hp += n; return x; }
 static ai_inline struct ai_chain *ini_chain(struct ai_chain *w, intptr_t a, intptr_t b) {

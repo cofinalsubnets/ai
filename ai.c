@@ -49,10 +49,9 @@ _Static_assert(Bytes == sizeof(uintptr_t), "word size sanity check");
 #include <stdarg.h>
 _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size");
 
-#ifdef AI_STAT
-#include <stdlib.h>          // malloc for the generational write-barrier audit's remembered set (host-only)
+// remembered-set capacity in words (old objects holding a young pointer). g->alloc'd, never raw malloc,
+// so the generational collector is freestanding -- it rides whatever allocator the frontend supplies.
 #define AI_REM_CAP (1u << 16)
-#endif
 // INITIAL pool sizes, in words per half. CONFIGURABLE like the custom allocator (g->alloc):
 // both pools GROW on demand, so these are only a starting point -- a tiny device overrides them
 // small (-Dai_minor0=... -Dai_major0=...) and accepts more collections; a host leaves them roomy
@@ -592,7 +591,11 @@ static ai_inline union u *tagthread(union u *h, uintptr_t len) {
   return h[len].x = word(h) | ai_thread_tag, h; }
 #define topof(g) ((word*)g+g->len)
 static ai_inline struct ai_tag { union u *head; union u end[]; } *ttag(struct ai*g, union u *k) {
- word *lo = ptr(g), *hi = topof(g);
+ // scan k forward to its terminator (which points back into the SAME pool the object lives in). A
+ // tenured object sits in the major pool, outside the main pool -- generationally graduated, so check.
+ word *lo, *hi;
+ if (ptr(k) >= g->major_base && ptr(k) < g->major_hp) lo = g->major_base, hi = g->major_hp;
+ else lo = ptr(g), hi = topof(g);
  while (!tagp(k->x, lo, hi)) k++;
  return (struct ai_tag*) k; }
 static ai_inline union u *tag_head(struct ai_tag *t) {
@@ -863,15 +866,20 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  g->scare_a = g->scare_b = nil;        // v0..end is GC-walked: raw 0 is not a value
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = ai_clock();
  g->minor = g->end;                  // generational watermark: nothing tenured yet (the first collection sets it)
-#ifdef AI_STAT
- g->rem = malloc(AI_REM_CAP * sizeof(ai_word)), g->rem_cap = g->rem ? AI_REM_CAP : 0;  // write-barrier audit (host-only)
- // the MAJOR pool: a separate two-space region for tenured objects. Born empty; the first
- // collection drains the whole boot live set into it. Grows (at a major) when the live set won't
- // fit. If malloc fails, major_pool stays 0 and ai_please falls back to the non-generational gcg.
+#ifndef AI_NOGEN
+ // GENERATIONAL setup: a remembered set (old objects holding a young pointer) + the MAJOR pool (a
+ // separate two-space for tenured objects, born empty). BOTH via g->alloc, so the collector rides the
+ // frontend's allocator -- a host/kship heap supplies them and the minor runs; a fixed-arena embedded
+ // target (ai_static_alloc returns NULL) gets neither, so major_pool stays 0 and ai_please falls back
+ // to the non-generational gcg. A minor without the rem set is UNSOUND, so a partial allocation (rem
+ // but no major) drops back to gcg too. -DAI_NOGEN forces gcg everywhere (the escape hatch).
  g->major_len = ai_major0;                                         // initial major half (configurable); grows in gen_major, much less often than the minor
- g->major_pool = malloc(2 * g->major_len * sizeof(word));
- g->major_base = g->major_hp = g->major_pool;                          // active = first half, empty
- g->budget = ai_budget;                                          // total memory cap (words); 0 = unbounded. Settable at runtime.
+ g->rem = g->alloc(g, NULL, AI_REM_CAP * sizeof(word));
+ g->major_pool = g->rem ? g->alloc(g, NULL, 2 * g->major_len * sizeof(word)) : NULL;
+ if (g->major_pool)
+  g->major_base = g->major_hp = g->major_pool, g->rem_cap = AI_REM_CAP, g->budget = ai_budget;
+ else if (g->rem)
+  g->alloc(g, g->rem, 0), g->rem = NULL;                          // got the rem set but not the major pool -> gcg
 #endif
  // book + macro maps (lookup-lambdas) then the main task thread.
  if (ai_ok(g = map_new(g)) && ai_ok(g = map_new(g)) && ai_ok(g = ai_have(g, 6))) {
@@ -1281,8 +1289,8 @@ static void gen_major(struct ai *g) {
  if (to_len < step) to_len = step;
  word *spare = (g->major_base == g->major_pool) ? g->major_pool + g->major_len : g->major_pool;  // the same-size other half
  word *to, *resized = 0;
- if (to_len != g->major_len) {                                 // a different-size pair: malloc it, free the old
-  if ((resized = malloc(2 * to_len * sizeof(word)))) to = resized; else to_len = g->major_len, to = spare;  // OOM -> spare, hope it fits
+ if (to_len != g->major_len) {                                 // a different-size pair: alloc it, free the old
+  if ((resized = g->alloc(g, NULL, 2 * to_len * sizeof(word)))) to = resized; else to_len = g->major_len, to = spare;  // OOM -> spare, hope it fits
  } else to = spare;
  g->gc_gen = 1;
  g->major_hp = to, g->cp = to;
@@ -1298,7 +1306,7 @@ static void gen_major(struct ai *g) {
  g->symbols = major_symbols_rebuild(g, om);
  major_run_finalizers(g);
  g->gc_f2lo = g->gc_f2hi = 0;                                // the minor range is consumed
- if (resized) free(g->major_pool), g->major_pool = resized, g->major_len = to_len;
+ if (resized) g->alloc(g, g->major_pool, 0), g->major_pool = resized, g->major_len = to_len;
  g->major_base = to;                                           // flip: active = the to-space
  g->hp = g->end;                                             // the minor's young was promoted: reset it
  g->gc_gen = 0; }
@@ -3480,11 +3488,19 @@ static struct ai *ioput_fn_body(struct ai *g, word x, uintptr_t off);
 // which records the true start, instead of reading value[-1]: ttag sounds only defined thread
 // cells. value > start <=> a reserved leading cell exists. (fn_partialp is a cheap fast
 // reject so the common curried-closure case skips the tag sound.)
+// in_heap: ptr p is a live heap object -- the main pool OR the major pool (a tenured object lives there
+// once the generational minor graduates; major_base/major_hp are 0 in a non-gen build, so the second
+// disjunct is dead there). The print/introspect paths use this to reject foreign/out-of-pool pointers.
+static ai_inline bool in_heap(struct ai *c, word x) {
+ return (ptr(x) >= ptr(c) && ptr(x) < ptr(c) + c->len) || (ptr(x) >= c->major_base && ptr(x) < c->major_hp); }
 static word fn_src(struct ai *c, union u *k, word x) {
- if (!(ptr(x) > ptr(c) && ptr(x) < ptr(c) + c->len) || fn_partialp(k)) return 0;
+ // x must be a real heap object (main pool above the core base, or the major pool -- the two pools are
+ // independent mallocs, so the major pool may sit ABOVE or BELOW the main one; test each range).
+ bool xin = (ptr(x) > ptr(c) && ptr(x) < ptr(c) + c->len) || (ptr(x) >= c->major_base && ptr(x) < c->major_hp);
+ if (!xin || fn_partialp(k)) return 0;
  if (k == tag_head(ttag(c, k))) return 0;       // value at allocation start: no leading src cell
  word s = k[-1].x;
- return lamp(s) && ptr(s) >= ptr(c) && ptr(s) < ptr(c) + c->len && chainp(s) ? s : 0; }
+ return lamp(s) && in_heap(c, s) && chainp(s) ? s : 0; }
 
 // --- de Bruijn canonical printing of a lambda's source ---------------------
 // A \-bound variable prints as $<level> where the level (de Bruijn LEVEL:
