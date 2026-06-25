@@ -1,29 +1,29 @@
-# 🔵 ai
+# 🌑 ai
 
 ai is kind of like `ai = (ml + apl) * (lisp / C)`.
-every value is an operator, a total function of its own type.
-all recursion is on heap and any recursive operator may be
-iterated by non-negative integers (green charms), which is
-their function action. consequently the value of a numeric
-list under the left-associative lisp eval function corresponds
-to a reversed exponential tower. this lisp refinement forms
-the ML part of `ml + apl`. the APL part is a transparent
-right-associative superset that interprets sigils (all-punctuation
-symbols) as infix or prefix operators according to placement.
-the two forms may be mixed freely: infix operators take the
-lisp meaning in function position, and infix can be converted
-to left-associative by wrapping the sigil in parens, eg.
- `3 = (+) 1 2`.
+every value in ai is a total function, and (almost) every
+expression has a value. all recursion is on heap and any
+ recursive operator may be iterated by non-negative integers
+(green charms), which is their function action. consequently
+the value of a numeric list under the left-associative lisp
+eval function corresponds to a reversed exponential tower.
+this refinement forms the ML part of `ml + apl`. the APL
+part is a transparent right-associative superset that
+interprets sigils (all-punctuation symbols) as infix or
+prefix operators according to placement. the two forms mix
+freely: infix operators take the lisp meaning in function
+position, and infix can be converted to left-associative by
+wrapping the sigil in parens, eg.  `3 = (+) 1 2`.
 
 in terms of implementation, `lisp : software :: C : hardware`.
-C gives random memory access via pointer arithmetic
-and platform-specific primitives. `lisp` is the software
-facing basement, which you could factor as `ml * scheme`
-left-associative applicative curried untyped lambda calculus,
-allowing applicative order to vary at will. this is sound
-excluding side effects because every operator is total and
-every thread is compose-operatively pre-empted regardless of user
-program behavior.
+C gives random memory access via pointer arithmetic and direct
+access to hardware. `lisp` is the software facing basement,
+which you could factor as `ml * scheme` left-associative
+applicative curried untyped lambda calculus, but applicative order
+may vary in general. this is internally sound because every operator
+is total and every thread cooperatively yields control regardless of
+user program behavior. a uniform global mechanism exists for handling
+conditions such as OOM.
 
 features
 - numeric tower with shaped array broadcasting
