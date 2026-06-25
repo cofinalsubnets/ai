@@ -616,7 +616,7 @@ static bool eqv_at(struct ai*, word, word, word*); // eqv with an explicit workl
 // Both answer false by identity alone, so eql settles them inline and skips the
 // noinline call -- the hot path under map-key and scope-variable lookup, which
 // compare nom/symbol keys by the thousand while compiling. lamp is evenp (no
-// deref); () is the core, a valid mint, so pointp's ap read is always safe.
+// deref); () is ZeroPoint, an immortal const mint, so pointp's ap read is always safe.
 static ai_inline bool pointp(word x) {
  lvm_t *p; return lamp(x) && ((p = cell(x)->ap) == lvm_sym || p == lvm_nom); }
 static ai_inline bool eql(struct ai *g, word a, word b) {
@@ -909,8 +909,7 @@ char const *ai_nif_name(intptr_t x) {
  return 0; }
 
 static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, void*, size_t)) {
- memset(g, 0, sizeof(struct ai));
- g->ap = lvm_sym;                      // () IS the core: its first word is an ap (a nameless point; no code/nom to read)
+ memset(g, 0, sizeof(struct ai));      // the core needs no leading ap: () is the const ZeroPoint, never (word)g
  g->len = len0, g->pool = (void*) g, g->alloc = al;
  g->scare_a = g->scare_b = nil;        // v0..end is GC-walked: raw 0 is not a value
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = ai_clock();
@@ -1150,11 +1149,8 @@ static ai_noinline struct ai *gcg(struct ai*h, struct ai *p1, uintptr_t len1, st
             *sp0 = g->sp;
  word sh = t0 - sp0; // stack height
  h->sp = ptr(h) + len1 - sh;
- // () IS the core, and it FLOPS with the dust: the old core sits at the from-space
- // base (p0), so leave a forwarding pointer in its first word -> the new core (h).
- // Every stored () then forwards through the normal gcp (h is in to-space), no
- // per-pointer check -- there is only ONE core, so the existing evacuation carries it.
- ((union u*) g)->ap = (lvm_t*) h;
+ // the core FLOPS with the dust to the new pool (h). nothing holds (word)g as a value
+ // (() is the const ZeroPoint, not the core), so no forwarding pointer is left behind.
  h->hp = h->cp = h->end;
 #ifdef AI_STAT
  h->gc_gen = 0, h->gc_to_lo = ptr(h), h->gc_to_hi = ptr(h) + len1, h->gc_fwd = ptr(h);  // to-space = the whole new pool
@@ -1374,8 +1370,7 @@ static struct ai *gen_grow(struct ai *g, uintptr_t len1) {
  word const *p0 = ptr(g), *t0 = ptr(g) + g->len, *sp0 = g->sp;
  word sh = t0 - sp0;
  h->sp = ptr(h) + len1 - sh;
- ((union u*) g)->ap = (lvm_t*) h;            // core moves: forward any (word)g root (vestigial -- () is ZeroPoint)
- h->hp = h->cp = h->end;
+ h->hp = h->cp = h->end;                     // core moves to h; no (word)g root to forward (() is the const ZeroPoint)
  h->gc_gen = 0, h->gc_to_lo = ptr(h), h->gc_to_hi = ptr(h) + len1, h->gc_fwd = ptr(h), h->gc_f2lo = 0;
  h->ip = cell(gcp(h, word(h->ip), p0, t0));
  h->tasks = cell(gcp(h, word(h->tasks), p0, t0));
@@ -2414,7 +2409,7 @@ static union u const no_entry[1];
 // is a POINT, not a quantity: a number would exponentiate under a numeral ((i love) =
 // 0**i is honest nan), a unit absorbs -- which is what keeps (i love you) = 1. It FLOPS
 // with the dust (gcg forwards old->new core) and prints () -- the face of absence.
-// No named constant; the nothing is the core. DISTINCT from 0 (fixnum) and "" (string).
+// No named constant; the nothing is ZeroPoint (ai_mint_zero). DISTINCT from 0 (fixnum) and "" (string).
 // A read of the LIVE book (the outermost cell) by name -- the missing-name law
 // at the global scope, the twin of boxfix's local (missing cell 'nom). A hit
 // pushes the current value; a miss is a MISSING name -- a nom not in the book,
@@ -3414,7 +3409,7 @@ static ai_inline struct ai*ioput_str(struct ai*g, word _) {
   g = ioputc(g, c); }
  return ai_pop(ioputc(g, '"'), 1); }
 
-// A bare mint (KMint) is nameless: () is the core (the face of absence), and
+// A bare mint (KMint) is nameless: () is ZeroPoint (the face of absence), and
 // every other point prints `(mint <serial>)` -- the serial in decimal, the mint's
 // GC-stable identity AND its `<` order key, so distinct mints wear distinct faces
 // that sort like the values. The face is DIAGNOSTIC, not a reparse: a mint cannot
@@ -3428,7 +3423,7 @@ static ai_inline struct ai*ioput_str(struct ai*g, word _) {
 //    src->code), so (show m) = (show m) for a live mint across any collection.
 //  - never asserted as a literal: the serial counts mints stream-wide (non-
 //    deterministic across runs/corpus order), so tests assert the SHAPE only
-//    (leading "(mint ", stable, distinct-mints-distinct). serial 0 is the core,
+//    (leading "(mint ", stable, distinct-mints-distinct). serial 0 is (), the const,
 //    printed () by the guard above, so the absence face never collides with a mint.
 static ai_inline struct ai*ioput_sym(struct ai*g, word _) {
  if (_ == ZeroPoint) return ioputcs(g, "()");  // the face of absence
@@ -5095,7 +5090,7 @@ op11(lvm_intf, flop(Sp[0]) ? putcharm((intptr_t) flo_get(Sp[0])) : Sp[0])
 // chain
 // ============================================================================
 op11(lvm_cap, chainp(Sp[0]) ? A(Sp[0]) : Sp[0])
-op11(lvm_cup, chainp(Sp[0]) ? B(Sp[0]) : (word)g)
+op11(lvm_cup, chainp(Sp[0]) ? B(Sp[0]) : ZeroPoint)   // cup of an atom -> the const () (ZeroPoint), NOT the moving core (which had serial g->ip, not 0)
 op11(lvm_chainp, (chainp(Sp[0]) && !nomp(Sp[0])) ? putcharm(1) : nil)  // the SURFACE chainp = a real compound list (formp): a named symbol is (name . mint) but counts as an atom
 lvm(lvm_link) {
  Have(Width(struct ai_chain));

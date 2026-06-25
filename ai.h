@@ -113,13 +113,8 @@ struct ai_nom {
  uintptr_t code; };
 
 struct ai {
- // () IS the core: its FIRST WORD is an ap (lvm_sym, set in ai_ini), enough to make
- // (word) ai_core_of(g) a value -- symp, applies const-1 (data_sym_apply ignores nom),
- // prints (). The one true nothing, distinct from 0 (a fixnum) and "" (a string). A
- // mint's code/nom would both be 0 here, so there is NOTHING to read -- the only path
- // that would (order) identity-checks the core instead. The dust specializes on the
- // unique core: gcg leaves a forwarding pointer in this ap word so every stored () follows.
- lvm_t *ap;
+ // (the core no longer masquerades as (): () is the const ZeroPoint (ai_mint_zero),
+ // never (word)g, so the core needs no leading ap word -- word0 is just `ip`.)
  union u {
   lvm_t *ap;
   ai_word x;
