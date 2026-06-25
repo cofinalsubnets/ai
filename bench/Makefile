@@ -36,18 +36,20 @@ TIMEOUT ?= 30
 SAMPLES ?= 5
 
 # workloads, in display order; override with `make BENCHES="fib primes"`.
-BENCHES := fib tak sum mapfilter deforest polysum primes bell strcat strscan hash sort tree float closure sat
+BENCHES := fib tak sum mapfilter deforest polysum primes bell strcat strscan hash sort tree bintrees float mandelbrot closure cdcl
 
 # <lang>:<bench> pairs that exceed TIMEOUT -- dropped up front so the build never
 # pays the timeout wall for them (re-test by removing one and `make clean`).
 SKIP :=
 
 # every language, in report-column order. ai first, then native (go rust java),
-# JIT (julia luajit pypy node), BEAM (elixir), and the schemes/lisps (chez sbcl).
+# JIT (julia luajit pypy node), BEAM (elixir), and a scheme (chez). (sbcl dropped:
+# far enough behind on these workloads it only stretched the table. luajit stays --
+# it's the inspiration for the auto-JIT.)
 ALL_LANGS := ai \
              go rust java \
              julia luajit pypy node \
-             elixir chez sbcl
+             elixir chez
 
 # the columns `make bench` shows by default.
 DEFAULT_LANGS := ai go rust julia luajit pypy node
@@ -98,7 +100,7 @@ SHOW    := $(filter $(PRESENT),$(DEFAULT_LANGS))
 
 txt = $(addprefix $(BDIR)/,$(addsuffix .txt,$(1)))
 
-.PHONY: all bench run raw html clean satrace $(ALL_LANGS)
+.PHONY: all bench run raw html clean satrace setup $(ALL_LANGS)
 .DEFAULT_GOAL := bench
 
 # Build/refresh the host binary via the root Makefile.
@@ -140,12 +142,20 @@ $(SATRACE): satrace.sh $(R)/sat/sat.l $(GL) | $(BDIR)
 satrace: $(SATRACE)
 	@cat $(SATRACE)
 
+# The cold-start row: median source->trivial-result wall-clock per language (compiled langs pay
+# their compile; interpreters pay startup). Cached; `make setup` to refresh it on its own.
+SETUP := $(BDIR)/setup.txt
+$(SETUP): setup.sh $(GL) | $(BDIR)
+	@./setup.sh > $@
+setup: $(SETUP)
+	@cat $(SETUP)
+
 # Self-contained results page: bench/bench.html, the full roster as columns
 # (a present-but-empty language shows a dotted column), with a transpose button
 # and a viewport-chosen initial orientation, plus the SAT-solver shootout table.
-# Regenerate after a fresh `make all` (and `make satrace` for fresh solver times).
-html: $(call txt,$(PRESENT)) $(SATRACE) mkhtml.sh | $(BDIR)
-	@cat $(call txt,$(PRESENT)) | ./mkhtml.sh "$(ALL_LANGS)" "$(SATRACE)" > bench.html
+# Regenerate after a fresh `make all` (and `make satrace`/`make setup` for fresh times).
+html: $(call txt,$(PRESENT)) $(SATRACE) $(SETUP) mkhtml.sh | $(BDIR)
+	@cat $(call txt,$(PRESENT)) $(SETUP) | ./mkhtml.sh "$(ALL_LANGS)" "$(SATRACE)" > bench.html
 	@echo "wrote bench/bench.html"
 
 clean:

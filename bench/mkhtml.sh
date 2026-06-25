@@ -7,7 +7,7 @@
 # transposes benches<->languages (handy on a narrow portrait screen).
 # <lang-roster> is the column SET (e.g. $(ALL_LANGS)). The page (in JS, at render)
 # orders EVERY column by NET time ascending -- Σ of a language's per-bench ms/it
-# EXCLUDING bell and sat (single-implementation benches: luajit/rust lack bell, sat
+# EXCLUDING bell and cdcl (single-implementation benches: luajit/rust lack bell, cdcl
 # is ai-only, so counting either hands the skippers a free 0 and skews the net). ai
 # takes its HONEST position (still tinted gold); a language with no rows sorts last.
 # The page embeds its data, so it opens straight off disk -- no server.
@@ -55,9 +55,8 @@ cat <<'HEAD'
   td.fast { color: #9ece6a; font-weight: bold; }              /* a kept answer: the green */
   .ai { background: rgba(169,177,214,.09) !important; }        /* the ai axis: translucent periwinkle */
   th.ai { background: rgba(169,177,214,.20) !important; color: #c0caf5 !important; }
-  td.okc, .okrow td { color: #9ece6a; }
-  td.bad, .okrow td.bad { color: #f7768e; }
-  .netrow th, .netrow td { border-top: 2px solid #545c7e; color: #e0af68; }   /* selective net: Σ ms/it excl bell+sat -- the column-ordering key, made visible */
+  .netrow th, .netrow td { border-top: 2px solid #545c7e; color: #e0af68; }   /* net: Σ ms/it of the fundamentals -- the column-ordering key */
+  .extra th, .extra td { color: #737aa2; }                                    /* below the net: bell (bignum) + setup (cold start) -- shown, not ranked */
   th.net, td.net { border-left: 2px solid #545c7e; color: #e0af68; }          /* ... as a column in the transposed view */
   td.to { color: #f7768e; }                                                   /* a solver that exceeded the timeout */
   h2 { font-weight: normal; color: #c0caf5; margin: 1.6em 0 .4em; }
@@ -69,7 +68,11 @@ cat <<'HEAD'
 auto-scaled past a 200&nbsp;ms floor, so startup is excluded). The fastest cell
 per bench is <b style="color:#9ece6a">green</b>; the <span class="ai"
 style="padding:0 .3em">ai</span> axis is tinted; a dot means no implementation
-(or an unavailable toolchain). <b>ok</b> = every language's checksum agrees.</p>
+(or an unavailable toolchain). The <b>net</b> row ranks the columns &mdash; it sums the
+lightweight fundamentals only. Below it, shown but not ranked: <b>bell</b> (bignum),
+<b>bintrees</b> (heavy GC throughput), <b>mandelbrot</b> (ai runs it interpreted &mdash; no
+complex codegen lane yet), and <b>setup</b> (cold start: source &rarr; trivial result, so
+compiled languages pay their compile).</p>
 <div class="bar">
   <button id="btn" type="button">transpose</button>
   <span id="mode"></span>
@@ -126,7 +129,6 @@ awk -v langs="$roster" '
   NF==5 && $3+0>0 {
     if (!($1 in seen)) { order[++n] = $1; seen[$1] = 1 }
     per[$1 SUBSEP $2] = $4/$3
-    csum[$1 SUBSEP $2] = $5
     have[$1 SUBSEP $2] = 1
   }
   END {
@@ -136,19 +138,16 @@ awk -v langs="$roster" '
     printf "const BENCHES=["
     for (i=1;i<=n;i++) printf "%s\"%s\"", (i>1?",":""), order[i]
     print "];"
-    print "const PER={},OK={};"
+    print "const PER={};"
     for (i=1;i<=n;i++) {
-      b = order[i]; printf "PER[\"%s\"]={", b; first=1; base=""; ok="true"
+      b = order[i]; printf "PER[\"%s\"]={", b; first=1
       for (j=1;j<=nl;j++) {
         lg = L[j]
         if (have[b SUBSEP lg]) {
           printf "%s\"%s\":%.4f", (first?"":","), lg, per[b SUBSEP lg]; first=0
-          if (base=="") base = csum[b SUBSEP lg]
-          else if (csum[b SUBSEP lg] != base) ok = "false"
         }
       }
       print "};"
-      printf "OK[\"%s\"]=%s;\n", b, ok
     }
   }
 '
@@ -158,27 +157,35 @@ const fmt = x => x == null ? "·"
   : x < 1 ? x.toFixed(4) : x < 100 ? x.toFixed(3) : x.toFixed(1);
 
 // column order: every language (ai included -- its HONEST position) by NET time
-// ascending -- Σ of a language's per-bench ms/it EXCLUDING bell and sat. Both are
-// single-implementation benches (luajit/rust lack bell; sat is ai-only), so
+// ascending -- Σ of a language's per-bench ms/it EXCLUDING bell and cdcl. Both are
+// single-implementation benches (luajit/rust lack bell; cdcl is ai-only), so
 // counting either gives the languages that skip it a free 0 and skews the net.
 // ai is still TINTED (the gold column) wherever it lands. No-data langs sort last.
-const NET = l => BENCHES.reduce((s, b) => s +
-  ((b === "bell" || b === "sat") ? 0 : (PER[b] && PER[b][l] != null ? PER[b][l] : 0)), 0);
-const HAS = l => BENCHES.some(b => PER[b] && PER[b][l] != null);
+// NORANK benches are NOT in the net (the ranking key), each for a reason that would skew a sum of
+// the lightweight fundamentals: bell (bignum -- luajit/rust lack it, and it dwarfs), bintrees (a
+// heavy GC-throughput workload, tens of ms for every language), mandelbrot (ai runs it interpreted
+// -- no complex glaze lane yet -- so an outlier until the twin lane lands), cdcl (ai-only; its perf
+// lives in the SAT-solver table), setup (a one-time cold-start cost, not a per-iteration time). All
+// but cdcl still SHOW, as rows below the net.
+const NORANK = b => b === "bell" || b === "bintrees" || b === "mandelbrot" || b === "cdcl" || b === "setup";
+const NET = l => BENCHES.reduce((s, b) => s + (NORANK(b) ? 0 : (PER[b] && PER[b][l] != null ? PER[b][l] : 0)), 0);
+const HAS = l => BENCHES.some(b => !NORANK(b) && PER[b] && PER[b][l] != null);
 const LANGORD = LANGS.slice().sort((a, b) =>
   (HAS(a) ? NET(a) : Infinity) - (HAS(b) ? NET(b) : Infinity));
+// the fundamentals (ranked, the main block) and the informational rows shown BELOW the net.
+const FUND  = BENCHES.filter(b => !NORANK(b));
+const EXTRA = ["bell", "bintrees", "mandelbrot", "setup"].filter(b => BENCHES.includes(b));   // below the net, not ranked; cdcl is dropped from the table entirely
 
 // default arrangement: benches down the side, languages across; the button
 // flips to languages-down-the-side (handy on a narrow portrait screen).
 let transposed = false;
 
 function build() {
-  const rows = transposed ? LANGORD : BENCHES;
-  const cols = transposed ? BENCHES : LANGORD;
+  const langs = LANGORD;
   const minB = {};
   for (const b of BENCHES) {
     let m = Infinity;
-    for (const l of LANGORD) { const v = PER[b] && PER[b][l]; if (v != null && v < m) m = v; }
+    for (const l of langs) { const v = PER[b] && PER[b][l]; if (v != null && v < m) m = v; }
     minB[b] = m;
   }
   const td = (b, l) => {
@@ -190,24 +197,26 @@ function build() {
   };
   const netc = (l) => "<td class='net" + (l === "ai" ? " ai" : "") + "'>" + (HAS(l) ? fmt(NET(l)) : "·") + "</td>";
   let h = "<table><thead><tr><th>" + (transposed ? "language" : "bench") + "</th>";
-  for (const c of cols) h += "<th" + (c === "ai" ? " class='ai'" : "") + ">" + c + "</th>";
-  h += !transposed ? "<th>ok</th>" : "<th class='net'>selective net</th>";   // ok column (benches down) / net column (langs down)
-  h += "</tr></thead><tbody>";
-  for (const r of rows) {
-    h += "<tr><th" + (r === "ai" ? " class='ai'" : "") + ">" + r + "</th>";
-    for (const c of cols) h += td(transposed ? c : r, transposed ? r : c);
-    if (!transposed) h += "<td class='" + (OK[r] ? "okc" : "bad") + "'>" + (OK[r] ? "✓" : "✗") + "</td>";
-    else h += netc(r);                                                       // per-language selective net (transposed)
+  if (transposed) {                                                          // languages down the rows: FUND benches, then net, then the EXTRA benches, as COLUMNS
+    for (const b of FUND) h += "<th>" + b + "</th>";
+    h += "<th class='net'>net</th>";
+    for (const b of EXTRA) h += "<th>" + b + "</th>";
+    h += "</tr></thead><tbody>";
+    for (const l of langs) {
+      h += "<tr><th" + (l === "ai" ? " class='ai'" : "") + ">" + l + "</th>";
+      for (const b of FUND) h += td(b, l);
+      h += netc(l);
+      for (const b of EXTRA) h += td(b, l);
+      h += "</tr>";
+    }
+  } else {                                                                   // benches down the rows: FUND rows, the net row, then the EXTRA rows (bell, setup) BELOW the net
+    for (const l of langs) h += "<th" + (l === "ai" ? " class='ai'" : "") + ">" + l + "</th>";
+    h += "</tr></thead><tbody>";
+    for (const b of FUND) { h += "<tr><th>" + b + "</th>"; for (const l of langs) h += td(b, l); h += "</tr>"; }
+    h += "<tr class='netrow'><th>net</th>";
+    for (const l of langs) h += netc(l);
     h += "</tr>";
-  }
-  if (transposed) {
-    h += "<tr class='okrow'><th>ok</th>";                                    // the ok marks as a bottom row (langs down)
-    for (const c of cols) h += "<td class='" + (OK[c] ? "" : "bad") + "'>" + (OK[c] ? "✓" : "✗") + "</td>";
-    h += "<td class='net'></td></tr>";
-  } else {
-    h += "<tr class='netrow'><th>selective net</th>";                        // the column-ordering key, as a bottom row (benches × languages)
-    for (const c of cols) h += netc(c);
-    h += "<td class='net'></td></tr>";
+    for (const b of EXTRA) { h += "<tr class='extra'><th>" + b + "</th>"; for (const l of langs) h += td(b, l); h += "</tr>"; }
   }
   h += "</tbody></table>";
   document.getElementById("t").innerHTML = h;
