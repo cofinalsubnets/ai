@@ -94,6 +94,25 @@ _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size"
 #ifndef ai_major0
 # define ai_major0 (1u << 16)      // ~512 KB major-pool half; grows much less often than the minor pool
 #endif
+// ai_gc_floor: a FLOOR on the post-collection free headroom, in words -- "always keep >= N words available
+// between heap and stack". The pool is sized to req0 + used + max(used>>2, ai_gc_floor), so after a
+// collection there is at least ai_gc_floor free. This trades RAM for FEWER COLLECTIONS (an allocation-heavy
+// loop -- a tree build, a hash fill -- runs longer between GCs) AND lets a native allocator (the glaze's
+// cons/value lane) complete a bounded burst without tripping its room-guard into a deopt. 0 = the pure
+// adaptive 1/4 headroom (the historical behavior). Tuned to the balance below; override with -Dai_gc_floor=N.
+#ifndef ai_gc_floor
+# define ai_gc_floor 0
+#endif
+// ai_gc_ratio: the generational nursery's COPY-OVERHEAD setpoint (gen_please). The minor pool is
+// resized to hold words-copied/words-allocated inside the band [1/(4*ratio), 1/ratio] -- a LARGER
+// ratio targets LOWER overhead, so the nursery grows bigger and collections fire less often (faster,
+// more RAM); a smaller ratio keeps it lean. This is the self-dampening differential resizer's setpoint
+// -- the principled "floor" knob on the host (vs ai_gc_floor, which only bites the non-gen gcg path).
+#ifndef ai_gc_ratio
+# define ai_gc_ratio 24   // tuned at the knee of the GC-reduction curve: ~3x fewer collections than 8,
+#endif                    // same 128MB nursery high-water as 16 (the controller doubles, so both land there),
+                          // emergent (a light program stays near the 8KB seed). The allocation-heavy benches
+                          // (tree/hash/sort) gain ~10%; past ~24 the curve flattens and RAM doubles (-> 64 = 256MB).
 // ai_budget: the TOTAL memory budget, in words -- the cap on what the runtime reserves (2*minor + 2*major,
 // both pools two-space). 0 = UNBOUNDED (a host: the budget grows on demand). A small device sets it to
 // its RAM (-Dai_budget=131072 for a 1 MB Teensy). The minor pool is then sized by APPEL'S RULE -- the
@@ -1400,7 +1419,7 @@ static struct ai *gen_please(struct ai *g, uintptr_t req0) {
  // accumulated over a sliding window (reset on a resize), which smooths the per-collection spikes a live
  // multiple would chase. ai_budget (0 = unbounded) caps the whole footprint -- Appel's rule: the nursery
  // gets the free budget after the major pool. One knob bounds a small device.
- enum { ratio = 8 };                            // target band: grow above 1/ratio overhead, shrink below 1/(4*ratio)
+ enum { ratio = ai_gc_ratio };                  // target band: grow above 1/ratio overhead, shrink below 1/(4*ratio)
  g->win_alloc += seen_young, g->win_copied += copied;
  uintptr_t used = g->len - avail(g), req = req0 + used + (used >> 2), len1 = g->len, arena = len1;
  if (g->win_copied * ratio > g->win_alloc) {                   // overhead > 1/ratio: nursery too small
@@ -1450,7 +1469,7 @@ ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
   // backing's cap field (garbage cap -> bump trap). Keeping >= 1/4 of the live
   // set free holds the table clear of the roots. (See test/jit two-file load:
   // 197 nifs fit, 198 tipped boot to the 2-word sliver and SIGILL'd.)
-  req = req0 + used + (used >> 2),
+  req = req0 + used + ((used >> 2) < ai_gc_floor ? (uintptr_t) ai_gc_floor : (used >> 2)),   // >= ai_gc_floor free after GC
   t2 = ai_clock();
  uintptr_t
   len1 = len0,

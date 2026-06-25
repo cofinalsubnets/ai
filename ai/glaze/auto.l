@@ -738,13 +738,35 @@
              (id? op 'two?)                               (&& (= 2 (tally e)) (cok? cm cands cps ps (caup e)))               ; (two? CE): CE chain-valued; result int 0/1 (TOTAL -- a non-chain reads false)
              0))                                                                               ; bare cap/cup are CHAIN-valued -> not admitted in an int position (cok? carries them)
        0)
+   ; --- STAGE D: vok? -- the VALUE grammar (a heap-allocating fn's body, e.g. tree's `mk`). An expr is
+   ;     VALUE-valued if it is: an int const (-> the tagged value) | a param (cggv re-tags it) | (link V V)
+   ;     (a cons; both operands value-ok) | (? INT V V) (int test via groupok?, value branches) | (g E..)
+   ;     a call to a VALUE-typed candidate (vcands; args int/chain-ok via gargok?, as for an int call).
+   ;     CROSS-CALL SOUNDNESS by candidate-set SEPARATION: vok?'s calls resolve only in `vcands`,
+   ;     groupok?'s only in `icands` -- so an int fn can't call a value fn (not in its set) and vice
+   ;     versa, with NO change to groupok?. The value fns glaze via cggv + the value-epilogue (emit.l).
+   (vok? cm icands vcands cps ps e)
+    (? (whole? e) 1
+       (member? e ps) 1
+       (two? e) (: op (cap e) ar (clook2 op vcands)
+          (? (< -1 ar)         (&& (= (tally (cup e)) ar) (gargok? cm icands cps ps (cup e) 0 op))   ; a VALUE-group call (target in vcands)
+             (id? op 'link)    (&& (= 3 (tally e)) (vok? cm icands vcands cps ps (caup e)) (vok? cm icands vcands cps ps (caup (cup e))))
+             (id? op '?)       (&& (= 4 (tally e)) (groupok? cm icands cps ps (caup e)) (vok? cm icands vcands cps ps (caup (cup e))) (vok? cm icands vcands cps ps (caup (cup (cup e)))))
+             0))
+       0)
    (chps body ps) (gfilt (\ k (cuse? body (nthl ps k))) (rangeL 0 (tally ps)))                ; chain-param INDICES: params used in cap/cup/two? (cuse? from emit.l)
-   (grpok-1 fns cm c cands) (: p (afind (\ q (id? (cap (cap q)) (cap c))) fns)
+   (grpok-1 fns cm icands vcands vnames c) (: p (afind (\ q (id? (cap (cap q)) (cap c))) fns)
                                 cps (map (\ k (nthl (cup (cap p)) k)) (cmlook (cap c) cm))      ; this fn's chain-param NAMES (its index list -> names)
-                                (groupok? cm cands cps (cup (cap p)) (cup p)))                  ; candidate c's body ok over cands?
+                                (? (member? (cap c) vnames) (vok? cm icands vcands cps (cup (cap p)) (cup p))   ; a VALUE fn -> value grammar
+                                   (groupok? cm icands cps (cup (cap p)) (cup p))))             ; an INT fn -> int grammar (over INT candidates only)
+   (gfix fns cm vnames cands)                                                                  ; one fixpoint step over candidates split into int/value sets
+    (: icands (afilter (\ c (! (member? (cap c) vnames))) cands)
+       vcands (afilter (\ c (member? (cap c) vnames)) cands)
+       keep (afilter (\ c (grpok-1 fns cm icands vcands vnames c)) cands)                       ; drop fns that fail; iterate to a fixpoint
+       (? (= (tally keep) (tally cands)) keep (gfix fns cm vnames keep)))
    (grpfix fns cands) (: cm (map (\ f (link (cap (cap f)) (chps (cup f) (cup (cap f))))) fns)   ; (name . chain-param-index-list) for every candidate fn
-                         keep (afilter (\ c (grpok-1 fns cm c cands)) cands)                    ; drop fns that fail; iterate to a fixpoint
-                         (? (= (tally keep) (tally cands)) keep (grpfix fns keep)))
+                         vnames (map (\ f (cap (cap f))) (afilter (\ f (hasl (cup f))) fns))    ; the VALUE-typed candidate names (body conses)
+                         (gfix fns cm vnames cands))
    (rewrite-bindings bl gnames gdefs) (? (atom? (cup bl)) bl                                  ; the trailing body form -> keep
       (: nf (cap bl) val (caup bl)  hit (&& (two? nf) (member? (cap nf) gnames))
          (link (? hit (cap nf) nf)                                                            ; drop the (name p..) define-sugar -> a PLAIN binding

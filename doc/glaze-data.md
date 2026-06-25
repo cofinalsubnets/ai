@@ -8,7 +8,19 @@ field — **`hash`** and **`tree`** — are built from *heap operators* (`link`/
 columns run compiled. This is the plan to extend the glaze's reach to the
 allocation-free halves of those workloads, and an honest account of what that buys.
 
-**Status — Stage A/B/C LANDED; D still a study.** The **chain lane** (Stage B,
+**Status — Stage A/B/C/D LANDED; ai now beats Go.** Stage D (native allocation)
+landed 2026-06-25: a **value lane** (`cggv` + `consemit`, emit.l) emits a room-guarded
+`link`/cons (the `jitfr`/`jitba` heap-result pattern), a **value-typed group ABI** (the
+result is a raw tagged pointer, no putfix), and a recognizer `vok?` admits value fns
+with **separated int/value candidate sets** so an int fn can't call a value fn (or vice
+versa) unsoundly. `tree`'s `mk` glazes from source — proven `=`-identical to interp and
+GC-safe across 8.19M allocations — taking `tree` 2.30 → 0.85 ms/it (was behind Go's 1.58,
+now 1.9× ahead). Paired with a GC-frequency tune (`ai_gc_ratio` 8 → 24, the setpoint of
+the generational nursery's self-dampening differential resizer — ~3× fewer collections on
+allocation-heavy work, same 128 MB nursery high-water as 16, emergent so light programs
+stay at the 8 KB seed), the **selective net is 8.70 vs Go's 9.03 — ai ahead by 0.33**. The
+remaining behind-Go bench is `hash`'s `ins`/`bump` (map rehash, the genuinely harder
+allocation; see Stage D notes below). The **chain lane** (Stage B,
 2026-06-24, `3fff0157`): the `tree` traverse `ck` — `(two? t)`/`(cap t)`/`(cup t)`
 over a cons spine — compiles to a native chain fold. The **map-read lane** (Stage C,
 `8ec459ad`): `plift` hoists `hash`'s read-only `scan` out of its nested `:` into a
@@ -163,17 +175,34 @@ Per the scalar-hook lesson, every kernel is benchmarked against the interpreter
   the recognizer rewrites that fn's map-valued `(peep h k d)` to `mpeep`, which the
   emitter lays as the native probe (a map-param entry guard deopts a non-map). `ins`/
   `bump` write, so they stay interpreted (Stage D).
-- **Stage D — frontier, defer.** Allocation under the collector (`tree`'s `mk`,
-  `hash`'s `ins`). Native code that bumps `Hp` must keep the two-space/generational
-  invariants — a GC mid-build forwards the half-built structure, and the write
-  barrier fires on old→young stores (see [`doc/gengc.md`](gengc.md)). Two routes:
-  1. **pre-reserve** one `Have` for a statically-bounded build (a `tree` depth is a
-     literal → 65535 cells reserved up front, no GC inside the kernel) — works for
-     `mk`, not for data-dependent growth+rehash like `ins`;
-  2. **GC-cooperative native** (the kernel publishes roots / is interruptible at safe
-     points) — the real method-JIT, a much larger effort.
+- **Stage D — native allocation. ✅ LANDED (2026-06-25).** `tree`'s `mk` conses
+  natively. The room hazard (a GC mid-build forwards the half-constructed structure
+  the native frame holds; see [`doc/gengc.md`](gengc.md)) is dissolved by the simplest
+  route — **no GC inside native code**: every `link` carries a room-guard (`lea
+  r10,[rdx+88]; cmp rcx,r10; jb OVF`), and on a full heap it **deopts** (abandons the
+  native frames, re-runs the *pure* `mk` in the interpreter, which collects normally).
+  Because no collection fires mid-build, the machine-stack intermediates never move —
+  the root problem simply doesn't arise. This is route 1 from the old plan, but
+  per-`link` rather than a whole-build pre-reserve, so it covers **any** depth (not
+  just a literal). The pieces:
+  - **`consemit`** (emit.l): room-guard, then `[Hp]=chainkind`, `[Hp+8]=cap`,
+    `[Hp+16]=cup`, `rax=Hp`, `Hp+=24` — `jitfr`/`jitba`'s heap-result lane for a 3-word
+    cell. The result is an even pointer = a valid value, returned raw (NO putfix).
+  - **`cggv`** (emit.l): value-mode codegen — a const → its *tagged* value, `(link A B)`
+    → cons (A,B via `cggv`), `(? T A B)` → int test (`cgg`) + value branches, `(g E..)`
+    → a value-group call (reuses `cgg`'s call emit; args int via `cgg`, result a value).
+  - **value-typed outer** (`mkouter` gains a `valt` flag): the epilogue stores `rax`
+    as-is (`mov [rcx],rax; Continue`), no `add rax,rax; or rax,1`. `jitgroup` types each
+    H body individually (`hasl` → `cggv` else `cggt`), so a value `mk` and an int sibling
+    can co-group.
+  - **`vok?`** (auto.l): the value grammar, gated by **candidate-set separation** —
+    `groupok?` resolves calls only in `icands`, `vok?` only in `vcands`, so cross-kind
+    calls are structurally impossible (sound with no change to `groupok?`).
 
-  Recommend deferring D until B/C have paid.
+  The GC-cooperative route (spill roots to the *VM* stack — which the collector scans,
+  `[sp, end)` — and safepoint mid-build) is the upgrade for `hash`'s `ins`, where the
+  rehash allocates continuously and deopt-on-full would thrash. Deferred; the cons win
+  on `tree` already flips the net.
 
 ## Honest ceiling
 
