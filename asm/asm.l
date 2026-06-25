@@ -90,14 +90,20 @@
 
    ;; -- assemble PROG for TARGET. returns a tablet { 'bytes 'labels }; `asm` is the byte-list
    ;; shortcut, `asm-str` packs them into a machine-code string, `asm-hex` shows them. --
-   (assemble target prog)
+   ;; -- assemble-at: like assemble, but `lbls` is a PRE-BOUND label tablet (name -> address). A
+   ;; client that emits a blob into a larger buffer seeds the EXTERNAL targets it jumps to -- e.g.
+   ;; the glaze seeds its deopt handler as `deopt -> (OVF - blob-start)`, so a `(jmp deopt)` inside
+   ;; the IR resolves to a rel32 reaching code OUTSIDE the assembled blob. The blob's own labels are
+   ;; layered on top by `lay`; an address may be negative (a target before the blob). --
+   (assemble-at target prog lbls)
       (: be (peep backends target ())
          _ (? (book? be) 0 (scare 'no-backend target))
-         p (lay prog be 0 () (tablet 0))
+         p (lay prog be 0 () lbls)
          res (tablet 0)
          _ (pin res 'bytes  (resolve (cap p) (cup p) be 0))
          _ (pin res 'labels (cup p))
          res)
+   (assemble target prog) (assemble-at target prog (tablet 0))
    (asm target prog)     (peep (assemble target prog) 'bytes 0)
    (asm-str target prog) (string (asm target prog))
    (label-at res name)   (peep (peep res 'labels 0) name ())

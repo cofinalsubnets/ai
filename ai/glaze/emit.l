@@ -151,6 +151,10 @@
    (mpeep-ir d) (cat mprobe-ir                                                      ; READ tails: MISS -> default d; HIT -> slot[I].value, untagged
       (L (L 'label 'miss) (L 'li 'r0 d) '(jmp end)
          '(label hit) '(leax r0 r9 r9 1 0) '(ldx r0 r7 r0 8 8) '(sar r0 1) '(label end)))
+   (asmx-seed ir nm addr) (: t (tablet 0) _ (pin t nm addr) (peep (assemble-at 'x64 ir t) 'bytes 0))   ; assemble with ONE pre-bound external label nm->addr (the glaze's deopt handler)
+   mpin-ir (cat mprobe-ir                                                           ; the SAME probe; WRITE tails: MISS -> `deopt` (an EXTERNAL label the caller seeds); HIT -> store the tagged spilled v at slot[I].value, then fall through to the caller's map-thread
+      (L (L 'label 'miss) '(jmp deopt)
+         '(label hit) '(leax r0 r9 r9 1 0) '(pop r8) '(leax r8 r8 r8 1 1) (L 'stx 'r7 'r0 8 8 'r8)))
    (rrm reg) (+ 192 (% reg 8))                                                      ; ModRM mod11: reg-field=rax, rm=reg
    (rrr reg) (+ 192 (* 8 (% reg 8)))                                                ; ModRM mod11: reg-field=reg, rm=rax
    (rexb reg) (? (< reg 8) 72 73)                                                   ; REX.W (+B if reg extended, in rm)
@@ -215,17 +219,12 @@
                 (: kb (cgg syms ps b off OVF) d (caup (cup (cup e)))                                               ; k->rax(untagged); regs rax/r8/r9/r10/r11 ONLY (rcx=Sp, rdx=Hp are LIVE for the interp after Continue)
                    (asm (L kb '(76 141 92 0 1) (arx (argix a ps 0))                                                 ; lea r11,[rax+rax+1] (tagged key); rax=MAP
                           (asmx (mpeep-ir (? (whole? d) d 0))))))                                                   ; the probe (asm/ IR, labels -> rel32): I=hash; loop over slots; gap-terminated; hit -> value, miss -> default
-             (&& (= op 'mpin) (member? a ps))                                                                     ; (mpin MAP k v): native open-addressed UPDATE-IN-PLACE -- probe; HIT store tagged v; MISS (key absent) DEOPT
-                (: v (caup (cup (cup e))) mapld (arx (argix a ps 0))                                               ; v = the value expr; MAP->rax (3 bytes); SAME probe as mpeep, only the hit/miss tails differ
+             (&& (= op 'mpin) (member? a ps))                                                                     ; (mpin MAP k v): native open-addressed UPDATE-IN-PLACE -- the SAME probe as mpeep, via asm/ IR; HIT stores the tagged spilled v at the slot, MISS (absent key) DEOPTS
+                (: v (caup (cup (cup e))) mapld (arx (argix a ps 0))                                               ; v = the value expr; mapld = MAP->rax (register-dependent, stays emit.l)
                    vb (cgg syms ps v off OVF) po (+ off (tally vb)) kb (cgg syms ps b (+ po 1) OVF)                ; v->rax; PUSH (spill v across the probe); k->rax(untagged)
-                   premiss (asm (L vb push-rax kb '(76 141 92 0 1) mapld                                          ; ASM (flat) -- vb/kb are byte-lists, so a bare (L ..) leaves them as SUBLISTS; asm is one-level concat, so (tally premiss) would count SPINE pieces, not bytes -> every downstream offset (joa, the call's back-jump) skews. asm it.
-                              '(76 139 64 8 77 139 72 16 73 209 233 73 255 201 73 129 192 24 0 0 0)               ; lea r11,[2k+1] (tagged key); MAP->rax; r8=backing; r9=cap; shr; dec(=mask); r8+=24=&slots
-                              '(72 184) (le8 mapmix)                                                              ; movabs rax, mix
-                              '(73 15 175 195 72 193 192 32 76 33 200 73 137 194)                                 ; rax=rot(mix*tagkey)&mask=I->r10
-                              '(75 141 4 18 73 139 4 192 76 57 216 15 132 29 0 0 0 72 247 192 1 0 0 0 15 132 11 0 0 0 73 255 194 77 33 202 233 215 255 255 255)))   ; loop: slot key; cmp r11; je HIT(+29); test gap; je MISS(+11); I=(I+1)&mask; jmp loop
-                   joa (+ off (tally premiss))                                                                    ; abs offset of the MISS jmp
-                   (asm (L premiss '(233) (le4 (- OVF (+ joa 5)))                                                 ; MISS: jmp OVF (deopt -- the key is absent, so this fn's caller wasn't an in-place update)
-                          '(75 141 4 18 65 89 79 141 76 9 1 77 137 76 192 8) mapld)))                             ; HIT: lea[2I]; pop r9=v; lea r9,[2v+1] (tag); mov [r8+rax*8+8],r9 (store at slot value); MAP->rax (thread the map)
+                   pre (asm (L vb push-rax kb '(76 141 92 0 1) mapld))                                            ; lea r11,[2k+1] (tagged key); MAP->rax -- ready for the probe
+                   blob (asmx-seed mpin-ir 'deopt (- OVF (+ off (tally pre))))                                    ; assemble the probe+store with `deopt` seeded to OVF (blob-relative): a MISS `(jmp deopt)` reaches the fn's deopt handler
+                   (asm (L pre blob mapld)))                                                                      ; HIT falls off the blob into this trailing mapld -> MAP->rax, threading the (mutated) map as the result
              (&& (= op 'tally) (member? a ps)) (asm (L (arx (argix a ps 0)) '(72 139 64 8)))                      ; (tally STR): rax=STR; rax=[rax+8] = len
              (&& (= op 'pin) (member? a ps))                                                                       ; (pin C i V): native byte store into a raw buf-param C, returns C
                 (: idx (caup (cup e)) val (caup (cup (cup e))) creg (pregn (argix a ps 0))
