@@ -36,7 +36,7 @@ TIMEOUT ?= 30
 SAMPLES ?= 5
 
 # workloads, in display order; override with `make BENCHES="fib primes"`.
-BENCHES := fib tak sum mapfilter deforest polysum primes bell strcat strscan hash sort tree bintrees mandelbrot closure cdcl
+BENCHES := fib tak sum deforest primes bell strcat strscan hash sort tree bintrees mandelbrot closure cdcl
 
 # <lang>:<bench> pairs that exceed TIMEOUT -- dropped up front so the build never
 # pays the timeout wall for them (re-test by removing one and `make clean`).
@@ -45,8 +45,8 @@ SKIP :=
 # every language, in report-column order. ai first, then native (go rust java),
 # JIT (julia luajit pypy node), BEAM (elixir), a scheme (chez), and a CL (sbcl).
 # (lean + apl dropped from the report: lean's per-sample AOT compile made it slow;
-# apl, once sum/mapfilter close, only sorted to the end. luajit stays -- it's the
-# inspiration for the auto-JIT.)
+# apl, once the closeable folds close, only sorted to the end. luajit stays -- it's
+# the inspiration for the auto-JIT.)
 ALL_LANGS := ai \
              go rust java \
              julia luajit pypy node \
