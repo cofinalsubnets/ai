@@ -760,4 +760,64 @@
        pxn (opd (opd gbody 0) 1)
        (? (&& (= 2 (tally invs)) (= 2 (tally fvars)))
           (jitfgrid glam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim) ()))
+   ; --- the NEUTRAL-IR retarget (leaf lane) ------------------------------------------------------
+   ; the byte-emitting lanes above are x86-64-only (raw byte lists). this lane emits the asm/ neutral
+   ; IR instead and assembles for a TARGET ('x64 or 'arm64), so aarch64 falls out of asm/arm64.l. it is
+   ; ADDITIVE -- the live byte path is untouched; auto.l still drives `jit`/`njit`. spec in doc/glaze-arm64.md.
+   ; greg: a logical role -> the abstract asm register, PER TARGET. x86 lands g/Ip/Hp/Sp in rdi/rsi/rdx/rcx
+   ; (= abstract r6/r5/r2/r1, SysV's first 4 args -- the convention IS the calling convention); aarch64's
+   ; AAPCS lands them in x0/x1/x2/x3 (= r0/r1/r2/r3), so the accumulator moves off r0. (anchor = the machine
+   ; stack pointer snapshot for the deopt unwind; scratch = mulo/rem's extra reg, unused on x86.)
+   (greg tgt role)
+    (: x (id? tgt 'x64)
+       (? (id? role 'g)       (? x 'r6 'r0)   (id? role 'ip)      (? x 'r5 'r1)
+          (id? role 'hp)      (? x 'r2 'r2)   (id? role 'sp)      (? x 'r1 'r3)
+          (id? role 'acc)     (? x 'r0 'r4)   (id? role 'tmp)     (? x 'r7 'r5)
+          (id? role 'anchor)  (? x 'r8 'r9)   (id? role 'scratch) (? x 'r4 'r10) ()))
+   (ccof op) (? (id? op '<) 'lt (id? op '<=) 'le (id? op '>) 'gt (id? op '>=) 'ge (id? op '=) 'eq ())
+   (bitop op) (? (id? op '&) 'and (id? op '|) 'or (id? op '^) 'xor ())   ; source bitwise symbol -> the asm/ IR ALU op
+
+   ; fxvir: fetch the arg from Sp[0], fixnum-guard (low bit), untag -> acc. a non-fixnum jumps to deopt.
+   (fxvir tgt) (: A (greg tgt 'acc) S (greg tgt 'sp) (L (L 'ld A S 0) (L 'test A 1) '(br eq deopt) (L 'sar A 1)))
+   ; arithir: acc = (the popped a) OP acc, overflow -> deopt. - keeps a-b order; * uses the fused mulo.
+   (arithir tgt op) (: A (greg tgt 'acc) T (greg tgt 'tmp) SC (greg tgt 'scratch)
+      (? (id? op '+) (L (L 'adds A A T) '(br vs deopt))
+         (id? op '-) (L (L 'subs T T A) '(br vs deopt) (L 'mov A T))
+         (id? op '*) (L (L 'mulo A A T SC 'deopt)) ()))
+   (divir tgt op) (: A (greg tgt 'acc) T (greg tgt 'tmp) SC (greg tgt 'scratch)   ; caller emits the /-by-0 guard
+      (? (id? op '//) (L (L 'div A T A)) (id? op '%) (L (L 'rem A T A SC)) ()))
+   ; cgir: a leaf expr e over the single param v -> IR ops, accumulating in acc. nested operands ride the
+   ; machine stack (push acc / pop tmp); ? gets fresh mint labels. mirrors cgv's grammar, one deopt label.
+   (cgir tgt v e)
+    (: A (greg tgt 'acc) T (greg tgt 'tmp)
+      (? (id? e v)  (fxvir tgt)
+         (whole? e) (L (L 'li A e))
+         (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+            (? (member? op '(+ - *))
+                 (cat (cgir tgt v a) (cat (L (L 'push A)) (cat (cgir tgt v b) (cat (L (L 'pop T)) (arithir tgt op)))))
+               (member? op '(// %))
+                 (cat (cgir tgt v a) (cat (L (L 'push A)) (cat (cgir tgt v b)
+                      (cat (L (L 'test A A) '(br eq deopt) (L 'pop T)) (divir tgt op)))))
+               (member? op '(& | ^))
+                 (cat (cgir tgt v a) (cat (L (L 'push A)) (cat (cgir tgt v b) (L (L 'pop T) (L (bitop op) A A T)))))
+               (member? op '(< <= > >= =))
+                 (cat (cgir tgt v a) (cat (L (L 'push A)) (cat (cgir tgt v b) (L (L 'pop T) (L 'cmp T A) (L 'set (ccof op) A)))))
+               (id? op '?)
+                 (: el (mint 0) en (mint 0)
+                    (cat (cgir tgt v a) (cat (L (L 'cmp A 0) (L 'br 'le el))
+                         (cat (cgir tgt v b) (cat (L (L 'jmp en) (L 'label el))
+                              (cat (cgir tgt v (caup (cup (cup e)))) (L (L 'label en))))))))
+               ()))
+         ()))
+   ; leafir: prologue (anchor = the machine sp); the body; putfix epilogue + Continue (Ip+=16; jmp [Ip]);
+   ; the shared deopt block (restore sp from anchor, tail-apply interp = value[1] at [Ip+8]).
+   (leafir tgt v body)
+    (: AN (greg tgt 'anchor) S (greg tgt 'sp) A (greg tgt 'acc) IP (greg tgt 'ip) T (greg tgt 'tmp)
+       (cat (L (L 'lea AN 'sp 0))
+         (cat (cgir tgt v body)
+           (cat (L (L 'adds A A A) '(br vs deopt) (L 'or A A 1) (L 'st S 0 A) (L 'add IP IP 16) (L 'ld T IP 0) (L 'jmpr T))
+             (L (L 'label 'deopt) (L 'lea 'sp AN 0) (L 'ld T IP 8) (L 'mov IP T) (L 'ld T IP 0) (L 'jmpr T))))))
+   (irbytes tgt lam) (peep (assemble tgt (leafir tgt (caup lam) (caup (cup lam)))) 'bytes 0)   ; -> the assembled machine bytes
+   ; (jitir '(\ x E) tgt) -- compile an arithmetic single-arg leaf to native FOR tgt; deopt -> interp.
+   (jitir lam tgt) (nif (emit (irbytes tgt lam)) (ev lam) lam 1)
 )

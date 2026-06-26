@@ -503,4 +503,32 @@
    (say err "ai/glaze/auto: native codegen ok
 ")))
 
-(say err "test/glaze-x86: emit + auto native codegen ok\n")
+; --- the neutral-IR retarget, leaf lane (jitir, emit.l) -- additive alongside the byte path.
+;     x86: the IR-emitted native == the interpreter across the grammar. arm64: the SAME source
+;     assembles for aarch64 (DATA only -- executing it needs the qemu kernel harness), proving the
+;     per-target register-role map. compiled through base-ev with ev->base-ev for interp references.
+(base-ev '(: ev base-ev
+   _ (assert
+      ; x86 native == interp
+      (31 = ((jitir '(\ x (+ (* x 3) 1)) 'x64) 10))
+      (= ((ev '(\ x (+ (* x 3) 1))) 10) ((jitir '(\ x (+ (* x 3) 1)) 'x64) 10))
+      (49 = ((jitir '(\ x (* x x)) 'x64) 7))
+      (8 = ((jitir '(\ x (- x 2)) 'x64) 10)) (-8 = ((jitir '(\ x (- 2 x)) 'x64) 10))     ; - keeps a-b order
+      (3 = ((jitir '(\ x (// x 3)) 'x64) 10)) (1 = ((jitir '(\ x (% x 7)) 'x64) 8))
+      (8 = ((jitir '(\ x (& x 12)) 'x64) 10)) (3 = ((jitir '(\ x (| x 1)) 'x64) 2)) (15 = ((jitir '(\ x (^ x 5)) 'x64) 10))
+      (1 = ((jitir '(\ x (< x 5)) 'x64) 3)) (0 = ((jitir '(\ x (< x 5)) 'x64) 9))         ; cmp -> set
+      (1 = ((jitir '(\ x (<= x 5)) 'x64) 5)) (1 = ((jitir '(\ x (>= x 5)) 'x64) 9)) (1 = ((jitir '(\ x (= x 5)) 'x64) 5))
+      (7 = ((jitir '(\ x (? (< x 0) (- 0 x) x)) 'x64) -7)) (0 = ((jitir '(\ x (? (< x 0) (- 0 x) x)) 'x64) 0))   ; abs (?)
+      (9000000000000000000 = ((jitir '(\ x (* x x)) 'x64) 3000000000))                    ; overflow -> deopt -> bignum
+      (16000000000000000001 = ((jitir '(\ x (+ 1 (* x x))) 'x64) 4000000000))             ; mid-nest overflow: sp unwind on deopt
+      (= (// 10 0) ((jitir '(\ x (// x 0)) 'x64) 10))                                      ; /-by-0 guard -> deopt -> interp
+      (= (+ '(1 2) 1) ((jitir '(\ x (+ x 1)) 'x64) '(1 2)))                                ; non-fixnum arg -> deopt -> interp
+      ((\ x (+ (* x 3) 1)) = (jitir '(\ x (+ (* x 3) 1)) 'x64))                            ; =-IDENTICAL to source (transparent)
+      (= '(2 4 6) (map (jitir '(\ x (+ x 1)) 'x64) '(1 3 5)))                              ; composes with higher-order fns
+      (= 1 ((: (go i a) (? (< i 60) (go (+ i 1) (&& a (= ((jitir `('\ 'x `('* 'x i)) 'x64) 7) (* 7 i)))) a)) 0 1))   ; agree 0..60
+      ; arm64: the same source assembles for aarch64 (data), and differs from x64 (per-target codegen)
+      (< 0 (tally (peep (assemble 'arm64 (leafir 'arm64 'x '(+ (* x 3) 1))) 'bytes 0)))
+      !(= (irbytes 'x64 '(\ x (+ x 1))) (irbytes 'arm64 '(\ x (+ x 1)))))
+   (say err "ai/glaze/emit-ir: neutral-IR leaf lane ok (x86 == interp; arm64 assembles)\n")))
+
+(say err "test/glaze-x86: emit + auto + ir native codegen ok\n")
