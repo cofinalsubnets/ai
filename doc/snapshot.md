@@ -139,10 +139,30 @@ Departures from the original plan above, worth noting:
    audit emit.l/auto.l for `id?` on source sub-terms. Sibling caution to [[value-interning-dropped]].
 
 3. **A freestanding kernel snapshot — boot the kernel from a baked image, no eval.** `ai_image_save`/
-   `ai_image_load` are now buffer-based + stdio-free, so the freestanding kernel (`port/kship/`, `kmain.c`
-   — no filesystem) could `objcopy` a dumped image into a C byte array and `ai_image_load(array, len)` at
-   startup instead of eval'ing the baked corpus. Two knots: the image must be dumped from a binary with
-   the SAME lvm_* layout as the kernel (the arch+anchor stamp guards mismatches, but the kernel and host
-   are different binaries — needs a kernel-built dump, or a layout-stable shared TU); and the kernel runs
-   `AI_NOGEN` (gcg, no major pool) while `ai_image_save` needs `g->major_pool` (gen host only) — so either
-   a gen kernel build or a non-major serialize path. Resolves the cold-start cost on the MCU too.
+   `ai_image_load` are now buffer-based + stdio-free (confirmed: the codec sits OUTSIDE the one
+   `#if __STDC_HOSTED__` region, so it compiles into the freestanding kernel), so the kernel (`port/kship/`,
+   `kmain.c` — no filesystem) could `objcopy` a dumped image into a C byte array and `ai_image_load(array,
+   len)` at startup instead of eval'ing the baked corpus. **ATTEMPTED 2026-06-25, blocked on knot 1
+   (gen-in-kernel), reverted.** The two knots:
+
+   - **Knot 1 — gen-in-kernel (the blocker hit).** The codec relocates into the MAJOR pool, which only the
+     generational collector has; the kernel builds `-DAI_NOGEN` (single-pool gcg, no major pool), so
+     `ai_image_save` can't even run there. Tried building the kernel "normal" (drop `-DAI_NOGEN` → gen) and
+     BOUNDING it via the Appel knob: sum the free RAM in `meminit` (`kram_words`) and set
+     `ai_core_of(g)->budget = kram_words/2` after `ai_ini` (the memmap-driven cap the Makefile comment left
+     as the port's TODO). RESULT: the gen kernel **builds + boots** (limine/archinit/meminit/net_init all
+     run) but **HANGS during the corpus compile** (`ai_evals_` of egg+prel+ev+bao) — qemu silent before the
+     first test dot. So gen needs MORE than the budget to work freestanding: suspect the remembered-set /
+     write-barrier malloc or the `gen_major` major-pool grow path interacting with `kmallocw` (NULL-on-OOM
+     not handled, or the realloc-via-alloc-then-free). This is a STANDALONE prerequisite: get K_TEST green
+     with gen first (add serial traces, find where the compile stalls), THEN the snapshot is tractable.
+     (Reverted Makefile kcflags + the kmain.c budget wiring.) The interactive kernel is already `tco=1`;
+     only K_TEST forces `tco=0` (a separate freestanding-sibcall hang), orthogonal to gen.
+   - **Knot 2 — a kernel-LOADABLE image.** Even past knot 1, a host-dumped image won't load in the kernel:
+     the arch+anchor stamp rejects a different binary (different lvm_* table order + binary-pointer
+     addresses). Options: dump from the KERNEL binary (unexec — boot in qemu, serialize, emit the bytes
+     over serial, `objcopy` into the kernel, RELINK with image.o placed LAST so .text/.rodata addresses
+     don't shift — the kernel is non-PIE so absolute pointers stay valid only if nothing moves); or a
+     layout-stable shared TU. An AI_NOGEN kernel could alternatively load into the MAIN pool (gcg) instead
+     of the major — a `ai_image_load` variant — sidestepping knot 1 but not knot 2. Resolves cold start on
+     the MCU too.
