@@ -526,9 +526,20 @@
       ((\ x (+ (* x 3) 1)) = (jitir '(\ x (+ (* x 3) 1)) 'x64))                            ; =-IDENTICAL to source (transparent)
       (= '(2 4 6) (map (jitir '(\ x (+ x 1)) 'x64) '(1 3 5)))                              ; composes with higher-order fns
       (= 1 ((: (go i a) (? (< i 60) (go (+ i 1) (&& a (= ((jitir `('\ 'x `('* 'x i)) 'x64) 7) (* 7 i)))) a)) 0 1))   ; agree 0..60
-      ; arm64: the same source assembles for aarch64 (data), and differs from x64 (per-target codegen)
-      (< 0 (tally (peep (assemble 'arm64 (leafir 'arm64 'x '(+ (* x 3) 1))) 'bytes 0)))
-      !(= (irbytes 'x64 '(\ x (+ x 1))) (irbytes 'arm64 '(\ x (+ x 1)))))
-   (say err "ai/glaze/emit-ir: neutral-IR leaf lane ok (x86 == interp; arm64 assembles)\n")))
+      ; --- n-ary lane (jitnir, arity>=2): native == interp, curries to saturation, transparent, deopts
+      (7 = ((jitnir '(\ x y (+ x y)) 'x64) 3 4)) (7 = (((jitnir '(\ x y (+ x y)) 'x64) 3) 4))      ; saturated + curried
+      (= ((ev '(\ x y (- (* x x) y))) 5 3) ((jitnir '(\ x y (- (* x x) y)) 'x64) 5 3))
+      (16000000000000000000 = ((jitnir '(\ x y (- (* x x) y)) 'x64) 4000000000 0))                 ; overflow -> deopt -> bignum
+      (13 = ((jitnir '(\ x y z (+ (+ x y) (* z 2))) 'x64) 1 2 5))
+      (13 = (((jitnir '(\ x y z (+ (+ x y) (* z 2))) 'x64) 1) 2 5))                                 ; arity-3, saturate at any split
+      ((\ x y z (+ (+ x y) (* z 2))) = (jitnir '(\ x y z (+ (+ x y) (* z 2))) 'x64))                ; =-identical to source
+      (16000000000000000005 = ((jitnir '(\ x y z (+ (+ (* x x) y) z)) 'x64) 4000000000 0 5))        ; deopt through a MIDDLE param
+      (3 = ((jitnir '(\ x y (// x y)) 'x64) 13 4)) (1 = ((jitnir '(\ x y (% x y)) 'x64) 8 7))       ; n-ary // and %
+      ; --- arm64: the SAME source assembles for aarch64 (data; exec needs qemu), and differs from x64
+      (< 0 (tally (peep (assemble 'arm64 (coreir 'arm64 '(x) '(+ (* x 3) 1) (deoptir 'arm64 0))) 'bytes 0)))   ; leaf
+      (< 0 (tally (peep (assemble 'arm64 (coreir 'arm64 '(x y) '(+ (* x x) y) (deoptir 'arm64 1))) 'bytes 0))) ; n-ary (deopt -> interp body)
+      !(= (peep (assemble 'x64   (coreir 'x64   '(x) '(+ x 1) (deoptir 'x64 0))) 'bytes 0)
+          (peep (assemble 'arm64 (coreir 'arm64 '(x) '(+ x 1) (deoptir 'arm64 0))) 'bytes 0)))      ; per-target codegen differs
+   (say err "ai/glaze/emit-ir: neutral-IR leaf + n-ary lanes ok (x86 == interp; arm64 assembles)\n")))
 
 (say err "test/glaze-x86: emit + auto + ir native codegen ok\n")
