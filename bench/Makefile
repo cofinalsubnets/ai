@@ -43,16 +43,18 @@ BENCHES := fib tak sum mapfilter deforest polysum primes bell strcat strscan has
 SKIP :=
 
 # every language, in report-column order. ai first, then native (go rust java),
-# JIT (julia luajit pypy node), BEAM (elixir), and a scheme (chez). (sbcl dropped:
-# far enough behind on these workloads it only stretched the table. luajit stays --
-# it's the inspiration for the auto-JIT.)
+# JIT (julia luajit pypy node), BEAM (elixir), a scheme (chez), and a CL (sbcl).
+# (lean dropped: the per-sample AOT compile made the column slow and its numbers
+# uninteresting. luajit stays -- it's the inspiration for the auto-JIT.) apl
+# (Dyalog) is the array language, top wherever a bench is one vectorized primitive,
+# last on scalar recursion -- the cleanest array-tradeoff illustration in the suite.
 ALL_LANGS := ai \
-             go rust java lean \
+             go rust java \
              julia luajit pypy node \
-             elixir chez
+             elixir chez sbcl apl
 
 # the columns `make bench` shows by default.
-DEFAULT_LANGS := ai go rust lean julia luajit pypy node
+DEFAULT_LANGS := ai go rust julia luajit pypy node
 
 # per-language: source extension, harness file (a result depends on it), the
 # interpreter binary (for the PATH presence check), and any extra prereq.
@@ -68,6 +70,7 @@ EXT_go := go
 EXT_java := java
 EXT_rust := rs
 EXT_lean := lean
+EXT_apl := apl
 
 HARN_ai := $(HARN)
 HARN_chez := lib/bench.ss
@@ -81,6 +84,7 @@ HARN_go := lib/bench.go
 HARN_java := lib/Bench.java
 HARN_rust := lib/bench.rs
 HARN_lean := lib/Bench.lean
+HARN_apl := lib/bench.apl
 
 BIN_chez := chez
 BIN_sbcl := sbcl
@@ -93,6 +97,7 @@ BIN_go := go
 BIN_java := javac
 BIN_rust := rustc
 BIN_lean := lean
+BIN_apl := dyalogscript
 
 EXTRA_ai := $(GL)
 

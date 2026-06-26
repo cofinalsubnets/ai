@@ -48,6 +48,7 @@ case $lang in
   ai)            ext=l;    bin=../out/host/ai;  cmd='cat $({ [ "$b" = mandelbrot ] || [ "$b" = fib ] || [ "$b" = tak ] || [ "$b" = primes ] || [ "$b" = strscan ] || [ "$b" = strcat ] || [ "$b" = deforest ] || [ "$b" = polysum ] || [ "$b" = closure ] || [ "$b" = tree ] || [ "$b" = bintrees ] || [ "$b" = hash ]; } && [ "$(uname -m)" = x86_64 ] && printf "%s %s " ../ai/glaze/emit.l ../ai/glaze/auto.l; [ "$b" = cdcl ] && printf "%s " ../sat/sat.l) bench.l benches/$b.l | AI_NO_IMAGE=1 ../out/host/ai' ;;
   chez)         ext=ss;   bin=chez;       cmd='chez --script benches/$b.ss' ;;
   sbcl)         ext=lisp; bin=sbcl;       cmd='sbcl --script benches/$b.lisp' ;;
+  apl)          ext=apl;  bin=dyalogscript; cmd='dyalogscript benches/$b.apl' ;;   # Dyalog APL (~/.local install); the bench ⎕FIXes lib/bench.apl
   elixir)       ext=exs;  bin=elixir;     cmd='elixir benches/$b.exs' ;;
   julia)        ext=jl;   bin=julia;      cmd='julia --startup-file=no benches/$b.jl' ;;
   pypy)         ext=py;   bin=pypy3;      cmd='pypy3 benches/$b.py' ;;
