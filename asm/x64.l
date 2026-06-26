@@ -30,14 +30,16 @@
    x64-alu (tablet 0)
    _ (foldl (\ _ p (pin x64-alu (cap p) (cup p))) 0
         (L (link 'add (L 1 0 1)) (link 'or (L 9 1 1)) (link 'and (L 33 4 1))
-           (link 'sub (L 41 5 0)) (link 'xor (L 49 6 1))))
+           (link 'sub (L 41 5 0)) (link 'xor (L 49 6 1))
+           (link 'adds (L 1 0 1)) (link 'subs (L 41 5 0))))    ; flag-setting -- x86 add/sub already set OF; pair with (br vs/vc ..)
 
    ;; -- condition codes: IR name -> the 0F 8x opcode low byte. --
    x64-cc (tablet 0)
    _ (foldl (\ _ p (pin x64-cc (cap p) (cup p))) 0
         (L (link 'eq 132) (link 'ne 133) (link 'lt 140) (link 'ge 141)
            (link 'le 142) (link 'gt 143) (link 'below 130) (link 'ae 131)
-           (link 'be 134) (link 'above 135) (link 's 136) (link 'ns 137)))
+           (link 'be 134) (link 'above 135) (link 's 136) (link 'ns 137)
+           (link 'vs 128) (link 'vc 129)))                      ; jo / jno (overflow set / clear)
 
    ;; -- the encoding bytes: REX.WRXB, ModRM(mod,reg,rm), SIB(scale,index,base). --
    (rex w r x b) (| 64 (| (<< w 3) (| (<< r 2) (| (<< x 1) b))))    ; 0x40 | wrxb
@@ -148,6 +150,34 @@
    (emit-call label)     (L 232 (fix 4 'rel32 label 0))
    (emit-jmp  label)     (L 233 (fix 4 'rel32 label 0))
    (emit-br cond label)  (L 15 (jcc-op cond) (fix 4 'rel32 label 0))
+   ;; jmpr: FF /4 -- an indirect jump through a register (the glaze's Continue / deopt tail). REX.B
+   ;; for an extended register; no REX.W (jmp defaults to 64-bit operand size).
+   (emit-jmpr d) (: dn (rn d) (cat (? (>= dn 8) (L 65) ()) (L 255 (modrm 3 4 dn))))
+   ;; mulo: d <- a*b (low 64), branch to lbl on signed overflow. imul (0F AF) sets OF when the
+   ;; product leaves signed-64, so a plain `jo` is exact -- the scratch `t` is UNUSED on x86 (only
+   ;; aarch64 needs it, for SMULH).
+   (emit-mulo d a b t lbl) (cat (emit-imul d a b) (L 15 128 (fix 4 'rel32 lbl 0)))   ; <imul> ; 0F 80 jo rel32
+   ;; set: d <- (cond) ? 1 : 0 from the last cmp -- SETcc dl (0F 9x /0) then MOVZX d,dl (0F B6 /r). a
+   ;; REX (B for r8b+, a bare 0x40 for spl/bpl/sil/dil) forces the byte operand to be the low byte,
+   ;; not ah/ch/dh/bh. SETcc's opcode is the Jcc low byte + 0x10 (0F 84 je -> 0F 94 sete).
+   (emit-set cond d)
+      (: o (jcc-op cond) dn (rn d)
+         rb (? (>= dn 8) (L 65) (? (>= dn 4) (L 64) ()))
+         (cat rb (cat (L 15 (+ o 16) (modrm 3 0 dn)) (L (rex 1 (hi dn) 0 (hi dn)) 15 182 (modrm 3 dn dn)))))
+   ;; div/rem: x86 idiv is fixed-register (RDX:RAX / r/m -> RAX quotient, RDX remainder), and rdx is
+   ;; commonly live (the glaze keeps Hp there), so the sequence SAVES rdx itself: push rdx; push the
+   ;; divisor to memory; mov rax,a; cqo (sign-extend); idiv [rsp]; result -> rax (rem: from rdx);
+   ;; add rsp,8; pop rdx; mov d,rax. clobbers rax; `d` must not be r2 (rdx). caller guards b != 0.
+   (emit-div remf d a b)
+      (catall (L (L 82)                                     ; push rdx
+                 (emit-push b)                              ; push the divisor
+                 (? (reg-eq a 'r0) () (emit-mov 'r0 a))     ; rax <- a (dividend)
+                 (L 72 153)                                 ; cqo
+                 (L 72 247 60 36)                           ; idiv qword [rsp]
+                 (? remf (L 72 137 208) ())                 ; rem: mov rax, rdx
+                 (L 72 131 196 8)                           ; add rsp, 8
+                 (L 90)                                     ; pop rdx
+                 (? (reg-eq d 'r0) () (emit-mov d 'r0))))   ; d <- rax
 
    ;; the dispatch: one IR form -> its byte/fixup chunk.
    (x64-lower ins)
@@ -172,6 +202,11 @@
             (= op 'dec)  (emit-un 255 1 (at ins 1))
             (= op 'jmp)  (emit-jmp  (at ins 1))
             (= op 'br)   (emit-br   (at ins 1) (at ins 2))
+            (= op 'jmpr) (emit-jmpr (at ins 1))
+            (= op 'mulo) (emit-mulo (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (mulo d a b t lbl)
+            (= op 'set)  (emit-set  (at ins 1) (at ins 2))
+            (= op 'div)  (emit-div 0 (at ins 1) (at ins 2) (at ins 3))
+            (= op 'rem)  (emit-div 1 (at ins 1) (at ins 2) (at ins 3))                        ; (rem d a b t) -- t ignored on x86 (rdx)
             (= op 'call) (emit-call (at ins 1))
             (= op 'ret)  (L 195)
             (= op 'sys)  (L 15 5)

@@ -85,6 +85,20 @@
       (L "jcc.all"
          "0f8c240000000f851e0000000f8f180000000f8d120000000f8e0c0000000f87060000000f8200000000c3"
          '((br lt a) (br ne a) (br gt a) (br ge a) (br le a) (br above a) (br below a) (label a) (ret)))
+      ;; the P0 glaze ops -- indirect jump, flag-setting add/sub (+ the vs/vc conds), overflow-checked
+      ;; multiply, condition->0/1. each objdump-verified (-M intel).
+      (L "jmpr.rax"    "ffe0"                  '((jmpr r0)))              ; jmp rax  (Continue/deopt tail)
+      (L "jmpr.r8"     "41ffe0"                '((jmpr r7)))              ; jmp r8
+      (L "set.eq"      "0f94c0480fb6c0"        '((set eq r0)))           ; sete al ; movzx rax,al
+      (L "set.lt"      "0f9cc0480fb6c0"        '((set lt r0)))           ; setl al ; movzx rax,al
+      (L "adds"        "4c01c0"                '((adds r0 r0 r7)))       ; add rax,r8  (sets OF -> br vs)
+      (L "subs"        "4c29c0"                '((subs r0 r0 r7)))       ; sub rax,r8  (sets OF)
+      (L "mulo.prog"   "490fafc00f8005000000e902000000ffe6c3"           ; imul rax,r8 ; jo ovf ; jmp done ; jmp rsi ; ret
+                       '((mulo r0 r0 r7 r4 ovf) (jmp done) (label ovf) (jmpr r5) (label done) (ret)))
+      (L "div"         "524150489948f73c244883c4085a"                   ; push rdx;push r8;cqo;idiv [rsp];add rsp,8;pop rdx
+                       '((div r0 r0 r7)))
+      (L "rem"         "524150489948f73c244889d04883c4085a"             ; ... mov rax,rdx (remainder) ...
+                       '((rem r0 r0 r7 r4)))
       ;; a whole program: write(1, buf, 13); exit(0)  -- r0=rax carries the syscall number
       (L "syscall.prog"
          "48c7c00100000048c7c70100000048c7c60010000048c7c20d0000000f0548c7c03c00000048c7c7000000000f05"
@@ -152,7 +166,32 @@
       (L "a64.nop"    "1f2003d5"          '((nop)))
       (L "a64.brk"    "000020d4"          '((trap)))
       (L "a64.loop"   "1f0001eb60000054000400d1fdffff17c0035fd6"
-                      '((label top) (cmp r0 r1) (br eq done) (dec r0) (jmp top) (label done) (ret))))
+                      '((label top) (cmp r0 r1) (br eq done) (dec r0) (jmp top) (label done) (ret)))
+      ;; the P0 glaze ops -- each llvm-mc-verified (--triple=aarch64). adds/subs are the S-variant
+      ;; (set NZCV); set is CSET; mulo is the SMULH+CMP-vs-ASR#63 overflow idiom (no flag-setting mul).
+      (L "a64.jmpr"   "00001fd6"          '((jmpr r0)))                 ; br x0
+      (L "a64.set.eq" "e0179f9a"          '((set eq r0)))               ; cset x0, eq
+      (L "a64.set.vs" "e0779f9a"          '((set vs r0)))               ; cset x0, vs  (overflow -> 0/1)
+      (L "a64.adds"   "000007ab"          '((adds r0 r0 r7)))           ; adds x0,x0,x7
+      (L "a64.subs"   "600007eb"          '((subs r0 r3 r7)))           ; subs x0,x3,x7
+      (L "a64.mulo.prog" "047c479b007c079b9ffc80eb4100005402000014a0001fd6c0035fd6"   ; smulh x4,x0,x7; mul x0,x0,x7; cmp x4,x0,asr#63; b.ne ovf; b done; br x5; ret
+                      '((mulo r0 r0 r7 r4 ovf) (jmp done) (label ovf) (jmpr r5) (label done) (ret)))
+      ;; P1: shifts/test/div/rem/indexed -- the integer + map lanes on aarch64. llvm-mc-verified.
+      (L "a64.sar"    "00fc4193"          '((sar r0 1)))                ; asr x0,x0,#1   (untag)
+      (L "a64.shr"    "e7fc41d3"          '((shr r7 1)))                ; lsr x7,x7,#1
+      (L "a64.shl"    "00f07dd3"          '((shl r0 3)))                ; lsl x0,x0,#3
+      (L "a64.rol"    "0080c093"          '((rol r0 32)))               ; ror x0,x0,#32  (the hash rotate)
+      (L "a64.ror"    "0020c093"          '((ror r0 8)))                ; ror x0,x0,#8
+      (L "a64.test.r" "1f0007ea"          '((test r0 r7)))              ; tst x0,x7
+      (L "a64.test.i" "1f0040f2"          '((test r0 1)))               ; tst x0,#1  (the gap/fixnum low-bit check)
+      (L "a64.and.i"  "00084092"          '((and r0 r0 7)))             ; and x0,x0,#7  (bitmask immediate)
+      (L "a64.div"    "000cc79a"          '((div r0 r0 r7)))            ; sdiv x0,x0,x7
+      (L "a64.rem"    "040cc79a8080079b"  '((rem r0 r0 r7 r4)))         ; sdiv x4,x0,x7 ; msub x0,x4,x7,x0
+      (L "a64.ldx"    "e00c008b000440f9"  '((ldx r0 r7 r0 8 8)))        ; add x0,x7,x0,lsl#3 ; ldr x0,[x0,#8]
+      (L "a64.leax"   "2101098b21040091"  '((leax r1 r9 r9 1 1)))       ; add x1,x9,x9 ; add x1,x1,#1
+      (L "a64.stx"    "f00c008b080600f9"  '((stx r7 r0 8 8 r8)))        ; add x16,x7,x0,lsl#3 ; str x8,[x16,#8]
+      (L "a64.li.big" "a0828fd240e9aff22037cff2e0c6f3f2"               ; movz+3 movk = 0x9e3779b97f4a7c15 (bignum-safe lane via //%)
+                      '((li r0 11400714819323198485))))
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'arm64 (at t 2))) 0 a64tests)
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --

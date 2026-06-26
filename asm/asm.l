@@ -17,8 +17,18 @@
 ;   (ld d base off)        ; d <- [base+off]   (64-bit load)
 ;   (st base off s)        ; [base+off] <- s   (64-bit store)
 ;   (lea d base off)       ; d <- base+off     (address arithmetic)
+;   (ldx d base ix sc dp)  ; d <- [base + ix*sc + dp]   (sc in 1/2/4/8)
+;   (stx base ix sc dp s)  ; [base + ix*sc + dp] <- s
+;   (leax d base ix sc dp) ; d <- base + ix*sc + dp
+;   (shl/shr/sar/rol/ror d c)                  ; shift / rotate d in place by immediate count c
+;   (test a b)             ; set flags from a AND b
+;   (div d a b) (rem d a b t)                  ; signed truncating quotient / remainder; t a scratch (arm64 rem; x86 ignores)
 ;   (push s) (pop d)
-;   (jmp label) (br cond label)                ; cond: eq ne lt le gt ge below above ae be s ns
+;   (jmp label) (br cond label)                ; cond: eq ne lt le gt ge below above ae be s ns vs vc
+;   (jmpr d)                                   ; indirect: jump to the address in register d
+;   (adds d a b) (subs d a b)                  ; like add/sub but SET FLAGS -- pair with (br vs/vc ..)
+;   (mulo d a b t lbl)                         ; d <- a*b (low 64); branch to lbl on signed overflow; t a scratch (clobbered)
+;   (set cond d)                               ; d <- (cond holds) ? 1 : 0, from the last cmp's flags
 ;   (call label) (ret) (sys)                   ; sys = syscall/svc
 ;   (nop) (trap)
 ;
