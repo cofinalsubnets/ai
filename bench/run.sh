@@ -59,6 +59,11 @@ case $lang in
   go)           ext=go;   bin=go;         cmd='d=$(mktemp -d); cp benches/$b.go "$d/main.go"; cp lib/bench.go "$d/bench.go"; go run "$d/main.go" "$d/bench.go"; rm -rf "$d"' ;;
   rust)         ext=rs;   bin=rustc;      cmd='d=$(mktemp -d); rustc -O -o "$d/b" benches/$b.rs >/dev/null 2>&1 && "$d/b"; rm -rf "$d"' ;;
   java)         ext=java; bin=javac;      cmd='d=$(mktemp -d); javac -d "$d" benches/$b.java lib/Bench.java >/dev/null 2>&1 && java -cp "$d" Main; rm -rf "$d"' ;;
+  # lean: compile the shared harness (as module `Bench`, via -R lib) and the
+  # bench to C, link into a native executable with leanc (from the toolchain
+  # prefix; only `lean` need be on PATH), then run. The build is NOT timed -- the
+  # bench self-times its inner loop, like go/rust/java.
+  lean)         ext=lean; bin=lean;       cmd='d=$(mktemp -d); lc="$(lean --print-prefix)/bin/leanc"; lean -R lib -o "$d/Bench.olean" -c "$d/Bench.c" lib/Bench.lean >/dev/null 2>&1 && "$lc" -O3 -c -o "$d/Bench.o" "$d/Bench.c" >/dev/null 2>&1 && LEAN_PATH="$d" lean -o "$d/m.olean" -c "$d/m.c" benches/$b.lean >/dev/null 2>&1 && "$lc" -O3 -o "$d/m" "$d/m.c" "$d/Bench.o" >/dev/null 2>&1 && "$d/m"; rm -rf "$d"' ;;
   *) echo "run.sh: unknown language '$lang'" >&2; exit 1 ;;
 esac
 

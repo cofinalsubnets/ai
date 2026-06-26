@@ -47,12 +47,12 @@ SKIP :=
 # far enough behind on these workloads it only stretched the table. luajit stays --
 # it's the inspiration for the auto-JIT.)
 ALL_LANGS := ai \
-             go rust java \
+             go rust java lean \
              julia luajit pypy node \
              elixir chez
 
 # the columns `make bench` shows by default.
-DEFAULT_LANGS := ai go rust julia luajit pypy node
+DEFAULT_LANGS := ai go rust lean julia luajit pypy node
 
 # per-language: source extension, harness file (a result depends on it), the
 # interpreter binary (for the PATH presence check), and any extra prereq.
@@ -67,6 +67,7 @@ EXT_julia := jl
 EXT_go := go
 EXT_java := java
 EXT_rust := rs
+EXT_lean := lean
 
 HARN_ai := $(HARN)
 HARN_chez := lib/bench.ss
@@ -79,6 +80,7 @@ HARN_julia := lib/bench.jl
 HARN_go := lib/bench.go
 HARN_java := lib/Bench.java
 HARN_rust := lib/bench.rs
+HARN_lean := lib/Bench.lean
 
 BIN_chez := chez
 BIN_sbcl := sbcl
@@ -90,6 +92,7 @@ BIN_julia := julia
 BIN_go := go
 BIN_java := javac
 BIN_rust := rustc
+BIN_lean := lean
 
 EXTRA_ai := $(GL)
 
