@@ -64,14 +64,23 @@
    red (tablet 0)
    _ (map (\ n (pin red n 1)) '(idfun coconustot coconusfromt hfiber))
 
-   ; NOT a soundness skip (uu AND Rocq both certify these): two based-J equivalence proofs
-   ; whose auto-translated TERM Lean's elaborator can't reconstruct -- it commits the Sigma
-   ; family / basepoint bottom-up before the based-J expected type can correct it, and won't
-   ; delta-reduce idfun at the reconciliation (Coq's match conversion does both). The theorems
-   ; ARE Lean-provable -- by hand-written proofs, not structural translation. Dropping these
-   ; two drops their closure too (the weq/idisweq equivalence layer): 200 -> 181.
+   ; backend-specific drop set (NOT soundness -- uu AND Rocq certify everything here). EMPTY:
+   ; the two based-J equivalence roots Lean's elaborator can't reconstruct from the structural
+   ; term (idisweq, iscontrcoconustot) are instead HAND-PROVEN below (the `manual` set), so the
+   ; full 200 port -- matching the Rocq leg. Kept as the mechanism for any future holdout.
    np (tablet 0)
-   _ (map (\ n (pin np n 1)) '(idisweq iscontrcoconustot))
+   _ (map (\ n (pin np n 1)) '())
+
+   ; HAND-WRITTEN Lean proofs for the two based-J equivalence roots the structural
+   ; translation can't reconstruct (see the note above). Tactic mode runs at full
+   ; transparency, so `cases` does the path induction and idfun reduces -- where the
+   ; emitted term stalled. Their ~17 dependents auto-port once these exist. The TYPE is
+   ; still the auto-translated stated type; only the body is replaced.
+   manual (tablet 0)
+   _ (pin manual 'idisweq
+       "  by intro T y; refine ⟨⟨y, @paths.idpath _ y⟩, ?_⟩; intro t; obtain ⟨x, p⟩ := t; cases p; exact @paths.idpath _ _")
+   _ (pin manual 'iscontrcoconustot
+       "  by intro T t; refine ⟨⟨t, @paths.idpath _ t⟩, ?_⟩; intro w; obtain ⟨x, p⟩ := w; cases p; exact @paths.idpath _ _")
 
    ; --- the translator: a uu term -> a Lean string ---
    ; every MLTT constructor is mapped; `un` is the safety net for any unhandled head
@@ -143,7 +152,9 @@
    keep (fix ex0)                                                   ; the closed exportable set
 
    ; --- emit, in source order ---
-   (emit e) ((? (peep red (e2 e) 0) "@[reducible] " "") + "def " + (leann (e2 e)) + " : " + (u2l (e3 e)) + " :=" + nl + "  " + (u2l (e4 e)) + nl)
+   (emit e) (: nm (e2 e) mb (peep manual nm 0)
+     ((? (peep red nm 0) "@[reducible] " "") + "def " + (leann nm) + " : " + (u2l (e3 e)) + " :="
+      + nl + (? mb mb ("  " + (u2l (e4 e)))) + nl))
    exports (foldl (\ a e (? (peep keep (e2 e) 0) (link e a) a)) () ents)   ; foldl reverses -> source order
 
    _ (. (lines `(
@@ -182,8 +193,9 @@
        "#print axioms uu_natpluscomm"
        "#print axioms uu_natplusassoc"
        "#print axioms uu_natmultcomm"
-       "#print axioms uu_iscontr"
        "#print axioms uu_total2_paths_f"
+       "#print axioms uu_idisweq"
+       "#print axioms uu_iscontrcoconustot"
        "")))
    _ (. ("/- " + (show ($ keep)) + " exported / " + (show (tally ents)) + " corpus entries swept;" + nl
          + "   re-certified by Lean 4 -- a second kernel beside Rocq's uugen.v -/" + nl))

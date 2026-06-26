@@ -1,13 +1,11 @@
 vgcore.*
 .gdb_history
 /out/
-# rocq/coqc build artifacts (rocq/spec.v is checked by `make test_proof`)
-# rocq/gen.v: generated from test/spec.l every run (test_gen); not a source
-# rocq/uugen.v: generated from test/uu.l every run (test_uugen); not a source
-rocq/gen.v
-rocq/uugen.v
-# lean/uugen.lean: generated from test/uu.l every run (test_uulean); not a source
-lean/uugen.lean
+# rocq/coqc build artifacts (rocq/spec.v is checked by `make test_proof`).
+# rocq/gen.v, rocq/uugen.v, lean/uugen.lean are GENERATED proof artifacts but are now
+# CHECKED IN (they regen + re-check in seconds) and regenerated every run -- drift-proof:
+# the gate fails if a checked-in copy is stale. Only the compiled outputs below are ignored.
+# (Benches are the exception -- regenerated manually, too slow for per-commit.)
 lean/*.olean
 *.vo
 *.vok
