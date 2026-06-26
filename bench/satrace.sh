@@ -16,6 +16,11 @@
 # 20=UNSAT), and `timeout` exits 124, all of which are normal control flow here.
 R=..
 GL=$R/out/host/ai
+export AI_NO_IMAGE=1   # run ai's solver INTERPRETED -- like run.sh. The image is glazed-by-default,
+                       # and the glaze currently mis-compiles a loop in sat.l (cdcl returns the wrong
+                       # verdict, failing sat.l's self-test -> no RESULT -> a spurious "timeout"). This
+                       # is the "interpreted solver" the shootout is framing anyway; the glaze<->sat.l
+                       # transparency bug is tracked separately.
 TIMEOUT=${1:-30}
 INSTANCES="5 6 7 8"
 SOLVERS="minisat cadical kissat glucose picosat"   # external; ai is special-cased
