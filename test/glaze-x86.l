@@ -539,7 +539,21 @@
       (< 0 (tally (peep (assemble 'arm64 (coreir 'arm64 '(x) '(+ (* x 3) 1) (deoptir 'arm64 0))) 'bytes 0)))   ; leaf
       (< 0 (tally (peep (assemble 'arm64 (coreir 'arm64 '(x y) '(+ (* x x) y) (deoptir 'arm64 1))) 'bytes 0))) ; n-ary (deopt -> interp body)
       !(= (peep (assemble 'x64   (coreir 'x64   '(x) '(+ x 1) (deoptir 'x64 0))) 'bytes 0)
-          (peep (assemble 'arm64 (coreir 'arm64 '(x) '(+ x 1) (deoptir 'arm64 0))) 'bytes 0)))      ; per-target codegen differs
-   (say err "ai/glaze/emit-ir: neutral-IR leaf + n-ary lanes ok (x86 == interp; arm64 assembles)\n")))
+          (peep (assemble 'arm64 (coreir 'arm64 '(x) '(+ x 1) (deoptir 'arm64 0))) 'bytes 0))       ; per-target codegen differs
+      ; --- group lane (jitgroupir): mutually-recursive first-order integer fns, native == interp
+      (55 = ((jitgroupir (L (link '(fib n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))) 'fib 'x64) 10))
+      (= ((ev '(: (fib n) (? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))) fib)) 25)
+         ((jitgroupir (L (link '(fib n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))) 'fib 'x64) 25))          ; fib(25)=75025 == interp
+      (1180591620717411303424 = ((jitgroupir (L (link '(p2 n) '(? (< n 1) 1 (* 2 (p2 (- n 1)))))) 'p2 'x64) 70)) ; 2^70: mul overflow -> OVF -> deopt -> bignum
+      (7 = ((jitgroupir (L (link '(tak x y z) '(? (< y x) (tak (tak (- x 1) y z) (tak (- y 1) z x) (tak (- z 1) x y)) z))) 'tak 'x64) 18 12 6))   ; multi-arg, nested self-calls
+      (7 = (((jitgroupir (L (link '(tak x y z) '(? (< y x) (tak (tak (- x 1) y z) (tak (- y 1) z x) (tak (- z 1) x y)) z))) 'tak 'x64) 18 12) 6)) ; ... curries at any split
+      (: eo (L (link '(evn n) '(? (= n 0) 1 (odn (- n 1)))) (link '(odn n) '(? (= n 0) 0 (evn (- n 1)))))
+         (&& (1 = ((jitgroupir eo 'evn 'x64) 10)) (0 = ((jitgroupir eo 'evn 'x64) 7)) (1 = ((jitgroupir eo 'odn 'x64) 7))))   ; MUTUAL recursion (either entry)
+      (= (jitgroupir (L (link '(fib n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))) 'fib 'x64)
+         (jitgroupir (L (link '(fib n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))) 'fib 'x64))               ; two natives, same source -> = (transparent)
+      ; arm64: the group assembles (data); the H saves lr + uses 16-byte slots + bl calls (llvm-mc-verified)
+      (< 0 (tally (peep (assemble 'arm64 (asm (L (mkouterir 'arm64 1 'fib 1)
+                  (mkhir 'arm64 '(fib) 'fib '(n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))))) 'bytes 0))))
+   (say err "ai/glaze/emit-ir: neutral-IR leaf + n-ary + group lanes ok (x86 == interp; arm64 assembles)\n")))
 
 (say err "test/glaze-x86: emit + auto + ir native codegen ok\n")

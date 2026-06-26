@@ -911,4 +911,79 @@
    ; (jitir '(\ x E) tgt) -- an arity-1 leaf. (jitnir '(\ p0 .. E) tgt) -- arity>=2 (natn curries to saturation).
    (jitir lam tgt)  (jitcore tgt (L (caup lam)) (caup (cup lam)) (deoptir tgt 0) 1 lam)
    (jitnir lam tgt) (: ps (init (cup lam)) body (last (cup lam)) (jitcore tgt ps body (deoptir tgt 1) (tally ps) lam))
+   ; --- the NEUTRAL-IR group lane (jitgroupir) -- a GROUP of mutually-recursive first-order integer fns
+   ;     to native, both targets. The byte path's two-pass offset math VANISHES: `call H_g` is `(call <name>)`,
+   ;     each H opens `(label <name>)`, and asm/ resolves the rel offsets. IR chunks concatenate FLAT via
+   ;     `asm` (foldl-(+); on lists of IR forms, + appends). ADDITIVE -- the byte path (cgg/jitgroup) and
+   ;     auto.l are untouched. (Integer core only: no TCO / value-mode / string|map|cask special ops yet.)
+   ; arg-register ABI: args in the CALLEE-SAVED bank (x86 rbx/r13/r14/r15 = r3/r12/r13/r14; arm64 x19..x22),
+   ; the OVF anchor in another callee-saved reg (govf). a call passes args on the MACHINE STACK; each H
+   ; saves/loads/restores its own arg regs (so a caller's args survive nested calls) + on arm64 saves `lr`
+   ; (bl clobbers it; x86 CALL/RET keeps the return address on the stack). slotsz = the push/pop unit (x86 8,
+   ; arm64 16). mov-to/from-sp is `lea` (the ORR-based mov reads/writes XZR for reg 31, never sp).
+   (slotsz tgt) (? (id? tgt 'x64) 8 16)
+   (govf tgt)   (? (id? tgt 'x64) 'r11 'r23)                                    ; the OVF anchor reg: x86 r12 / arm64 x23
+   (argregir tgt i) (nthl (? (id? tgt 'x64) '(r3 r12 r13 r14) '(r19 r20 r21 r22)) i)
+   (hsave tgt)  (? (id? tgt 'x64) () (L '(push lr)))                            ; arm64 H spills lr; x86 uses CALL/RET's stack
+   (hrest tgt)  (? (id? tgt 'x64) () (L '(pop lr)))
+   (saveargsir tgt k) (foldl (\ a i (asm (L a (L (L 'push (argregir tgt i)))))) () (rangeL 0 k))
+   (restargsir tgt k) (foldl (\ a i (asm (L a (L (L 'pop (argregir tgt (- (- k 1) i))))))) () (rangeL 0 k))
+   (loadargsir tgt k) (foldl (\ a i (asm (L a (L (L 'ld (argregir tgt i) 'sp (* (slotsz tgt) (- (* 2 k) i))))))) () (rangeL 0 k))   ; argreg_i <- the passed arg at [sp + slotsz*(2k-i)]
+   (garith tgt op) (: A (greg tgt 'acc) T (greg tgt 'tmp) SC (greg tgt 'scratch)   ; acc = (popped a) OP acc, overflow -> OVF
+      (? (id? op '+) (L (L 'adds A A T) '(br vs OVF))
+         (id? op '-) (L (L 'subs T T A) '(br vs OVF) (L 'mov A T))
+         (id? op '*) (L (L 'mulo A A T SC 'OVF)) ()))
+   (deoptmn tgt bodyp) (: IP (greg tgt 'ip) T (greg tgt 'tmp)                    ; tail-apply interp (value[1]); bodyp -> its BODY (+16, arity>=2)
+      (L (L 'ld T IP 8) (? bodyp (L 'lea IP T 16) (L 'mov IP T)) (L 'ld T IP 0) (L 'jmpr T)))
+   ; cggir: a group expr e over params ps (in arg regs). syms = the group fn names (call targets). a call
+   ; pushes its args, `call H_g`, pops them; arith/div overflow & /-by-0 jump to the shared OVF handler.
+   (cggir tgt syms ps e)
+    (: A (greg tgt 'acc) T (greg tgt 'tmp)
+      (? (member? e ps) (L (L 'mov A (argregir tgt (argix e ps 0))))
+         (whole? e) (L (L 'li A e))
+         (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+            (? (member? op syms)
+                 (asm (L (gargsir tgt syms ps (cup e)) (L (L 'call op)) (L (L 'add 'sp 'sp (* (slotsz tgt) (tally (cup e)))))))
+               (member? op '(+ - *))
+                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T)) (garith tgt op)))
+               (member? op '(// %))
+                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'test A A) '(br eq OVF) (L 'pop T)) (divir tgt op)))
+               (member? op '(& | ^))
+                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T) (L (bitop op) A A T))))
+               (member? op '(< <= > >= =))
+                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T) (L 'cmp T A) (L 'set (ccof op) A))))
+               (id? op '?)
+                 (: el (mint 0) en (mint 0)
+                    (asm (L (cggir tgt syms ps a) (L (L 'cmp A 0) (L 'br 'le el)) (cggir tgt syms ps b)
+                            (L (L 'jmp en) (L 'label el)) (cggir tgt syms ps (caup (cup (cup e)))) (L (L 'label en)))))
+               ()))
+         ()))
+   (gargsir tgt syms ps as) (? (atom? as) () (asm (L (cggir tgt syms ps (cap as)) (L (L 'push (greg tgt 'acc))) (gargsir tgt syms ps (cup as)))))
+   ; mkhir: one function. label; [push lr]; save arg regs; load the passed args; body; restore; [pop lr]; ret.
+   (mkhir tgt syms nm ps body)
+    (: k (tally ps)
+       (asm (L (L (L 'label nm)) (hsave tgt) (saveargsir tgt k) (loadargsir tgt k)
+               (cggir tgt syms ps body) (restargsir tgt k) (hrest tgt) (L '(ret)))))
+   ; mkouterir: the entry's OUTER -- save anchor+arg regs; anchor=sp; fixnum-guard+push the args; call
+   ; H_entry; pop args; restore; putfix + Continue; OVF (mov sp,anchor -> abandon frames; restore) -> DEOPT.
+   (mkouterir tgt k entry arity)
+    (: A (greg tgt 'acc) S (greg tgt 'sp) IP (greg tgt 'ip) T (greg tgt 'tmp) OVFR (govf tgt) ss (slotsz tgt)
+       pushargs (foldl (\ a i (asm (L a (L (L 'ld A S (* 8 i)) (L 'test A 1) '(br eq OVF) (L 'sar A 1) (L 'push A))))) () (rangeL 0 k))
+       (asm (L (L (L 'push OVFR)) (saveargsir tgt k) (L (L 'lea OVFR 'sp 0)) pushargs
+               (L (L 'call entry) (L 'add 'sp 'sp (* ss k))) (restargsir tgt k) (L (L 'pop OVFR))
+               (L (L 'adds A A A) '(br vs DEOPT) (L 'or A A 1) (L 'st S 0 A) (L 'add IP IP 16) (L 'ld T IP 0) (L 'jmpr T))
+               (L (L 'label 'OVF) (L 'lea 'sp OVFR 0)) (restargsir tgt k) (L (L 'pop OVFR))
+               (L (L 'label 'DEOPT)) (deoptmn tgt (> arity 1)))))
+   ; (jitgroupir defs entry tgt) -- defs = ((nameform . body) ..); compile the group, entry as the value.
+   (jitgroupir defs entry tgt)
+    (: parse (map (\ d (: nf (cap d) (L (cap nf) (cup nf) (cup d)))) defs)            ; (name params body) per fn
+       syms (map cap parse)                                                            ; the fn names (call targets)
+       efn (gfind (\ f (id? (cap f) entry)) parse)  k (tally (nthl efn 1))
+       ord (link efn (gfilt (\ f (! (id? (cap f) entry))) parse))                      ; entry first (H_entry sits right after the OUTER)
+       outer (mkouterir tgt k entry k)
+       Hs (foldl (\ a f (asm (L a (mkhir tgt syms (cap f) (nthl f 1) (nthl f 2))))) () ord)
+       lrf (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lrf (cup ds)))))))
+       fb (ev (link ': (lrf defs)))                                                    ; the WHOLE group interpreted -- the deopt fallback
+       elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                              ; the entry's source lambda (=/show)
+       (nif (emit (peep (assemble tgt (asm (L outer Hs))) 'bytes 0)) fb elam k))
 )
