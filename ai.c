@@ -195,7 +195,7 @@ lvm_t lvm_kcall,
  lvm_link,   lvm_cap,  lvm_cup,    lvm_puts,
  lvm_getc,  lvm_string, lvm_lt,     lvm_le,   lvm_eq,     lvm_same, lvm_gt,  lvm_ge,
  lvm_sort,  lvm_tally,
- lvm_put, lvm_pull, lvm_table,   lvm_keys,  lvm_dig,
+ lvm_put, lvm_pull, lvm_tablet,   lvm_keys,  lvm_dig,
  lvm_unc, lvm_poke, lvm_peek,
  lvm_seek,  lvm_trim,   lvm_twirl,   lvm_add,
  lvm_sub,   lvm_mul,    lvm_quot,   lvm_fquot, lvm_rem,  lvm_arg,
@@ -307,6 +307,7 @@ static ai_inline bool tabp(word _) { return lamp(_) && cell(_)->ap == lvm_map_lo
 static const word ai_map_gap_cell = 0;
 #define map_gap ((word) &ai_map_gap_cell)
 #define map_min_cap 4
+#define map_hint_max (1u << 24)        // the `(tablet n)` size hint saturates to this bounded green charm
 static ai_inline word map_back(word m) { return cell(m)[1].x; }
 static ai_inline word *map_slots(word m) { return &cell(map_back(m))[3].x; }
 static ai_inline uintptr_t map_len(word m) { return getcharm(cell(map_back(m))[1].x); }
@@ -781,7 +782,7 @@ lvm_t lvm_fault;
  _(nif_peek, "peek", s2(lvm_peek)) _(nif_poke, "poke", s3(lvm_poke)) _(nif_trim, "trim", s1(lvm_trim))\
  _(nif_seek, "seek", s2(lvm_seek)) _(nif_pin, "saturate", s1(lvm_pin)) _(nif_peep, "peep", s3(lvm_peep))\
  _(nif_put, "pin", s3(lvm_put)) _(nif_pull, "pull", s3(lvm_pull))\
- _(nif_table, "tablet", s1(lvm_table)) _(nif_keys, "keys", s1(lvm_keys))\
+ _(nif_table, "tablet", s1(lvm_tablet)) _(nif_keys, "keys", s1(lvm_keys))\
  _(nif_dig, "dig", s1(lvm_dig))\
  _(nif_bufnew, "cask", s1(lvm_bufnew)) _(nif_bcopy, "pour", s5(lvm_bcopy))\
  _(nif_eat1, "eat1", s2(lvm_eat1)) _(nif_eat2, "eat2", s3(lvm_eat2)) _(nif_toast, "toast", s1(lvm_toast))\
@@ -4399,7 +4400,7 @@ static ai_noinline word ai_mapdel(struct ai *g, word m, word k, word zero) {
  cell(map_back(m))[1].x = putcharm(map_len(m) - 1);
  return m; }
 
-// C-callable fresh empty map, pushed on sp[0]. Same shape as lvm_table.
+// C-callable fresh empty map, pushed on sp[0]. Same shape as lvm_tablet.
 static struct ai *map_new(struct ai *g) {
  uintptr_t cap = map_min_cap, nb = 4 + 2 * cap;
  if (!ai_ok(g = ai_have(g, nb + 3))) return g;
@@ -4408,9 +4409,17 @@ static struct ai *map_new(struct ai *g) {
  g->hp += nb + 3;
  return ai_push(g, 1, (word) h); }
 
-// (tablet _): a fresh empty map -- header [lvm_map_lookup, backing] + backing.
-lvm(lvm_table) {
- uintptr_t cap = map_min_cap, nb = 4 + 2 * cap;
+// (tablet n): a fresh EMPTY map -- header [lvm_map_lookup, backing] + backing.
+// n is a SIZE HINT: the backing is presized to hold n entries below the 0.75 load
+// factor (ai_mapput grows when (len+1)*4 >= cap*3), so a loop that inserts n known
+// keys never rehashes. n<=0 (incl. the bare `(tablet 0)`) keeps the min capacity.
+// The map is empty either way (len 0); the hint is a pure throughput optimization.
+lvm(lvm_tablet) {
+ intptr_t raw = charmp(Sp[0]) ? getcharm(Sp[0]) : 0;          // saturate to a bounded green charm first
+ uintptr_t hint = raw <= 0 ? 0 : (uintptr_t) raw > map_hint_max ? map_hint_max : (uintptr_t) raw;
+ uintptr_t cap = map_min_cap;
+ while (cap * 3 <= hint * 4) cap *= 2;                        // grow to hold `hint` below the 0.75 load factor
+ uintptr_t nb = 4 + 2 * cap;
  Have(nb + 3);
  union u *b = map_fill_back((union u*) Hp, cap);
  union u *h = (union u*) (Hp + nb);

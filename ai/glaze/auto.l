@@ -341,13 +341,19 @@
              sibnames (map caap (gfilt fnpair? ipairs))                                           ; all inner fn NAMES
              valnames (map cap (gfilt (\ pr (! (fnpair? pr))) ipairs))                            ; inner value-binding names (bare symbols)
              wlifts (gfilt (\ pr (&& (name? (wmaph pr sibnames)) (bumpok? (caap pr) pr ipairs ibody))) ipairs)   ; the hoistable WRITE-loops (map RMW, discarded result)
+             mapsz (foldl (\ m w (: H (wmaph w sibnames) bd (cup w)                                  ; PRESIZE: each write-loop's map H -> its counted bound N
+                            cnd (? (&& (two? bd) (id? (cap bd) '?)) (opd bd 0) ())
+                            N (? (&& (two? cnd) (id? (cap cnd) '<)) (opd cnd 1) ())                   ; cond (< i N) -> the bound
+                            (? (&& (name? H) (! (id? N ()))) (link (link H N) m) m))) () wlifts)       ; so `(tablet 0)` -> `(tablet N)`: the native inserts never grow
              lifts (cat (gfilt (\ pr (roloop? pr sibnames)) ipairs) wlifts)
              (? (atom? lifts) (L Fpair ())
                 (: remain (gfilt (\ pr (! (any (\ lp (id? pr lp)) lifts))) ipairs)                ; the NON-lifted inner bindings (by identity)
                    specs (map (\ pr (link (caap pr)                                               ; per lift a spec (g gn fv..): name, hoisted name F_g, captures
                                   (link (intern (+ (string F) (+ "_" (string (caap pr)))))
                                         (gfilt (\ s (&& (! (id? s '_)) (! (member? s (cuap pr))) (occurs? s (cup pr)))) (cat P valnames))))) lifts)   ; `_` is the throwaway/effect binding -- the loop body REBINDS it locally (the pin slot), never captures the enclosing one
-                   rwp (foldl (\ ps sp (subst-pairs (cap sp) (caup sp) (cuup sp) ps)) remain specs)   ; rewrite (g A..) calls through every spec, in the remaining bindings
+                   (presz pr) (? (fnpair? pr) pr (: ms (afind (\ x (id? (cap x) (cap pr))) mapsz) v (cup pr)   ; a map binding `(H (tablet 0))` -> `(H (tablet N))`
+                                  (? (&& (two? ms) (two? v) (id? (cap v) 'tablet)) (link (cap pr) `('tablet (cup ms))) pr)))   ; presize `(tablet N)` so the N native inserts never grow
+                   rwp (map presz (foldl (\ ps sp (subst-pairs (cap sp) (caup sp) (cuup sp) ps)) remain specs))   ; rewrite (g A..) calls through every spec, then PRESIZE the maps
                    rwb (foldl (\ b sp (subst-call (cap sp) (caup sp) (cuup sp) b)) ibody specs)       ; ... and in the trailing body
                    newdefs (map (\ sp (: lp (afind (\ pr (id? (caap pr) (cap sp))) lifts)            ; the hoisted def: (gn fv.. q..) . body'[g->gn]
                                   wl (any (\ w (id? w lp)) wlifts)                                   ; a WRITE-loop -> threaded body; else the plain read-only rename
