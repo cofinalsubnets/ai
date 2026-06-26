@@ -145,10 +145,18 @@ identical sequence), sorts ascending, and checksums an order-dependent rolling
 hash of the result (so the checksum verifies the *ordering*, not just the
 multiset). ai uses the prel's `sort` (a list merge sort added for this);
 every other dialect uses its built-in sort, so the column reads as library sort
-quality. `tree` is the classic binary-trees alloc/GC stress: build a perfect
+quality. `tree` (and `bintrees`) is the classic binary-trees alloc/GC stress: build a perfect
 depth-16 tree (2¹⁶−1 nodes, leaves nil) and traverse counting nodes — it churns
 small two-field aggregates (cons pairs / 2-tuples / `[ai r]`) and exercises the
-collector more than any other bench. `float` is mandelbrot escape counts over a
+collector more than any other bench. This is where allocation STRATEGY shows: ai's
+copying GC bump-allocates and **bulk-reclaims** dead nodes (a pointer-bump to allocate,
+nothing to free per object) — ideal for ephemeral churn. The naïve `Box<Tree>` in Rust
+is the opposite — a `malloc` *and* an individual `drop`/free **per node** — its worst
+case, and the only reason a GC'd language would "win" the row. So `tree.rs`/`bintrees.rs`
+use a bump **arena** (nodes in a pre-sized `Vec`, children as indices, bulk-freed at the
+end): Rust's memory model used *well*, the same bump-then-bulk shape ai's collector has —
+and it lands ahead of ai/go (Rust ~0.55 vs ai ~0.86 on `tree`). The honest reading is
+"copying GC vs. arena," both at their best, not "ai is faster at trees." `float` is mandelbrot escape counts over a
 64×64 grid: pure f64 `+`/`−`/`*`/`<=` (no transcendentals) over exactly
 representable constants, with an integer checksum, so it is bit-identical
 everywhere — including ai's *boxed*-float path, which is the point (it's the
@@ -161,28 +169,35 @@ A caution the `closure` bench taught us: an **optimizing backend can evaluate th
 whole loop at compile time.** Its inputs are compile-time constants and
 `twice (adder i) i` reduces to `3i`, so LLVM's scalar-evolution recognizes the
 series `Σ 3i`, closes it to a formula, and folds the bench to a single literal — a
-meaningless O(1) "result" (we saw 0.05 µs/it, ~150,000× too fast). Julia (LLVM JIT)
-and Rust (`rustc -O`) both do it, and constant-argument recursion folds the same way
-(`fib(30)`/`tak(22,12,6)` collapse to a literal → an infinite rep-doubling hang). The
-fix is to make the loop's inputs opaque to the optimizer — Julia iterates a prebuilt
-vector instead of a literal range, Rust wraps inputs in `std::hint::black_box` — so
-the real O(n) loop must run. The checksum is unchanged; only the timing becomes
-honest. (This is where partial evaluation shades into closed-form recurrence solving,
-a backend doing it uninvited.)
+meaningless O(1) "result" if `work()` becomes a constant the rep-doubler can hoist out
+(→ an infinite rep-doubling hang). The same trap closes constant-argument recursion
+(`fib(30)`/`tak(22,12,6)` collapse to a literal). The fix is to make the **input**
+opaque so the call can't fold to a compile-time literal — Rust wraps the *input* in
+`std::hint::black_box`, Julia iterates a prebuilt vector — while leaving the optimizer
+free to do its real runtime work.
 
-`deforest` and `polysum` are the two sides of that coin, deliberately. Both are the
-same odd-squares map/filter/fold pipeline. **`deforest`** has a `% p` in the body,
-which keeps it non-polynomial: ai's glaze FUSES the pipeline to one native counted
-loop (no intermediate lists) but cannot close it, so every language runs an honest
-O(n) loop — it measures the *fusion* a functional pipeline needs to land at the
-hand-written loop's cost. **`polysum`** drops the `%`, leaving a pure-polynomial body,
-and ai's **loop-closer** collapses it to its closed form — Σ over the odds
-reparametrized to `k=2j+1` and summed by finite differences — so ai runs O(1) while
-everyone else runs O(n). That is the closure caution turned into a feature: a closed-
-form recurrence solver invited *in*, and one that reaches the case LLVM's
-scalar-evolution punts on (it gives up on the data-dependent odd filter; the
-loop-closer changes variable and solves it). So ai's `polysum` cell is ~0 by design,
-and the cross-language row reads honestly as "O(1) closed form vs. O(n) loop."
+**Apples-to-apples.** Once ai's own glaze does aggressive loop-closing, hobbling LLVM
+with *per-element* `black_box` (forcing an O(n) loop) on the closed-form benches stops
+being fair. So the recognition benches black_box only the input `n`; `rustc -O` is then
+free to apply its own SCEV, exactly as ai applies its loop-closer. The measured result
+is honest both ways — and a pleasant surprise on `polysum`:
+
+- **`polysum`** (sum of the odd squares) — ai's loop-closer reparametrizes the odds to
+  `k=2j+1` and sums by finite differences (O(1)); LLVM's SCEV *cannot* — un-hobbled, it
+  still runs O(n), because the data-dependent odd filter defeats scalar-evolution. So
+  **ai genuinely wins this**, not by handicap.
+- **`closure`** (`Σ 3i`, no filter) — LLVM closes it to O(1) and **wins**; ai's glaze
+  only dehof-inlines the higher-order functions to a first-order loop, it doesn't reach
+  its closer through them. Honestly rust's row.
+- **`deforest`** — the `% p` keeps the body non-polynomial, so *neither* compiler can
+  close it; both run an honest O(n) FUSED loop (ai deforests to one native counted loop,
+  `rustc -O` fuses + vectorizes the iterator chain). It measures the abstraction cost of
+  the functional pipeline.
+
+`fib`/`tak` keep their input-`black_box` (else the whole recursion folds to a literal and
+the rep-doubler hangs). `sum`/`mapfilter` keep per-element opacity on purpose — they
+measure list-vs-array *traversal*, where neither side closes anything; relaxing them
+would turn a traversal bench into a closing contest.
 
 The two string benches split the write and read paths. `strcat` builds a string
 one character at a time with each language's concatenation operator (pypy/luajit/
