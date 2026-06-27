@@ -15,4 +15,4 @@
  ; inner: c0-ev compiles the corpus; outer: that hatchling recompiles it -> ev self-hosted,
  ; not c0-compiled. the Futamura move: specialize the evaluator to the corpus, twice.
  _ (mop (pin book 'ev (sit (sit ev 0 egg) 0 egg)))
- (pull (pin book 'born (clock now)) 'book 0))))
+ (pin book 'born (clock now)))))   ; keep `book` reachable post-egg -- the host image-dump pulls eat/toast/nif + seals book (users); the no-image dev/test binary keeps them as the test knob
