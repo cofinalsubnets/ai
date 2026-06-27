@@ -446,6 +446,11 @@ static char const baolaunch[] = "(bao 0)";   // bao.l is define-only -> the fron
 extern int image_dump(struct ai*, char const*);          // host/image.c (file I/O around ai.c's codec)
 extern struct ai *image_load(char const*);
 static char const *image_dump_path = NULL;
+// The baked post-boot image: a reserve in its own .image section (host/image_baked.c), patched in
+// post-link by the Makefile (the binary dumps itself, then objcopy bakes the bytes back in). Loaded
+// at startup when its magic validates; else a normal egg boot. The <exe>.img sidecar is the fallback.
+extern uint64_t ai_baked_image[];
+extern uintptr_t ai_baked_image_len;
 // the glaze (native JIT, ai/glaze/{emit,auto}.l), x86-64 only. Baked but evaled ONLY
 // before a --dump-image -- so a normal boot never pays the ~810 ms native-compile of
 // its self-tests, while the dumped snapshot carries the JIT always-on at zero startup
@@ -516,9 +521,12 @@ int main(int argc, char const **argv) {
   // truncated -- makes image_load return NULL, so we fall through to the normal egg boot. Never wrong.
   static char autopath[4096];
   if (!g && !image_dump_path && !getenv("AI_NO_IMAGE")) {
-    ssize_t n = readlink("/proc/self/exe", autopath, sizeof autopath - 5);
-    if (n > 0) { memcpy(autopath + n, ".img", 5);                            // ".img\0" past the exe path
-      if ((g = image_load(autopath))) image_load_path = autopath; } }
+    if (ai_baked_image_len && (g = ai_image_load(ai_baked_image, ai_baked_image_len)))
+      image_load_path = "<baked>";                                       // a loaded image is the booted state: skip the egg warm
+    if (!g) {                                                              // else the <exe>.img sidecar
+      ssize_t n = readlink("/proc/self/exe", autopath, sizeof autopath - 5);
+      if (n > 0) { memcpy(autopath + n, ".img", 5);                        // ".img\0" past the exe path
+        if ((g = image_load(autopath))) image_load_path = autopath; } } }
 #endif
   if (!g) g = ai_ini();
   bool argp = argc > 1;

@@ -429,6 +429,10 @@ ai0: $(ai0)
 $(ho)/ai.img: $(ho)/ai
 	@echo IMG	$@
 	@$(ho)/ai --dump-image $@
+	@echo BAKE	$(ho)/ai
+	@secsz=$$(objdump -h $(ho)/ai | awk '/\.image/{print strtonum("0x"$$3)}'); \
+	 sz=$$(stat -c%s $@); test $$sz -le $$secsz || { echo "image $$sz > .image reserve $$secsz -- bump RESERVE_WORDS in host/image_baked.c"; exit 1; }; \
+	 cp $@ $@.pad && truncate -s $$secsz $@.pad && objcopy --update-section .image=$@.pad $(ho)/ai && rm -f $@.pad
 
 # cook/Cookfile: this Makefile transpiled into a resolved cook recipe by
 # `cook --emit` (cook/cook.l). cook reads this Makefile directly too, but the
