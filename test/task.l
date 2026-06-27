@@ -30,7 +30,7 @@
  ; wait on an unknown pid returns 0 without blocking.
  (= 0 (catch 99999))
  ; non-numeric pid argument: also 0.
- (= 0 (catch nil))
+ (= 0 (catch ()))
  ; pid 0 (main) is treated as not-waitable from main itself.
  (= 0 (catch 0))
 
@@ -79,7 +79,7 @@
  ; done? on an unknown pid is true (catch would return 0 immediately).
  (= 1 (back? 99999))
  ; done? on a non-numeric pid is true.
- (= 1 (back? nil))
+ (= 1 (back? ()))
  ; done? on the caller's own pid (main = 0) is true — wait skips self.
  (= 1 (back? 0))
 
@@ -97,7 +97,7 @@
  ; sleep with non-positive n returns nil immediately without yielding.
  (nil? (rest 0))
  (nil? (rest -1))
- (nil? (rest nil))
+ (nil? (rest ()))
 
  ; sleep takes at least n ticks (g_clock ms on this frontend).
  ; allow generous slack for slow CI.
@@ -139,7 +139,7 @@
  ; chill on an unknown pid: 0, no-op.
  (= 0 (freeze 99999))
  ; chill on a non-numeric pid: 0.
- (= 0 (freeze nil))
+ (= 0 (freeze ()))
  ; chill on self (main = 0): 0 (self-chill impossible by construction).
  (= 0 (freeze 0))
 
