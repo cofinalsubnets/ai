@@ -979,6 +979,10 @@
                   (asm `((cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel (mpeep-ir (? (whole? d) d 0)) lp ht ms en 'deopt))))   ; k -> acc; r10 = tagged key (2k+1); acc = MAP; the probe (labels gensym'd)
                (id? op 'mpin) (: R (argregir tgt (argix a ps 0)) val (caup (cup (cup e))) lp (mint 0) ht (mint 0) ms (mint 0) en (mint 0)   ; (mpin MAP k v): probe + UPDATE-in-place; a grow-due MISS -> OVF (full unwind+deopt); returns MAP
                   (asm `((cggir tgt syms ps val) `(`('push A)) (cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel mpin-ir lp ht ms en 'OVF) `(`('mov A R)))))   ; v -> acc, push (spill); k -> acc; r10=tag(k); acc=MAP; probe+store (the `(pop r8)` tail pops v); acc=MAP (threaded)
+               (id? op 'two?) (: z (mint 0) en (mint 0)                                       ; (two? E): is E a chain? -> 1/0, TOTAL (no deopt -- a non-chain reads 0)
+                  (asm `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne z) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne z) `('li A 1) `('jmp en) `('label z) `('li A 0) `('label en)))))
+               (id? op 'cap) (asm `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne 'OVF) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne 'OVF) `('ld A A 8))))    ; (cap E): chain-guard -> OVF (non-chain deopts; always under two?), then acc=[E+8]
+               (id? op 'cup) (asm `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne 'OVF) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne 'OVF) `('ld A A 16))))   ; (cup E): chain-guard, then acc=[E+16]
                ()))
          ()))
    (gargsir tgt syms ps as) (? (atom? as) () (asm (L (cggir tgt syms ps (cap as)) (L (L 'push (greg tgt 'acc))) (gargsir tgt syms ps (cup as)))))
@@ -1010,11 +1014,27 @@
                          `(`('jmp en) `('label el)) (cggvir tgt syms ps (caup (cup (cup e)))) `(`('label en)))))
                ()))
          ()))
-   ; mkhir: one function. label; [push lr]; save arg regs; load the passed args; body; restore; [pop lr]; ret.
+   ; cggtir: e in TAIL position. a tail SELF-call (selfnm, matching arity) -> compute the new args (from the
+   ;   OLD arg regs) onto the machine stack, pop them into the arg regs, then jmp Lbody (the body-start, past
+   ;   save/load) -- the frame is REUSED, so a counted loop is O(1) stack, no call/ret per iteration. a tail ?
+   ;   recurses tail into both branches (the test stays non-tail). everything else -> cggir (value in acc),
+   ;   falling through to restore+ret. self-only (a sibling tail-call stays a plain `call`, as the byte path).
+   (cggtir tgt syms ps e selfnm Lbody)
+    (: A (greg tgt 'acc) k (tally ps)
+       (? (&& (two? e) (id? (cap e) selfnm) (= (tally (cup e)) k))                    ; TAIL SELF-CALL -> loop in place
+            (asm `((gargsir tgt syms ps (cup e))                                      ; push the new args (all from the OLD regs)
+                   (foldl (\ a i (asm `(a `(`('pop (argregir tgt (- (- k 1) i))))))) () (rangeL 0 k))   ; pop into the arg regs, reverse
+                   `(`('jmp Lbody))))
+          (&& (two? e) (id? (cap e) '?))                                              ; TAIL ? -> test non-tail, both branches tail
+            (: el (mint 0) en (mint 0)
+               (asm `((cggir tgt syms ps (caup e)) `(`('cmp A 0) `('br 'le el)) (cggtir tgt syms ps (caup (cup e)) selfnm Lbody)
+                      `(`('jmp en) `('label el)) (cggtir tgt syms ps (caup (cup (cup e))) selfnm Lbody) `(`('label en)))))
+          (cggir tgt syms ps e)))                                                     ; any other tail expr -> value in acc
+   ; mkhir: one function. label; [push lr]; save arg regs; load the passed args; Lbody:; body; restore; [pop lr]; ret.
    (mkhir tgt syms nm ps body)
-    (: k (tally ps)
-       (asm (L (L (L 'label nm)) (hsave tgt) (saveargsir tgt k) (loadargsir tgt k)
-               (? (hasl body) (cggvir tgt syms ps body) (cggir tgt syms ps body))   ; VALUE-typed body (conses) -> cggvir, else integer cggir
+    (: k (tally ps) Lbody (mint 0)
+       (asm (L (L (L 'label nm)) (hsave tgt) (saveargsir tgt k) (loadargsir tgt k) (L (L 'label Lbody))
+               (? (hasl body) (cggvir tgt syms ps body) (cggtir tgt syms ps body nm Lbody))   ; VALUE body (conses) -> cggvir (no TCO); int body -> cggtir (TCO)
                (restargsir tgt k) (hrest tgt) (L '(ret)))))
    ; mkouterir: the entry's OUTER -- save anchor+arg regs; anchor=sp; fixnum-guard+push the args; call
    ; H_entry; pop args; restore; putfix + Continue; OVF (mov sp,anchor -> abandon frames; restore) -> DEOPT.
@@ -1045,7 +1065,7 @@
    ; gate is vacuously true for any admitted group, so jitgroup retires. (`?`/`link` already covered: int +
    ; value-mode cons. No tail-call detection needed: a tail self-call compiles as a plain `call` -- correct,
    ; just not yet O(1)-stack; the loop lanes catch counted loops upstream.)
-   jgir-supported '(+ - * // % & | ^ < <= > >= = ? link peep tally pin mpeep mpin)   ; ops cggir/cggvir handle (grows per lane: cap cup two?)
+   jgir-supported '(+ - * // % & | ^ < <= > >= = ? link peep tally pin mpeep mpin two? cap cup)   ; the full op set cggir/cggvir handle (gate now vacuous for any recognizer-admitted group)
    (jgir-ops-ok? syms e) (? (two? e)                                            ; every op head in e is a group call or a supported op; recurse into every operand
       (: op (cap e) (&& (|| (member? op syms) (member? op jgir-supported)) (all (\ x (jgir-ops-ok? syms x)) (cup e))))
       1)

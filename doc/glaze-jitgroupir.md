@@ -17,7 +17,11 @@ back to the byte path; `auto.l`'s `rewrite-bindings` calls it (line ~833). This 
 | string (`peep`/`tally`) | `cgg` 223-237 | `cggir` ✅ (+ `smask` guard in `mkouterir`) | op-coverage |
 | cask (`pin`) | `cgg` 238-244 | `cggir` ✅ (`stxb`; + `bufmask` guard) | op-coverage |
 | map (`mpeep`/`mpin`) | `cgg` 227-236 (asmx) | `cggir` ✅ (`relabel`'d probe; + `mmask` guard) | op-coverage |
-| chain (`cap`/`cup`/`two?`) | `cgg` 245-250 | — | — |
+| chain (`cap`/`cup`/`two?`) | `cgg` 245-250 | `cggir` ✅ (`cmask`, no entry guard; `cap`/`cup` deopt inline) | op-coverage |
+| TCO (tail self-call → loop) | `cggt` | `cggtir` ✅ (+ `Lbody` in `mkhir`) | n/a |
+
+**The gate is now vacuous** — `jgir-supported` holds every op the recognizer admits, so `jgir-ok?`
+is true for any admitted group and the byte path (`jitgroup`) is unreachable. Stage 7 retires it.
 | TCO (tail self-call → loop) | `cggt` | — (compiles as `call`: correct, O(n) stack) | n/a |
 
 The string lane needed a new assembler primitive: the IR had no byte-width memory op, but `peep` is a
@@ -143,9 +147,14 @@ porting a lane just re-routes its asserts from `jitgroup` to `jitgroupir` with n
    `peep`/`pin` (the byte path does this; without it the fallback hit unbound `mpeep` → `(() m 3 -1)` =
    const-1 = -1 — the silent trap, found via the grow-deopt path). The sequence law makes the alias
    `(mpeep mc mk md) (peep mc mk md)` read the *previous*/global `peep`, not recurse.
-5. **chain** (`cap`/`cup`/`two?` + `cmask`) → `rcl` (tree walk); `rcb` stays interp (recognizer rejects
-   `cap`-into-arith — unchanged).
-6. **TCO** (`cggtir` + `Lbody`) → `primes`/`tak`/loop asserts keep O(1) stack on the IR path.
+5. **chain** ✅ — `cap`/`cup`/`two?` in `cggir`; `cmask` params raw, NO entry guard (`two?` total;
+   `cap`/`cup` chain-guard inline → `OVF`). `rcl` (tree walk) glazes `ck`; `rcb` stays interp (recognizer
+   rejects `cap`-into-arith). GOTCHA: in backtick IR, write `'OVF` (the literal label) — bare `OVF` is a
+   variable read → missing → `()` → `undef-label ()`.
+6. **TCO** ✅ — `cggtir` (tail self-call → compute new args, pop into arg regs, `jmp Lbody`; tail `?`
+   recurses tail; else `cggir`) + `Lbody` label in `mkhir` after loadargs. Self-only (sibling tail-calls
+   stay `call`, as the byte path). **Required before the vacuous gate is safe**: a 1M-deep tail loop via
+   jitgroupir without TCO SIGSEGVs (verified exit 139 → fixed; the 1M loop now returns its value).
 7. **retire** — once the gate is vacuous for every recognizer-admitted group, drop the
    `(jgir-ok? …) … (jitgroup …)` fallback and delete `cgg`/`cggv`/`cggt`/`mkouter`/`jitgroup` +
    `consemit`/`mkguards`/`mkig` from `emit.l`. (Keep `suse?`/`cuse?`/`muse?`/`buse?`/`smfix` — reused.)

@@ -594,6 +594,14 @@
          (&& (20 = r16) (40 = (peep m16 5 -1)) (0 = (peep m16 1 -1))                                                 ; native mpin wrote REAL entries (the core map accessor reads them)
              (20 = r2) (80 = (peep m2 9 -1))                                                                         ; grow-deopt faithful: same result + the map actually grew & inserted
              (-1 = ((jitgroupir (L (link '(g m k) '(mpeep m k -1))) 'g 'x64) 5 3))))                                 ; a FIXNUM map arg -> guard rejects -> deopt -> interp peep on a scalar = the default -1
+      ; CHAIN lane (cap/cup/two?): t a chain param (raw, NO entry guard -- two? is TOTAL; cap/cup chain-guard inline, deopting a non-chain)
+      (: (mk d) (? (< d 1) 0 (link (mk (- d 1)) (mk (- d 1))))                                                       ; an interp tree builder (the allocating mk stays interp)
+         ckn (jitgroupir (L (link '(ck t) '(? (two? t) (+ 1 (+ (ck (cap t)) (ck (cup t)))) 0))) 'ck 'x64)            ; native node-count walk
+         (&& (255 = (ckn (mk 8))) (15 = (ckn (mk 4)))                                                                ; 2^d-1 nodes, native cap/cup recursion
+             (0 = (ckn 0)) (1 = (ckn (link 0 0)))))                                                                  ; two? total: a fixnum leaf -> 0; a lone chain -> 1
+      ; TCO: a tail self-call loops IN PLACE (reuse the frame, O(1) stack) -- 1M deep would SIGSEGV without it
+      (1000000 = ((jitgroupir (L (link '(loop i) '(? (< i 1000000) (loop (+ i 1)) i))) 'loop 'x64) 0))               ; single-arg counted loop
+      (499999500000 = ((jitgroupir (L (link '(sm i a) '(? (< i 1000000) (sm (+ i 1) (+ a i)) a))) 'sm 'x64) 0 0))    ; multi-arg tail accumulator (sum 0..1M-1)
       ; arm64: the group assembles (data); the H saves lr + uses 16-byte slots + bl calls (llvm-mc-verified)
       (< 0 (tally (peep (assemble 'arm64 (asm (L (mkouterir 'arm64 1 'fib 1 0 () () () ())
                   (mkhir 'arm64 '(fib) 'fib '(n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))))) 'bytes 0))))
