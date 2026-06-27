@@ -295,25 +295,25 @@ sed_lit = sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/'
 gl0_h = out/lib/cli0.h out/lib/egg0.h out/lib/prel0.h out/lib/ev0.h out/lib/bao0.h out/lib/tests0.h $(asm0_h)
 .PHONY: lib
 lib: $(lib_h) $(gl0_h)
+# lcat a .l source into its C-string header, ATOMICALLY: generate to a temp, require it
+# non-empty, then mv into place. A bare `> $@` truncates first, so a broken ai0 (or any
+# lcat failure) would leave a 0-byte header that make then treats as up-to-date -- which
+# SILENTLY drops a baked service (e.g. an empty asm.h => `assemble` unbound => the glaze's
+# map lane emits nothing => a corrupt native => crash/hang). Fail loudly instead.
+lcat_h = @mkdir -p out/lib; echo AI	$@; \
+  $(ai0) -l ai/prel.l tools/lcat.l $< > $@.tmp && test -s $@.tmp && mv -f $@.tmp $@ \
+    || { rm -f $@.tmp; echo "FAIL: $@ empty (ai0 lcat failed -- broken bootstrap?)"; exit 1; }
 $(lib_h): out/lib/%.h: ai/%.l tools/lcat.l   # + $(ai0), stated below where it is in scope
-	@mkdir -p out/lib
-	@echo AI	$@
-	@$(ai0) -l ai/prel.l tools/lcat.l $< > $@
+	$(lcat_h)
 # the asm/ assembler (asm/asm.l + asm/x64.l) rides the SAME lcat pipeline into the
 # post-egg layer -- a core language service (the glaze is its client). Explicit rules
 # (their sources live in asm/, not ai/, so the pattern rule above misses them).
 out/lib/asm.h: asm/asm.l tools/lcat.l
-	@mkdir -p out/lib
-	@echo AI	$@
-	@$(ai0) -l ai/prel.l tools/lcat.l $< > $@
+	$(lcat_h)
 out/lib/x64.h: asm/x64.l tools/lcat.l
-	@mkdir -p out/lib
-	@echo AI	$@
-	@$(ai0) -l ai/prel.l tools/lcat.l $< > $@
+	$(lcat_h)
 out/lib/arm64.h: asm/arm64.l tools/lcat.l
-	@mkdir -p out/lib
-	@echo AI	$@
-	@$(ai0) -l ai/prel.l tools/lcat.l $< > $@
+	$(lcat_h)
 # ai0's sed-wrapped raw source of the same three (no interpreter -- the l reader
 # strips ; comments at read time), baked into the bootstrap so the corpus can test
 # the assembler under BOTH compilers (c0 + the self-hosted ev), like prel/ev/bao.
