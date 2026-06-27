@@ -477,9 +477,9 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "bao.h"
   );
 #if defined(__x86_64__)
-  g = ai_evals_(g, glaze_emit);                          // ALWAYS load the native JIT post-egg -> ev = auto-ev, glaze
-  g = ai_evals_(g, glaze_auto);                          // always-on (no fragile stale image). base-ev captures the
-#endif                                                   // hatched ev. ~680ms from-scratch; the image snapshots past it.
+  g = ai_evals_(g, glaze_emit);                          // load the native JIT post-egg -> ev = auto-ev, glaze always-on
+  g = ai_evals_(g, glaze_auto);                          // (no fragile stale image; base-ev captures the hatched ev).
+#endif                                                   // ~680ms from-scratch; the image snapshots past it.
   if (image_dump_path) {                                 // --dump-image: snapshot the post-warm heap, then exit
 #if defined(__x86_64__)
     // auto.l's self-tests ran auto-ev, filling the `memo` compile cache with native nif

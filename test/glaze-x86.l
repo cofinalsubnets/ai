@@ -1,8 +1,9 @@
 ; glaze-x86 -- the x86-64 native-codegen self-tests for the glaze (ai/glaze/{emit,auto}.l), the
 ; EXECUTING counterpart to the arch-neutral test/glaze.l (which only checks the substrate). HOST-
 ; x86-ONLY: these INSTALL and EXECUTE native machine code, so they're run only by the x86-guarded
-; `make test_glaze` (never the arch-neutral corpus -- common.mk filters this file out). test_glaze
-; cats emit.l + auto.l ahead of this file, so jit/jitsum/jitgroupir/.../base-ev/autogroup are bound.
+; `make test_glaze` (never the arch-neutral corpus -- common.mk filters this file out). It runs against
+; the binary's BAKED glaze (boot loads emit.l+auto.l), so jit/jitsum/jitgroupir/.../base-ev/autogroup are
+; bound -- cat'd straight through, NOT re-cat'd (that double-loads the glaze under auto-ev, clobbering base-ev).
 ;
 ; Each block compiles through `base-ev` (auto.l's captured pre-rebind compiler), because the
 ; loader's global `ev` is now auto-ev and mis-opfixes some pathological self-test forms. The EMIT
@@ -10,7 +11,7 @@
 ; (as when these lived inline, pre-rebind). The AUTO block leaves `ev` = the live auto-ev, since
 ; those tests exist to exercise the glazing path.
 
-; CONTEXT GUARD (top-level, runs FIRST): this file needs emit.l+auto.l cat'd ahead (`make test_glaze`).
+; CONTEXT GUARD (top-level, runs FIRST): this file needs the binary's BAKED glaze (`make test_glaze`).
 ; run STANDALONE, base-ev/jitgroupir/.. are unbound -> ()=zero point -> (base-ev '(..))=const-1=1 SILENTLY
 ; skips every block, yet the final top-level "ok" still prints (a false pass -- the const-1 trap). assert
 ; the harness names are bound so a wrong invocation SCARES `;; assert (lit? base-ev)` instead.

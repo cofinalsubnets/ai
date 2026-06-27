@@ -91,12 +91,12 @@ test_hostnif: host
 ifeq ($a,x86_64)
 test_glaze: host
 	@echo "GLAZE test/glaze-x86.l (emit + auto)"; \
-	  cat ai/glaze/emit.l ai/glaze/auto.l test/glaze-x86.l | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
+	  cat test/glaze-x86.l | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
 	  cat out/host/.test_glaze.out; \
 	  { [ $$r -eq 0 ] && grep -q "test/glaze-x86:" out/host/.test_glaze.out; } \
 	    || { echo "FAIL glaze x86 (exit $$r)"; exit 1; }; \
 	  echo "GLAZE ai/glaze/hook.l"; \
-	  cat ai/glaze/emit.l ai/glaze/hook.l | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
+	  cat ai/glaze/hook.l | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
 	  cat out/host/.test_glaze.out; \
 	  { [ $$r -eq 0 ] && grep -q "ai/glaze/hook:" out/host/.test_glaze.out; } \
 	    || { echo "FAIL glaze/hook (exit $$r)"; exit 1; }
