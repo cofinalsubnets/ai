@@ -587,6 +587,13 @@
          _ (fil c 4)
          (&& (= '(65 66 67 68 69) (L (peep c 0 0) (peep c 1 0) (peep c 2 0) (peep c 3 0) (peep c 4 0)))             ; each byte written natively
              (88 = (: c2 (cask 4) _ ((jitgroupir (L (link '(g c) '(pin c 2 88))) 'g 'x64) c2) (peep c2 2 0)))))     ; a single native pin -> byte 2
+      ; MAP lane (mpeep/mpin): m a map param (kind-guarded, raw); the open-addressed probe (mprobe-ir relabeled per site, deopt -> OVF)
+      (: rn (jitgroupir (L (link '(run m i) '(? (< i 0) (mpeep m 3 -1) (run (mpin m (+ 1 i) (* 10 i)) (- i 1))))) 'run 'x64)   ; fill keys 1..i+1 with 10*i (threading (mpin ..)'s map), then read key 3
+         m16 (tablet 16) r16 (rn m16 8)                                                                              ; presized -> pure native
+         m2 (tablet 2) r2 (rn m2 8)                                                                                  ; undersized -> mpin grow-miss -> OVF deopt -> interp grows (faithful)
+         (&& (20 = r16) (40 = (peep m16 5 -1)) (0 = (peep m16 1 -1))                                                 ; native mpin wrote REAL entries (the core map accessor reads them)
+             (20 = r2) (80 = (peep m2 9 -1))                                                                         ; grow-deopt faithful: same result + the map actually grew & inserted
+             (-1 = ((jitgroupir (L (link '(g m k) '(mpeep m k -1))) 'g 'x64) 5 3))))                                 ; a FIXNUM map arg -> guard rejects -> deopt -> interp peep on a scalar = the default -1
       ; arm64: the group assembles (data); the H saves lr + uses 16-byte slots + bl calls (llvm-mc-verified)
       (< 0 (tally (peep (assemble 'arm64 (asm (L (mkouterir 'arm64 1 'fib 1 0 () () () ())
                   (mkhir 'arm64 '(fib) 'fib '(n) '(? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))))) 'bytes 0))))

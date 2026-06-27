@@ -241,12 +241,10 @@ forward reference lifting, like <code>letrec*</code> in scheme.</p>
     <dd>the cross-kind total order: <code>() &lt; mint &lt; name &lt; string &lt; number &lt; chain &lt; tray &lt; book &lt; hot</code> -- numbers folded into one band by net.</dd>
   <dt id="g-blue">blue</dt>
     <dd>net exactly 0: kept yet nothing (<code>0</code>, <code>()</code>, <code>""</code>). truth's floor.</dd>
-  <dt id="g-book">book</dt>
+  <dt id="g-book">book / tablet</dt>
     <dd>a map: a mutable hash that is its own lookup function. <em>the</em> book is the global environment.</dd>
-  <dt id="g-cask">cask</dt>
-    <dd><code>n</code> mutable zeroed bytes; identity-compared.</dd>
   <dt id="g-chain">chain</dt>
-  <dd>the pairing kind (cons/pair). <code>cap</code> is the head, <code>cup</code> the rest, with <code>caap</code>...<code>cuup</code> compounds; under <code>+</code> it's the free monoid on its cells.</dd>
+    <dd>the product kind (cons/pair). <code>cap</code> is the head, <code>cup</code> the rest, with <code>caap</code>...<code>cuup</code> compounds; under <code>+</code> it's the free monoid on its cells.</dd>
   <dt id="g-charm">charm</dt>
     <dd>a register-allocated fixed-width integer (fixnum)</dd>
   <dt id="g-color">color</dt>
@@ -258,7 +256,7 @@ forward reference lifting, like <code>letrec*</code> in scheme.</p>
   <dt id="g-egg">the egg</dt>
     <dd>the heap image baked at compile time; the evaluator hatches onto it.</dd>
   <dt id="g-galaxy">galaxy</dt>
-    <dd>a numeric array (a tray of stars); folds into the number band by its net.</dd>
+    <dd>a tray of stars (numeric array); folds into the number band by its net.</dd>
   <dt id="g-gem">gem</dt>
     <dd>a float -- the smooth kind between the charms.</dd>
   <dt id="g-lattice">the kind lattice</dt>
@@ -266,7 +264,7 @@ forward reference lifting, like <code>letrec*</code> in scheme.</p>
   <dt id="g-green">green</dt>
     <dd>net &#8805; 0 -- what <code>$</code> keeps; the naturals.</dd>
   <dt id="g-hot">hot</dt>
-    <dd>an opaque external reference (a cask or port); applies as a constant.</dd>
+    <dd>an opaque external reference; applies as a constant.</dd>
   <dt id="g-kind">kind</dt>
     <dd>a value's type tag; the kinds form the dispatch lattice.</dd>
   <dt id="g-mint">mint</dt>
@@ -505,8 +503,9 @@ transcendentals to <a href="test/spec.l">test/spec.l</a>, which asserts a float 
 </ol>
 <p><em>Rocq demo.</em> as a demo, much of the combinator / <span class="term" data-g="numeral">numeral</span> / absence / measure / order / algebra core is machine-checked in <a href="rocq/spec.v">rocq/spec.v</a> over exact integers.
 the transcendental floats are demonstrated in <a href="test/spec.l">test/spec.l</a> but deliberately outside the rocq slice; §8 says exactly where the line is, and why.</p>
+<p><em>A prover of its own, two kernels to check it.</em> the prove layer no longer rests on one kernel. ai carries its own proof assistant -- <em>uu</em>, a Martin-Löf type theory with a predicative universe checker -- and the theorems it certifies are exported to be <em>re-checked outside ai</em>: <code>tools/uu2coq.l</code> emits Gallina (<a href="rocq/uugen.v">uugen.v</a>) and <code>tools/uu2lean.l</code> emits Lean 4 (<a href="lean/uugen.lean">uugen.lean</a>), which coqc and lean re-certify axiom-free, the two kernels at parity (200 theorems each). so ai is an untrusted proof <em>producer</em> and two independent kernels are the checkers -- the de Bruijn criterion, doubled: a law proved inside ai is re-verified outside it, in two systems at once. the runtime is proved in the same key -- the generational collector's minor pass is sound under a complete write barrier (<a href="rocq/gc.v">gc.v</a>, <span class="thm">barrier_sound</span>, axiom-free), and <a href="rocq/extract.v">extract.v</a> extracts the proven β-substitution core to OCaml as a differential oracle against the live <code>ev</code>.</p>
 <p>the caveat every formal demonstration carries is the consistency of its own metatheory. the Rocq layer lives in universe-checked Rocq, so its theorems are unconditional -- "the world does not explode here." drop universe checking (type-in-type) and <code>empty</code> becomes inhabited, ex falso giving everything; the <span class="term" data-g="blue">blue</span> theorems are stated where the world does <em>not</em> explode.</p>
-<p>what is <em>not</em> proved in Rocq, by design, lives at the demonstrate layer: the float / complex / bignum <em>values</em> of the tower (the algebra of §1-9 is proved over exact ℤ; the tower's float/complex layer, the close of §8, is demonstrated, not proved), pointer identity <code>id?</code> (nothing is shared in the model), and the implementation invariants of §5 (the dispatch matrices, the tail-threading), which the runtime checks rather than Rocq. a fourth bridge keeps the demonstrate and prove layers in step automatically: <code>tools/spec2coq.l</code> generates Rocq straight from the spec (see also, below).</p>
+<p>what is <em>not</em> proved in Rocq, by design, lives at the demonstrate layer: the float / complex / bignum <em>values</em> of the tower (the algebra of §1-9 is proved over exact ℤ; the tower's float/complex layer, the close of §8, is demonstrated, not proved), pointer identity <code>id?</code> (nothing is shared in the model), and the implementation invariants of §5 (the dispatch matrices, the tail-threading), which the runtime checks rather than Rocq. a further bridge keeps the demonstrate and prove layers in step automatically: <code>tools/spec2coq.l</code> generates Rocq straight from the spec (see also, below).</p>
 </details>
 <details class="dump"><summary><h3 id="glance">partial list of formalizations</h3></summary>
 <table>
@@ -531,6 +530,7 @@ the transcendental floats are demonstrated in <a href="test/spec.l">test/spec.l<
 <tr><td>9</td><td><span class="term" data-g="mint">mint</span> laws; <span class="term" data-g="nom">nom</span> order</td><td><span class="thm">mint_const1</span> <span class="thm">mint_distinct</span> <span class="thm">same_name_serial</span></td></tr>
 </table>
 <p><em>step any of these in <a href="rocq/spec.v">rocq/spec.v</a>; run all of them in <a href="test/spec.l">test/spec.l</a>; doubt any of them at the binary. the three agree.</em></p>
+<p class="dim">the table lists <a href="rocq/spec.v">spec.v</a>'s laws; the stack carries more (§<a href="#meta">meta</a>): the generational GC's write-barrier soundness in <a href="rocq/gc.v">gc.v</a> (<span class="thm">barrier_sound</span>), a β-step oracle extracted to OCaml in <a href="rocq/extract.v">extract.v</a> (<span class="thm">beta_is_step</span>), and ai's own <em>uu</em> proofs re-checked axiom-free by Rocq <em>and</em> Lean in <a href="rocq/uugen.v">uugen.v</a> / <a href="lean/uugen.lean">uugen.lean</a>.</p>
 
 </details>
 <details class="dump"><summary><h3 id="impl">implementation</h3></summary>
@@ -544,6 +544,9 @@ the transcendental floats are demonstrated in <a href="test/spec.l">test/spec.l<
 <li><a href="test/spec.l">test/spec.l</a> -- the executable spec; every law assert-backed, <span class="term" data-g="green">green</span> on every target</li>
 <li><a href="rocq/spec.v">rocq/spec.v</a> -- the machine-checked theorems cited above as the <span class="term" data-g="green">green</span> chips</li>
 <li><a href="tools/spec2coq.l">tools/spec2coq.l</a> -- generates Rocq straight from the spec, keeping the demonstrate and prove layers in step</li>
+<li><a href="tools/uu2coq.l">tools/uu2coq.l</a> / <a href="tools/uu2lean.l">tools/uu2lean.l</a> -- the internal-prover bridge: export ai's own <em>uu</em> proofs to Gallina and Lean 4</li>
+<li><a href="rocq/uugen.v">rocq/uugen.v</a> + <a href="lean/uugen.lean">lean/uugen.lean</a> -- that exported corpus, re-checked axiom-free by Rocq and Lean at parity (200 theorems each)</li>
+<li><a href="rocq/gc.v">rocq/gc.v</a> -- the generational minor GC, proved sound under a complete write barrier</li>
 <li><a href="CLAUDE.md">CLAUDE.md</a> -- the self-maintaining context file</li>
 <li><a href="README.md">README.md</a> -- the overview</li>
 </ul>

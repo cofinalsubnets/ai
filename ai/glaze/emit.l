@@ -975,9 +975,17 @@
                (id? op 'pin) (: R (argregir tgt (argix a ps 0)) val (caup (cup (cup e)))     ; (pin C i V): store V's low byte at C's backing[i] (r8=[C+8]=backing str), return C
                   (asm `((cggir tgt syms ps b) `(`('push A)) (cggir tgt syms ps val)         ; i -> acc, push; V -> acc
                          `(`('pop T) `('ld 'r8 R 8) `('stxb 'r8 T 1 16 A) `('mov A R)))))      ; pop T(=i); r8=backing; [backing+i+16]=V.lo; acc=C
+               (id? op 'mpeep) (: R (argregir tgt (argix a ps 0)) d (caup (cup (cup e))) lp (mint 0) ht (mint 0) ms (mint 0) en (mint 0)   ; (mpeep MAP k d): open-addressed probe -> the value (raw) in acc, gap-miss -> d
+                  (asm `((cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel (mpeep-ir (? (whole? d) d 0)) lp ht ms en 'deopt))))   ; k -> acc; r10 = tagged key (2k+1); acc = MAP; the probe (labels gensym'd)
+               (id? op 'mpin) (: R (argregir tgt (argix a ps 0)) val (caup (cup (cup e))) lp (mint 0) ht (mint 0) ms (mint 0) en (mint 0)   ; (mpin MAP k v): probe + UPDATE-in-place; a grow-due MISS -> OVF (full unwind+deopt); returns MAP
+                  (asm `((cggir tgt syms ps val) `(`('push A)) (cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel mpin-ir lp ht ms en 'OVF) `(`('mov A R)))))   ; v -> acc, push (spill); k -> acc; r10=tag(k); acc=MAP; probe+store (the `(pop r8)` tail pops v); acc=MAP (threaded)
                ()))
          ()))
    (gargsir tgt syms ps as) (? (atom? as) () (asm (L (cggir tgt syms ps (cap as)) (L (L 'push (greg tgt 'acc))) (gargsir tgt syms ps (cup as)))))
+   ; relabel: gensym the map probe's FIXED labels (loop/hit/miss/end) per call site, and point deopt at the
+   ; given group label -- so the same mprobe-ir/mpeep-ir/mpin-ir IR can be spliced N times in ONE group
+   ; assemble without label collisions (the byte path sidesteps this by asmx'ing each probe to bytes alone).
+   (relabel ir lp ht ms en dp) (map (\ f (map (\ x (? (id? x 'loop) lp (id? x 'hit) ht (id? x 'miss) ms (id? x 'end) en (id? x 'deopt) dp x)) f)) ir)
    ; consir: build a chain cell (cons) on the heap -> acc. ROOM-GUARD first (Sp - Hp >= 3w + floor, else
    ;   br OVF -> deopt, so no GC fires mid-native), then [Hp]=chainkind, [Hp+8]=cap(=tmp), [Hp+16]=cup(=acc),
    ;   acc=Hp (an even ptr IS the value, no putfix), Hp+=3w. Mirrors the byte path's consemit. r9/r10 are
@@ -1037,7 +1045,7 @@
    ; gate is vacuously true for any admitted group, so jitgroup retires. (`?`/`link` already covered: int +
    ; value-mode cons. No tail-call detection needed: a tail self-call compiles as a plain `call` -- correct,
    ; just not yet O(1)-stack; the loop lanes catch counted loops upstream.)
-   jgir-supported '(+ - * // % & | ^ < <= > >= = ? link peep tally pin)         ; ops cggir/cggvir handle (grows per lane: mpeep mpin cap cup two?)
+   jgir-supported '(+ - * // % & | ^ < <= > >= = ? link peep tally pin mpeep mpin)   ; ops cggir/cggvir handle (grows per lane: cap cup two?)
    (jgir-ops-ok? syms e) (? (two? e)                                            ; every op head in e is a group call or a supported op; recurse into every operand
       (: op (cap e) (&& (|| (member? op syms) (member? op jgir-supported)) (all (\ x (jgir-ops-ok? syms x)) (cup e))))
       1)
@@ -1059,7 +1067,7 @@
        outer (mkouterir tgt k entry k valt smask mmask bufmask cmask)
        Hs (foldl (\ a f (asm (L a (mkhir tgt syms (cap f) (nthl f 1) (nthl f 2))))) () ord)
        lrf (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lrf (cup ds)))))))
-       fb (ev (link ': (lrf defs)))                                                    ; the WHOLE group interpreted -- the deopt fallback
+       fb (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (link '(mpin mc mk mv) (link '(pin mc mk mv) (lrf defs)))))))   ; the WHOLE group interpreted -- the deopt fallback. mpeep/mpin are GLAZE-internal (not real fns), so alias them to the core peep/pin (the body reads the PREVIOUS=global binding by the sequence law -- not recursion); harmless for non-map lanes (peep/pin stay the core accessors)
        elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                              ; the entry's source lambda (=/show)
        (nif (emit (peep (assemble tgt (asm (L outer Hs))) 'bytes 0)) fb elam k))
 )

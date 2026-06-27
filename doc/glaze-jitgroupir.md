@@ -16,8 +16,8 @@ back to the byte path; `auto.l`'s `rewrite-bindings` calls it (line ~833). This 
 | value-mode cons (`link`, `?`, param-return, value-group calls) | `cggv` | `cggvir`+`consir` ✅ | op-coverage |
 | string (`peep`/`tally`) | `cgg` 223-237 | `cggir` ✅ (+ `smask` guard in `mkouterir`) | op-coverage |
 | cask (`pin`) | `cgg` 238-244 | `cggir` ✅ (`stxb`; + `bufmask` guard) | op-coverage |
+| map (`mpeep`/`mpin`) | `cgg` 227-236 (asmx) | `cggir` ✅ (`relabel`'d probe; + `mmask` guard) | op-coverage |
 | chain (`cap`/`cup`/`two?`) | `cgg` 245-250 | — | — |
-| map (`mpeep`/`mpin`) | `cgg` 227-236 (asmx) | — | — |
 | TCO (tail self-call → loop) | `cggt` | — (compiles as `call`: correct, O(n) stack) | n/a |
 
 The string lane needed a new assembler primitive: the IR had no byte-width memory op, but `peep` is a
@@ -135,7 +135,14 @@ porting a lane just re-routes its asserts from `jitgroup` to `jitgroupir` with n
 3. **cask** ✅ — `pin` in `cggir` (`stxb` byte store into `[C+8]`'s backing + idx; returns `C`, so it
    threads as a sibling-call cask arg); `bufmask` already computed+guarded (stage 2). `leff` stays
    interp (effectful `_`-bound `pin`); the glazed path is `castbuild`'s lifted fill loop (cb*).
-4. **map** (`mpeep`/`mpin` + `mmask` + the `relabel` pass) → `rmap`/`rpl`/`rhash`.
+4. **map** ✅ — `mpeep`/`mpin` in `cggir` reusing the `mprobe-ir`/`mpeep-ir`/`mpin-ir` IR fragments
+   through a generic `relabel` pass (gensym the fixed `loop`/`hit`/`miss`/`end` labels per site; `mpin`'s
+   `deopt` → the group's **`OVF`**, matching the byte path's seed — the full unwind, not bare `DEOPT`).
+   `mmask` guard already landed (stage 2). **Also fixed `jitgroupir`'s `fb`**: `mpeep`/`mpin` are
+   glaze-internal names, not real fns, so the interp deopt fallback must alias them to the core
+   `peep`/`pin` (the byte path does this; without it the fallback hit unbound `mpeep` → `(() m 3 -1)` =
+   const-1 = -1 — the silent trap, found via the grow-deopt path). The sequence law makes the alias
+   `(mpeep mc mk md) (peep mc mk md)` read the *previous*/global `peep`, not recurse.
 5. **chain** (`cap`/`cup`/`two?` + `cmask`) → `rcl` (tree walk); `rcb` stays interp (recognizer rejects
    `cap`-into-arith — unchanged).
 6. **TCO** (`cggtir` + `Lbody`) → `primes`/`tak`/loop asserts keep O(1) stack on the IR path.
