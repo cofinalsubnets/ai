@@ -22,7 +22,7 @@ ai0 = out/host/ai0
 # image auto-load for all recipes. The USER's binary (run outside make) still auto-loads <exe>.img.
 export AI_NO_IMAGE := 1
 
-.PHONY: all install uninstall clean distclean hooks
+.PHONY: all install uninstall clean distclean
 .PHONY: host kernel wasm ai0
 .PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_gc test_hostnif test_glaze test_sat test_asm test_extract
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench nettest
@@ -261,11 +261,10 @@ test_extract: host
 endif
 all: host kernel wasm
 
-# Point git at the tracked hooks dir (.githooks). The pre-commit hook rebuilds
-# wasm/ai.js whenever a commit touches what it is built from, so the committed
-# artifact never lags the sources. One-time per clone; idempotent.
-hooks:
-	@git config core.hooksPath .githooks && echo "git hooks -> .githooks (pre-commit keeps wasm/ai.js fresh)"
+# NB: there is NO git pre-commit hook -- committed artifacts (wasm/ai.js, bench/
+# bench.html) are rebuilt MANUALLY (`make wasm`, `make -C bench html`) and staged
+# by hand. An auto-rebuild hook re-ran the benchmarks on every commit (minutes);
+# it was removed deliberately. Rebuild before committing artifact-affecting code.
 
 # Static lisp headers: each ai/*.l is serialized to a C string literal in
 # out/lib/*.h by tools/lcat.l (run on the bootstrap interpreter ai0). Frontends
