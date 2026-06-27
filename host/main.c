@@ -376,7 +376,12 @@ static char const
 // With no args, self-test: eval prel+bao (the shell core) and run the baked corpus
 // via c0, then bootstrap the self-hosted ev (egg) and run the corpus again through it.
 static struct ai *boot(struct ai *g, bool argp) {
-  if (argp) return ai_evals_(g, cli);
+  if (argp) {                                          // a build tool (lcat etc.): bake prel+bao FIRST so the CLI's
+    g = ai_evals_(g,                                   // own loader/printer (eval1/bye reach for map/jot/tap/puts/putc)
+#include "prel0.h"                                     // have the prel surface before they load the first file -- else
+#include "bao0.h"                                      // loading prel.l ITSELF misses every prel fn its loader uses.
+    );
+    return ai_evals_(g, cli); }
   g = ai_strof(g, tests0);                            // the baked corpus, as a string
   struct ai_def td[] = {{"tests", ai_pop1(g)}};
   g = ai_defn(g, td, countof(td));
