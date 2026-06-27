@@ -170,18 +170,17 @@
     (atom? (cup bs)) (list (wx (cap bs) bnd))
     (: nd (dsug (cap bs) (caup bs))               ; desugar (f a..) so wx's \ adds params to bnd
      (link (cap nd) (link (wx (cup nd) bnd) (wxb (cuup bs) bnd)))))
-   ; cond-clause rewrite RULES (pat . tpl), tried in order by `firstr` (the prel unifier
-   ; inside the compiler). the nil?-flip family: a (nil? e) test flips its branches and
-   ; drops the wrapper, since the cond tests g_false(e) == nil?(e). `unify` enforces each
-   ; EXACT shape on its own (proper-list tails must match), so a rule fires only on its
-   ; arity; the lone side-condition left is nil? being unshadowed. rule 1 (3-clause) is
-   ; byte-identical to the old hand-written peephole; rule 2 (2-clause, no else) is a NEW
-   ; sound win the old guard never caught -- the table makes it nearly free.
-   ve (var 'e)  vc (var 'con)  vl (var 'else)
-   cflip-rules (L (link (L (L 'nil? ve) vc vl) (L ve vl vc))   ; ((nil? ?e) ?c ?el) -> (?e ?el ?c)
-                  (link (L (L 'nil? ve) vc)    (L ve () vc)))   ; ((nil? ?e) ?c)     -> (?e () ?c)
-   (firstr rules x) (? (atom? rules) x                ; first matching rule wins; else x
-    (: r (rewrite (caap rules) (cuap rules) x) (? (id? r x) (firstr (cup rules) x) r)))
+   ; cflip: the nil?-flip peephole on a cond clause list. since the cond tests g_false == nil?,
+   ; (? (nil? e) c [el]) and (? e [el] c) are equal -- flipping the branches drops the nil? wrapper
+   ; (and lets cst then fold a now-bare constant test). fires ONLY on an EXACT (nil? e) test in a
+   ; 2- or 3-form clause; a longer clause list keeps its tail unflipped. a DIRECT structural rewrite
+   ; (the old unify-table version -- firstr over a cflip-rules global -- broke the egg's self-compile).
+   (cflip bs) (? (&& (two? (cup bs)) (two? (cap bs)) (id? (caap bs) 'nil?) (atom? (cuup (cap bs))))
+    (: e (caup (cap bs)) c (caup bs) rest (cuup bs)
+     (? (atom? rest)       `(e () c)                ; (nil? e) c    -> (e () c)
+        (atom? (cup rest)) `(e (cap rest) c)        ; (nil? e) c el -> (e el c)
+        bs))
+    bs)
    ; cst: a post-wx test that is a compile-time CONSTANT -> (1 . falsy?), else 0. mirrors feels'
    ; cval (a non-symbol atom, or a (\ v) quote of one); the cond tests g_false == nil?, so the
    ; constant's truth is exactly nil? of its value -- a folded test prunes its dead branch.
@@ -190,7 +189,7 @@
               (&& (id? (cap t) '\) (atom? (cuup t))) (link 1 (nil? (caup t)))   ; a quote (\ v)
               (&& (atom? (cup t)) (atom? (cap t)) (nil? (nom? (cap t)))) (link 1 (nil? (cap t)))  ; (c) == c: a folded monadic (opfix wraps (! e) -> ((nil? e)), so a folded test lands wrapped)
               0)
-   (wxc bs bnd) (: fb (? (member? 'nil? bnd) bs (firstr cflip-rules bs))
+   (wxc bs bnd) (: fb (? (member? 'nil? bnd) bs (cflip bs))
     (? (atom? fb) (list ())                           ; clauses ran out: implicit () else (nil-ontology)
        (atom? (cup fb)) (list (wx (cap fb) bnd))      ; the lone else
        (: t (wx (cap fb) bnd) k (cst t)               ; walk the test; is it a static constant?
