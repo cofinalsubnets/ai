@@ -14,6 +14,7 @@
    flip co                           ; flip stays an alias for co (minimize the blast)
    sat saturate)                     ; `saturate` is the canonical name now (the `$` sigil factors to it); `sat` is the short alias
 (: macros (peep book 0 0))
+(: : () ? () \ ())
 (: pi 3.141592653589793
    tau (* 2 pi) ;; no infix here
    e 2.718281828459045                          ; Euler's number; exp is (\ x (x e))

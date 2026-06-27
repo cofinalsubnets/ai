@@ -53,10 +53,8 @@
 (assert (id? 'cell-nom (: q an-fwd an-fwd 2 q)))
 (: help 0)
 
-; the empty special forms are their head reads -- the same missing reads under a help
-(: help (\ s a b (? (&& (scare? s) (id? a 'missing)) `('empty-form b) 0)))
-(assert (: r (:) (&& (two? r) (id? ': (caup r))))
-        (: r (?) (&& (two? r) (id? '? (caup r)))))
+(: help (\ s a b (? (&& (scare? s) (id? a 'missing)) 'fired 0)))
+(assert (id? (:) ()) (id? (?) ()) (id? (\) ()))
 (: help 0)
 
 ; (missing t k) -- the book read as a value: k present in tablet t answers the

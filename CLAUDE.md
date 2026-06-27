@@ -129,7 +129,7 @@
 ; CONDITION (see control) carrying the binding site's nom -- the zero point helpless; no read escapes
 ; to an outer binding of the same name. rebinding a name still reads the previous value (the sequence
 ; law); recursion among lambda bindings resolves lazily. an EMPTY form is its head's value -- (f) ==
-; f at zero operands -- and the heads are missing, so (:) (?) (\) all read the zero point. a nullary
+; f at zero operands -- so (:) (?) (\) all read (). a nullary
 ; HELPER call is the SAME law and the SAME trap: `(go)` is `go` UNRUN, never the loop step -- fire
 ; every thunk with an operand, the UNIT `(go ())` (() not 0, the 0->() flip: a do-nothing arg is
 ; nothing, not a number that would exponentiate).
@@ -483,8 +483,8 @@ $"ab" + 2            ; 197     a sigil at one binds tightest: (+ ($ "ab") 2)
 ; it reads the zero point. the read happens where the code says: a closure captures its free globals
 ; at creation, so a missing read in a lambda body fires at the define, not the call. see
 ; test/missing.l. THE CONDITION IS ONE LAW AT EVERY DEPTH: a `:` binding read before its pin (one
-; scope), (missing t k) on any tablet miss, an empty special form reading its head -- all the same
-; missing. numeral counts are CAPPED: a compose count or exact-power exponent above the `apcap` box (a
+; scope), (missing t k) on any tablet miss -- all the same missing. numeral
+; counts are CAPPED: a compose count or exact-power exponent above the `apcap` box (a
 ; public tunable, default 2^20) raises (scare 'apcap k) instead of allocating O(k). retune with (pin
 ; apcap 0 n); see test/apcap.l.
 ; demo:

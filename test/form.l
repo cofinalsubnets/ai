@@ -1,9 +1,7 @@
 (assert
- (id? (:) :) (id? (:) \)          ; a special-form name as a value is missing: not in the book
- (id? (:) (\))                   ; ... and the singleton law collapses (\) to \, the same missing.
- (id? (:) (:)) (id? (:) (?))      ; the empty forms are their head reads -- (f)==f at zero
-                                ; operands, BOTH lanes -- the same missing reads, 0 helpless
-                                ; (under a help they raise like any missing name; see missing.l)
+ (id? (:) :) (id? (:) \)
+ (id? (:) (\))
+ (id? (:) (:)) (id? (:) (?))
  (= ''x '(\ x))
  (= 1 (? 1))
  (= 1 (: 1))
