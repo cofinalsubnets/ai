@@ -476,10 +476,12 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "arm64.h"                                       //   execute), so every target is arch-neutral. the glaze (x86 client) executes x64
 #include "bao.h"
   );
+#if defined(__x86_64__)
+  g = ai_evals_(g, glaze_emit);                          // ALWAYS load the native JIT post-egg -> ev = auto-ev, glaze
+  g = ai_evals_(g, glaze_auto);                          // always-on (no fragile stale image). base-ev captures the
+#endif                                                   // hatched ev. ~680ms from-scratch; the image snapshots past it.
   if (image_dump_path) {                                 // --dump-image: snapshot the post-warm heap, then exit
 #if defined(__x86_64__)
-    g = ai_evals_(g, glaze_emit);                        // load the native JIT BEFORE the dump (x86 only):
-    g = ai_evals_(g, glaze_auto);                        //   the snapshot bakes ev = auto-ev, glaze always-on
     // auto.l's self-tests ran auto-ev, filling the `memo` compile cache with native nif
     // closures (ap = a W^X mmap addr) that can't be serialized. Empty it: the image boots
     // with a clean cache (natives JIT lazily on the loaded runtime's first ev, as designed).
