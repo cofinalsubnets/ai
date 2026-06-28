@@ -135,16 +135,6 @@
   (: fgt (jitf '(\ x (> (/ 100.0 x) 7.0)))       (&& (1 = (fgt 10)) (0 = (fgt 20)) (1 = (fgt 5))))  ; 100/x > 7 <=> 0<x<14.3
   (: fge (jitf '(\ x (>= (- (* x 0.5) 1.0) 2.0))) (&& (1 = (fge 6)) (0 = (fge 5))))                 ; x/2-1 >= 2 <=> x>=6
   (: feq (jitf '(\ x (= (* x 0.25) 2.0)))         (&& (1 = (feq 8)) (0 = (feq 7))))                 ; x/4 == 2 <=> x==8
-  ; --- FLOAT RECURRENCE LOOP OWNER: a native mandelbrot pixel kernel == the interpreter ---
-  (: msrc '(\ px py (: cx (- (* px 0.046875) 2.0) cy (- (* py 0.046875) 1.5)
-                      ((: (go zx zy it) (? (&& (< it 100) (<= (+ (* zx zx) (* zy zy)) 4.0))
-                            (go (+ (- (* zx zx) (* zy zy)) cx) (+ (* (* 2.0 zx) zy) cy) (+ it 1)) it)) 0.0 0.0 0)))
-     mp (jitfrec msrc '(px py) '((cx (- (* px 0.046875) 2.0)) (cy (- (* py 0.046875) 1.5)))
-                 '(zx zy) '((+ (- (* zx zx) (* zy zy)) cx) (+ (* (* 2.0 zx) zy) cy))
-                 '(+ (* zx zx) (* zy zy)) '<= 4.0 100)
-     mi (ev msrc)
-     (&& (= (mi 0 0) (mp 0 0)) (= (mi 32 32) (mp 32 32)) (= (mi 20 40) (mp 20 40))                  ; native == interp
-         (= (mi 63 63) (mp 63 63)) (= (mi 10 50) (mp 10 50)) (= (mi 45 18) (mp 45 18))))
   ; --- NESTED grid owner: native whole-grid mandelbrot == interpreter (checksum 87130) ---
   (: gsrc '(\ _ (: (mand cx cy zx zy it) (? (&& (< it 100) (<= (+ (* zx zx) (* zy zy)) 4.0))
                        (mand cx cy (+ (- (* zx zx) (* zy zy)) cx) (+ (* (* 2.0 zx) zy) cy) (+ it 1)) it)

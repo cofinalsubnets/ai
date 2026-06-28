@@ -47,14 +47,6 @@
    (emit l) (: b (cask (tally l)) _ ((: (go i x) (? (two? x) (: _ (pin b i (cap x)) (go (+ i 1) (cup x))) ())) 0 l) b)
    ; (jit '(\ x E)) -- compile an arithmetic single-arg closure to native.
    (jit lam) (jitir lam 'x64)  ; arity-1 leaf -> the neutral-IR lane (cgir)
-   ; --- the arity-INDEPENDENT deopt/epilogue blobs for the >=2-arity natives: the deopt jmps to interp's
-   ; BODY (interp+16 past its lvm_cur) where the saturated args already sit. The byte n-ary ARITH lane
-   ; (cgn + opseq-mn/idivseq-mn) is retired -- jitn now routes through the neutral-IR cgir (below); these
-   ; three blobs stay because the float loop driver (loopcode-f) reuses epilogue-mn.
-   deopt-mn '(72 139 70 8  72 141 112 16  72 139 6  255 224)  ; mov rax,[rsi+8]; lea rsi,[rax+16]; mov rax,[rsi]; jmp rax
-   (guard-mn d)  (+ '(113 20) (+ (+ '(72 129 196) (le4 (* 8 d))) deopt-mn))   ; jno +20; add rsp,8d; deopt-mn
-   epilogue-mn (+ '(72 1 192) (+ (guard-mn 0) (+ '(72 131 200 1) (+ '(72 137 1)
-                 (+ '(72 131 198 16) '(72 139 6  255 224))))))
    ; argix finds a param var's frame index in ps (shared with the IR lane's fxir/cgir).
    (argix e ps i) (? !(two? ps) 0  (= e (cap ps)) i  (argix e (cup ps) (+ i 1)))   ; param -> index
    ; (jitn '(\ p0 .. body)) -- an arity>=2 leaf -> native (natn curries to saturation). Now an ALIAS for
@@ -277,22 +269,7 @@
           '(77 141 81 7 73 193 234 3 73 131 194 2 74 141 20 210)                ; r10=total ; lea rdx,[rdx+r10*8]  (Hp += total*8)
           '(72 137 1 72 131 198 16 72 139 6 255 224))))                         ; mov [rcx],rax ; add rsi,16 ; Continue (NO putfix)
         (ev lam) lam 1))
-   ; --- FLOAT RECURRENCE LOOP OWNER (the mandelbrot escape-loop class) ----------
-   ; owns a numeric escape loop end to end: FIXNUM inputs (pixel coords) -> derived
-   ; floats (computed once) -> a float recurrence over loop-vars in xmm8.. with an
-   ; INTEGER counter, a compound escape test (counter < lim AND a float predicate),
-   ; returning the COUNT (an integer -- no box). this is where owning the whole loop
-   ; pays (vs a per-pixel leaf that re-boxes + re-crosses the boundary). cgF is the
-   ; float-expr compiler over a multi-register env: float locals in xmm8.. (fload),
-   ; int params via cvtsi2sd, constants via fconst. the counter is bounded (it<lim)
-   ; so it needs no overflow guard; an int ACCUMULATOR would (the lane law) -- the
-   ; count here can't overflow a fixnum. xmm0/xmm1 + [rsp] stay the float scratch.
-   (fload j)  (+ '(242 65 15 16) (list (+ 192 j)))                   ; movsd xmm0, xmm(8+j)
-   (fstore j) (+ '(242 68 15 16) (list (+ 192 (* 8 j))))             ; movsd xmm(8+j), xmm0
-   (fzero j)  (+ '(102 69 15 87) (list (+ 192 (* 9 j))))             ; xorpd xmm(8+j), xmm(8+j)
-   (fpop j)   (+ '(242 68 15 16) (+ (list (+ 4 (* 8 j))) '(36 72 131 196 8)))   ; movsd xmm(8+j),[rsp] ; add rsp,8
-   (alook k al i) (? (atom? al) -1 (= k (cap al)) i (alook k (cup al) (+ i 1)))
-   (clook k ce) (? (atom? ce) () (= k (caap ce)) (cap ce) (clook k (cup ce)))   ; counter env: name -> (name regbytes)
+   (clook k ce) (? (atom? ce) () (= k (caap ce)) (cap ce) (clook k (cup ce)))   ; counter env: name -> (name regbytes; cgFd/rgof read it)
    ; --- CONSTANT HOISTING: peek is mopped so a float constant costs a movabs+movq to materialize;
    ;     re-emitting that inside a loop body is the dominant cost. so collect the DISTINCT float
    ;     constants of a kernel, preload each into a dedicated xmm reg (xmm2..7, free -- scratch is
@@ -306,14 +283,7 @@
    (fccl es acc) (? (two? es) (fccl (cup es) (fcc (cap es) acc)) acc)            ; collect over a list of exprs
    (htbl cs i) (? (atom? cs) () (> i 7) () (link (L (cap cs) i) (htbl (cup cs) (+ i 1))))   ; value -> reg (2..7)
    (hlook v ht) (? (atom? ht) -1 (= v (caap ht)) (caup (cap ht)) (hlook v (cup ht)))
-   (hpre ht) (? (atom? ht) () (: e (cap ht)                                      ; preload: movabs bits,rax ; movq xmm_r,rax
-      (+ (+ '(72 184) (+ (le8 (fbits (cap e))) (+ '(102 72 15 110) (list (+ 192 (* 8 (caup e))))))) (hpre (cup ht)))))
    (hcon v ht) (: r (hlook v ht) (? (< -1 r) (+ '(242 15 16) (list (+ 192 r))) (asmx (fconst v))))   ; hoisted -> movsd xmm0,xmm_r ; else inline fconst
-   ; register-scratch spill/reload for the float-expr stack: xmm12..15 hold nesting depth 0..3 (no
-   ; memory traffic), falling back to the [rsp] xpush/xpop1 below depth 4. THIS is the win -- the
-   ; inner loop's nested operands stay in registers instead of round-tripping through memory.
-   (rpush d) (? (< d 4) (+ '(242 68 15 16) (list (+ 224 (* 8 d)))) xpush)   ; movsd xmm(12+d),xmm0 ; else sub rsp;movsd[rsp]
-   (rpop d)  (? (< d 4) (+ '(242 65 15 16) (list (+ 204 d)))       xpop1)   ; movsd xmm1,xmm(12+d) ; else movsd[rsp];add rsp
    ; --- the OPTIMIZING float-body allocator: value-numbered DAG (CSE) + linear-scan register
    ;     allocation. compiles a SET of root exprs (the inner-loop mag + the fvar updates, which
    ;     SHARE subexprs like zx*zx) to register-only SSE, each value in its own xmm reg so the CPU
@@ -335,37 +305,6 @@
    (rgof leaf env) (: e (clook leaf env) (? (two? e) (caup e) (scare 'glaze-leaf leaf)))   ; leaf -> its fixed reg
    (asm ps) (foldl (\ a b (+ a b)) () ps)                                                  ; concat a LIST of byte pieces (+ is associative)
    (efold names i) (? (two? names) (link (L (cap names) i) (efold (cup names) (+ i 1))) ())   ; names -> (name reg) from reg i
-   ; cgF: a FLOAT subexpr -> xmm0, over the hoist table ht + THREE envs: fe (float locals in xmm8..,
-   ; fload), ce (int loop-COUNTERS in raw regs -> cvtsi2sd), ie (int Sp params -> fxv+cvtsi2sd).
-   (cgF ht ce ie fe e d) (? (gem? e)   (hcon e ht)
-                            (whole? e) (hcon (+ e 0.0) ht)
-                            (atom? e)  (: fj (alook e fe 0)
-                               (? (< -1 fj) (fload fj)
-                                  (: cb (clook e ce) (? (two? cb) (caup cb)               ; loop counter (raw reg) -> cvtsi2sd
-                                     (: ai (alook e ie 0) (? (< -1 ai) (+ (fxv ai d) '(242 72 15 42 192)) ()))))))   ; Sp param
-                            (two? e) (: op (cap e) a (caup e) b (caup (cup e))
-                               (? (member? op '(+ - * /)) (+ (cgF ht ce ie fe a d) (+ (rpush d) (+ (cgF ht ce ie fe b (+ d 1)) (+ (rpop d) (asmx (fbinop op)))))) ()))
-                            ())
-   (ucmp-exit op) (? (= op '<=) '(15 135) (= op '<) '(15 131) (= op '>=) '(15 134) (= op '>) '(15 130) ())   ; EXIT jcc = inverse of the continue cmp
-   (loopcode-f ips finit fvars updates testexpr cmpop bound lim)
-    (: nf (tally finit)  fenv (cat (map cap finit) fvars)
-       ht (htbl (fcc bound (fccl updates (fcc testexpr (fccl (map (\ f (caup (cap f))) finit) ())))) 2)
-       pre-d ((: (go j fs) (? (two? fs) (+ (+ (cgF ht () ips fenv (caup (cap fs)) 0) (fstore j)) (go (+ j 1) (cup fs))) ())) 0 finit)
-       pre-z ((: (go j) (? (< j (tally fvars)) (+ (fzero (+ nf j)) (go (+ j 1))) ())) 0)
-       pre   (asm (L pre-d pre-z '(77 49 192)))                     ; xor r8,r8  (counter it = 0)
-       tint  (+ '(73 131 248) (list lim))                           ; cmp r8, lim
-       tflt  (asm (L (cgF ht () ips fenv testexpr 0) (rpush 0) (hcon bound ht) (rpop 0) '(102 15 46 200)))   ; mag ; bound ; ucomisd
-       ups   ((: (go us) (? (two? us) (+ (+ (cgF ht () ips fenv (cap us) 0) xpush) (go (cup us))) ())) updates)
-       pops  ((: (go j) (? (< j nf) () (+ (fpop j) (go (- j 1))))) (+ nf (- (tally fvars) 1)))
-       body  (asm (L ups pops '(73 255 192)))                       ; ... ; inc r8
-       Lb (tally body)  Lt (tally tflt)
-       jge (+ '(15 141) (le4 (+ (+ Lt 6) (+ Lb 5))))                ; counter exit: jge EXIT  (skip tflt+exj+body+back)
-       exj (+ (ucmp-exit cmpop) (le4 (+ Lb 5)))                     ; float  exit: skip body+back
-       back (+ '(233) (le4 (- 0 (+ (+ (+ (+ (+ 4 6) Lt) 6) Lb) 5))))   ; jmp TOP
-       (asm (L (hpre ht) pre tint jge tflt exj body back '(76 137 192))))   ; preload consts; EXIT: mov rax,r8
-   ; (jitfrec src '(px py) finit fvars updates testexpr cmpop bound lim) -> native pixel kernel.
-   (jitfrec lam ips finit fvars updates testexpr cmpop bound lim)
-    (nif (emit (+ (loopcode-f ips finit fvars updates testexpr cmpop bound lim) epilogue-mn)) (ev lam) lam (tally ips))
    ; --- NESTED GRID OWNER (general, D-dimensional): own a WHOLE counted-loop NEST as ONE native
    ;     kernel -- D nested integer loops over fixnum coords -> M derived-float invariants -> a float
    ;     recurrence over N float-vars, accumulating an integer count -- one boundary crossing per grid,
