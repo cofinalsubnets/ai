@@ -15,10 +15,14 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+
+// kship's UDP wire (port/kship/x86_64/net.c) caps a datagram at one ethernet MTU.
+#define DG_MAX 1472
 
 // Is Sp-slot x a heap stream port? Same inline check main.c's lvm_close uses:
 // an even (heap) word whose first slot is the lvm_port_io discriminator. A
@@ -141,12 +145,119 @@ static lvm(lvm_shutdown) {
  Sp += 1; Ip += 1;
  return Continue(); }
 
+// --- UDP (kship's milestone-5 oracle wire) ---------------------------------
+// The TCP nifs above can't talk to kship: kship speaks UDP DATAGRAMS, each
+// carrying its own sender address to reply to, and a connected byte-stream port
+// (the fgetc/fputc free-read path) can't express that. So UDP gets three nifs
+// that recvfrom/sendto directly off a bound port's fd and marshal the peer as a
+// fixnum -- (host-order ipv4 << 16) | port, 48 bits, comfortably inside a fixnum:
+//   (udp-bind port)            -> a port on a bound UDP socket | nil
+//   (udp-recv p)               -> (peerfix . datagram-bytes) | nil  [BLOCKS]
+//   (udp-send p peerfix bytes) -> p (chainable) | nil
+// Blocking recv is intentional, like accept above: the oracle is one-at-a-time,
+// so there is nothing else to do until the next datagram arrives.
+
+ai_noinline static int call_udpbind(int port) {
+ if (port < 0 || port > 65535) return -1;
+ int fd = socket(AF_INET, SOCK_DGRAM, 0);
+ if (fd < 0) return -1;
+ int one = 1;
+ setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+ struct sockaddr_in a = {0};
+ a.sin_family = AF_INET;
+ a.sin_addr.s_addr = htonl(INADDR_ANY);
+ a.sin_port = htons((uint16_t) port);
+ if (bind(fd, (struct sockaddr*) &a, sizeof a)) { close(fd); return -1; }
+ return fd; }
+
+static lvm(lvm_udpbind) {
+ if (!oddp(Sp[0])) goto fail;
+ int fd = call_udpbind((int) getcharm(Sp[0]));
+ if (fd < 0) goto fail;
+ Pack(g);
+ struct ai *r = ai_io_alloc(g, fd);
+ if (!ai_ok(r)) { close(fd); goto fail; }
+ g = r;
+ Unpack(g);
+ // stack: [port#, ...] -> [port, ...]
+ Sp[1] = Sp[0];
+ Sp += 1; Ip += 1;
+ return Continue();
+ fail:
+ Sp[0] = ai_nil; Ip += 1;
+ return Continue(); }
+
+static lvm(lvm_udprecv) {
+ if (!portp(Sp[0])) goto fail;
+ int fd = port_fd(Sp[0]);
+ if (fd < 0) goto fail;
+ static char buf[DG_MAX];
+ struct sockaddr_in peer; memset(&peer, 0, sizeof peer);
+ socklen_t plen = sizeof peer;
+ ssize_t n;
+ do n = recvfrom(fd, buf, sizeof buf, 0, (struct sockaddr*) &peer, &plen);
+ while (n < 0 && errno == EINTR);
+ if (n < 0) goto fail;
+ uintptr_t peerfix = ((uintptr_t) ntohl(peer.sin_addr.s_addr) << 16)
+                   | (uintptr_t) ntohs(peer.sin_port);
+ Pack(g);                                            // bytes + chain allocate -> Pack
+ if (n > 0) {                                        // datagram -> a fresh ai string
+  g = str0(g, (uintptr_t) n);
+  if (!ai_ok(g)) return ghelp(g);
+  memcpy(txt(g->sp[0]), buf, (uintptr_t) n);
+  len(g->sp[0]) = (uintptr_t) n;
+ } else {                                            // empty datagram -> the singleton
+  g = ai_push(g, 1, (uintptr_t) EmptyString);
+  if (!ai_ok(g)) return ghelp(g); }
+ g = ai_have(g, Width(struct ai_chain));             // (peerfix . bytes)
+ if (!ai_ok(g)) return ghelp(g);
+ struct ai_chain *w = bump(g, Width(struct ai_chain));
+ ini_chain(w, putcharm(peerfix), g->sp[0]);          // read sp[0] AFTER ai_have (may move)
+ g->sp[0] = word(w);
+ Unpack(g);
+ // stack: [port, ...] -> [(peerfix . bytes), ...]
+ Sp[1] = Sp[0];
+ Sp += 1; Ip += 1;
+ return Continue();
+ fail:
+ Sp[0] = ai_nil; Ip += 1;
+ return Continue(); }
+
+static lvm(lvm_udpsend) {
+ if (!portp(Sp[0]) || !oddp(Sp[1]) || !ai_strp(Sp[2])) goto fail;
+ int fd = port_fd(Sp[0]);
+ if (fd < 0) goto fail;
+ uintptr_t peerfix = getcharm(Sp[1]);
+ struct sockaddr_in a; memset(&a, 0, sizeof a);
+ a.sin_family = AF_INET;
+ a.sin_addr.s_addr = htonl((uint32_t) (peerfix >> 16));
+ a.sin_port = htons((uint16_t) (peerfix & 0xffff));
+ struct ai_str *s = str(Sp[2]);
+ ssize_t w;
+ do w = sendto(fd, txt(s), len(s), 0, (struct sockaddr*) &a, sizeof a);
+ while (w < 0 && errno == EINTR);
+ if (w < 0) goto fail;
+ // stack: [p, peerfix, bytes, ...] -> [p, ...]
+ Sp[2] = Sp[0];
+ Sp += 2; Ip += 1;
+ return Continue();
+ fail:
+ Sp[2] = ai_nil;
+ Sp += 2; Ip += 1;
+ return Continue(); }
+
 static union u const
  nif_connect[]  = {{lvm_cur}, {.x = putcharm(2)}, {lvm_connect},  {lvm_ret0}},
  nif_listen[]   = {{lvm_listen}, {lvm_ret0}},
  nif_accept[]   = {{lvm_accept}, {lvm_ret0}},
- nif_shutdown[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_shutdown}, {lvm_ret0}};
+ nif_shutdown[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_shutdown}, {lvm_ret0}},
+ nif_udpbind[]  = {{lvm_udpbind}, {lvm_ret0}},
+ nif_udprecv[]  = {{lvm_udprecv}, {lvm_ret0}},
+ nif_udpsend[]  = {{lvm_cur}, {.x = putcharm(3)}, {lvm_udpsend}, {lvm_ret0}};
 AI_NIF("connect",  nif_connect);
 AI_NIF("listen",   nif_listen);
 AI_NIF("accept",   nif_accept);
 AI_NIF("seal", nif_shutdown);
+AI_NIF("udp-bind", nif_udpbind);
+AI_NIF("udp-recv", nif_udprecv);
+AI_NIF("udp-send", nif_udpsend);
