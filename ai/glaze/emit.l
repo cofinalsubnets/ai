@@ -28,7 +28,6 @@
    ; leaks pushes and the terminator `ret` faults. deopt tail-applies interp(arg).
    (guard d)  ('(113 19 72 129 196) + (le4 (* 8 d)) + deopt)      ; jno +19; add rsp,8d; deopt
    (guardz d) ('(117 19 72 129 196) + (le4 (* 8 d)) + deopt)      ; jnz +19; add rsp,8d; deopt
-   ld-i '(76 137 208)                                                           ; loop var i (raw, in r10)
    untag '(72 209 248)                                                           ; sar rax,1
    (fetch i) (? (= i 0)        '(72 139 1)                                       ; mov rax,[rcx]       (TAGGED, no untag)
                 (< (* 8 i) 128) `(72 139 65 (8 * i))              ; mov rax,[rcx+disp8]
@@ -39,45 +38,15 @@
    ; a fixnum RESULT leaving range, never a bad INPUT. test al,1 (fixnum = odd); a clear
    ; low bit (even) falls through to the deopt -- structurally a guardz (jnz over it).
    (fxv  i d) ((fetch i) + '(168 1) + (guardz d)    + untag)           ; nat deopt (interp value[0])
-   push-rax '(80)   pop-r8 '(65 88)
+   ; the leaf/loop arith body-codegen + its helpers (cgv, opseq/idivseq/bitseq/cmpseq/setcc, condcode)
+   ; are RETIRED: the IR lanes carry them now -- cgir (leaf/n-ary) and cgvir (loops). guard/guardz/fetch/
+   ; untag survive (the float param-load fxv); epilogue survives (jitf + the loop/grid raw tails).
    epilogue
-    ; add rax,rax;guard;or rax,1;mov[rcx]
-    ; add rsi,16; Continue
+    ; add rax,rax;guard;or rax,1;mov[rcx] ; add rsi,16; Continue
     ('(72 1 192) + (guard 0) + '(72 131 200 1 72 137 1 72 131 198 16 72 139 6 255 224))
-   (opseq op d) (? (= op '+) (pop-r8 + '(76 1 192) + (guard d))            ; add rax,r8 ; guard
-                   (= op '*) (pop-r8 + '(73 15 175 192) + (guard d))       ; imul rax,r8 ; guard
-                   (= op '-) (pop-r8 + '(73 41 192) + (guard d) + '(76 137 192))  ; sub r8,rax;guard;mov rax,r8
-                   ())
-   ; // and %: a in r8 (dividend), b in rax (divisor) -> rax; preserves rdx(=Hp) via
-   ; the machine stack; divide-by-zero deopts (guardz). idiv truncates toward 0, the
-   ; remainder takes the dividend's sign -- matching love's // and %.
-   (idivseq op d) (+ pop-r8 (+ '(72 133 192) (+ (guardz d)                 ; a->r8; test rax,rax (==0 -> deopt)
-     (+ '(82 80 76 137 192 72 153 72 247 60 36)                                ; push rdx;push rax;mov rax,r8;cqo;idiv [rsp]
-       (+ (? (= op '%) '(72 137 208) ()) '(72 131 196 8 90))))))                ; (% mov rax,rdx); add rsp,8; pop rdx
-   ; bitwise: a in r8, b in rax -> rax = a OP b (fixnum operands stay <=62-bit, no guard)
-   (bitseq op) (+ pop-r8 (? (= op '&) '(76 33 192) (= op '|) '(76 9 192) (= op '^) '(76 49 192) ()))  ; and/or/xor rax,r8
-   ; comparison: a in r8, b in rax -> rax = (a OP b) ? 1 : 0 (0/1, no deopt)
-   (setcc op) (? (= op '<) '(15 156 192) (= op '<=) '(15 158 192) (= op '>) '(15 159 192)
-                 (= op '>=) '(15 157 192) (= op '=) '(15 148 192) ())             ; setcc al
-   (cmpseq op) (+ pop-r8 (+ '(73 57 192) (+ (setcc op) '(72 15 182 192)))) ; cmp r8,rax; setcc al; movzx rax,al
-   ; (? test then else): test>0 -> then else else (love truth = strictly positive)
-   (condcode tb thb elb) (: Lt (tally thb) Le (tally elb)
-     (+ tb (+ '(72 131 248 0)                                                ; cmp rax,0
-       (+ (+ '(15 142) (le4 (+ Lt 5)))                                       ; jle else (skip then + jmp)
-         (+ thb (+ (+ '(233) (le4 Le)) elb))))))                           ; then ; jmp end ; else
-   (cgv v vl e d) (? (= e v)  (vl d)                                             ; vl = a load FN of d (leaf guards, loop counter doesn't)
-                     (whole? e) (+ '(72 184) (le8 e))                            ; movabs rax, n
-                     (two? e) (: op (cap e)  a (caup e)  b (caup (cup e))
-                                 (? (member? op '(+ - *))      (+ (cgv v vl a d) (+ push-rax (+ (cgv v vl b (+ d 1)) (opseq op d))))
-                                    (member? op '(// %))        (+ (cgv v vl a d) (+ push-rax (+ (cgv v vl b (+ d 1)) (idivseq op d))))
-                                    (member? op '(& | ^))       (+ (cgv v vl a d) (+ push-rax (+ (cgv v vl b (+ d 1)) (bitseq op))))
-                                    (member? op '(< <= > >= =)) (+ (cgv v vl a d) (+ push-rax (+ (cgv v vl b (+ d 1)) (cmpseq op))))
-                                    (= op '?) (condcode (cgv v vl a d) (cgv v vl b d) (cgv v vl (caup (cup (cup e))) d))
-                                    ()))
-                     ())
    (emit l) (: b (cask (tally l)) _ ((: (go i x) (? (two? x) (: _ (pin b i (cap x)) (go (+ i 1) (cup x))) ())) 0 l) b)
    ; (jit '(\ x E)) -- compile an arithmetic single-arg closure to native.
-   (jit lam) (jitir lam 'x64)  ; arity-1 leaf -> the neutral-IR lane (cgir). the byte cgv body-codegen below stays: the loop lanes (loopcode/loopcode-n) reuse it.
+   (jit lam) (jitir lam 'x64)  ; arity-1 leaf -> the neutral-IR lane (cgir)
    ; --- the arity-INDEPENDENT deopt/epilogue blobs for the >=2-arity natives: the deopt jmps to interp's
    ; BODY (interp+16 past its lvm_cur) where the saturated args already sit. The byte n-ary ARITH lane
    ; (cgn + opseq-mn/idivseq-mn) is retired -- jitn now routes through the neutral-IR cgir (below); these
@@ -146,9 +115,7 @@
    ; at Sp[0]. r9=n r10=cv r11=acc. FOLD is a (op . init) -- + folds from 0, * from 1 --
    ; and cmp is the loop test's comparison (the loop runs while (cmp cv n)). offsets are
    ; COMPUTED from the piece lengths, not hardcoded, so a longer acc op (imul) is fine.
-   acc-add '(73 1 195)            acc-mul '(76 15 175 216)        ; add r11,rax / imul r11,rax
-   (r11-init a0) (? (= a0 0) '(77 49 219) (+ '(73 199 195) (le4 a0)))   ; xor r11,r11 / mov r11,a0
-   (foldbytes op) (? (= op '+) acc-add (= op '*) acc-mul ())
+   (r11-init a0) (? (= a0 0) '(77 49 219) (+ '(73 199 195) (le4 a0)))   ; xor r11,r11 / mov r11,a0  (loopcode pre; acc-fold is IR)
    (foldinit op)  (? (= op '*) 1 0)                               ; * folds from 1, + from 0
    ; END condition = the INVERSE of the continue-comparison (exit when (cmp cv n) is false).
    (exitcc cmp) (? (= cmp '<) 'ge (= cmp '<=) 'gt (= cmp '>) 'le
@@ -172,9 +139,6 @@
    ; TEST, compute EVERY Uj from the OLD regs -- push all, then pop into the regs in
    ; reverse -- so the updates read pre-update values (e.g. fib's `b` and `a+b`); else
    ; RESULT. r9/r10/r11 survive the expr scratch (rax/r8/stack), so no save needed.
-   (reg-ld j)   (? (= j 0) '(76 137 200) (= j 1) '(76 137 208) (= j 2) '(76 137 216) ())  ; mov rax, r9/r10/r11
-   (reg-init j) (? (= j 0) '(73 199 193) (= j 1) '(73 199 194) (= j 2) '(73 199 195) ())  ; mov r9/r10/r11, imm32
-   (reg-pop j)  (? (= j 0) '(65 89) (= j 1) '(65 90) (= j 2) '(65 91) ())                 ; pop r9/r10/r11
    ; lvreg: loop var j -> its abstract register (v0/v1/v2 = phys r9/r10/r11 = IR r8/r9/r10).
    (lvreg j) (nthl '(r8 r9 r10) j)
    (loopcode-n n vars updates test result inits)
