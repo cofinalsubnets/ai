@@ -154,20 +154,14 @@
    (exitcc cmp) (? (= cmp '<) 'ge (= cmp '<=) 'gt (= cmp '>) 'le
                    (= cmp '>=) 'lt (= cmp '=) 'ne ())  ; ge/gt/le/lt/ne
    (loopcode body cv op cmp)
-    (: lb   (cgv cv (\ d ld-i) body 0)                         ; body -> rax (cv loaded raw via ld-i)
-       acc  (+ (foldbytes op) (guard 0))                       ; r11 = r11 op rax ; overflow -> deopt
+    (: bodyir (cgvir 'x64 (\ e d (? (= e cv) '((mov r0 r9)) ())) body 0)      ; body -> acc(rax); cv loaded raw from r10 (IR r9)
+       accir  (cat (? (id? op '+) '((adds r10 r10 r0)) (id? op '*) '((imul r10 r10 r0)) ()) (ldeopt 'x64 0))   ; r11 = r11 op rax ; overflow -> deopt
        pre  (+ '(76 139 9  73 209 249  77 49 210) (r11-init (foldinit op)))    ; mov r9,[rcx];sar;xor r10; init r11
-       ; control flow via the asm/ assembler -- the back-edge/exit offsets are
-       ; LABEL-resolved (no hand-counted le4); the pre/body/acc/epi blobs splice in
-       ; as `raw`. phys r9=n r10=cv r11=acc -> IR r8 r9 r10, so cmp r10,r9 = (cmp r9 r8).
-       (asmx `(`('raw pre)
-               '(label top)
-               '(cmp r9 r8) `('br (exitcc cmp) 'end)          ; cmp cv,n ; exit when (cmp cv n) false
-               `('raw lb) `('raw acc)
-               '(inc r9) '(jmp top)                           ; cv++ ; loop top
-               '(label end)
-               '(mov r0 r10)                                  ; mov rax,r11
-               `('raw epilogue))))
+       ; whole loop in asm/ IR now: pre/epilogue are raw x86 blobs, the BODY + acc-fold + control flow are
+       ; label-resolved IR. phys r9=n r10=cv r11=acc -> IR r8 r9 r10, so cmp r10,r9 = (cmp r9 r8).
+       (asmx (cat (L `('raw pre) '(label top) '(cmp r9 r8) `('br (exitcc cmp) 'end))   ; cmp cv,n ; exit when (cmp cv n) false
+              (cat bodyir (cat accir
+                   (L '(inc r9) '(jmp top) '(label end) '(mov r0 r10) `('raw epilogue)))))))   ; cv++ ; loop ; mov rax,r11
    ; (jitsum body) -- compile (\ n (sum_{i<n} body(i))) to a native counted loop.
    (jitsum body)
     (: src `('\ 'n `(`(': `('go 'i 'a) `('? `('< 'i 'n) `('go `('+ 'i 1) `('+ 'a body)) 'a)) 0 0))
@@ -181,35 +175,24 @@
    (reg-ld j)   (? (= j 0) '(76 137 200) (= j 1) '(76 137 208) (= j 2) '(76 137 216) ())  ; mov rax, r9/r10/r11
    (reg-init j) (? (= j 0) '(73 199 193) (= j 1) '(73 199 194) (= j 2) '(73 199 195) ())  ; mov r9/r10/r11, imm32
    (reg-pop j)  (? (= j 0) '(65 89) (= j 1) '(65 90) (= j 2) '(65 91) ())                 ; pop r9/r10/r11
-   ; cgl: an expr over {n (the fxv'd param) ; v0..vk (raw loop-var registers)} -> rax.
-   (cgl n vars e d)
-    (? (= e n)        (fxv 0 d)                                  ; the param: guarded Sp[0] load (untag)
-       (member? e vars)  (reg-ld (argix e vars 0))                  ; a loop var: raw register
-       (whole? e)       (+ '(72 184) (le8 e))                    ; movabs
-       (two? e) (: op (cap e)  a (caup e)  b (caup (cup e))
-                   (? (member? op '(+ - *))      (+ (cgl n vars a d) (+ push-rax (+ (cgl n vars b (+ d 1)) (opseq op d))))
-                      (member? op '(// %))        (+ (cgl n vars a d) (+ push-rax (+ (cgl n vars b (+ d 1)) (idivseq op d))))
-                      (member? op '(& | ^))       (+ (cgl n vars a d) (+ push-rax (+ (cgl n vars b (+ d 1)) (bitseq op))))
-                      (member? op '(< <= > >= =)) (+ (cgl n vars a d) (+ push-rax (+ (cgl n vars b (+ d 1)) (cmpseq op))))
-                      (= op '?) (condcode (cgl n vars a d) (cgl n vars b d) (cgl n vars (caup (cup (cup e))) d))
-                      ()))
-       ())
+   ; lvreg: loop var j -> its abstract register (v0/v1/v2 = phys r9/r10/r11 = IR r8/r9/r10).
+   (lvreg j) (nthl '(r8 r9 r10) j)
    (loopcode-n n vars updates test result inits)
-    (: pre  ((: (go j is) (? (two? is) (+ (+ (reg-init j) (le4 (cap is))) (go (+ j 1) (cup is))) ())) 0 inits)
-       ups  ((: (go j us) (? (two? us) (+ (+ (cgl n vars (cap us) j) push-rax) (go (+ j 1) (cup us))) ())) 0 updates)  ; push Uj at depth j
-       pops ((: (go j) (? (< j 0) () (+ (reg-pop j) (go (- j 1))))) (- (tally updates) 1))   ; pop reg(k-1)..reg(0)
-       ub   (+ ups pops)
-       tb   (cgl n vars test 0)
-       rb   (cgl n vars result 0)
-       ; control flow via the asm/ assembler -- the test-exit/back-edge offsets are
-       ; LABEL-resolved (no hand-counted le4); the pre/tb/ub/rb/epi blobs splice as `raw`.
-       (asmx `(`('raw pre)
-               '(label top)
-               `('raw tb) '(cmp r0 0) '(br eq end)            ; <test>; rax==0 (false) -> end
-               `('raw ub) '(jmp top)                          ; updates ; loop top
-               '(label end)
-               `('raw rb)                                     ; result -> rax
-               `('raw epilogue))))
+    ; the whole N-var loop in asm/ IR. nvld loads a var: n from Sp[0] (fxvir, guarded), a loop var from its
+    ; raw register. updates are computed from the OLD regs (all pushed at depth j, then popped reverse so
+    ; reg(j) <- Uj). control flow + per-depth deopt are label-resolved; only epilogue stays a raw blob.
+    (: nvld (\ e d (? (= e n) (fxvir 'x64 0 d)
+                       (member? e vars) (L (L 'mov 'r0 (lvreg (argix e vars 0))))
+                       ()))
+       pre  ((: (go j is) (? (two? is) (cat (L (L 'li (lvreg j) (cap is))) (go (+ j 1) (cup is))) ())) 0 inits)        ; reg-init
+       ups  ((: (go j us) (? (two? us) (cat (cgvir 'x64 nvld (cap us) j) (cat (L '(push r0)) (go (+ j 1) (cup us)))) ())) 0 updates)   ; push Uj at depth j
+       pops ((: (go j) (? (< j 0) () (cat (L (L 'pop (lvreg j))) (go (- j 1))))) (- (tally updates) 1))                ; pop reg(k-1)..reg(0)
+       tb   (cgvir 'x64 nvld test 0)
+       rb   (cgvir 'x64 nvld result 0)
+       (asmx (cat pre (cat (L '(label top))
+              (cat tb (cat (L '(cmp r0 0) '(br eq end))                ; <test>; rax==0 (false) -> end
+              (cat ups (cat pops (cat (L '(jmp top) '(label end))      ; updates ; loop top
+              (cat rb (L `('raw epilogue))))))))))))                    ; result -> rax
    ; (jitloop-n lam vars updates test result inits) -- a general N-var loop -> native.
    (jitloop-n lam vars updates test result inits)
     (nif (emit (loopcode-n (caup lam) vars updates test result inits)) (ev lam) lam 1)
@@ -679,6 +662,46 @@
    ; (jitir '(\ x E) tgt) -- an arity-1 leaf. (jitnir '(\ p0 .. E) tgt) -- arity>=2 (natn curries to saturation).
    (jitir lam tgt)  (jitcore tgt (L (caup lam)) (caup (cup lam)) (deoptir tgt 0) 1 lam)
    (jitnir lam tgt) (: ps (init (cup lam)) body (last (cup lam)) (jitcore tgt ps body (deoptir tgt 1) (tally ps) lam))
+
+   ; --- the LOOP-BODY neutral IR (cgvir): the same arith grammar as cgir, but for the loop lanes, whose
+   ; state (n/counter/acc) fills r9/r10/r11 leaving NO free reg for an anchor. So the overflow/div-by-0
+   ; guard deopts INLINE -- unwind the d pending machine-stack pushes, then tail-apply interp (value[1] to
+   ; the arg still in Sp[0]) -- instead of cgir's anchor-restore. A var is loaded by `varld` (the counter
+   ; from its raw register; an n-loop param via fxir). Replaces the byte cgv/cgl + opseq/cmpseq/... lane.
+   (ldeopt tgt d) (: A (greg tgt 'acc) IP (greg tgt 'ip) ok (mint 0)   ; jno over deopt; on overflow: unwind d, tail to interp
+      (cat (L (L 'br 'vc ok)) (cat (? (> d 0) (L (L 'add 'sp 'sp (* 8 d))) ())
+           (L (L 'ld A IP 8) (L 'mov IP A) (L 'ld A IP 0) (L 'jmpr A) (L 'label ok)))))
+   (zdeopt tgt d) (: A (greg tgt 'acc) IP (greg tgt 'ip) ok (mint 0)   ; jnz over deopt (the /-by-0 AND fixnum-input guard)
+      (cat (L (L 'br 'ne ok)) (cat (? (> d 0) (L (L 'add 'sp 'sp (* 8 d))) ())
+           (L (L 'ld A IP 8) (L 'mov IP A) (L 'ld A IP 0) (L 'jmpr A) (L 'label ok)))))
+   (fxvir tgt i d) (: A (greg tgt 'acc) S (greg tgt 'sp)   ; load Sp[i] TAGGED, fixnum-guard (inline deopt at depth d), untag
+      (cat (L (L 'ld A S (* 8 i)) (L 'test A 1)) (cat (zdeopt tgt d) (L (L 'sar A 1)))))
+   (arithl tgt op d) (: A (greg tgt 'acc) T (greg tgt 'tmp)   ; acc = (popped a) OP acc, overflow -> inline deopt
+      (? (id? op '+) (cat (L (L 'adds A A T)) (ldeopt tgt d))
+         (id? op '*) (cat (L (L 'imul A A T)) (ldeopt tgt d))
+         (id? op '-) (cat (L (L 'subs T T A)) (cat (ldeopt tgt d) (L (L 'mov A T)))) ()))
+   (divl tgt op d) (: A (greg tgt 'acc) T (greg tgt 'tmp) SC (greg tgt 'scratch)   ; a in tmp (popped), b in acc -> acc; b==0 deopts
+      (cat (L (L 'pop T) (L 'test A A)) (cat (zdeopt tgt d) (? (id? op '//) (L (L 'div A T A)) (id? op '%) (L (L 'rem A T A SC)) ()))))
+   (cgvir tgt varld e d) (: A (greg tgt 'acc) T (greg tgt 'tmp)
+      (: vl (varld e d)
+       (? vl vl                                              ; a var -> its loader IR (acc <- the var, at depth d)
+          (whole? e) (L (L 'li A e))
+          (two? e) (: op (cap e) a (caup e) b (caup (cup e))
+             (? (member? op '(+ - *))
+                  (cat (cgvir tgt varld a d) (cat (L (L 'push A)) (cat (cgvir tgt varld b (+ d 1)) (cat (L (L 'pop T)) (arithl tgt op d)))))
+                (member? op '(// %))
+                  (cat (cgvir tgt varld a d) (cat (L (L 'push A)) (cat (cgvir tgt varld b (+ d 1)) (divl tgt op d))))
+                (member? op '(& | ^))
+                  (cat (cgvir tgt varld a d) (cat (L (L 'push A)) (cat (cgvir tgt varld b (+ d 1)) (L (L 'pop T) (L (bitop op) A A T)))))
+                (member? op '(< <= > >= =))
+                  (cat (cgvir tgt varld a d) (cat (L (L 'push A)) (cat (cgvir tgt varld b (+ d 1)) (L (L 'pop T) (L 'cmp T A) (L 'set (ccof op) A)))))
+                (id? op '?)
+                  (: el (mint 0) en (mint 0)
+                     (cat (cgvir tgt varld a d) (cat (L (L 'cmp A 0) (L 'br 'le el))
+                          (cat (cgvir tgt varld b d) (cat (L (L 'jmp en) (L 'label el))
+                               (cat (cgvir tgt varld (caup (cup (cup e))) d) (L (L 'label en))))))))
+                ()))
+          ())))
    ; --- the NEUTRAL-IR group lane (jitgroupir) -- a GROUP of mutually-recursive first-order integer fns
    ;     to native, both targets. `call H_g` is `(call <name>)`, each H opens `(label <name>)`, and asm/
    ;     resolves the rel offsets. IR chunks concatenate FLAT via `asm` (foldl-(+); on lists of IR forms,
