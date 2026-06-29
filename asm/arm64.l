@@ -177,6 +177,25 @@
       (catall (L (arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))               ; add x16, base, index lsl #amt
                  (arm64-mem-r 0xF8000000 0xF9000000 (rn s) 16 disp)))                         ; str s, [x16, #disp]
 
+   ;; -- scalar-double FP (the float glaze lane). f0..f15 -> v0..v15 (d-register view), a SEPARATE file
+   ;;    from the GPRs. the IR carries the SSE mnemonics (addsd/movsd/...) two-address (d = op(d,s)); we
+   ;;    map each to the arm64 scalar-double form, repeating d as the first source where arm64 is
+   ;;    three-address. type=01 (double) throughout; every word was objdump-checked.
+   arm64-fregs (tablet 0)
+   _ (foldl (\ _ i (pin arm64-fregs (intern (+ "f" (show i))) i)) 0 (jot 16))                  ; f0..f15 -> 0..15
+   (frn r) (: e (peep arm64-fregs r -1) (? (< e 0) (scare 'badfreg r) e))
+   arm64-fp3 (tablet 0)                                                                         ; SSE arith mnemonic -> the scalar-double base word (Dd = Dn OP Dm)
+   _ (foldl (\ _ p (pin arm64-fp3 (cap p) (cup p))) 0
+        (L (link 'addsd 0x1E602800) (link 'subsd 0x1E603800) (link 'mulsd 0x1E600800) (link 'divsd 0x1E601800)))
+   (arm64-fp3op op d s) (: dn (frn d) sn (frn s) (le32 (| (peep arm64-fp3 op 0) (| (<< sn 16) (| (<< dn 5) dn)))))   ; Dd = Dd OP Ds
+   (arm64-fmov  d s) (: dn (frn d) sn (frn s) (le32 (| 0x1E604000 (| (<< sn 5) dn))))           ; FMOV Dd, Ds
+   (arm64-fcmp  a b) (: an (frn a) bn (frn b) (le32 (| 0x1E602000 (| (<< bn 16) (<< an 5)))))   ; FCMP Da, Db (sets NZCV; unordered -> VS)
+   (arm64-scvtf d g) (: dn (frn d) gn (rn g) (le32 (| 0x9E620000 (| (<< gn 5) dn))))            ; SCVTF Dd, Xg  (signed int -> double)
+   (arm64-fmovxr d g) (: dn (frn d) gn (rn g) (le32 (| 0x9E670000 (| (<< gn 5) dn))))           ; FMOV Dd, Xg   (gpr bits -> fpr)  == movqxr
+   (arm64-fmovrx g d) (: gn (rn g) dn (frn d) (le32 (| 0x9E660000 (| (<< dn 5) gn))))           ; FMOV Xg, Dd   (fpr -> gpr bits)  == movqrx
+   (arm64-fst base disp s) (: tn (frn s) bn (rn base) (le32 (| 0xFD000000 (| (<< (// disp 8) 10) (| (<< bn 5) tn)))))   ; STR Ds, [base, #disp]  (disp a multiple of 8)
+   (arm64-fld d base disp) (: dn (frn d) bn (rn base) (le32 (| 0xFD400000 (| (<< (// disp 8) 10) (| (<< bn 5) dn)))))   ; LDR Dd, [base, #disp]
+
    (arm64-lower ins)
       (: op (cap ins)
          (? (= op 'li)   (arm64-li   (at ins 1) (at ins 2))
@@ -205,6 +224,14 @@
             (= op 'stx)  (arm64-stx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))
             (= op 'leax) (arm64-leax (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))
             (= op 'call) (arm64-call (at ins 1))
+            (= op 'movsd)    (arm64-fmov   (at ins 1) (at ins 2))                 ; -- scalar-double FP --
+            (member? op '(addsd subsd mulsd divsd)) (arm64-fp3op op (at ins 1) (at ins 2))
+            (= op 'ucomisd)  (arm64-fcmp   (at ins 1) (at ins 2))
+            (= op 'cvtsi2sd) (arm64-scvtf  (at ins 1) (at ins 2))
+            (= op 'movqxr)   (arm64-fmovxr (at ins 1) (at ins 2))
+            (= op 'movqrx)   (arm64-fmovrx (at ins 1) (at ins 2))
+            (= op 'stsd)     (arm64-fst    (at ins 1) (at ins 2) (at ins 3))      ; (stsd base disp f)
+            (= op 'ldsd)     (arm64-fld    (at ins 1) (at ins 2) (at ins 3))      ; (ldsd f base disp)
             (= op 'ret)  (le32 0xD65F03C0)                     ; ret x30
             (= op 'sys)  (le32 0xD4000001)                     ; svc #0
             (= op 'nop)  (le32 0xD503201F)

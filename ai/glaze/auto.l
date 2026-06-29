@@ -997,24 +997,25 @@
    ; equal-but-distinct closure semantics (!(id? (\ x E) (\ x E))). A safe creation hook
    ; needs the POST-macro opfix seam + a CODE cache (distinct cells per instance). Future.)
    ; the lanes route to `arch` (the assembler target). on x86 (arch='x64) the FULL glaze runs. on arm64 the
-   ; INTEGER lanes are live -- leaf/n-ary/closure (jitir/jitnir), the COUNTED LOOPS (loopcode/loopcode-n)
-   ; and the mutually-recursive arith GROUP (autogroup -> jitgroupir), all arch-parameterized and validated
-   ; under qemu (`make test_arm64`, which builds tco=1 to match the native ABI: Ip/Hp/Sp in x1/x2/x3, the
-   ; threaded Continue). The FLOAT lanes (jitfr float-result / autonat float-grids / castbuild's cask-fill)
-   ; are still x86-only emitters, so on arm64 they fall to the interpreter (autogroup carries every source
-   ; rewrite that lowers to the integer group, so fib/tak/primes still glaze).
-   (auto-ev e) (? (! x86?) (? (qual e)  (memo e (\ l (jitir l arch)))        ; arm64: integer lanes native, float interp
+   ; INTEGER lanes (leaf/n-ary/closure, counted loops, the mutually-recursive arith GROUP) AND the scalar
+   ; FLOAT-result leaf (jitfr) are all live -- arch-parameterized and validated under qemu (`make
+   ; test_arm64`, which builds tco=1 to match the native ABI: Ip/Hp/Sp in x1/x2/x3, the threaded Continue).
+   ; Only the float-GRID lane (autonat/jitfgridn, packed SSE2) and castbuild's cask-fill stay x86-only, so
+   ; on arm64 they fall to the interpreter (autogroup carries every source rewrite that lowers to the
+   ; integer group, so fib/tak/primes still glaze).
+   (auto-ev e) (? (! x86?) (? (qual e)  (memo e (\ l (jitir l arch)))        ; arm64: integer + scalar-float lanes native
                                (qualn e) (memo e (\ l (jitnir l arch)))
                                (qualc e) (memo e (\ l (jitnir (flatc l) arch)))
+                               (qualfr e) (memo e (\ l (jitfr l arch)))      ; float-RESULT leaf -> heap-boxed gem
                                (: li (loopinfo e)                            ; counted loops (arch-aware loopcode)
                                   (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li))))))
                                      (: ln (loopinfo-n e)
                                         (? ln (memo e (\ l (njit-loop-n l (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))))))
-                                           (base-ev (autogroup e)))))))      ; group native (arch-aware); float -> interp
+                                           (base-ev (autogroup e)))))))      ; group native (arch-aware); float-grids -> interp
                   (qual e)  (memo e (\ l (jitir l arch)))
                   (qualn e) (memo e (\ l (jitnir l arch)))
                   (qualc e) (memo e (\ l (jitnir (flatc l) arch)))
-                  (qualfr e) (memo e jitfr)                       ; float-RESULT leaf -> heap-boxed gem (sound: param floated at first use)
+                  (qualfr e) (memo e (\ l (jitfr l arch)))         ; float-RESULT leaf -> heap-boxed gem (sound: param floated at first use)
                   (: li (loopinfo e)
                      (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li))))))
                         (: ln (loopinfo-n e)

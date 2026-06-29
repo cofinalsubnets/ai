@@ -220,7 +220,20 @@
          "640040f99f0040f26001005484fc4193840400b106010054840004abc6000054840040b2640000f921400091250040f9a0001fd6250440f9e10305aa250040f9a0001fd6"
          '((ld r4 r3 0) (test r4 1) (br eq deopt) (sar r4 1) (adds r4 r4 1) (br vs deopt)
            (adds r4 r4 r4) (br vs deopt) (or r4 r4 1) (st r3 0 r4) (add r1 r1 16) (ld r5 r1 0) (jmpr r5)
-           (label deopt) (ld r5 r1 8) (mov r1 r5) (ld r5 r1 0) (jmpr r5))))
+           (label deopt) (ld r5 r1 8) (mov r1 r5) (ld r5 r1 0) (jmpr r5)))
+      ;; scalar-double FP (the float glaze lane): f0..f15 -> d0..d15. SSE-named IR, two-address, mapped to
+      ;; the arm64 scalar-double form. each golden checked vs llvm-objdump (mnemonics in the trailing comment).
+      (L "a64.cvtsi2sd" "8000629e"          '((cvtsi2sd f0 r4)))          ; scvtf d0, x4
+      (L "a64.movqxr"   "8100679e"          '((movqxr f1 r4)))            ; fmov  d1, x4  (gpr bits -> fpr)
+      (L "a64.movqrx"   "0400669e"          '((movqrx r4 f0)))            ; fmov  x4, d0  (fpr -> gpr bits)
+      (L "a64.movsd"    "2040601e"          '((movsd f0 f1)))             ; fmov  d0, d1
+      (L "a64.addsd"    "0028611e"          '((addsd f0 f1)))             ; fadd  d0, d0, d1
+      (L "a64.subsd"    "2138601e"          '((subsd f1 f0)))             ; fsub  d1, d1, d0
+      (L "a64.mulsd"    "0008611e"          '((mulsd f0 f1)))             ; fmul  d0, d0, d1
+      (L "a64.divsd"    "2118601e"          '((divsd f1 f0)))             ; fdiv  d1, d1, d0
+      (L "a64.ucomisd"  "0020611e"          '((ucomisd f0 f1)))           ; fcmp  d0, d1
+      (L "a64.stsd"     "400400fd"          '((stsd r2 8 f0)))            ; str   d0, [x2, #8]
+      (L "a64.ldsd"     "610040fd"          '((ldsd f1 r3 0))))           ; ldr   d1, [x3]
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'arm64 (at t 2))) 0 a64tests)
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --

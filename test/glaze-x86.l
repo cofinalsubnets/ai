@@ -71,17 +71,17 @@
      (&& (15 = (a5 10)) (17 = (a7 10)) ('(6 7 8) = (map a5 '(1 2 3)))                 ; native captured closure, composes
          (8000000000000000000 = ((mk 4000000000000000000) 4000000000000000000))))    ; ... and deopts through the capture
   ; HEAP RESULT (jitfr): a float-result leaf BOXES on the heap -- a gem out, == interp, transparent, deopts
-  (: fr (jitfr '(\ x (+ (* x 1.5) 2.0)))  ifr (\ x (+ (* x 1.5) 2.0))
+  (: fr (jitfr '(\ x (+ (* x 1.5) 2.0)) 'x64)  ifr (\ x (+ (* x 1.5) 2.0))
      (&& (gem? (fr 4)) (8.0 = (fr 4)) (= (ifr 7) (fr 7))                  ; a FLOAT box; 4*1.5+2=8.0; == interp
          (lit? fr) ((\ x (+ (* x 1.5) 2.0)) = fr)                         ; applicable + =-IDENTICAL to source
          (= (map ifr '(1 2 3)) (map fr '(1 2 3)))                         ; composes with map, == interp
          (= (ifr (:)) (fr (:)))))                                         ; non-fixnum arg -> fxv deopt -> interp
-  (: frz (jitfr '(\ x (/ (- x x) (- x x)))) (&& (gem? (frz 5)) (0.0 = (frz 5))))   ; 0/0 -> NaN -> 0.0 (flo_put's law)
+  (: frz (jitfr '(\ x (/ (- x x) (- x x))) 'x64) (&& (gem? (frz 5)) (0.0 = (frz 5))))   ; 0/0 -> NaN -> 0.0 (flo_put's law)
   ; GC-SAFETY: a native-written box is a normal ai_flo (kind=lvm_flo, 2 words) -> the cheney copier
   ; traces/moves it like any gem. hold one across a big alloc (forces GC), and box thousands under
   ; pressure -- if the box were malformed or the bump corrupted Sp's region, these would diverge/crash.
-  (: gfr (jitfr '(\ x (+ (* x 1.5) 2.0)))  b (gfr 4)  _ (tally (jot 200000))  (8.0 = b))   ; the box survives a forced GC
-  (: gfr (jitfr '(\ x (+ (* x 1.5) 2.0)))  ys (map gfr (jot 4000))  zs (map (\ x (+ (* x 1.5) 2.0)) (jot 4000)) (= ys zs))  ; 4000 boxes under GC pressure == interp
+  (: gfr (jitfr '(\ x (+ (* x 1.5) 2.0)) 'x64)  b (gfr 4)  _ (tally (jot 200000))  (8.0 = b))   ; the box survives a forced GC
+  (: gfr (jitfr '(\ x (+ (* x 1.5) 2.0)) 'x64)  ys (map gfr (jot 4000))  zs (map (\ x (+ (* x 1.5) 2.0)) (jot 4000)) (= ys zs))  ; 4000 boxes under GC pressure == interp
   ; --- added coverage: setcc <=/>/>=/=, multi-arg (cgn) %/&/|/cmp/?, *-fold loop, //-by-0 deopt ---
   ; comparison RESULT codes -- only `<` reached a setcc before, 4 of 5 opcodes were dark
   (: le (jit '(\ x (<= x 5))) (&& (1 = (le 5)) (1 = (le 3)) (0 = (le 6))))            ; setcc <=
