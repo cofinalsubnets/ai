@@ -21,29 +21,10 @@
 (: (le8 n) (: u (? (< n 0) (+ n 18446744073709551616) n)                            ; two's-complement; & is broken on
               ((: (go i) (? (< i 8) (link (% (// u (i 256)) 256) (go (+ i 1))) ())) 0))   ; a bignum >= 2^63, so use //% (n -> 8 LE bytes)
    (le4 n) ((: (go i) (? (< i 4) (link (& (>> n (* 8 i)) 255) (go (+ i 1))) ())) 0)  ; n -> 4 LE bytes (offsets < 2^31, & ok)
-   deopt    '(72 139 70 8  72 137 198  72 139 6  255 224)   ; mov rax,[rsi+8]; mov rsi,rax; mov rax,[rsi]; jmp rax
-   ; guard d / guardz d: skip the inline deopt unless OF (guard) / unless nonzero
-   ; (guardz, for divide-by-zero); on deopt UNWIND d pending machine-stack operands
-   ; (add rsp,8d) so the jmp-to-interp leaves rsp balanced -- else a mid-nest deopt
-   ; leaks pushes and the terminator `ret` faults. deopt tail-applies interp(arg).
-   (guard d)  ('(113 19 72 129 196) + (le4 (* 8 d)) + deopt)      ; jno +19; add rsp,8d; deopt
-   (guardz d) ('(117 19 72 129 196) + (le4 (* 8 d)) + deopt)      ; jnz +19; add rsp,8d; deopt
-   untag '(72 209 248)                                                           ; sar rax,1
-   (fetch i) (? (= i 0)        '(72 139 1)                                       ; mov rax,[rcx]       (TAGGED, no untag)
-                (< (* 8 i) 128) `(72 139 65 (8 * i))              ; mov rax,[rcx+disp8]
-                                ('(72 139 129) + (le4 (* 8 i))))               ; mov rax,[rcx+disp32]
-   ; FIXNUM INPUT GUARD: native arithmetic assumes fixnums (sar/imul/idiv), so a
-   ; NON-fixnum arg (an even/heap word -- a list, mint, the zero point, ...) must DEOPT
-   ; to the bytecode body, which dispatches generically. The overflow guard only catches
-   ; a fixnum RESULT leaving range, never a bad INPUT. test al,1 (fixnum = odd); a clear
-   ; low bit (even) falls through to the deopt -- structurally a guardz (jnz over it).
-   (fxv  i d) ((fetch i) + '(168 1) + (guardz d)    + untag)           ; nat deopt (interp value[0])
-   ; the leaf/loop arith body-codegen + its helpers (cgv, opseq/idivseq/bitseq/cmpseq/setcc, condcode)
-   ; are RETIRED: the IR lanes carry them now -- cgir (leaf/n-ary) and cgvir (loops). guard/guardz/fetch/
-   ; untag survive (the float param-load fxv); epilogue survives (jitf + the loop/grid raw tails).
-   epilogue
-    ; add rax,rax;guard;or rax,1;mov[rcx] ; add rsi,16; Continue
-    ('(72 1 192) + (guard 0) + '(72 131 200 1 72 137 1 72 131 198 16 72 139 6 255 224))
+   ; the raw-byte x86 lane is fully RETIRED: every codegen helper now emits neutral asm/ IR (cgir/cgvir for
+   ; arith, the float lanes cgf/jitfr, the grid kernels gridn/grid2), assembled per target. The old byte
+   ; blobs (deopt/guard/guardz/fetch/untag/fxv/epilogue) are gone -- their IR twins are deoptbody/ldeopt/
+   ; zdeopt/fxvir/loopepi, which serve BOTH x86 and arm64.
    (emit l) (: b (cask (tally l)) _ ((: (go i x) (? (two? x) (: _ (pin b i (cap x)) (go (+ i 1) (cup x))) ())) 0 l) b)
    ; (jit '(\ x E)) -- compile an arithmetic single-arg closure to native.
    (jit lam) (jitir lam 'x64)  ; arity-1 leaf -> the neutral-IR lane (cgir)
@@ -177,8 +158,6 @@
           e  ((: (go e) (? (< ax (e 2.0)) (go (- e 1)) e)) eu)                                     ; lower
           (+ (* s 9223372036854775808) (+ (* (+ e 1023) 4503599627370496)
              (int (* (- (/ ax (e 2.0)) 1.0) 4503599627370496.0))))))
-   xpush '(72 131 236 8 242 15 17 4 36)                              ; sub rsp,8 ; movsd [rsp],xmm0  (bytes, for the byte-built grid lanes)
-   xpop1 '(242 15 16 12 36 72 131 196 8)                             ; movsd xmm1,[rsp] ; add rsp,8
    ; the float spill rides the machine stack at the loop/group slot size (x86 8 / arm64 16, for sp
    ; alignment), so a mid-nest deopt (deoptbody, slotsz*d) unwinds it correctly.
    (xpushir tgt) `(`('sub 'sp 'sp (slotsz tgt)) '(stsd sp 0 f0))   ; spill xmm0/d0 -> [sp]
@@ -246,7 +225,7 @@
    (fccl es acc) (? (two? es) (fccl (cup es) (fcc (cap es) acc)) acc)            ; collect over a list of exprs
    (htbl cs i) (? (atom? cs) () (> i 7) () (link (L (cap cs) i) (htbl (cup cs) (+ i 1))))   ; value -> reg (2..7)
    (hlook v ht) (? (atom? ht) -1 (= v (caap ht)) (caup (cap ht)) (hlook v (cup ht)))
-   (hcon v ht) (: r (hlook v ht) (? (< -1 r) (+ '(242 15 16) (list (+ 192 r))) (asmx (fconst 'x64 v))))   ; hoisted -> movsd xmm0,xmm_r ; else inline fconst (x86 grid lane)
+   (hcon tgt v ht) (: r (hlook v ht) (? (< -1 r) `(`('movsd 'f0 (fr r))) (fconst tgt v)))   ; hoisted const reg -> f0 (movsd) ; else inline fconst -- neutral IR, both targets
    ; --- the OPTIMIZING float-body allocator: value-numbered DAG (CSE) + linear-scan register
    ;     allocation. compiles a SET of root exprs (the inner-loop mag + the fvar updates, which
    ;     SHARE subexprs like zx*zx) to register-only SSE, each value in its own xmm reg so the CPU
@@ -279,28 +258,28 @@
    ;     the float lane need no guard. arity 1 (a dummy arg ignored), integer checksum out. offsets COMPUTED.
    (rangeL a b) (? (< a b) (link a (rangeL (+ a 1) b)) ())
    (map2 f a b) (? (two? a) (link (f (cap a) (cap b)) (map2 f (cup a) (cup b))) ())
-   (cvtcnt r)  (L 242 73 15 42 (+ 194 (- r 10)))               ; cvtsi2sd xmm0, r   (r10-15) -- byte, read by cgFd (raw) in both grids
-   ; cgFd: a derive expr over the COUNTER env ce (int loop counters -> cvtsi2sd) + hoisted consts,
-   ; using [rsp] scratch (xpush/xpop1) so it never touches an xmm8.. local reg -- run once per cell
-   ; (cold), so memory scratch costs nothing measurable.
-   (cgFd ht ce e) (? (gem? e)   (hcon e ht)
-                     (whole? e) (hcon (+ e 0.0) ht)
-                     (atom? e)  (: cb (clook e ce) (? (two? cb) (caup cb) ()))
+   ; cgFd: a derive expr over the COUNTER env ce (int loop counters -> cvtsi2sd, the IR carried by cenv) +
+   ; hoisted consts, using [sp] scratch (xpushir/xpop1ir) so it never touches an xmm8.. local reg -- run
+   ; once per cell (cold). Neutral IR, both targets.
+   (cgFd tgt ht ce e) (? (gem? e)   (hcon tgt e ht)
+                     (whole? e) (hcon tgt (+ e 0.0) ht)
+                     (atom? e)  (: cb (clook e ce) (? (two? cb) (caup cb) ()))           ; counter -> its (cvtsi2sd f0 cntr) IR
                      (two? e)   (: op (cap e) a (caup e) b (caup (cup e))
-                                   (? (member? op '(+ - * /)) (+ (cgFd ht ce a) (+ xpush (+ (cgFd ht ce b) (+ xpop1 (asmx (fbinop op)))))) ()))
+                                   (? (member? op '(+ - * /)) ((cgFd tgt ht ce a) + (xpushir tgt) + (cgFd tgt ht ce b) + (xpop1ir tgt) + (fbinop op)) ()))
                      ())
-   (loopcode-gridn dims cnames invs invd fvars updates testexpr cmpop bound lim)
-    ; the scalar D-dim grid kernel as a neutral asm/ IR PROGRAM (the grid2 pattern, single-step): control
-    ; flow is LABELS (no hand offsets), the recurrence is allocp's CSE'd named-SSE forms, the cold derives
-    ; (cgFd) stay raw. k=r7(iter), acc=r8, counters=r9..(gr); xmm: consts xmm2.., invariants xmm8.., fvars
-    ; next, the rest the DAG pool. D>=3 spills callee-saved counters; the acc-overflow deopt restores them.
-    (: D (tally dims)  M (tally invs)  N (tally fvars)
+   (loopcode-gridn dims cnames invs invd fvars updates testexpr cmpop bound lim tgt)
+    ; the scalar D-dim grid kernel as a neutral asm/ IR PROGRAM, BOTH targets: control flow is LABELS (no
+    ; hand offsets), the recurrence is allocp's CSE'd named-SSE forms, the cold derives (cgFd) are IR too.
+    ; k=r7(iter), acc=r8, counters=r9..(gr); SCR=scratch (greg acc), the deopt tail uses greg ip. xmm: consts
+    ; f2.., invariants f8.., fvars next, the rest the DAG pool. On x86 D>=3 spills the callee-saved counters
+    ; (r12..); on arm64 the counters are caller-saved (x8..), so none. The acc add is GUARDED (lane law).
+    (: D (tally dims)  M (tally invs)  N (tally fvars)  SCR (greg tgt 'acc)    ; SCR: integer scratch (fbits load + the result)
        cregs (rangeL 10 (+ 10 D))                                             ; counter regs (phys r10..), outer->inner
-       saved (rangeL 12 (+ 10 D))                                            ; the callee-saved counters (phys r12..) for D>=3
+       saved (? (id? tgt 'x64) (rangeL 12 (+ 10 D)) ())                       ; x86 r12.. callee-saved (D>=3); arm64 counters caller-saved -> none
        fenv (cat invs fvars)
-       cenv (map2 (\ nm r `(nm (cvtcnt r))) cnames cregs)                     ; counter name -> cvtsi2sd bytes (cgFd reads, raw)
+       cenv (map2 (\ nm r (L nm `(`('cvtsi2sd 'f0 (gr r))))) cnames cregs)    ; counter name -> its (cvtsi2sd f0 cntr) IR (cgFd reads it)
        ht (htbl (fcc bound (fccl invd (fccl updates (fcc testexpr ())))) 2)   ; distinct consts -> xmm2..7
-       derives (foldl (\ a p (a + `(`('raw (cgFd ht cenv (cup p))) `('movsd (fr (8 + (cap p))) 'f0)))) () (map2 (\ i d (link i d)) (rangeL 0 M) invd))   ; inv i -> xmm(8+i)
+       derives (foldl (\ a p (a + (cgFd tgt ht cenv (cup p)) + `(`('movsd (fr (8 + (cap p))) 'f0)))) () (map2 (\ i d (link i d)) (rangeL 0 M) invd))   ; inv i -> xmm(8+i)
        zerof (foldl (\ a j (a + `(`('xorpd (fr (8 + M + j)) (fr (8 + M + j)))))) () (rangeL 0 N))   ; fvar j -> xmm(8+M+j) = 0
        aenv ((efold fenv 8) + ht)
        pool (`(0 1) + (rangeL (+ 8 (+ M N)) 16))
@@ -308,12 +287,11 @@
        AL (allocp dag rootv aenv nn pool 'movsd sseops)  bodyc (cap AL)  rg (caup AL)
        magr (peep rg (cap rootv) 0)  breg (fr (hlook bound ht))
        wb (foldl (\ a j (a + `(`('movsd (fr (8 + M + j)) (fr (peep rg (nthl rootv (1 + j)) 0)))))) () (rangeL 0 N))   ; fvar <- its update's reg
-       deopt '((ld r0 r5 8) (mov r5 r0) (ld r0 r5 0) (jmpr r0))               ; tail-apply the interp fallback (overflow)
        iter (`('(label itop) `('cmp 'r7 lim) '(br ge iesc))                   ; while k<lim AND (cmp mag bound)
              + bodyc + `(`('ucomisd (fr magr) breg) `('br (ucmpx cmpop) 'iesc))
              + wb + '((inc r7) (jmp itop) (label iesc)))
-       popsv (foldl (\ a r (a + `(`('pop (gr r))))) () (rev saved))           ; D>=3: restore callee-saved counters before deopt
-       accb (`('(adds r8 r8 r7) '(br vc cont)) + popsv + deopt + '((label cont)))   ; ESC: acc += k ; overflow -> deopt
+       popsv (foldl (\ a r (a + `(`('pop (gr r))))) () (rev saved))           ; x86 D>=3: restore callee-saved counters before deopt
+       accb (`('(adds r8 r8 r7) '(br vc cont)) + popsv + (deoptbody tgt 0) + '((label cont)))   ; ESC: acc += k ; overflow -> deopt
        cell (derives + zerof + '((li r7 0)) + iter + accb)                    ; derive invariants; zero fvars; k=0; recur; acc += k
        (loop-nest ci body) (: cr (gr (nthl cregs ci))  b (nthl dims ci)       ; counted loops outer->inner (single-step)
           tp (intern ("lt" + (show ci)))  en (intern ("le" + (show ci)))
@@ -321,8 +299,8 @@
           (`(`('li cr 0) `('label tp) `('cmp cr b) `('br 'ge en)) + inner + `(`('inc cr) `('jmp tp) `('label en))))
        pushsv (foldl (\ a r (a + `(`('push (gr r))))) () saved)
        popsv2 (foldl (\ a r (a + `(`('pop (gr r))))) () (rev saved))
-       preload (foldl (\ a e (a + `(`('li 'r0 (fbits (cap e))) `('movqxr (fr (caup e)) 'r0)))) () ht)   ; load each const
-       (asmx (pushsv + preload + '((li r8 0)) + (loop-nest 0 cell) + popsv2 + '((mov r0 r8)))))   ; push saved; consts; acc=0; NEST; pop; rax<-acc
+       preload (foldl (\ a e (a + `(`('li SCR (fbits (cap e))) `('movqxr (fr (caup e)) SCR)))) () ht)   ; load each const
+       (pushsv + preload + '((li r8 0)) + (loop-nest 0 cell) + popsv2 + `(`('mov SCR 'r8))))   ; IR program: push saved; consts; acc=0; NEST; pop; result -> SCR(=acc)
    ; --- 2-WIDE PACKED-SSE2 grid kernel (loopcode-grid2): the SAME D-dim float-recurrence grid, but the
    ;     INNERMOST dim is processed TWO cells at a time -- lanes [c, c+1] packed [low,high] in each xmm.
    ;     The recurrence runs PACKED (addpd/mulpd/subpd via the asm/ SSE2 lane) so both pixels advance per op; the
@@ -367,12 +345,12 @@
     (: D (tally dims)  M (tally invs)  N (tally fvars)
        cregs (rangeL 10 (+ 10 D))  rinner (last cregs)  iir (gr rinner)                  ; iir = inner counter's IR reg (bumped for lane1)
        fenv (invs + fvars)
-       cenv (map2 (\ nm r `(nm (cvtcnt r))) cnames cregs)                                ; counter name -> cvtsi2sd bytes (cgFd reads these)
+       cenv (map2 (\ nm r (L nm `(`('cvtsi2sd 'f0 (gr r))))) cnames cregs)               ; counter name -> its (cvtsi2sd f0 cntr) IR (cgFd reads these)
        ht (htbl (fcc bound (fccl updates (fcc testexpr ()))) 2)                          ; ONLY inner-recurrence consts (bound+..) -> f2,f3; derive consts inline -> f4,5,6 free
        breg (fr (hlook bound ht))  pred (cmppd-imm cmpop)
        idx (map2 (\ i d (link i d)) (rangeL 0 M) invd)                                   ; (inv-index . derive-expr) pairs
-       d0 (foldl (\ a p (a + `(`('raw (cgFd ht cenv (cup p))) `('movsd (fr (8 + (cap p))) 'f0)))) () idx)       ; inv i lane0 -> low of f(8+i)
-       d1 (foldl (\ a p (a + `(`('raw (cgFd ht cenv (cup p))) `('unpcklpd (fr (8 + (cap p))) 'f0)))) () idx)    ; inv i lane1 (counter+1) -> high
+       d0 (foldl (\ a p (a + (cgFd 'x64 ht cenv (cup p)) + `(`('movsd (fr (8 + (cap p))) 'f0)))) () idx)       ; inv i lane0 -> low of f(8+i)
+       d1 (foldl (\ a p (a + (cgFd 'x64 ht cenv (cup p)) + `(`('unpcklpd (fr (8 + (cap p))) 'f0)))) () idx)    ; inv i lane1 (counter+1) -> high
        derives (d0 + `(`('inc iir)) + d1 + `(`('dec iir)))                               ; lane1 = the same derive at counter+1
        zerof (foldl (\ a j (a + `(`('xorpd (fr (8 + M + j)) (fr (8 + M + j)))))) () (rangeL 0 N))   ; fvars := 0 (both lanes)
        aenv ((efold fenv 8) + ht)
@@ -384,7 +362,7 @@
        maskc `(`('movupd 'f6 (fr magr)) `('cmppd 'f6 breg pred) '(andpd f5 f6) '(psubq f4 f5) '(movmskpd r0 f5))
        iter (`('(label itop) `('cmp 'r7 lim) '(br ge iesc)) + bodyc + maskc             ; while k<lim AND any lane alive
              + '((test r0 r0) (br eq iesc)) + wb + '((inc r7) (jmp itop) (label iesc)))
-       deopt '((ld r0 r5 8) (mov r5 r0) (ld r0 r5 0) (jmpr r0))                          ; tail-apply the interp fallback (overflow)
+       deopt (deoptbody 'x64 0)                                                          ; tail-apply the interp fallback (overflow)
        accb ('((movqrx r0 f4) (adds r8 r8 r0) (br vc cont0)) + deopt                     ; acc += count.lane0 ; guard
              + '((label cont0) (movhlps f6 f4) (movqrx r0 f6) (adds r8 r8 r0) (br vc cont1)) + deopt + '((label cont1)))   ; acc += count.lane1 ; guard
        cell (derives + zerof + '((xorpd f4 f4) (pcmpeqd f5 f5) (li r7 0)) + iter + accb)   ; count=0; alive=ones; k=0; loop; acc
@@ -394,18 +372,21 @@
           step  (? (= ci (- D 1)) `(`('add cr cr 2)) `(`('inc cr)))
           (`(`('li cr 0) `('label tp) `('cmp cr b) `('br 'ge en)) + inner + step + `(`('jmp tp) `('label en))))
        preload (foldl (\ a e (a + `(`('li 'r0 (fbits (cap e))) `('movqxr (fr (caup e)) 'r0) `('unpcklpd (fr (caup e)) (fr (caup e)))))) () ht)   ; broadcast each const [c,c]
-       prog (preload + '((li r8 0)) + (loop-nest 0 cell) + '((mov r0 r8)))                ; acc=0 ; NEST ; rax<-acc
-       (asmx prog))
+       (preload + '((li r8 0)) + (loop-nest 0 cell) + '((mov r0 r8))))                    ; IR program (x86): acc=0 ; NEST ; result -> r0(=acc)
    ; (jitfgridn lam cnames dims invs invd fvars updates testexpr cmpop bound lim) -> native D-dim grid.
    ; Tries the 2-wide PACKED kernel when the shape fits (grid2-ok?), else the scalar grid kernel.
-   (jitfgridn lam cnames dims invs invd fvars updates testexpr cmpop bound lim)
-    (: pk (? (grid2-ok? dims invs fvars updates testexpr cmpop bound)
+   ; the PACKED 2-wide kernel (grid2) is x86-only (NEON has no movmskpd); arm64 uses the scalar gridn.
+   ; both kernels return a neutral IR PROGRAM ending with the checksum in acc; jitfgridn appends loopepi
+   ; (putfix + Continue) and assembles for `tgt`.
+   (jitfgridn lam cnames dims invs invd fvars updates testexpr cmpop bound lim tgt)
+    (: pk (? (&& (id? tgt 'x64) (grid2-ok? dims invs fvars updates testexpr cmpop bound))
              (loopcode-grid2 dims cnames invs invd fvars updates testexpr cmpop bound lim) ())
-       (nif (emit (+ (? (atom? pk) (loopcode-gridn dims cnames invs invd fvars updates testexpr cmpop bound lim) pk) epilogue)) (ev lam) lam 1))
-   ; (jitfgrid src pxn pyn cxd cyd fvars updates testexpr cmpop bound lim) -> the 2D mandelbrot-class
+       prog (? (atom? pk) (loopcode-gridn dims cnames invs invd fvars updates testexpr cmpop bound lim tgt) pk)
+       (nif (emit (asmt tgt (prog + (loopepi tgt)))) (ev lam) lam 1))
+   ; (jitfgrid src pxn pyn cxd cyd fvars updates testexpr cmpop bound lim tgt) -> the 2D mandelbrot-class
    ; delegate (the original signature) onto the general kernel: D=2 (px py), M=2 invariants (cx cy).
-   (jitfgrid lam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim)
-    (jitfgridn lam '(px py) (L pxn pyn) '(cx cy) (L cxd cyd) fvars updates testexpr cmpop bound lim)
+   (jitfgrid lam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim tgt)
+    (jitfgridn lam '(px py) (L pxn pyn) '(cx cy) (L cxd cyd) fvars updates testexpr cmpop bound lim tgt)
    ; --- the AUTO-HOOK recognizer: read a float-recurrence GRID nest from SOURCE and extract the
    ;     jitfgrid structure, so ordinary interpreted code gets glazed transparently (no hand-call).
    ;     matches the shape: a mand recurrence (\ cx cy zx zy it (? (&& (< it LIM) (cmp TEST BOUND))
@@ -420,7 +401,7 @@
                                         (L (link p (cap r)) (link a (caup r)) (nthl r 2)))) ; fvar + update
                  (L () () ()))
    (posof k l i) (? (= k (cap l)) i (posof k (cup l) (+ i 1)))
-   (grok glam mps mbody cbody gbody)                               ; -> a native grid closure, or () if it doesn't match the shape
+   (grok glam mps mbody cbody gbody tgt)                           ; -> a native grid closure, or () if it doesn't match the shape
     (: cond (opd mbody 0)  then (opd mbody 1)
        c2 (opd cond 1)  lim (opd (opd cond 0) 1)  cmpop (cap c2)  testexpr (opd c2 0)  bound (opd c2 1)
        cl (classify mps (cup then))  fvars (cap cl)  updates (caup cl)  invs (nthl cl 2)
@@ -428,7 +409,7 @@
        cxd (nthl margs (posof (nthl invs 0) mps 0))  cyd (nthl margs (posof (nthl invs 1) mps 0))
        pxn (opd (opd gbody 0) 1)
        (? (&& (= 2 (tally invs)) (= 2 (tally fvars)))
-          (jitfgrid glam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim) ()))
+          (jitfgrid glam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim tgt) ()))
    ; --- the NEUTRAL-IR retarget (leaf + n-ary lanes) ---------------------------------------------
    ; the byte-emitting lanes above are x86-64-only (raw byte lists). this lane emits the asm/ neutral
    ; IR instead and assembles for a TARGET ('x64 or 'arm64), so aarch64 falls out of asm/arm64.l. it is

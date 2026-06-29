@@ -980,7 +980,7 @@
                                         margs (nthl (last chain) 2)
                                         invd (map (\ iv (nthl margs (posof iv recps 0))) invs)
                                         glam (L '\ '_ form)       ; faithful interp nest (deopt fallback / =-show)
-                                        ng (jitfgridn glam cnames dims invs invd fvars updates testexpr cmpop bound lim)
+                                        ng (jitfgridn glam cnames dims invs invd fvars updates testexpr cmpop bound lim arch)
                                         (? (lit? ng) (link ': (anat-rebind (cup form) (cap (cap outerp)) ng)) form)))))))))))))
    ; COMPILE CACHE: each source \-expr compiles ONCE (no re-mmap on repeated ev).
    ; Keyed by source -- structurally-equal closures share the same native (sound:
@@ -1011,7 +1011,7 @@
                                   (? li (memo e (\ l (njit-loop l (cap li) (caup li) (caup (cup li)) (caup (cup (cup li))))))
                                      (: ln (loopinfo-n e)
                                         (? ln (memo e (\ l (njit-loop-n l (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))))))
-                                           (base-ev (autogroup e)))))))      ; group native (arch-aware); float-grids -> interp
+                                           (base-ev (autogroup (autonat (twolow e)))))))))   ; float-GRID nest (scalar gridn, arch-aware) then group; castbuild (cask-fill) is x86-only so skipped
                   (qual e)  (memo e (\ l (jitir l arch)))
                   (qualn e) (memo e (\ l (jitnir l arch)))
                   (qualc e) (memo e (\ l (jitnir (flatc l) arch)))

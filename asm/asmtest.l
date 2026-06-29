@@ -233,7 +233,8 @@
       (L "a64.divsd"    "2118601e"          '((divsd f1 f0)))             ; fdiv  d1, d1, d0
       (L "a64.ucomisd"  "0020611e"          '((ucomisd f0 f1)))           ; fcmp  d0, d1
       (L "a64.stsd"     "400400fd"          '((stsd r2 8 f0)))            ; str   d0, [x2, #8]
-      (L "a64.ldsd"     "610040fd"          '((ldsd f1 r3 0))))           ; ldr   d1, [x3]
+      (L "a64.ldsd"     "610040fd"          '((ldsd f1 r3 0)))            ; ldr   d1, [x3]
+      (L "a64.xorpd"    "841c242e"          '((xorpd f4 f4))))            ; eor   v4.8b, v4.8b, v4.8b  (zero a double)
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'arm64 (at t 2))) 0 a64tests)
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --

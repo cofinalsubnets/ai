@@ -195,6 +195,7 @@
    (arm64-fmovrx g d) (: gn (rn g) dn (frn d) (le32 (| 0x9E660000 (| (<< dn 5) gn))))           ; FMOV Xg, Dd   (fpr -> gpr bits)  == movqrx
    (arm64-fst base disp s) (: tn (frn s) bn (rn base) (le32 (| 0xFD000000 (| (<< (// disp 8) 10) (| (<< bn 5) tn)))))   ; STR Ds, [base, #disp]  (disp a multiple of 8)
    (arm64-fld d base disp) (: dn (frn d) bn (rn base) (le32 (| 0xFD400000 (| (<< (// disp 8) 10) (| (<< bn 5) dn)))))   ; LDR Dd, [base, #disp]
+   (arm64-xorpd d s) (: dn (frn d) sn (frn s) (le32 (| 0x2E201C00 (| (<< sn 16) (| (<< dn 5) dn)))))   ; EOR Vd.8B, Vd.8B, Vs.8B (zero a double when d==s; the grid's fvar-init)
 
    (arm64-lower ins)
       (: op (cap ins)
@@ -232,6 +233,7 @@
             (= op 'movqrx)   (arm64-fmovrx (at ins 1) (at ins 2))
             (= op 'stsd)     (arm64-fst    (at ins 1) (at ins 2) (at ins 3))      ; (stsd base disp f)
             (= op 'ldsd)     (arm64-fld    (at ins 1) (at ins 2) (at ins 3))      ; (ldsd f base disp)
+            (= op 'xorpd)    (arm64-xorpd  (at ins 1) (at ins 2))                 ; zero a double (d==s)
             (= op 'ret)  (le32 0xD65F03C0)                     ; ret x30
             (= op 'sys)  (le32 0xD4000001)                     ; svc #0
             (= op 'nop)  (le32 0xD503201F)
