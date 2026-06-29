@@ -647,10 +647,10 @@
        pushargs (foldl (\ a i (asm `(a (pusharg1 i)))) () (rangeL 0 k))
        epi (? valt `(`('st S 0 A) `('add IP IP 16) `('ld T IP 0) `('jmpr T))                                  ; VALUE: store acc as-is; Continue (no putfix)
                  `(`('adds A A A) '(br vs DEOPT) `('or A A 1) `('st S 0 A) `('add IP IP 16) `('ld T IP 0) `('jmpr T)))   ; INT: putfix (overflow -> deopt); Continue
-       (asm `(`(`('push OVFR)) (saveargsir tgt k) `(`('lea OVFR 'sp 0)) pushargs
-              `(`('call entry) `('add 'sp 'sp (* ss k))) (restargsir tgt k) `(`('pop OVFR))
+       (asm `((hsave tgt) `(`('push OVFR)) (saveargsir tgt k) `(`('lea OVFR 'sp 0)) pushargs
+              `(`('call entry) `('add 'sp 'sp (* ss k))) (restargsir tgt k) `(`('pop OVFR)) (hrest tgt)   ; restore lr: the OUTER's `call` clobbered it (arm64), and the Continue/deopt return through lvm_ret (tco=0 rets via lr)
               epi
-              `(`('label 'OVF) `('lea 'sp OVFR 0)) (restargsir tgt k) `(`('pop OVFR))
+              `(`('label 'OVF) `('lea 'sp OVFR 0)) (restargsir tgt k) `(`('pop OVFR)) (hrest tgt)
               `(`('label 'DEOPT)) (deoptmn tgt (> arity 1)))))
    ; jgir-ok? -- the op-COVERAGE gate: does jitgroupir implement every op this group uses (jgir-supported)?
    ; autogroup routes here when true, else leaves the group INTERPRETED (the val fallback in auto.l). Reached
