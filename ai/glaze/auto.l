@@ -525,6 +525,26 @@
              (: sub (\ e (dsimp (foldl (\ b pr (subst-sym (cap pr) (cup pr) b)) e lamcs)))         ; inline each HOF lamc, then beta-collapse
                 keep (afilter (\ pr (! (lamc? pr))) pairs)                                         ; non-HOF bindings keep their RAW form (grpfix recognizes define-sugar function heads)
                 (link ': (unpair (map (\ pr (link (cap pr) (sub (cup pr)))) keep) (sub body)))))))
+   ; --- CHURCH LOWERING (dechurch): a literal church application (N f x) -- N a small whole numeral,
+   ;     f a FUNCTION (a lambda literal or a partial of a dyadic op, e.g. (+ i)) -- is f applied to x
+   ;     N times: ((N f) x) = f^N(x). Lower it to the nested application at compile time:
+   ;     (2 (+ i) i) -> (+ i (+ i i)). Pure arithmetic the group lane glazes -- where church is
+   ;     otherwise OPAQUE to the glaze (every application dispatches through the lisp `num-ap` closure,
+   ;     so it stays interpreted). EXACT -- this IS ai's church semantics: (0 f x)=x (0=const-1->1=id),
+   ;     (1 f x)=(f x), and dch-nest builds f^N innermost-out. Disambiguated from POWER by "the operand
+   ;     is a function": (2 i)/(2 5)/(2 3 4) carry a NON-function operand (a numeral, or tally /= 2) so
+   ;     dch-fn? is false -> left as exponentiation/the tower. A lambda operand is beta-collapsed by
+   ;     dsimp; an op-partial needs no beta. Bottom-up; no-op unless the operand is a literal function,
+   ;     so a variable count/operand (e.g. a bound `dbl`) still rides num-ap (sound, just interpreted).
+   (dch-fn? f) (|| (ho-lamb? f) (&& (two? f) (= 2 (tally f)) (member? (cap f) '(+ - * // % & | ^))))   ; a lambda, or a dyadic-op partial like (+ i)
+   (dch-ap f x) (? (ho-lamb? f) (dsimp (L f x)) (cat f (L x)))                                          ; apply f to x: beta a lambda, extend an op-partial
+   (dch-nest f n x) (? (= n 0) x (dch-ap f (dch-nest f (- n 1) x)))                                     ; f^n(x), built innermost-out
+   (dechurch e)
+    (? (atom? e) e  (dquote? e) e
+       (: y (map dechurch e)                                                                           ; bottom-up: lower nested church first
+          (? (&& (= 3 (tally y)) (whole? (cap y)) (<= 0 (cap y)) (< (cap y) 64) (dch-fn? (cap (cup y))))
+             (dch-nest (cap (cup y)) (cap y) (cap (cup (cup y))))                                       ; (N f x) -> f^N(x)
+             y)))
    ; --- LOCAL LET (delet): inline a PURE value-let -- (: n1 v1 .. result), every binding a plain symbol
    ;     (no local fn -> that is norm-let/lift's job), names distinct -- into ONE fragment expression by
    ;     ordered substitution, so a fn that names its intermediates joins the group. The fragment is pure
@@ -899,7 +919,7 @@
        ; syntax instead of the parity-of-`:` leak convention; until then, decline.)
        (= 0 (% (tally (cup form0)) 2)) form0
        (memo-leak? form0) form0                                                                ; a `:`-sibling map memo (fact/bell) -> interp, sound
-       (: form (plift (lift (delet (defoliate (loopclose (autospec (debool (dehof (fold-consts form0)))))))))   ; inline lambda-const HOFs to first-order, lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets, lambda-lift named-let bodies, THEN plift read-only loops out of nested lets (hash's scan) -> flat group fns
+       (: form (plift (lift (delet (defoliate (loopclose (autospec (debool (dehof (dechurch (fold-consts form0))))))))))   ; lower literal church (N f x)->f^N(x), inline lambda-const HOFs to first-order, lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets, lambda-lift named-let bodies, THEN plift read-only loops out of nested lets (hash's scan) -> flat group fns
           parsed (anat-defs (cup form)) pairs (cap parsed)
           fns (afilter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
           (? (! (two? fns)) form0                                                            ; no candidate functions -> original

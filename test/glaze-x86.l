@@ -400,6 +400,21 @@
     ; autospec is a NO-OP without BOTH a defined fn and a static-data binding -> a plain fib group is byte-unchanged
     (: nf '(: (fib n) (? (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))) (fib 10))
        (id? (autospec nf) nf))
+    ; CHURCH LOWERING (dechurch): a literal (N f x) with a FUNCTION operand is f^N(x) -- lowered to the
+    ; nested application so the group lane glazes (church is otherwise opaque -> num-ap -> interp). An
+    ; op-partial gives pure arithmetic; a lambda operand is beta-collapsed by dsimp. == interp, value exact.
+    (: dch '(: (f i) (2 (+ i) i)                                                          ; (2 (+ i) i) = (+ i (+ i i)) = 3i
+               ((: (go k a) (? (< k 100) (go (+ k 1) (+ a (f k))) a)) 0 0))
+       (&& !(id? (autogroup dch) dch) (14850 = (ev dch)) (= (base-ev dch) (ev dch))))     ; Σ 3k for k<100 = 3·4950
+    (: dchl '(: (f i) (2 (\ a (* a a)) i)                                                 ; (2 sqr i) = (sqr (sqr i)) = i^4
+                ((: (go k a) (? (< k 10) (go (+ k 1) (+ a (f k))) a)) 0 0))
+       (&& !(id? (autogroup dchl) dchl) (15333 = (ev dchl)) (= (base-ev dchl) (ev dchl))))  ; Σ k^4 for k<10
+    ; POWER is NOT church: a NUMBER operand (tally /= 2, or a numeral) is exponentiation -- dechurch leaves
+    ; it (still num-ap/interp), so the value stays exact. (2 i)=i^2, (2 3 i)=((2 3) i)=(9 i)=i^9.
+    (: dpw '(: (g i) (2 i)   ((: (go k a) (? (< k 6) (go (+ k 1) (+ a (g k))) a)) 0 0))
+       (&& (55 = (ev dpw)) (= (base-ev dpw) (ev dpw))))                                   ; Σ k^2 for k<6 = 55, untouched
+    (: dpw2 '(: (h i) (2 3 i) ((: (go k a) (? (< k 4) (go (+ k 1) (+ a (h k))) a)) 0 0))
+       (&& (20196 = (ev dpw2)) (= (base-ev dpw2) (ev dpw2))))                             ; Σ k^9 for k<4 = 20196, untouched
     ; LOCAL LET (delet): a fn body that NAMES intermediates -- a pure value-let -- inlines to one fragment
     ; expression, so the fn joins the group. == interp, value exact.
     (: lb '(: (f x) (: q (* x x) (+ q q)) (f 5))
