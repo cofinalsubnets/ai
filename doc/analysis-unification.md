@@ -86,10 +86,26 @@ running them **interleaved** over the shared lattice (A) — strictly *more prec
 HO-ness, int/value typing cross-inform), not just less code. Today they're still separate
 passes that happen to share the engine.
 
-**(C) One rewrite engine — wire `datalog.l`'s guarded rewriting.** `debool`, `dechurch`,
-`dehof`-inline, `fold-consts`, `delet`, `defoliate` are all *guarded rewrite rules* whose guard
-is a query against (A). As a rule-set, `dsub`/`subst-sym`/`subst-call`/`bsub`/`cprop:beta`/
-`dsimp`/`mix`-substitution collapse to one substitution + normalization.
+**(C) One rewrite engine — wire `datalog.l`'s guarded rewriting. RETIRED (2026-06-30, decided
+against).** The idea was to make `debool`/`dechurch`/`dehof`-inline/`fold-consts`/`delet`/
+`defoliate` guarded rewrite rules over a unify engine. On inspection it doesn't pay off, for the
+same reason warn-kinds and kinds.l-devirt didn't:
+- There is no proliferation of uniform rewrites to engine-ify. The trivial peepholes a rule engine
+  could subsume (`debool`/`dechurch`/`fold-consts`/parts of `delet`) total ~40 lines of clear
+  structural code; the heavy passes (`loopclose` = finite differences, `autospec`/`mix` = partial
+  eval, `defoliate` = deforestation) are ALGORITHMS, not pattern→template rewrites, and wouldn't
+  fold into a rule table at all.
+- The engine's machinery (a unify matcher + rule table + saturation/termination control) would
+  EXCEED what it replaces — more code and more subtlety, i.e. added fat.
+- Prior evidence it backfires: `ev.l` already had a unify-table rewrite (`cflip` via `firstr` over a
+  `cflip-rules` global) and it BROKE the egg's self-compile — backed out for a direct structural
+  rewrite (see ev.l's cflip comment). A unify-driven rewrite engine in the bootstrap compiler has
+  bitten once.
+`unify`/`walk` stay where they earn their keep: the live, tested **kanren** engine (`test/kanren.l`).
+`dechurch` stands as the counter-proof — when a genuinely useful rewrite appears, it is ~15 clear
+lines as a peephole, cheaper than the engine that would generalize it. (A unify+`monofix` engine
+WOULD be coherent in the other direction — extending kanren toward full Datalog, a user-facing
+feature — but that is a "want a Datalog" decision, not compiler plumbing.)
 
 What collapses out: ~4 purity + ~4 arity + ~4 constant detectors → 1 each; 5 substitutions → 1;
 3 betas → 1; 4 fixpoints → 1 harness; `warn-kinds` → the real lattice; parallel
@@ -150,17 +166,29 @@ analysis, orthogonal.
    returns `()` (the +/* unit, which VANISHES in a chain), so there is no "wrong kind". A lint
    that flags "this is `()`" frames in the RED in a green-framed language and presumes intent. Off
    by default, never earning its keep → trimmed.
-4. **Rewrite engine (C):** start with trivial peepholes (`debool`, `dechurch`, `fold-consts`)
-   as rules; leave `loopclose`/`mix` algorithms intact but consulting (A).
+4. **Rewrite engine (C): RETIRED** — decided against (see (C) above). Few distinct rewrites, engine
+   machinery exceeds the payoff, and a prior unify-table rewrite broke the egg. Peepholes stay
+   peepholes.
 5. Delete dead duplicate helpers as each is orphaned.
+
+## Outcome (2026-06-30)
+
+The genuine wins landed: step 1 (one `monofix` for all 4 fixpoints), step 2 (constant-ness onto
+`kconst`, the `filter` triplication collapsed), `dechurch`, and removing `warn-kinds`. The doc's
+bigger ambitions — the fact table / kinds.l devirt (step 3) and the datalog rewrite engine (step 4)
+— were found NOT to pay off on this codebase and were retired with rationale: the glaze already
+devirtualizes the hot path with purpose-built soundness analyses, and there is no proliferation of
+uniform rewrites to engine-ify. The honest negative results are part of the value. Reminder: this
+doc is a plan/narrative — **only the binary is authoritative; probe it before trusting any claim here.**
 
 ## `dechurch` (the canary)
 
 Sound prototype validated: `(2 (+ i) i)` → `(+ i (+ i i))` (3i), `(3 ..)` → 4i, `(2 dbl 5)` →
 20; `(2 i)`/`(2 5)` correctly NOT expanded (power, not compose — disambiguated by
-"operand is a function": a lambda or a partial of a dyadic op). As a peephole it's ~15 lines; in
-(C) it's ONE rule `(N f) → compose^N f` guarded by `arrow(f)`. Recommendation: land it now as
-the peephole (real win — makes idiomatic `(2 (+ i) i)` go native, where today church is opaque
+"operand is a function": a lambda or a partial of a dyadic op). LANDED as a ~15-line peephole
+(`3fcdc9ec`); it would have been one rule in the (now-retired) engine (C), but ~15 clear lines is
+cheaper than the engine — which is exactly the argument for retiring (C). The win — makes idiomatic
+`(2 (+ i) i)` go native, where today church is opaque
 to the glaze and stays interpreted ~15-25 ms/it), tagged "rule #1" for (C).
 
 Caveat church can't otherwise glaze: every church application dispatches through the lisp
