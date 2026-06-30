@@ -182,7 +182,7 @@ uintptr_t hash(struct ai*, intptr_t);
 static ai_inline union u *map_fill_back(union u*, uintptr_t);
 lvm_t lvm_kcall,
  lvm_chain, lvm_vec, lvm_sym, lvm_nom, lvm_str, lvm_big, lvm_flo, // data sentinels (enum q order); each tail-jumps to its apply handler
- lvm_putn, lvm_gauge,    lvm_clock, lvm_apof,
+ lvm_putn, lvm_gauge,    lvm_clock, lvm_apof, lvm_seal,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_nomctor, lvm_intern, lvm_chainp,
  lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_eat1, lvm_eat2, lvm_toast, lvm_toasted,
  lvm_coin, lvm_coinmk, lvm_load, lvm_dieof, lvm_coinp, lvm_add_coin, lvm_mul_coin,   // newtypes: a coin (die + payload), a typed hot riding KHot
@@ -780,6 +780,7 @@ lvm_t lvm_fault;
 #endif
 #define nifs(_) \
  _(nif_clock, "clock", s1(lvm_clock)) _(nif_gauge, "gauge", s1(lvm_gauge)) _(nif_apof, "apof", s1(lvm_apof))\
+ _(nif_seal, "seal-hooks", s1(lvm_seal))\
  _(nif_add, "+", s2(lvm_add)) _(nif_sub, "-", s2(lvm_sub)) _(nif_mul, "*", s2(lvm_mul))\
  _(nif_quot, "/", s2(lvm_quot)) _(nif_fquot, "//", s2(lvm_fquot)) _(nif_rem, "%", s2(lvm_rem)) \
  _(nif_lt, "<", s2(lvm_lt))  _(nif_le, "<=", s2(lvm_le)) _(nif_eq, "=", s2(lvm_eq))\
@@ -926,6 +927,7 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  memset(g, 0, sizeof(struct ai));      // the core needs no leading ap: () is the const ZeroPoint, never (word)g
  g->len = len0, g->pool = (void*) g, g->alloc = al;
  g->scare_a = g->scare_b = nil;        // v0..end is GC-walked: raw 0 is not a value
+ g->hot_numap = g->hot_add = g->hot_mul = nil;   // unsealed: hot_hook traps until (seal-hooks) fills them
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = ai_clock();
  g->minor = g->end;                  // generational watermark: nothing tenured yet (the first collection sets it)
 #ifndef AI_NOGEN
@@ -2321,15 +2323,12 @@ static struct ai_mint *sym_probe(struct ai *g, char const *nm, uintptr_t n) {
   if (k == map_gap) return 0;
   if (len(k) == n && !memcmp(txt(k), nm, n)) return sym(s[2 * i + 1]); } }
 
-// Resolve a C->lisp ap from book (where the prel pins it -- book is
-// GC-traced and egg-baked, so it survives into the runtime image), materializing
-// the key by name. Scare loud if undefined: a prel-ordering contract
-// violation. Probe + mapget are reads, so no Have in the tail-jump callers.
-static ai_inline ai_word resolve_hot(struct ai *g, char const *nm, uintptr_t n) {
- struct ai_mint *y = sym_probe(g, nm, n);
- ai_word cur = y ? ai_mapget(g, nil, word(y), g->book) : nil;
- if (!lamp(cur)) __builtin_trap();
- return cur; }
+// The church hooks (num-ap/add/mul) are lisp closures the prel pins on the book at runtime, so the C
+// apply paths must fetch them from there. (seal-hooks) resolves all three into g->hot_* ONCE, right
+// after the prel pins them; the hot paths then read the slot directly -- no per-call sym_probe + book
+// lookup. hot_hook traps if a slot is unsealed (nil) or somehow not a lambda: a clean failure, never
+// a wild read. g->hot_* is GC-traced (v0..end) and rides the egg image, so a loaded image is sealed.
+static ai_inline ai_word hot_hook(ai_word h) { if (!lamp(h)) __builtin_trap(); return h; }
 
 // Thread (function) combinators for `+` and `*`, pinned on book by the prel
 // like num-ap. A thread operand takes precedence over every other type, so
@@ -2544,16 +2543,32 @@ lvm(lvm_missing) {
  return Unpack(g), Ap(self, g); }
 static lvm(lvm_numap) {
  NumapHave(lvm_numap);
- word h = resolve_hot(g, "num-ap", 6);
+ word h = hot_hook(g->hot_numap);
  word n = Sp[1], x = Sp[0], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static lvm(lvm_numtap) {
  NumapHave(lvm_numtap);
- word h = resolve_hot(g, "num-ap", 6);
+ word h = hot_hook(g->hot_numap);
  word fs = getcharm(Ip[1].x), n = Sp[1], x = Sp[0], *dst = &Sp[fs + 2] - 3, ret = Sp[fs + 2];
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
+
+// (seal-hooks _): resolve the church hooks (num-ap/add/mul) from book into g->hot_* ONCE. The prel
+// calls this immediately after pinning them, so every later church op reads the slot directly. Probe
+// + mapget are reads (no Have). Trap if a hook is missing -- a prel-ordering contract violation. The
+// prel runs in every warm (and the result rides the egg image), so every runtime ends up sealed.
+lvm(lvm_seal) {
+ static char const *const nm[] = {"num-ap", "add", "mul"};
+ static uintptr_t const ln[] = {6, 3, 3};
+ ai_word *const slot[] = {&g->hot_numap, &g->hot_add, &g->hot_mul};
+ for (int i = 0; i < 3; i++) {
+  struct ai_mint *y = sym_probe(g, nm[i], ln[i]);
+  ai_word cur = y ? ai_mapget(g, nil, word(y), g->book) : nil;
+  if (!lamp(cur)) __builtin_trap();
+  *slot[i] = cur; }
+ Sp[0] = nil, Ip += 1;
+ return Continue(); }
 
 // `+`/`*` over a lambda operand: build the combinator partial (add/mul g g)
 // and leave it as the result. Mirrors lvm_numap's frame -- [g, comb, g, ret=Ip+1]
@@ -2563,14 +2578,14 @@ static lvm(lvm_numtap) {
 static lvm(lvm_addh) {
  if (coinp(Sp[0]) || coinp(Sp[1])) return Ap(lvm_add_coin, g);
  Have(2);
- word h = resolve_hot(g, "add", 3);
+ word h = hot_hook(g->hot_add);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 static lvm(lvm_mulh) {
  if (coinp(Sp[0]) || coinp(Sp[1])) return Ap(lvm_mul_coin, g);
  Have(2);
- word h = resolve_hot(g, "mul", 3);
+ word h = hot_hook(g->hot_mul);
  word fa = Sp[0], ga = Sp[1], *dst = Sp - 2, ret = word(Ip + 1);
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
@@ -5052,8 +5067,11 @@ static intptr_t image_imm_index(word v) {
 // base delta, so the refsym (image_immortals) delta must equal the anchor (image_dump) delta -- a
 // different binary lays its symbols out differently, so the two deltas disagree and the load is refused.
 struct image_hdr {
- uint64_t magic, wordsize, nwords, arch, anchor, rsv0, rsv1, refsym, next_serial;
- uint64_t root_tag[6], root_val[6];          /* book, symbols, tasks, scare_a, scare_b, x */
+ uint64_t magic, wordsize, nwords, arch, anchor, nroot, rsv1, refsym, next_serial;
+ uint64_t root_tag[24], root_val[24];        /* symbols, tasks, then the ENTIRE v0..end region (book,
+                                                scare_a/b, the church hooks, x/io) walked GENERICALLY --
+                                                same words the GC traces, so a new v0 field rides along
+                                                with no codec change. nroot = how many were written. */
 };
 // encode a live value (post-compaction) -> portable (tag,payload):
 //  0 FIX raw | 1 PTR word-offset into the blob | 2 LVM table index | 3 IMM immortal index
@@ -5125,8 +5143,14 @@ void *ai_image_save(struct ai *g, uintptr_t *outlen) {
   p = (union u*) ((word*) p + sz); }
  if (fail) { g->alloc(g, buf, 0); return NULL; }         // a binary pointer landed in the index range -> refuse (caller boots normally)
  struct image_hdr H = { IMAGE_MAGIC, sizeof(word), nw, IMAGE_ARCH, (uint64_t)(word) &ai_image_save, 0, 0, (uint64_t)(word) image_immortals, g->next_serial, {0}, {0} };
- word roots[6] = { g->book, g->symbols, (word) g->tasks, g->scare_a, g->scare_b, g->x };
- for (int i = 0; i < 6; i++) image_root_enc(roots[i], base, hp, &H.root_tag[i], &H.root_val[i]);
+ // roots = symbols + tasks (live OUTSIDE v0), then the whole GC-traced v0..end block, GENERICALLY: any
+ // field added to struct ai's v0 region is serialized automatically, no codec edit (cf. the GC's v0..end loop).
+ uintptr_t nv = (word*) g->end - (word*) &g->v0, nr = 2 + nv;
+ if (nr > countof(H.root_tag)) { g->alloc(g, buf, 0); return NULL; }     // grew past the header table -> bump root_tag[]
+ image_root_enc(g->symbols,        base, hp, &H.root_tag[0], &H.root_val[0]);
+ image_root_enc((word) g->tasks,   base, hp, &H.root_tag[1], &H.root_val[1]);
+ for (uintptr_t i = 0; i < nv; i++) image_root_enc(((word*) &g->v0)[i], base, hp, &H.root_tag[2 + i], &H.root_val[2 + i]);
+ H.nroot = nr;
  memcpy(buf, &H, sizeof H);
  return *outlen = total, buf; }
 // reconstruct a fresh g from a SAVE buffer ({header, blob} of byte length len); NULL on any problem.
@@ -5170,12 +5194,11 @@ struct ai *ai_image_load(void const *buf, uintptr_t len) {
    sz = k + 1;
    for (uintptr_t i = 1; i < sz; i++) ((word*) p)[i] = img_decode(((word*) p)[i], base, hb, delta); }
   p = (union u*) ((word*) p + sz); }
- g->book    = image_root_dec(H.root_tag[0], H.root_val[0], base);
- g->symbols = image_root_dec(H.root_tag[1], H.root_val[1], base);
- g->tasks   = (union u*) image_root_dec(H.root_tag[2], H.root_val[2], base);
- g->scare_a = image_root_dec(H.root_tag[3], H.root_val[3], base);
- g->scare_b = image_root_dec(H.root_tag[4], H.root_val[4], base);
- g->x       = image_root_dec(H.root_tag[5], H.root_val[5], base);
+ uintptr_t nv = (word*) g->end - (word*) &g->v0;                         // same struct/binary (anchor-checked) -> same layout
+ if (H.nroot != 2 + nv) return NULL;                                     // root count mismatch -> stale/foreign image -> normal boot
+ g->symbols = image_root_dec(H.root_tag[0], H.root_val[0], base);
+ g->tasks   = (union u*) image_root_dec(H.root_tag[1], H.root_val[1], base);
+ for (uintptr_t i = 0; i < nv; i++) ((word*) &g->v0)[i] = image_root_dec(H.root_tag[2 + i], H.root_val[2 + i], base);
  g->next_serial = H.next_serial;
  // sp stays at ai_ini's topof(g) (empty AI stack); the dispatch re-establishes ip
  g->major_live0 = nw, g->since_major = 0;
@@ -5620,7 +5643,7 @@ static lvm(data_sym_apply) {
 // which picks exponentiate / compose / self by operand+operator kind.
 static lvm(data_num_apply) {
  Have(2);
- word h = resolve_hot(g, "num-ap", 6);
+ word h = hot_hook(g->hot_numap);
  word n = word(Ip), x = Sp[0], ret = Sp[1], *dst = Sp - 2;
  dst[0] = n, dst[1] = h, dst[2] = x, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }

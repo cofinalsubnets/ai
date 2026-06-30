@@ -131,6 +131,10 @@
 (: (add f g a x) (f a (g a x))
    (mul f g x) (f (g x))
    _ (pin book 'add add) _ (pin book 'mul mul))
+; cache num-ap/add/mul into the VM (g->hot_*) now that all three are pinned, so the hot apply paths
+; (lvm_numap/numtap/addh/mulh, data_num_apply) read them directly instead of interning + book-probing
+; per call. MUST follow the pins above; the prel runs in every warm, so every runtime gets sealed.
+(seal-hooks ())
 (: (map f l) (? (two? l) (link (f (cap l)) (map f (cup l))))
    (foldl f z l) (? (two? l) (foldl f (f z (cap l)) (cup l)) z)
    (foldr f z l) (? (two? l) (f (cap l) (foldr f z (cup l))) z))

@@ -196,11 +196,6 @@ struct ai {
  union {
   intptr_t v0;
   struct {
-   // The C->lisp hooks (num-ap, add, mul, help, operators) live on book
-   // (GC-traced, egg-baked): no slots, no key caches -- C materializes the
-   // keys by name per use (sym_probe walks the intern map allocation-free;
-   // hot numeric code is compiled by the lisp compiler, which holds the
-   // symbols directly, so the C dispatch only catches stragglers).
    ai_word book;   // global env map (lookup-lambda); GC-forwarded in v0..end. The
                   // macro table is book[nil] -- no separate field. The 'missing
                   // condition tag needs no slot: it is the `missing` nif's name,
@@ -209,6 +204,11 @@ struct ai {
    ai_word scare_a, scare_b; // the last bare scare's condition data, stashed at
                   // the raise so a terminal exit can speak (ai_scare_face_);
                   // nil nil = the bare oom, which has no data. GC-traced here.
+   ai_word hot_numap, hot_add, hot_mul; // the church C->lisp hooks (num-ap/add/mul),
+                  // resolved ONCE by (seal-hooks) after the prel pins them, then read
+                  // directly on the hot apply paths (lvm_numap/numtap/addh/mulh,
+                  // data_num_apply) -- no per-call sym_probe + book lookup. GC-traced
+                  // (v0..end). Unsealed = nil -> hot_hook traps, never a wild read.
   union {
    ai_word x;
    struct ai_io {
