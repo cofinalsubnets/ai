@@ -131,8 +131,25 @@ analysis, orthogonal.
 
    REMAINING on-track work: the per-node memoized fact table (query sites read it instead of
    re-walking — the real structural win), which naturally leads into step 3.
-3. **Extend the lattice to the real `kinds.l` abstract interpretation + devirt** (the
-   high-value, high-risk step), with the harness from (1) as its engine.
+3. **Devirt / `kinds.l` abstract interpretation.** FINDING (2026-06-30, after removing
+   `warn-kinds`): devirt — "skip the generic NxN dispatch when operands are provably numeric" — is
+   ALREADY realized for the hot path by the glaze. The native group lane emits raw machine
+   arithmetic (the devirtualized path itself), and the glaze already runs a purpose-built kind
+   inference, `fty` (auto.l), to pick the int-vs-float lane. Crucially `fty` is NOT a clean
+   projection of the kinds.l lattice: its `I/F/0` types encode CODEGEN SOUNDNESS, not pure kind —
+   the `0`-reject for value-dependent int/int division, and `allsafe`'s "when is the param floated"
+   (the 2^53 bignum-divergence guard) are float-lane concerns a generic lattice doesn't model.
+   Forcing `fty` (or the recognizers) onto kinds.l would be fragile edits to load-bearing
+   soundness logic for ~zero gain. A NEW kinds.l devirt would therefore only target the
+   INTERPRETER's cold path — marginal: the C core already has a both-fixnum fast path, and every
+   hot numeric loop is glazed. So **`kinds.l` stays parked** (it remains a documented spike) and
+   devirt is considered DONE-by-the-glaze. `warn-kinds` (the only shipped consumer, a red-framed
+   lint) was removed (`5c341c16`) rather than upgraded — see the philosophy note below.
+
+   `warn-kinds` removal rationale: ai is fully generic and TOTAL — an undefined op combination
+   returns `()` (the +/* unit, which VANISHES in a chain), so there is no "wrong kind". A lint
+   that flags "this is `()`" frames in the RED in a green-framed language and presumes intent. Off
+   by default, never earning its keep → trimmed.
 4. **Rewrite engine (C):** start with trivial peepholes (`debool`, `dechurch`, `fold-consts`)
    as rules; leave `loopclose`/`mix` algorithms intact but consulting (A).
 5. Delete dead duplicate helpers as each is orphaned.
