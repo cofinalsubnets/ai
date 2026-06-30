@@ -107,8 +107,15 @@ analysis, orthogonal.
    capture fixpoint, via measure-snapshot-before-step). One driver, four lattices
    (ascending/descending/mutating), proved with zero analysis risk on already-sound code. The
    one remaining int/value fixpoint, `grpfix`, is just `gfix`'s caller (already on monofix).
-2. **Add a fact table; move the QUERY sites** (`dcheap?`/`propk?`/`cval`) to read it — pass by
-   pass, each contained, gate-checked.
+2. **Collapse the re-derived facts onto shared derivations, then a fact table.** IN PROGRESS.
+   Shared facts live in **prel** (chosen 2026-06-30, like `monofix` — prel additions aren't
+   mopped, so no egg-mop-list growth). Done: **constant-ness** — one `kconst` (prel) returns
+   `(1 . value)` for a constant form else `()`; feels' `cval`, cprop's `propk?`, wxc's `cst` are
+   all projections of it (was 3 copies across 3 scopes). NEXT facts to collapse the same way:
+   purity (`pureset`/`pure-head?`/`dcheap?`/`roalloc`), arity (`opof`/`farof`/`falook`),
+   occurrence (`occurs?`/`dcount`/`fvs`). THEN the per-node memoized table (query sites read it
+   instead of re-walking). Gotcha learned: a prel helper must use only earlier-defined prel
+   names — `&&`/`||` are macros defined late, so use nested `?` (a forward macro hangs the egg).
 3. **Extend the lattice to the real `kinds.l` abstract interpretation + devirt** (the
    high-value, high-risk step), with the harness from (1) as its engine.
 4. **Rewrite engine (C):** start with trivial peepholes (`debool`, `dechurch`, `fold-consts`)
