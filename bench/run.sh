@@ -28,24 +28,12 @@ samples=${5:-5}   # timed windows per bench; the median ms/it window is reported
 # per-language file extension, interpreter binary, and run command. the command
 # is eval'd with $b bound to the bench name, so the source is benches/$b.$ext.
 case $lang in
-  # ai: for `mandelbrot`, `fib`, `tak`, `primes`, `strscan`, `strcat`, `deforest`, `polysum`, `closure`, `tree`, `bintrees`, load
-  # the native glaze (ai/glaze/emit.l + auto.l) AHEAD of the bench on an x86-64 host -- the recognizers then read
-  # the bench's UNCHANGED source and compile it to native (mandelbrot's float-recurrence grid -> a whole-grid SSE
-  # kernel: its IDIOMATIC complex ~(re im) recurrence is LOWERED to a real/imag float pair (twolow) onto that
-  # kernel; fib/tak/primes' integer call graph -> a native mutually-recursive group, with primes'
-  # named-let loops lambda-lifted into it; deforest's map/filter/fold list pipeline DEFORESTED into one
-  # native loop; polysum's pure-polynomial pipeline CLOSED to its O(1) closed form by the loop-closer;
-  # strcat's O(n^2) string-accumulator loop rebuilt to a native O(n) cask-fill while its rolling hash glazes
-  # via the string lane; closure's curried HOFs (twice/adder) INLINED to a first-order recurrence by dehof;
-  # tree's + bintrees' binary-tree BUILD (mk) -> native cons (the Stage-D value-lane, GC-safe under the moving
-  # collector) and node-count TRAVERSE (ck) -> a native chain fold (the chain lane: (two? t)/(cap t)/(cup t)
-  # lowered inline) -- bintrees adds the sustained-alloc / long-lived-survival loop (a GC-throughput stress);
-  # hash's read-only
-  # sum-lookup SCAN PARTIAL-LIFTED out of hash-run (plift) to a top-level fn taking the map as a param, its
-  # (peep h k) compiled to a native open-addressed map probe via the map lane, the allocating ins/bump staying
-  # interpreted), the ai analogue of LuaJIT auto-JITting Lua. The glaze self-tests print to stderr
-  # (discarded here); other benches stay interpreted (the glaze matches only these).
-  ai)            ext=l;    bin=../out/host/ai;  cmd='cat $({ [ "$b" = mandelbrot ] || [ "$b" = fib ] || [ "$b" = tak ] || [ "$b" = primes ] || [ "$b" = strscan ] || [ "$b" = strcat ] || [ "$b" = deforest ] || [ "$b" = polysum ] || [ "$b" = closure ] || [ "$b" = tree ] || [ "$b" = bintrees ] || [ "$b" = hash ] || [ "$b" = sum ] || [ "$b" = mapfilter ]; } && [ "$(uname -m)" = x86_64 ] && printf "%s %s " ../ai/glaze/emit.l ../ai/glaze/auto.l; [ "$b" = cdcl ] && printf "%s " ../sat/sat.l) bench.l benches/$b.l | AI_NO_IMAGE=1 ../out/host/ai' ;;
+  # ai: the native glaze (ai/glaze/{emit,auto}.l) is BAKED into out/host/ai and active by default, so the
+  # bench just runs through the binary -- no prepend. (`make bench` depends on `host`, so the baked glaze
+  # is always fresh.) We do NOT cat the glaze source ahead of the bench: re-loading the glaze on top of
+  # the baked glaze is a redundant DOUBLE-LOAD that faults under autospec; the baked binary is the truth.
+  # cdcl alone prepends the SAT solver library it needs (not the glaze).
+  ai)            ext=l;    bin=../out/host/ai;  cmd='cat $([ "$b" = cdcl ] && printf "%s " ../sat/sat.l) bench.l benches/$b.l | AI_NO_IMAGE=1 ../out/host/ai' ;;
   chez)         ext=ss;   bin=chez;       cmd='chez --script benches/$b.ss' ;;
   sbcl)         ext=lisp; bin=sbcl;       cmd='sbcl --script benches/$b.lisp' ;;
   apl)          ext=apl;  bin=dyalogscript; cmd='dyalogscript benches/$b.apl' ;;   # Dyalog APL (~/.local install); the bench ⎕FIXes lib/bench.apl
