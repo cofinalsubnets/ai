@@ -202,6 +202,8 @@
       (L "a64.ldx"    "e00c008b000440f9"  '((ldx r0 r7 r0 8 8)))        ; add x0,x7,x0,lsl#3 ; ldr x0,[x0,#8]
       (L "a64.leax"   "2101098b21040091"  '((leax r1 r9 r9 1 1)))       ; add x1,x9,x9 ; add x1,x1,#1
       (L "a64.stx"    "f00c008b080600f9"  '((stx r7 r0 8 8 r8)))        ; add x16,x7,x0,lsl#3 ; str x8,[x16,#8]
+      (L "a64.ldxb"   "6000008b00404039"  '((ldxb r0 r3 r0 1 16)))      ; add x0,x3,x0 ; ldrb w0,[x0,#16]   (string-lane peep read)
+      (L "a64.stxb"   "7000008b00420039"  '((stxb r3 r0 1 16 r0)))      ; add x16,x3,x0 ; strb w0,[x16,#16] (cask-lane pin store)
       (L "a64.li.big" "a0828fd240e9aff22037cff2e0c6f3f2"               ; movz+3 movk = 0x9e3779b97f4a7c15 (bignum-safe lane via //%)
                       '((li r0 11400714819323198485)))
       ;; the link register (x30) by name -- a callee spills it across nested calls (BL clobbers it).

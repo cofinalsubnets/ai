@@ -176,6 +176,15 @@
    (arm64-stx base index scale disp s)
       (catall (L (arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))               ; add x16, base, index lsl #amt
                  (arm64-mem-r 0xF8000000 0xF9000000 (rn s) 16 disp)))                         ; str s, [x16, #disp]
+   ;; byte indexed load/store (the string/cask/map byte lanes). LDRB zero-extends to W (clearing the top
+   ;; 32 of X, == x86 movzx); STRB stores the low byte. disp is a raw BYTE offset (no scaling), unsigned
+   ;; 12-bit. Same address synthesis as ldx/stx: ldxb borrows the dest as the address temp, stxb uses x16.
+   (arm64-ldxb d base index scale disp)                                                       ; d = (byte)[base + index*scale + disp]
+      (: dn (rn d) (catall (L (arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale))    ; add Xd, base, index lsl #amt
+                             (le32 (| 0x39400000 (| (<< disp 10) (| (<< dn 5) dn)))))))         ; ldrb Wd, [Xd, #disp]
+   (arm64-stxb base index scale disp s)                                                       ; [base + index*scale + disp] = (byte)s
+      (catall (L (arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))                 ; add x16, base, index lsl #amt
+                 (le32 (| 0x39000000 (| (<< disp 10) (| (<< 16 5) (rn s)))))))                 ; strb Ws, [x16, #disp]
 
    ;; -- scalar-double FP (the float glaze lane). f0..f15 -> v0..v15 (d-register view), a SEPARATE file
    ;;    from the GPRs. the IR carries the SSE mnemonics (addsd/movsd/...) two-address (d = op(d,s)); we
@@ -223,6 +232,8 @@
             (= op 'rem)  (arm64-rem  (at ins 1) (at ins 2) (at ins 3) (at ins 4))
             (= op 'ldx)  (arm64-ldx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))
             (= op 'stx)  (arm64-stx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))
+            (= op 'ldxb) (arm64-ldxb (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (ldxb d base index scale disp) -- zero-extend byte load
+            (= op 'stxb) (arm64-stxb (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (stxb base index scale disp s) -- low-byte store
             (= op 'leax) (arm64-leax (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))
             (= op 'call) (arm64-call (at ins 1))
             (= op 'movsd)    (arm64-fmov   (at ins 1) (at ins 2))                 ; -- scalar-double FP --

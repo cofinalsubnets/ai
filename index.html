@@ -125,42 +125,27 @@
 <span class="chip" data-run="(1 / 2) 2">(1 / 2) 2</span>
 <span class="chip" data-run="(1 / 2) -1">(1 / 2) -1</span>
 
-
-<p class="lead"><em>ai would rather be felt than seen.</em></p>
-
-<p>ai is a lisp / ml / apl hybrid over a tiny portable C core.
-every value is a total unary function, so application is
-always defined, and almost no expression is an error.</p>
-
 <hr>
 
-<div class="law"><span class="n">application.</span> every value is a one-argument function, and application <span class="term" data-g="currying">curries</span> -- that is the whole language. <code>(f)</code> is <code>f</code>, <code>(f x y)</code> is <code>((f x) y)</code>, so partial application is just leaving arguments off the end. three special forms do the rest: <code>:</code> binds and sequences (letrec*, the last form its value), <code>?</code> is cond (test/result pairs, then an else), and <code>\</code> is lambda -- handed a single operand it has nothing left to bind, so it returns it unevaluated and quote falls out, <code>'x</code> is <code>(\ x)</code>.</div>
-<div class="law"><span class="n">net.</span> every value has a <span class="term" data-g="net">net</span> -- one complex number summed from its parts: a number is itself, a <span class="term" data-g="string">string</span> its bytes, a list its spine, opposite phases cancelling as vectors. the sign of the net is the value's <span class="term" data-g="color">color</span> -- <span class="term" data-g="green">green</span> nonnegative, <span class="term" data-g="red">red</span> negative,
-  <span class="term" data-g="blue">blue</span> zero. the <code>$</code> operator (saturate) pulls any value through its net onto the <span class="term" data-g="green">green</span> <span class="term" data-g="charm">charms</span>,
-  sending <span class="term" data-g="red">red</span> values to <span class="term" data-g="blue">blue</span>. this defines truth value in conditionals, so in ai false means "negative or empty".</div>
-<div class="law"><span class="n">ring.</span> <code>+</code> and <code>*</code> are two generic operations, total across every kind, and <code>+</code> is the <span class="term" data-g="net">net</span> made total. <span class="term nul" data-g="unit">()</span> -- nothing -- is their shared unit, doing nothing everywhere: the two-sided identity of both (<code>() + x</code> and <code>() * x</code> are <code>x</code>), false in every test, const-1 when applied -- never the number <code>0</code>, which annihilates <code>*</code>. together they form a ring that only strengthens along the <span class="term" data-g="lattice">lattice</span> (a free monoid on strings, a semiring on lists, a ring on numbers), and the lattice is open: a <em>die</em> strikes your own <em>coin</em>, a value family riding the same dispatch with <span class="term nul" data-g="unit">()</span> for nothing.</div>
-<div class="law"><span class="n">notation.</span> ai is a lisp, with two notations layered over the parentheses: <em>application binds to the left, operators to the right.</em> a call is ml-style and curried, read leftward -- <code>(f x y)</code> is <code>((f x) y)</code>. operators are apl-style and have no precedence, read rightward -- <code>1 + 2 * 3</code> is <code>1 + (2 * 3)</code>. and every operator is secretly two: <em>spaced is dyadic, glued is monadic</em> -- <code>a - b</code> subtracts, <code>-x</code> negates. space your operators.</div>
+<p>ai is a lisp-like surface over a tiny C core. differences from other lisp:</p>
+<ul>
+  <li><em>every value is a function.</em> even numbers, strings and lists</li>
+  <li><em>every function is curried.</em> partial application just works. nullary "calls" are identity, <code>(x) = x</code></li>
+  <li><em>every operation is generic.</em> <code>+</code> cats strings, <code>*</code> composes functions</li>
+  <li><em>infix notation.</em> all-punct symbols act as flat r2l infix operators, wrap in parens to escape. you can still use polish (lisp) notation normally</li>
+  <li><em>prefix notation.</em> some chars (eg. <code>$</code>, <code>*</code>, <code>+</code>, <code>-</code>) act as prefix operators when glued to another token</li>
+  <li><em>truth is color.</em> every value has a color based on the sign of its <code>net</code>, a structural summation of its parts. <span class="term" data-g="green">green</span> (pos) is true, <span class="term" data-g="red">red</span> (neg) and <span class="term" data-g="blue">blue</span> (0) are false.</li>
+</ul>
 
-<hr>
-
-<h2 id="four-ways"><a href="#four-ways">one object, four ways</a></h2>
-
-<p>the <span class="term" data-g="kind">kinds</span> form a <span class="term" data-g="lattice">lattice</span>, flattened into one total order over all values:</p>
-
-<pre><code>() &lt; mint &lt; name &lt; string &lt; number &lt; chain &lt; tray &lt; book &lt; hot
-</code></pre>
-
-<p>that lattice <em>is</em> the dispatch table -- a generic operator is a matrix indexed by its operands' kinds.</p>
-
-<p>read it as <strong>order</strong> and it is a deliberate remap: the <span class="term" data-g="point">points</span> fall to the floor, a <span class="term" data-g="galaxy">galaxy</span> folds in by its <span class="term" data-g="net">net</span>. read it as <strong>algebra</strong> and it is the strongest <code>+</code>/<code>*</code> theory each band affords. read it as <strong>abstract domain</strong> and it is a compile pass climbing the same lattice by join to a fixpoint, so a statically-numeric site skips the matrix.</p>
-
-<hr>
-
-<h2 id="three-layers"><a href="#three-layers">three layers</a></h2>
-
-<p>any law can be believed at three strengths. <em>probe</em> it at the binary, a one-line experiment. <em>demonstrate</em> it in <a href="test/spec.l">test/spec.l</a>, assert-backed and green on every target -- host, bootstrap, freestanding kernel, wasm. <em>prove</em> it in <a href="rocq/spec.v">rocq/spec.v</a>, universe-checked and axiom-free.</p>
-
-<p>the algebra is proved over exact &#8484;; the float tower is demonstrated, not proved -- that line is drawn on purpose. ai also carries its own prover, <em>uu</em>, whose theorems re-check axiom-free in Rocq and Lean at parity.</p>
+<p>other cool features:</p>
+<ul>
+  <li>apl/numpy-like numeric arrays with broadcasting</li>
+  <li>first-class complex numbers</li>
+  <li>mandatory co-op multitasking</li>
+  <li>public domain, zero dependencies, boots bare metal</li>
+  <li>builds for MCUs (missing some features atm but under development)</li>
+  <li>pretty fast template JIT (currently amd64/arm64 only)</li>
+</ul>
 
 <hr>
 
@@ -168,18 +153,18 @@ always defined, and almost no expression is an error.</p>
 
 <hr>
 <h2 id="glossary"><a href="#glossary">glossary</a></h2>
-<p class="dim">the terms of art, alphabetical -- the one operation, the measures, the numeric tower, the kinds, the runtime. hover any dotted term on the page for its gloss; click to jump here.</p>
+<p class="dim">i made up my own words for some things</p>
 <dl class="glossary">
   <dt id="g-application">application</dt>
-    <dd>the one operation: <code>(f x)</code> applies <code>f</code> to <code>x</code>. in the numeric case it is exponentiation -- <code>(n x)</code> = <code>x&#8319;</code>, and a list of numbers is a tower.</dd>
+  <dd>the main vm operation: <code>(f x)</code> applies <code>f</code> to <code>x</code>. the numeric case is exponentiation.</dd>
   <dt id="g-band">band / the true-blue order</dt>
     <dd>the cross-kind total order: <code>() &lt; mint &lt; name &lt; string &lt; number &lt; chain &lt; tray &lt; book &lt; hot</code> -- numbers folded into one band by net.</dd>
   <dt id="g-blue">blue</dt>
-    <dd>net exactly 0: kept yet nothing (<code>0</code>, <code>()</code>, <code>""</code>). truth's floor.</dd>
+  <dd>net exactly 0: (<code>0</code>, <code>()</code>, <code>""</code>, <code>'(1 2 3 -6)</code>).</dd>
   <dt id="g-book">book / tablet</dt>
-    <dd>a map: a mutable hash that is its own lookup function. <em>the</em> book is the global environment.</dd>
+    <dd>a mutable hash that is its own lookup function. <em>the book</em> refers to the global scope.</dd>
   <dt id="g-chain">chain</dt>
-    <dd>the product kind (cons/pair). <code>cap</code> is the head, <code>cup</code> the rest, with <code>caap</code>...<code>cuup</code> compounds; under <code>+</code> it's the free monoid on its cells.</dd>
+    <dd>the product kind (cons/pair). cap is car/hd, cup is cdr/tl, with the usual abbreviations. (btw i know pairs are not string diagrams, i just like the words :)</dd>
   <dt id="g-charm">charm</dt>
     <dd>a register-allocated fixed-width integer (fixnum)</dd>
   <dt id="g-color">color</dt>
@@ -188,8 +173,6 @@ always defined, and almost no expression is an error.</p>
     <dd>any number -- a star or a galaxy.</dd>
   <dt id="g-currying">currying</dt>
     <dd><code>(f x y) = ((f x) y)</code>, <code>(f) = f</code> -- a multi-arg call is just application, left to right.</dd>
-  <dt id="g-egg">the egg</dt>
-    <dd>the heap image baked at compile time; the evaluator hatches onto it.</dd>
   <dt id="g-galaxy">galaxy</dt>
     <dd>a tray of stars (numeric array); folds into the number band by its net.</dd>
   <dt id="g-gem">gem</dt>
@@ -211,7 +194,7 @@ always defined, and almost no expression is an error.</p>
   <dt id="g-numeral">numeral</dt>
     <dd>a charm as a Church numeral: <code>(n x)</code> iterates <code>x</code> <code>n</code> times. <code>1</code> is identity, <code>0</code> const-1.</dd>
   <dt id="g-operator">operator</dt>
-    <dd>the universal value: every value is a one-argument total function, so application is always defined.</dd>
+    <dd>the global type: every value is a one-argument total function, so application is always defined.</dd>
   <dt id="g-point">point</dt>
     <dd>a mint or a nom; the points floor the total order, below string.</dd>
   <dt id="g-red">red</dt>

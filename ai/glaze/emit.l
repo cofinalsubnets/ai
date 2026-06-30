@@ -541,6 +541,22 @@
       (? (id? op '+) (L (L 'adds A A T) '(br vs OVF))
          (id? op '-) (L (L 'subs T T A) '(br vs OVF) (L 'mov A T))
          (id? op '*) (L (L 'mulo A A T SC 'OVF)) ()))
+   ; --- register/immediate-operand peephole (the cgg lane's, ported into the neutral IR) ---
+   ; the generic binary lane is push-acc..pop-tmp per op -- the gap vs a register machine. when one operand
+   ; is already a PARAM (in an arg reg) or a small immediate, combine it DIRECTLY: acc OP= reg|imm, no stack
+   ; traffic. e.g. primes' (* d d), (< n (* d d)), (+ d 1), (= 0 ..) all run flat. both targets: the asm/ ALU
+   ; takes a reg or an imm for adds/subs/cmp (arm64 imm is 12-bit -> pimm?); mulo is register-only on arm64,
+   ; so the imm lane skips `*` (the param-`*` case -- d*d -- is the one that matters and IS a register).
+   (pimm? x) (&& (whole? x) (<= (? (< x 0) (- 0 x) x) 4095))                     ; a small immediate both arches add/sub/cmp directly
+   (preg tgt ps x) (&& (member? x ps) (argregir tgt (argix x ps 0)))            ; x a param -> its arg reg, else ()
+   (garith-r tgt op R) (: A (greg tgt 'acc) SC (greg tgt 'scratch)              ; acc = acc OP R (R a reg), overflow -> OVF
+      (? (id? op '+) `(`('adds A A R) '(br vs OVF))
+         (id? op '-) `(`('subs A A R) '(br vs OVF))
+         (id? op '*) `(`('mulo A A R SC 'OVF)) ()))
+   (garith-i tgt op imm) (: A (greg tgt 'acc)                                   ; acc = acc OP imm (no '*'), overflow -> OVF
+      (? (id? op '+) `(`('adds A A imm) '(br vs OVF))
+         (id? op '-) `(`('subs A A imm) '(br vs OVF)) ()))
+   (flipc op) (? (id? op '<) '> (id? op '<=) '>= (id? op '>) '< (id? op '>=) '<= op)   ; mirror a cmp's operands (= stays)
    (deoptmn tgt bodyp) (: IP (greg tgt 'ip) T (greg tgt 'tmp)                    ; tail-apply interp (value[1]); bodyp -> its BODY (+16, arity>=2)
       (L (L 'ld T IP 8) (? bodyp (L 'lea IP T 16) (L 'mov IP T)) (L 'ld T IP 0) (L 'jmpr T)))
    ; cggir: a group expr e over params ps (in arg regs). syms = the group fn names (call targets). a call
@@ -553,13 +569,23 @@
             (? (member? op syms)
                  (asm (L (gargsir tgt syms ps (cup e)) (L (L 'call op)) (L (L 'add 'sp 'sp (* (slotsz tgt) (tally (cup e)))))))
                (member? op '(+ - *))
-                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T)) (garith tgt op)))
+                 (: pa (preg tgt ps a) pb (preg tgt ps b)
+                    (? pb                                (asm `((cggir tgt syms ps a) (garith-r tgt op pb)))   ; (E op p): E->acc; acc OP= p_reg
+                       (&& (pimm? b) !(id? op '*))       (asm `((cggir tgt syms ps a) (garith-i tgt op b)))    ; (E op C)
+                       (&& pa (member? op '(+ *)))       (asm `((cggir tgt syms ps b) (garith-r tgt op pa)))   ; (p op E): commute
+                       (&& (pimm? a) (id? op '+))         (asm `((cggir tgt syms ps b) (garith-i tgt op a)))    ; (C + E): commute (imm '*' has no arm64 form -> generic)
+                       (asm `((cggir tgt syms ps a) `(`('push A)) (cggir tgt syms ps b) `(`('pop T)) (garith tgt op)))))   ; generic
                (member? op '(// %))
                  (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'test A A) '(br eq OVF) (L 'pop T)) (divir tgt op)))
                (member? op '(& | ^))
                  (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T) (L (bitop op) A A T))))
                (member? op '(< <= > >= =))
-                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T) (L 'cmp T A) (L 'set (ccof op) A))))
+                 (: pa (preg tgt ps a) pb (preg tgt ps b)
+                    (? pb         (asm `((cggir tgt syms ps a) `(`('cmp A pb) `('set (ccof op) A))))             ; (E op p): cmp acc,p_reg
+                       (pimm? b)  (asm `((cggir tgt syms ps a) `(`('cmp A b)  `('set (ccof op) A))))             ; (E op C)
+                       pa         (asm `((cggir tgt syms ps b) `(`('cmp pa A) `('set (ccof op) A))))             ; (p op E): flags p-acc = a-b, cc kept
+                       (pimm? a)  (asm `((cggir tgt syms ps b) `(`('cmp A a)  `('set (ccof (flipc op)) A))))     ; (C op E): cmp acc,C = b-a, flip cc
+                       (asm `((cggir tgt syms ps a) `(`('push A)) (cggir tgt syms ps b) `(`('pop T) `('cmp T A) `('set (ccof op) A))))))   ; generic
                (id? op '?)
                  (: el (mint 0) en (mint 0)
                     (asm (L (cggir tgt syms ps a) (L (L 'cmp A 0) (L 'br 'le el)) (cggir tgt syms ps b)
@@ -679,7 +705,7 @@
        outer (mkouterir tgt k entry k valt smask mmask bufmask cmask)
        Hs (foldl (\ a f (asm (L a (mkhir tgt syms (cap f) (nthl f 1) (nthl f 2))))) () ord)
        lrf (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lrf (cup ds)))))))
-       fb (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (link '(mpin mc mk mv) (link '(pin mc mk mv) (lrf defs)))))))   ; the WHOLE group interpreted -- the deopt fallback. mpeep/mpin are GLAZE-internal (not real fns), so alias them to the core peep/pin (the body reads the PREVIOUS=global binding by the sequence law -- not recursion); harmless for non-map lanes (peep/pin stay the core accessors)
+       fb (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (link '(mpin mc mk mv) (link '(pin mc mk mv) (lrf defs)))))))   ; the WHOLE group re-evaluated as the deopt fallback. Post-rebind `ev` is the glaze, so this RE-GLAZES the group (harmless: a never-deopting native re-build) -- which is why the mpeep/mpin->peep/pin byte-lane aliases (ldxb/stxb) MUST assemble on EVERY target (arm64 included). mpeep/mpin are GLAZE-internal (not real fns), aliased to the core peep/pin (the body reads the PREVIOUS=global binding by the sequence law -- not recursion); harmless for non-map lanes (peep/pin stay the core accessors)
        elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                              ; the entry's source lambda (=/show)
        (nif (emit (peep (assemble tgt (asm (L outer Hs))) 'bytes 0)) fb elam k))
 )
