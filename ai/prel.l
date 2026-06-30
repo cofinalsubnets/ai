@@ -90,7 +90,6 @@
    ; exponent above it raises (scare 'apcap k) instead of allocating O(k) -- so
    ; (bignum f) asks for help where it would oom. retune at runtime: (pin apcap 0 n).
    apcap (pin (tablet 0) 0 1048576)              ; (a raw box: the # sigil's hash isn't built yet)
-   warns (pin (tablet 0) 0 0)                    ; PUBLIC tunable box: 1 -> feel prints compile-time kind warnings to err (default off). (pin warns 0 1)
    (ipow b k) (? (< k 1) 1 (: h (ipow b (// k 2)) h2 (* h h) (? (= 0 (% k 2)) h2 (* h2 b))))
    ; does the count/exponent k top the apcap box? the shared predicate. each site
    ; keeps its own (scare 'apcap k) as the cond RESULT, so a recovering help's value
@@ -695,47 +694,6 @@
 (:: '\\ (\ a (link (link '\ a) (map (\ a `(var `('\ a))) (init a)))))                             ; lambda w/ fresh logic vars
 (: === (\ u v (rel (est u v))))                       ; the relation's infix unify
 (pin operators '=== 2)
-
-; --- compile-time kind warnings (the analysis half; ev's feel prints them to err
-; when the `warns` box is on). flags an op whose operand KINDS guarantee a nil
-; result -- the runtime fast-paths the good case but is silent on the bad one.
-; SOUND by construction: an unknown kind is `top`, which never warns, so no false
-; positives. the abstract domain is the kinds-lattice read as analysis (one of its
-; four readings). helpers are private; only `warn-kinds form` -- a list of the
-; offending subforms -- leaks. the kind-env is a single forward pass over `:`
-; bindings (a forward/cyclic ref reads top, staying sound); `\` params read top.
-(: warn-kinds (:
-   (krank k) (? (id? k 'charm) 1 (id? k 'whole) 2 (id? k 'real) 3 (id? k 'cplx) 4 0)   ; numeric tiers, else 0
-   (knum? k) (< 0 (krank k))
-   (klook env x) (? (atom? env) 'top (: p (cap env) (? (id? x (cap p)) (cup p) (klook (cup env) x))))
-   (kquote d) (? (nom? d) 'nom (two? d) 'list (string? d) 'str (charm? d) 'charm 'top)   ; the kind of a quoted literal
-   (kof env e) (?                                          ; abstract kind of an expression
-     (charm? e) 'charm
-     (string? e) 'str
-     (nom? e) (klook env e)
-     (atom? e) 'top
-     (: h (cap e) a (cap (cup e)) b (cap (cup (cup e)))
-       (? (id? h '\) (? (atom? (cup (cup e))) (kquote a) 'top)   ; (\ d) quote -> the datum's literal kind ; (\ x..) lambda -> top
-          (id? h ':) (kof (kenv env (cup e)) (klast (cup e)))
-          (id? h '+) (: ka (kof env a) kb (kof env b)       ; + : str.str=cat, num.num climbs (overflow), else top
-                        (? (&& (id? ka 'str) (id? kb 'str)) 'str (&& (knum? ka) (knum? kb)) 'whole 'top))
-          (|| (id? h '-) (id? h '//) (id? h '%)) (? (&& (knum? (kof env a)) (knum? (kof env b))) 'whole 'top)
-          'top)))                                           ; */?/lambda/unknown -> top (don't over-claim)
-   (kenv env bs) (? (atom? bs) env (atom? (cup bs)) env     ; build a kind-env from a : binding list
-                  (kenv (link (link (cap bs) (kof env (cap (cup bs)))) env) (cup (cup bs))))
-   (klast bs) (? (atom? bs) 0 (atom? (cup bs)) (cap bs) (klast (cup (cup bs))))   ; the : body (or 0)
-   (knownbad k) (&& (nil? (knum? k)) (nil? (id? k 'top)) (nil? (id? k 'bot)))     ; a DEFINITE non-number
-   (badop env e) (: h (cap e) a (kof env (cap (cup e))) b (kof env (cap (cup (cup e))))
-     (? (|| (id? h '-) (id? h '//) (id? h '%)) (|| (knownbad a) (knownbad b))     ; numeric-only op on a non-number
-        (id? h '*) (&& (id? a 'str) (id? b 'str))                                 ; str*str -> nil
-        0))
-   (kwarns env e) (? (atom? e) 0                            ; collect offending subforms under env
-     (: h (cap e)
-       (? (id? h ':) (: e2 (kenv env (cup e)) (catmap (\ s (kwarns e2 s)) (cup e)))
-          (id? h '\) (catmap (\ s (kwarns env s)) (cup e))
-          (: sub (catmap (\ s (kwarns env s)) (cup e))
-             (? (badop env e) (link e sub) sub)))))
-   (\ form (kwarns 0 form))))
 
 ; recursive-value boxing for `:` (the letrec* "capture by location" fix).
 ; ONE SCOPE: every name bound in a `:` resolves locally over the whole form.
