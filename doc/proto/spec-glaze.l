@@ -12,8 +12,10 @@
 ; the composition is the point: autospec REMOVES interpretation (rewrite level), the glaze NATIVES the
 ; residual (codegen level) -- mix downstreams into the same first-order fragment fib/tak/strscan ride.
 ;
-; RUN (x86-64 host; needs the `nat` nif): the glaze is -l-loaded, so prepend it:
-;   cat ai/glaze/emit.l ai/glaze/auto.l doc/proto/spec-glaze.l | out/host/ai
+; RUN (x86-64 host): just `out/host/ai doc/proto/spec-glaze.l` -- the glaze is BAKED into the binary,
+; so autospec is active by default (no prepend). Do NOT prepend emit.l/auto.l: re-loading the glaze on
+; top of the baked glaze (a double-load) corrupts a thread under autospec and faults -- a dev-path-only
+; bug, not the runtime; the baked binary is the truth.
 ; (a strict `assert` self-gates correctness; the timing prints to err.)
 
 (: prog '(: (ev1 nd x) (? (id? (cap nd) 'lit) (caup nd)  (id? (cap nd) 'var) x
