@@ -79,35 +79,20 @@ _Static_assert(sizeof(union u) == sizeof(intptr_t), "cell size equals word size"
 // remembered-set capacity in words (old objects holding a young pointer). g->alloc'd, never raw malloc,
 // so the generational collector is freestanding -- it rides whatever allocator the frontend supplies.
 #define AI_REM_CAP (1u << 16)
-// INITIAL pool sizes, in words per half. CONFIGURABLE like the custom allocator (g->alloc):
-// both pools GROW on demand, so these are only a starting point -- a tiny device overrides them
-// small (-Dai_minor0=... -Dai_major0=...) and accepts more collections; a host leaves them roomy
-// and boots in few. (Compile-time for now; the runtime-pluggable form rides the init API once the
-// minor graduates out of AI_STAT.) ai_minor0 also sizes the non-generational main pool.
+// INITIAL pool sizes, in words per half. CONFIGURABLE like the custom allocator (g->alloc): both
+// pools GROW on demand, so these are only a starting point -- a tiny device overrides them small
+// (-Dai_minor0=... -Dai_major0=...) and accepts more collections; a host leaves them roomy and boots
+// in few.
 #ifndef ai_minor0
-# ifdef AI_STAT
-#  define ai_minor0 (1u << 14)   // ~128 KB: the generational dev host boots fast
-# else
-#  define ai_minor0 (1u << 10)   // the non-gen pool grows via gcg, so a small seed is fine
-# endif
+# define ai_minor0 (1u << 14)   // ~128 KB minor (the main pool); the dev host boots fast
 #endif
 #ifndef ai_major0
 # define ai_major0 (1u << 16)      // ~512 KB major-pool half; grows much less often than the minor pool
 #endif
-// ai_gc_floor: a FLOOR on the post-collection free headroom, in words -- "always keep >= N words available
-// between heap and stack". The pool is sized to req0 + used + max(used>>2, ai_gc_floor), so after a
-// collection there is at least ai_gc_floor free. This trades RAM for FEWER COLLECTIONS (an allocation-heavy
-// loop -- a tree build, a hash fill -- runs longer between GCs) AND lets a native allocator (the glaze's
-// cons/value lane) complete a bounded burst without tripping its room-guard into a deopt. 0 = the pure
-// adaptive 1/4 headroom (the historical behavior). Tuned to the balance below; override with -Dai_gc_floor=N.
-#ifndef ai_gc_floor
-# define ai_gc_floor 0
-#endif
 // ai_gc_ratio: the generational nursery's COPY-OVERHEAD setpoint (gen_please). The minor pool is
 // resized to hold words-copied/words-allocated inside the band [1/(4*ratio), 1/ratio] -- a LARGER
 // ratio targets LOWER overhead, so the nursery grows bigger and collections fire less often (faster,
-// more RAM); a smaller ratio keeps it lean. This is the self-dampening differential resizer's setpoint
-// -- the principled "floor" knob on the host (vs ai_gc_floor, which only bites the non-gen gcg path).
+// more RAM); a smaller ratio keeps it lean. This is the self-dampening differential resizer's setpoint.
 #ifndef ai_gc_ratio
 # define ai_gc_ratio 24   // tuned at the knee of the GC-reduction curve: ~3x fewer collections than 8,
 #endif                    // same 128MB nursery high-water as 16 (the controller doubles, so both land there),
@@ -930,21 +915,14 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  g->hot_numap = g->hot_add = g->hot_mul = nil;   // unsealed: hot_hook traps until (seal-hooks) fills them
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = ai_clock();
  g->minor = g->end;                  // generational watermark: nothing tenured yet (the first collection sets it)
-#ifndef AI_NOGEN
- // GENERATIONAL setup: a remembered set (old objects holding a young pointer) + the MAJOR pool (a
- // separate two-space for tenured objects, born empty). BOTH via g->alloc, so the collector rides the
- // frontend's allocator -- a host/kship heap supplies them and the minor runs; a fixed-arena embedded
- // target (ai_static_alloc returns NULL) gets neither, so major_pool stays 0 and ai_please falls back
- // to the non-generational gcg. A minor without the rem set is UNSOUND, so a partial allocation (rem
- // but no major) drops back to gcg too. -DAI_NOGEN forces gcg everywhere (the escape hatch).
+ // generational setup: a remembered set (old objects holding a young pointer) + the MAJOR pool (a
+ // separate two-space for tenured objects). Both via g->alloc -- the collector rides the frontend's
+ // heap, so a frontend that cannot supply them cannot run (the generational collector is the only one).
  g->major_len = ai_major0;                                         // initial major half (configurable); grows in gen_major, much less often than the minor
  g->rem = g->alloc(g, NULL, AI_REM_CAP * sizeof(word));
  g->major_pool = g->rem ? g->alloc(g, NULL, 2 * g->major_len * sizeof(word)) : NULL;
- if (g->major_pool)
-  g->major_base = g->major_hp = g->major_pool, g->rem_cap = AI_REM_CAP, g->budget = ai_budget;
- else if (g->rem)
-  g->alloc(g, g->rem, 0), g->rem = NULL;                          // got the rem set but not the major pool -> gcg
-#endif
+ if (!g->major_pool) { if (g->rem) g->alloc(g, g->rem, 0); return encode(g, ai_status_scare); }
+ g->major_base = g->major_hp = g->major_pool, g->rem_cap = AI_REM_CAP, g->budget = ai_budget;
  // book + macro maps (lookup-lambdas) then the main task thread.
  if (ai_ok(g = map_new(g)) && ai_ok(g = map_new(g)) && ai_ok(g = ai_have(g, 6))) {
   union u *M = bump(g, 6);            // sp[0]=macro, sp[1]=book (no GC since ai_have)
@@ -962,7 +940,7 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
   g = ai_pop(g, 1);
   // the WEAK intern map (string -> the canonical atom), created before the
   // first intern (the def tables just below). it lives OUTSIDE the traced
-  // v0 region: gcg clones it untraced and sweeps it at the fixpoint.
+  // v0 region: a collection clones it untraced and sweeps it at the fixpoint.
   g = map_new(g);
   if (ai_ok(g)) g->symbols = ai_pop1(g);
   struct ai_def def0[] = {
@@ -1010,12 +988,6 @@ struct ai *ai_ini_m(void *(*al)(struct ai*, void*, size_t)) {
                                        // tiny device overrides ai_minor0 small and scales up only as needed
  struct ai *g = al(NULL, NULL, 2 * len0 * sizeof(word));
  return g == NULL ? encode(g, ai_status_scare) : ai_ini_0(g, len0, al); }
-
-static void *ai_static_alloc(struct ai*g, void *p, size_t n) { (void) g, (void) p, (void) n; return NULL; }  // fixed arena: no malloc/free
-struct ai *ai_ini_s(void *mem, uintptr_t nbytes) {
- uintptr_t len0 = nbytes / (2 * sizeof(word));
- return len0 <= Width(struct ai) ? encode(mem, ai_status_scare) :
-   ai_ini_0(mem, len0, ai_static_alloc); }
 
 static void *ai_libc_alloc(struct ai*g, void *p, size_t n) { (void) g; return n ? malloc(n) : (free(p), NULL); }
 struct ai *ai_ini(void) { return ai_ini_m(ai_libc_alloc); }
@@ -1124,80 +1096,6 @@ static ai_inline void evac_data(struct ai *g, word const *const p0, word const*c
    case KFlo: return evac_flo(g, p0, t0);
    case KWide: return evac_wide(g, p0, t0);
    case KCplx: return evac_cplx(g, p0, t0); } }
-
-// THE WEAK INTERN TABLE. the cheney phase never traces it (the map alone
-// keeps no atom alive); after the fixpoint, symbols_rebuild walks the OLD
-// from-space table -- still ours to read -- and inserts only the entries
-// whose atoms were forwarded into a fresh same-cap backing in to-space (the
-// copied atom carries its forwarded name; survivors <= len < 3/4 cap, so
-// everything fits with no growth). a dead atom's entry simply never crosses:
-// dead spellings vanish, the same weak interning the rebuilt map gave for
-// free. bump-bounded: from-space held a table of the same size.
-static ai_noinline word symbols_rebuild(struct ai *h, struct ai *g) {
- word om = g->symbols;
- if (!om) return 0;
- uintptr_t cap = map_cap(om), mask = cap - 1, n = 0;
- union u *b = map_fill_back(bump(h, 4 + 2 * cap), cap), *hd = bump(h, 3);
- hd[0].ap = lvm_map_lookup, hd[1].x = (word) b, tagthread(hd, 2);
- word *os = map_slots(om), *ns = &b[3].x;
- word const *lo = ptr(h), *hi = ptr(h) + h->len;
- for (uintptr_t j = 0; j < cap; j++) {
-  word k = os[2 * j];
-  if (k == map_gap) continue;
-  word fwd = cell(os[2 * j + 1])->x;            // the atom's first word: its forward, if it survived
-  if (!(lamp(fwd) && lo <= ptr(fwd) && ptr(fwd) < hi)) continue;
-  word nk = nom(fwd)->name;                     // the copied KNom carries the forwarded name string
-  uintptr_t i = hash(h, nk) & mask;
-  while (ns[2 * i] != map_gap) i = (i + 1) & mask;
-  ns[2 * i] = nk, ns[2 * i + 1] = fwd, n++; }
- b[1].x = putcharm(n);
- return (word) hd; }
-
-static ai_inline void run_finalizers(struct ai*g) {
- struct ai_fz *new_fz = NULL;
- for (struct ai_fz *fz = g->fz; fz; fz = fz->next) {
-  word fwd = fz->p->x;
-  if (lamp(fwd) && ptr(g) <= ptr(fwd) && ptr(fwd) < ptr(g) + g->len) {
-   struct ai_fz *nn = bump(g, Width(struct ai_fz));
-   nn->p = cell(fwd), nn->fn = fz->fn, nn->next = new_fz, new_fz = nn;
-  } else fz->fn(fz->p); }
- g->fz = new_fz; }
-
-static ai_noinline struct ai *gcg(struct ai*h, struct ai *p1, uintptr_t len1, struct ai *g) {
- memcpy(h, g, sizeof(struct ai));
- h->pool = (void*) p1;
- h->len = len1;
- uintptr_t const len0 = g->len;
- word const *p0 = ptr(g),
-            *t0 = ptr(g) + len0, // source top
-            *sp0 = g->sp;
- word sh = t0 - sp0; // stack height
- h->sp = ptr(h) + len1 - sh;
- // the core FLOPS with the dust to the new pool (h). nothing holds (word)g as a value
- // (() is the const ZeroPoint, not the core), so no forwarding pointer is left behind.
- h->hp = h->cp = h->end;
-#ifdef AI_STAT
- h->gc_gen = 0, h->gc_to_lo = ptr(h), h->gc_to_hi = ptr(h) + len1, h->gc_fwd = ptr(h);  // to-space = the whole new pool
-#endif
- h->ip = cell(gcp(h, word(h->ip), p0, t0));
- h->tasks = cell(gcp(h, word(h->tasks), p0, t0));
- h->symbols = 0;                               // the WEAK intern map: rebuilt below, after the fixpoint
- for (word i = 0; i < h->end - &h->v0; i++) (&h->v0)[i] = gcp(h, (&h->v0)[i], p0, t0);               // core live variables (incl. the pre-interned *_sym book keys)
- for (word n = 0; n < sh; n++) h->sp[n] = gcp(h, sp0[n], p0, t0);                     // stack
- for (struct ai_r *s = h->root; s; s = s->n) *s->x = gcp(h, *s->x, p0, t0); // C live variables
- while (h->cp < h->hp) (datp(h->cp) ? evac_data : evac_thread)(h, p0, t0);              // cheney algorithm
- // the weak intern table: rebuilt ONLY NOW, past the sound window, so the
- // cheney loop never traces it (an early copy would sit in [cp, hp) and get
- // walked -- resurrecting every atom). run_finalizers bumps after the
- // fixpoint the same way.
- h->symbols = symbols_rebuild(h, g);
- run_finalizers(h);
- h->minor = h->hp;                  // everything compacted (incl. the rebuilt table + finalizers) is now OLD; future bumps are young
-#ifdef AI_STAT
- if (h->len > h->max_len) h->max_len = h->len;                                       // instrumentation: peak pool len
- { uintptr_t heap = h->hp - h->end; if (heap > h->max_heap) h->max_heap = heap; }    // peak live (compacted) heap
-#endif
- return h; }
 
 #ifdef AI_STAT
 // ===== generational write barrier (stage 2; AI_STAT / host only) ================
@@ -1354,8 +1252,8 @@ static void gen_minor(struct ai *g) {
 // young or old, into the spare half (or a fresh pair twice the size when the major is over half
 // full). This subsumes the dirty case: tracing from roots finds every LIVE old->young edge with no
 // rem set. Then rebuild the weak intern map + run finalizers into the to-space, flip, and reset the
-// (now fully promoted) minor. The core stays put in the main pool, so -- unlike gcg -- there is no
-// core-flop: nil is ZeroPoint (an out-of-pool const), not the core.
+// (now fully promoted) minor. The core stays put in the main pool, so there is no core-flop: nil is
+// ZeroPoint (an out-of-pool const), not the core.
 static struct ai *gen_major(struct ai *g) {
  word const *p0 = g->major_base, *t0 = g->major_hp;              // from-range 1: major active
  // size the to-space for the WORST CASE: all of major-active AND all of the minor survive (the
@@ -1491,56 +1389,7 @@ static struct ai *gen_please(struct ai *g, uintptr_t req0) {
 #endif
 
 ai_noinline struct ai *ai_please(struct ai *g, uintptr_t req0) {
- uintptr_t const
-  t0 = g->t0, // end of last gc period
-  t1 = ai_clock(), // end of current non-gc period
-  len0 = g->len;
- // find alternate pool
- struct ai *h = off_pool(g);
-#ifdef AI_STAT
- if (g->major_pool) return gen_please(g, req0);   // GENERATIONAL: minor (or major) into the major pool
- uintptr_t seen = g->hp - g->end;   // (fallback: major malloc failed -> today's whole-pool gcg below)
-#endif
- g = gcg(h, g->pool, g->len, g);
-#ifdef AI_STAT
- g->n_gc += 1;                      // one cycle per please (a resize copies twice but is one collection)
- g->n_seen += seen;                 // Σ scanned
- g->n_evac += g->hp - g->end;       // Σ survivors copied out (compacted live), words
- g->rem_n = 0, g->dirty = 0;        // post-collection the minor is empty: no old->young edges, no pending mutation
-#endif
- uintptr_t const
-  v_lo = 4,
-  v_hi = v_lo * v_lo,
-  used = len0 - avail(g),                        // live set after this compaction (heap + stack)
-  // HEADROOM is mandatory, not just the immediate request. Each collection
-  // rebuilds the weak intern table fresh in the free sliver between hp and sp
-  // (symbols_rebuild). If the pool is sized to barely fit `req0 + used` it runs
-  // at ~100% load: that sliver shrinks to a couple of words, and a live stack
-  // root can come to alias the rebuilt backing -- the next collection then
-  // forwards through that root and stamps a forwarding pointer over the
-  // backing's cap field (garbage cap -> bump trap). Keeping >= 1/4 of the live
-  // set free holds the table clear of the roots. (See test/jit two-file load:
-  // 197 nifs fit, 198 tipped boot to the 2-word sliver and SIGILL'd.)
-  req = req0 + used + ((used >> 2) < ai_gc_floor ? (uintptr_t) ai_gc_floor : (used >> 2)),   // >= ai_gc_floor free after GC
-  t2 = ai_clock();
- uintptr_t
-  len1 = len0,
-  v = t2 == t1 ? v_hi : (t2 - t0) / (t2 - t1);
- if (len1 < req || v < v_lo) // if too small
-  do len1 <<= 1, v <<= 1; // then grow
-  while (len1 < req || v < v_lo);
- else if (len1 > 2 * req && v > v_hi) // else if too big
-  do len1 >>= 1, v >>= 1; // then shrink
-  while (len1 > 2 * req && v > v_hi);
- else return g->t0 = t2, g; // else right size -> all done
- return // allocate a new pool with target size
-  !(h = g->alloc(g, NULL, len1 * 2 * sizeof(word))) ? // if malloc fails but pool is big enough
-   (g->scare_a = g->scare_b = nil, // oom is the bare scare: clear any stale stash
-    encode(g, req <= len0 ? ai_status_ok : ai_status_scare)) : // we can still report success
-  (h = gcg(h, h, len1, g),
-   g->alloc(g, g->pool, 0),
-   h->t0 = ai_clock(),
-   h); }
+ return gen_please(g, req0); }   // generational ONLY: a minor (or major) into the major pool that ai_ini_0 guarantees
 
 static ai_inline word copy_chain(struct ai*g, struct ai_chain *src, word const *const p0, word const *const t0) {
  struct ai_chain *dst = bump(g, Width(struct ai_chain));
@@ -2465,8 +2314,8 @@ static ai_inline struct ai *zflush(struct ai*);
 // answers and what () reads as. The core's head is a nameless serial-0 mint (the one
 // serial never drawn), nameless, $0, falsy, applying const-1 like every unit. absence
 // is a POINT, not a quantity: a number would exponentiate under a numeral ((i love) =
-// 0**i is honest nan), a unit absorbs -- which is what keeps (i love you) = 1. It FLOPS
-// with the dust (gcg forwards old->new core) and prints () -- the face of absence.
+// 0**i is honest nan), a unit absorbs -- which is what keeps (i love you) = 1. It prints
+// () -- the face of absence.
 // No named constant; the nothing is ZeroPoint (ai_mint_zero). DISTINCT from 0 (fixnum) and "" (string).
 // A read of the LIVE book (the outermost cell) by name -- the missing-name law
 // at the global scope, the twin of boxfix's local (missing cell 'nom). A hit
@@ -2948,7 +2797,7 @@ lvm(lvm_quote) {
 // push () -- the core, the one true nothing. A RUNTIME FETCH (no operand): the core
 // FLOPS with the dust, so () can never be baked as a quote constant (the egg's build
 // core != the runtime core). analyze emits this for the core; the value is always the
-// live core, forwarded by gcg when it moves.
+// live core, forwarded by the collector when it moves.
 lvm(lvm_zp) {
  Have1();
  Sp -= 1;
