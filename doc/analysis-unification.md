@@ -107,15 +107,30 @@ analysis, orthogonal.
    capture fixpoint, via measure-snapshot-before-step). One driver, four lattices
    (ascending/descending/mutating), proved with zero analysis risk on already-sound code. The
    one remaining int/value fixpoint, `grpfix`, is just `gfix`'s caller (already on monofix).
-2. **Collapse the re-derived facts onto shared derivations, then a fact table.** IN PROGRESS.
-   Shared facts live in **prel** (chosen 2026-06-30, like `monofix` — prel additions aren't
-   mopped, so no egg-mop-list growth). Done: **constant-ness** — one `kconst` (prel) returns
-   `(1 . value)` for a constant form else `()`; feels' `cval`, cprop's `propk?`, wxc's `cst` are
-   all projections of it (was 3 copies across 3 scopes). NEXT facts to collapse the same way:
-   purity (`pureset`/`pure-head?`/`dcheap?`/`roalloc`), arity (`opof`/`farof`/`falook`),
-   occurrence (`occurs?`/`dcount`/`fvs`). THEN the per-node memoized table (query sites read it
-   instead of re-walking). Gotcha learned: a prel helper must use only earlier-defined prel
-   names — `&&`/`||` are macros defined late, so use nested `?` (a forward macro hangs the egg).
+2. **Collapse the re-derived facts onto shared derivations, then a fact table.** Shared facts
+   live in **prel** (chosen 2026-06-30, like `monofix` — prel additions aren't mopped, so no
+   egg-mop-list growth). Done: **constant-ness** — one `kconst` (prel) returns `(1 . value)` for a
+   constant form else `()`; feels' `cval`, cprop's `propk?`, wxc's `cst` are all projections of
+   it (was 3 copies across 3 scopes). Gotcha learned: a prel helper must use only earlier-defined
+   prel names — `&&`/`||` are macros defined late, so use nested `?` (a forward macro hangs the egg).
+
+   **The table over-counted.** On close inspection the other rows do NOT flat-collapse like
+   constant-ness did, so they were NOT forced:
+   - *purity* is already layered on the shared `pureset` (`pure-head?`/`allp`/`pbody?` compose
+     it — not copies); the glaze's `roalloc` is a different-policy denylist and `dcheap?` the
+     stricter cheap-and-pure subset.
+   - *arity* reads genuinely different sources — `opof` peeks a nif's C-struct, `farof`/`falook`
+     walk the scope chain, the glaze counts param-lists.
+   - *occurrence* — `occurs?`/`dcount` differ only as boolean-vs-count and unifying loses
+     `occurs?`'s short-circuit (hot path); `fvs` is binder-aware (a different computation).
+   The one genuine remaining flat-copy was a *combinator*, not a fact: `filter` was triplicated
+   (prel `filter` + identical `afilter` in auto.l + `gfilt` in emit.l) — collapsed onto prel
+   `filter` (`ace79465`). So substitution (`dsub`/`subst-sym`/`subst-call`/`bsub`/`rewrite`) is
+   the same story: several are genuinely different (capture-avoiding `bsub`, call-rewrite
+   `subst-call`, unify-based `rewrite`); only `subst-sym`≈`dsub` are near-equal (same scope).
+
+   REMAINING on-track work: the per-node memoized fact table (query sites read it instead of
+   re-walking — the real structural win), which naturally leads into step 3.
 3. **Extend the lattice to the real `kinds.l` abstract interpretation + devirt** (the
    high-value, high-risk step), with the harness from (1) as its engine.
 4. **Rewrite engine (C):** start with trivial peepholes (`debool`, `dechurch`, `fold-consts`)
