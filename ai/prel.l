@@ -114,12 +114,25 @@
    ; zero numeral ((-3 f) = (0 f) = 1, the literal lambda construction), a float
    ; ceils, a complex its modulus when it sorts positive, an array its element
    ; sum -- the saturated net. k=0 -> 1 (const 1); k=1 -> x directly -- the snappy basics.
-   (num-ap n x) (? (constellation? x) (powg x n)
-                   (: k (sat n)
-                      (? (< k 1) 1 (= k 1) x
-                         (apover k) (scare 'apcap k)
-                         (numfn k x))))
-   _ (pin book 'num-ap num-ap))
+   ; cached compose-combinators: cmpk = (\ f (\ x f^k(x))) -- applying a numeral k to a FUNCTION f is just
+   ; (cmpk f), a normal closure CAPTURE of f, no per-call thread assembly (numfn's twirl/poke). Built ONCE,
+   ; compiled like any lambda; k past the cache falls back to numfn. The hot case (2/3) hits hand-written
+   ; `twice`/`thrice` speed. They + num-ap sit in this nested (body-HAVING) `:`, so they are LOCAL -- num-ap
+   ; captures them as siblings, they never reach the book, no mop entry. pre-operators: prefix only.
+   _ (: cmp2 (\ f (\ x (f (f x))))
+        cmp3 (\ f (\ x (f (f (f x)))))
+        cmp4 (\ f (\ x (f (f (f (f x))))))
+        cmp5 (\ f (\ x (f (f (f (f (f x)))))))
+        cmp6 (\ f (\ x (f (f (f (f (f (f x))))))))
+        cmp7 (\ f (\ x (f (f (f (f (f (f (f x)))))))))
+        cmp8 (\ f (\ x (f (f (f (f (f (f (f (f x))))))))))
+        (cmp k) (? (= k 2) cmp2 (= k 3) cmp3 (= k 4) cmp4 (= k 5) cmp5 (= k 6) cmp6 (= k 7) cmp7 (= k 8) cmp8 0)
+        (num-ap n x) (? (constellation? x) (powg x n)
+                        (: k (sat n)
+                           (? (< k 1) 1 (= k 1) x
+                              (apover k) (scare 'apcap k)
+                              (: c (cmp k) (? c (c x) (numfn k x))))))
+        (pin book 'num-ap num-ap)))
 ; text (function) combinators for + and *, installed like num-ap. a text operand
 ; takes precedence over every other type, so +/* of a function build a function. these
 ; are the README's Church numeral arithmetic, so +/* on numerals agree with the numbers:
