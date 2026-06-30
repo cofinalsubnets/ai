@@ -184,11 +184,20 @@
    ; cst: a post-wx test that is a compile-time CONSTANT -> (1 . falsy?), else 0. mirrors feels'
    ; cval (a non-symbol atom, or a (\ v) quote of one); the cond tests g_false == nil?, so the
    ; constant's truth is exactly nil? of its value -- a folded test prunes its dead branch.
-   (cst t) (? (nom? t) 0                              ; a variable (or the () zero point): unknown
-              (atom? t) (link 1 (nil? t))             ; number/string literal: known by its net
-              (&& (id? (cap t) '\) (atom? (cuup t))) (link 1 (nil? (caup t)))   ; a quote (\ v)
-              (&& (atom? (cup t)) (atom? (cap t)) (nil? (nom? (cap t)))) (link 1 (nil? (cap t)))  ; (c) == c: a folded monadic (opfix wraps (! e) -> ((nil? e)), so a folded test lands wrapped)
-              0)
+   ; kc: the constant-form recognizer (const? . value) for this compiler block -- one recognizer, the
+   ; cprop/wxc constant queries (cst, propk?) are its projections. Identical to feels' `cval` but
+   ; re-derived: feels is a SEPARATE top-level scope (its bindings are local to its block), so the two
+   ; can't share without a global. A shared low layer would unify them (analysis-unification step 2).
+   (kc e) (? (nom? e) (link 0 0)
+              (atom? e) (link 1 e)
+              (&& (id? (cap e) '\) (atom? (cuup e))) (link 1 (caup e))
+              (link 0 0))
+   ; cst: re-read kc's (const? . value) as (const? . falsy?) -- the constant's truth is exactly nil? of
+   ; its value, so a folded test prunes its dead branch.
+   (cst t) (: c (kc t)
+              (? (cap c) (link 1 (nil? (cup c)))       ; kc knows it (atom / quote literal)
+                 (&& (atom? (cup t)) (atom? (cap t)) (nil? (nom? (cap t)))) (link 1 (nil? (cap t)))  ; PLUS (c) == c: a folded monadic (opfix wraps (! e) -> ((nil? e)), so a folded test lands wrapped)
+                 0))
    (wxc bs bnd) (: fb (? (member? 'nil? bnd) bs (cflip bs))
     (? (atom? fb) (list ())                           ; clauses ran out: implicit () else (nil-ontology)
        (atom? (cup fb)) (list (wx (cap fb) bnd))      ; the lone else
@@ -219,7 +228,7 @@
    ; OFFLINE partial evaluator, doc/proto/mix.l, where static DATA folds too. cprop runs before wx
    ; (pre-boxfix, pre-expansion); only an already-constant RHS propagates (a forward ref / cell read
    ; never is -- letrec-safe); a non-constant rebind or a lambda param KILLS the name.
-   (propk? v) (? (nom? v) 0 (atom? v) 1 (&& (id? (cap v) '\) (atom? (cuup v))) 1 0)   ; a constant FORM?
+   (propk? v) (cap (kc v))   ; a constant FORM? -- the const? bit of the block's kc recognizer (cf. cst, the falsy projection)
    (assq k se) (? (atom? se) 0 (id? k (caap se)) (cap se) (assq k (cup se)))
    (rmq k se) (? (atom? se) () (id? k (caap se)) (rmq k (cup se)) (link (cap se) (rmq k (cup se))))
    (strip ps se) (? (atom? ps) se (strip (cup ps) (rmq (cap ps) se)))                 ; kill all params
