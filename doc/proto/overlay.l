@@ -199,7 +199,7 @@
                           (: h (cap e) as (map (\ s (kindof dom sigs env s)) (cup e))
                              (? (member? h '(+ *)) ((dom 'tr) h (cap as) (cap (cup as)))
                                 (&& (id? h '?) (= 4 (tally e))) ((dom 'join) (cap (cup as)) (cap (cup (cup as))))  ; (? c a b) -> join branches
-                                (: sg (sig-of sigs h) (? (two? sg) (nthl sg 2) 'top)))))  ; typed callee -> its result-die (the BOUNDARY)
+                                (: sg (sig-of sigs h) (? (two? sg) (inst dom (bindv dom (caup sg) as) (nthl sg 2)) 'top)))))  ; typed callee -> result-die, die-VARS instantiated from arg dies
    (pairs bs)   (? (atom? bs) 0 (atom? (cup bs)) 0 (link (link (cap bs) (cap (cup bs))) (pairs (cup (cup bs)))))
    (alle a b)   (? (atom? a) 1 (: p (cap a) (&& (id? (cup p) (look b (cap p))) (alle (cup a) b))))
    (enveq a b)  (&& (alle a b) (alle b a))
@@ -230,8 +230,10 @@
                                  (? (id? d 'clash) (link e sub) sub)))
    (check dom sigs prog) (catmap (\ p (: nm (caap p) ps (cuap p) body (cup p) sg (sig-of sigs nm)   ; p = ((f params) . body)
                                         (? (! (two? sg)) 0                               ; untyped fn -> not checked (gradual)
-                                           (: cl (clashes dom sigs (zipenv ps (caup sg)) body)        ; infer body under param dies
-                                              (? (atom? cl) 0 (L (link nm cl)))))))                    ; -> (name sites..) when clashy
+                                           (: env (zipenv ps (caup sg)) cl (clashes dom sigs env body)
+                                              bd (kindof dom sigs env body) decl (nthl sg 2)          ; body die vs DECLARED result
+                                              ok (&& (atom? cl) (id? ((dom 'join) bd decl) decl))      ; no clash AND bd <= decl
+                                              (? ok 0 (L (link nm (? (atom? cl) (L 'result bd decl) cl))))))))   ; clash sites OR (result bd decl)
                                  (filter (\ p (! (atom? (cap p)))) (pairs (cup prog))))  ; strip `:`; function defs only
    ; the UNITS domain -- user-supplied: meters/seconds/area; `clash` = provably-wrong, `bot` = scalar/neutral
    (ujoin a b) (? (id? a 'bot) b (id? b 'bot) a (id? a b) a (|| (id? a 'clash) (id? b 'clash)) 'clash 'top)
@@ -254,6 +256,34 @@
    _ (: _ (puts ";; M2 black_box = the top die (assume nothing: never clashes, never devirts)\n")
         _ (chk "blackbox: 0 clashes" 0 (tally (check udom '((f (top) top)) bbox))) 0)
 
+   ; --- Phase 1: die-VARIABLES (parametric polymorphism) + caller INSTANTIATION + the observe-only seam ---
+   ;     a die not among the domain's concrete `dice` is a VARIABLE (a rigid skolem during body-check; the
+   ;     domain's structural id?-rules already treat it right -- a+a=a, a+bot=a, a+b=clash). The result
+   ;     check in `check` above (bd <= decl) turns a mislabelled result into a type error. A typed callee
+   ;     INSTANTIATES: match the sig's param-vars against the actual arg dies, substitute into the result.
+   ;     (Flat dies -> a trivial matcher; structured dies + real unification are Phase 2 / uu.)
+   (vard? dom d)     (! (member? d (dom 'dice)))
+   (bindv dom ps as) (? (atom? ps) 0 (: rest (bindv dom (cup ps) (cup as))
+                                        (? (vard? dom (cap ps)) (link (link (cap ps) (cap as)) rest) rest)))
+   (sub-look sub v)  (? (atom? sub) v (id? v (cap (cap sub))) (cup (cap sub)) (sub-look (cup sub) v))   ; v if unbound
+   (inst dom sub d)  (? (vard? dom d) (sub-look sub d) d)
+   (checked-ev dom sigs form) (: rep (check dom sigs form)                               ; OBSERVE-ONLY: report, then run UNCHANGED
+                                 _ (? (two? rep) (: _ (puts ";;   overlay flags ") _ (puts (show (map cap rep))) (putc 10)) 0)
+                                 (base-ev form))
+   idp  '(: (id x) x (id 5))                            sg-id   '((id (a) a))            ; id : a -> a
+   mis  '(: (ml x) x (ml 5))                            sg-mis  '((ml (meters) seconds)) ; returns meters, DECLARES seconds
+   amx  '(: (am x y) (+ x y) (am 3 4))                  sg-amx  '((am (a b) a))          ; a + b : ill-typed for distinct a,b
+   comp '(: (id x) x (area2 w h) (* (id w) (id h)) (area2 3 4))   sg-comp '((id (a) a) (area2 (meters meters) area))
+   _ (: _ (puts ";; P1 polymorphism (die-variables, at the definition site)\n")
+        _ (chk "poly id : a->a ok"       0 (tally (check udom sg-id idp)))
+        _ (chk "mislabel a->b flagged"   1 (tally (check udom sg-mis mis)))
+        _ (chk "a+b (distinct) flagged"  1 (tally (check udom sg-amx amx))) 0)
+   _ (: _ (puts ";; P1 caller instantiation -- area2 checks ONLY because (id w) instantiates a:=meters\n")
+        _ (chk "instantiate + compose ok" 0 (tally (check udom sg-comp comp))) 0)
+   _ (: _ (puts ";; P1 observe-only seam -- checked-ev == base-ev value, report on the side\n")
+        _ (chk "checked-ev good =12"    12 (checked-ev udom '((room-area (meters meters) area)) good))
+        _ (chk "checked-ev bad  =7"      7 (checked-ev udom '((bad (meters seconds) area)) bad)) 0)
+
    n (peep fails 0 0)
-   _ (: _ (putc 10) _ (puts (? (= n 0) ";; PHASE-0 M0-M2 PASS -- pluggable domain checks + erases\n" (+ ";; FAIL: " (+ (show n) " mismatches\n")))))
+   _ (: _ (putc 10) _ (puts (? (= n 0) ";; PHASE 0+1 PASS -- pluggable domain: polymorphic check, instantiate, erase\n" (+ ";; FAIL: " (+ (show n) " mismatches\n")))))
    0)
