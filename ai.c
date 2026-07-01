@@ -184,7 +184,9 @@ lvm_t lvm_kcall,
  lvm_unc, lvm_poke, lvm_peek,
  lvm_seek,  lvm_trim,   lvm_twirl,   lvm_add,
  lvm_sub,   lvm_mul,    lvm_quot,   lvm_fquot, lvm_rem,  lvm_arg,
- lvm_bmul_start, lvm_bmul,   // resumable (yieldable) bignum multiply
+ lvm_bmul_start, lvm_bmul,   // resumable (yieldable) bignum multiply (chunked schoolbook)
+ lvm_kmul,                   // resumable (yieldable) subquadratic Karatsuba (loop body)
+ lvm_bdiv,                   // resumable (yieldable) bignum long division (loop body)
  lvm_quote, lvm_index,  lvm_eval,   lvm_cond, lvm_jump,   lvm_defglob,
  lvm_ap,    lvm_tap,    lvm_apn,    lvm_tapn, lvm_ret,
  lvm_argap, lvm_quoteap, lvm_argtap,
@@ -208,6 +210,7 @@ lvm_t lvm_kcall,
 // applies a monadic math fn elementwise to an array (e.g. (sin arr)); lvm_vmap2
 // is the dyadic analogue with broadcasting (e.g. (pow arr arr), (atan2 ...)).
 lvm(lvm_vbin, int);
+lvm(lvm_bdiv_start, int);   // resumable long-division entry; the int is vop (vop_fquot / vop_rem)
 lvm(lvm_vmap1, ai_flo_t (*)(ai_flo_t));
 lvm(lvm_vmap2, ai_flo_t (*)(ai_flo_t, ai_flo_t));
 // Complex arithmetic lane (kernel/cplx.c): the scalar arith slow paths divert
@@ -5200,9 +5203,7 @@ lvm(lvm_link) {
  if (!bigp(a) && !bigp(b)) { intptr_t av = toint(a), bv = toint(b); \
   if (!(av == INTPTR_MIN && bv == -1)) { word _res; Have(box_req); emit_int(av c_op bv); \
    return *++Sp = _res, Ip++, Continue(); } } \
- Pack(g); g = ai_big_binop(g, vop); \
- if (!ai_ok(g)) return ghelp(g); \
- return Unpack(g), Continue(); }
+ return Ap(lvm_bdiv_start, g, vop); }   /* big // and % run yieldable (resumable long division) */
 #define avm_ovf(op, builtin) lvm(lvm_##op) { \
  word a = Sp[0], b = Sp[1]; \
  if (charmp(a) && charmp(b)) { intptr_t t; \
@@ -6616,6 +6617,111 @@ static struct ai *ai_bmul_setup(struct ai *g) {
  g->ip = (union u*) bmul_loop;
  return g; }
 
+// --- resumable (yieldable) Karatsuba multiply -------------------------------
+// The chunked schoolbook above is O(na*nb): fine, and it yields, but a huge
+// EQUAL-length product (squaring, modpow) deserves SUBQUADRATIC work too. This
+// drives a TRUE recursive Karatsuba -- z0, z2 AND the middle z1 all recurse, so
+// O(n^1.585), not the O(n^2) of the tree's older half-recursive mag_mul_kara --
+// as a yieldable VM instruction. The whole computation lives in ONE pinned buf:
+//   [ hdr | job stack | A(n) | B(n) | R(2n) | scratch ]
+// re-read by offset each dispatch (a parked yield lets GC move the buf). A JOB
+// multiplies ws[ar..ar+n) x ws[br..br+n) -> ws[rr..rr+2n): state 0 SPLITS (form
+// the two operand sums sa=a0+a1, sb=b0+b1, then push the three half-size child
+// jobs z0,z2,z1); state 1 COMBINES (z1 -= z0; z1 -= z2; r += z1<<m). Children
+// run before the parent's combine (LIFO) and share one scratch arena below the
+// sums, since they run sequentially. Only na==nb routes here (the case worth
+// splitting -- squaring/modpow); unequal-large stays on lvm_bmul's schoolbook.
+#define kmul_chunk (1 << 14)   // leaf limb-mults folded per dispatch before a yield check
+#define KMUL_HDR 8             // ws header limbs: [0]=n [1]=top (stack ptr) [2]=sign [3]=r_off
+#define KMUL_JW  6             // job record limbs: ar, br, n, rr, sr, state
+static union u const kmul_loop[1] = { { .ap = lvm_kmul } };
+
+static struct ai *ai_kmul_setup(struct ai *g) {
+ word a = g->sp[0], b = g->sp[1];
+ int n = big_nlimbs(a);                                   // caller contract: bigp(a)&&bigp(b), na==nb==n, n>=kara_cutoff
+ int d = 0; for (int t = n; t >= kara_cutoff; t = (t + 1) / 2) d++;   // Karatsuba depth
+ uintptr_t njob = (uintptr_t) 8 * d + 32;                 // job-stack capacity (~3d live, generous)
+ uintptr_t scrn = (uintptr_t) 6 * n + 16 * (uintptr_t) d + 256;      // O(n) scratch, with margin
+ uintptr_t jobs_off = KMUL_HDR, a_off = jobs_off + njob * KMUL_JW,
+           b_off = a_off + n, r_off = b_off + n, scr_off = r_off + 2 * (uintptr_t) n;
+ uintptr_t wslimbs = scr_off + scrn;
+ uintptr_t sreq = str_type_width + b2w(wslimbs * sizeof(ai_limb));
+ uintptr_t breq = Width(struct ai_buf) + Width(struct ai_tag);
+ if (!ai_ok(g = ai_have(g, sreq + breq + 3))) return g;
+ a = g->sp[0], b = g->sp[1];                              // re-fetch (ai_have may have GC'd)
+ ai_limb sa[wlimbs], sb[wlimbs]; ai_limb const *la, *lb; bool nega, negb;
+ (void) load_int_mag(a, sa, &la, &nega); (void) load_int_mag(b, sb, &lb, &negb);
+ struct ai_str *ws_s = ini_str((struct ai_str*) g->hp, wslimbs * sizeof(ai_limb));
+ g->hp += sreq;
+ ai_limb *ws = (ai_limb*) txt(ws_s);
+ for (uintptr_t i = 0; i < wslimbs; i++) ws[i] = 0;       // zero everything: clean result + scratch slots
+ for (int i = 0; i < n; i++) ws[a_off + i] = la[i];
+ for (int i = 0; i < n; i++) ws[b_off + i] = lb[i];
+ ws[0] = (ai_limb) n, ws[1] = 1, ws[2] = (ai_limb) (nega != negb), ws[3] = r_off;   // n, top=1, sign, r_off
+ ai_limb *j0 = ws + jobs_off;                             // the root job: multiply A x B -> R
+ j0[0] = a_off, j0[1] = b_off, j0[2] = (ai_limb) n, j0[3] = r_off, j0[4] = scr_off, j0[5] = 0;
+ union u *k = (union u*) g->hp; g->hp += breq;
+ ((struct ai_buf*) k)->ap = lvm_buf, ((struct ai_buf*) k)->str = ws_s, tagthread(k, Width(struct ai_buf));
+ union u *ret = g->ip + 1;
+ g->sp[0] = word(k), g->sp[1] = word(ret);                // frame [ws_buf, ret_ip]  (was [a, b])
+ g->ip = (union u*) kmul_loop;
+ return g; }
+
+lvm(lvm_kmul) {
+ ai_limb *ws = (ai_limb*) txt(buf_str(Sp[0]));
+ int n = (int) ws[0], top = (int) ws[1];
+ ai_limb *jobs = ws + KMUL_HDR;
+ long budget = kmul_chunk;
+ while (top > 0 && budget > 0) {
+  ws[1] = (ai_limb) top; YieldCheck();             // persist top, then a PER-JOB yield check: a
+  // subquadratic multiply runs far fewer/cheaper dispatches than the O(n^2) schoolbook, so a
+  // once-per-dispatch check (as in lvm_bmul) would yield too rarely to stay preemptible.
+  ai_limb *J = jobs + (uintptr_t) (top - 1) * KMUL_JW;
+  uintptr_t ar = J[0], br = J[1]; int jn = (int) J[2]; uintptr_t rr = J[3], sr = J[4]; int st = (int) J[5];
+  if (jn < kara_cutoff) {                                 // leaf: schoolbook jn x jn -> ws[rr..rr+2jn)
+   mag_mul(ws + rr, ws + ar, jn, ws + br, jn);
+   budget -= (long) jn * jn; top--; continue; }
+  int m = jn / 2, h = jn - m;                             // low m limbs, high h (m or m+1)
+  if (st == 0) {                                          // SPLIT
+   uintptr_t saO = sr, sbO = sr + (uintptr_t) (h + 1),
+             z1O = sr + 2 * (uintptr_t) (h + 1), csr = sr + 4 * (uintptr_t) (h + 1);
+   int ns = mag_add(ws + saO, ws + ar, m, ws + ar + m, h);            // sa = a_lo + a_hi
+   for (int i = ns; i < h + 1; i++) ws[saO + i] = 0;                  // zero-extend to exactly h+1
+   int nt = mag_add(ws + sbO, ws + br, m, ws + br + m, h);            // sb = b_lo + b_hi
+   for (int i = nt; i < h + 1; i++) ws[sbO + i] = 0;
+   for (int i = 0; i < 2 * (h + 1); i++) ws[z1O + i] = 0;            // clear z1's output slot
+   J[5] = 1;                                                          // this job COMBINES when it returns
+   ai_limb *z1J = jobs + (uintptr_t) top       * KMUL_JW;            // push z1 = sa*sb (pops first)
+   z1J[0] = saO, z1J[1] = sbO, z1J[2] = (ai_limb) (h + 1), z1J[3] = z1O, z1J[4] = csr, z1J[5] = 0;
+   ai_limb *z2J = jobs + (uintptr_t) (top + 1) * KMUL_JW;            // push z2 = a_hi*b_hi -> r[2m..]
+   z2J[0] = ar + m, z2J[1] = br + m, z2J[2] = (ai_limb) h, z2J[3] = rr + 2 * (uintptr_t) m, z2J[4] = csr, z2J[5] = 0;
+   ai_limb *z0J = jobs + (uintptr_t) (top + 2) * KMUL_JW;            // push z0 = a_lo*b_lo -> r[0..] (pops last)
+   z0J[0] = ar, z0J[1] = br, z0J[2] = (ai_limb) m, z0J[3] = rr, z0J[4] = csr, z0J[5] = 0;
+   top += 3; budget -= jn;                                            // pop order z0,z2,z1 then this (combine)
+  } else {                                                // COMBINE (st == 1)
+   uintptr_t z1O = sr + 2 * (uintptr_t) (h + 1);
+   int z0n = 2 * m;      while (z0n > 0 && ws[rr + (uintptr_t) z0n - 1] == 0) z0n--;
+   int z2n = 2 * h;      while (z2n > 0 && ws[rr + 2 * (uintptr_t) m + (uintptr_t) z2n - 1] == 0) z2n--;
+   int nz1 = 2 * (h + 1); while (nz1 > 0 && ws[z1O + (uintptr_t) nz1 - 1] == 0) nz1--;
+   nz1 = mag_sub(ws + z1O, ws + z1O, nz1, ws + rr, z0n);                       // z1 -= z0
+   while (nz1 > 0 && ws[z1O + (uintptr_t) nz1 - 1] == 0) nz1--;
+   nz1 = mag_sub(ws + z1O, ws + z1O, nz1, ws + rr + 2 * (uintptr_t) m, z2n);   // z1 -= z2
+   while (nz1 > 0 && ws[z1O + (uintptr_t) nz1 - 1] == 0) nz1--;
+   mag_add_off(ws + rr, 2 * jn, ws + z1O, nz1, m);                             // r += z1 * B^m
+   budget -= jn; top--; }
+ }
+ ws[1] = (ai_limb) top;                                   // persist the stack pointer before any yield
+ if (top > 0) { YieldCheck(); return Continue(); }
+ bool neg = ws[2]; uintptr_t r_off = ws[3];               // done: ws[r_off..r_off+2n) is the product
+ Have(Width(struct ai_big) + b2w(((size_t) 2 * (size_t) n + 1) * sizeof(ai_limb)));
+ ws = (ai_limb*) txt(buf_str(Sp[0]));                     // re-fetch (Have may have GC'd)
+ n = (int) ws[0], r_off = ws[3];
+ word ret = Sp[1], res;
+ Pack(g);
+ res = ai_big_canon(&g->hp, ws + r_off, 2 * n, neg);
+ Unpack(g);
+ return Sp += 1, Sp[0] = res, Ip = cell(ret), Continue(); }
+
 lvm(lvm_bmul_start) {
  // SMALL-PRODUCT FAST PATH. The resumable apparatus (ai_bmul_setup: promote BOTH operands to
  // heap bignums, allocate the result buffer + tag, lay out a 5-word work frame) exists so a
@@ -6633,7 +6739,11 @@ lvm(lvm_bmul_start) {
   Pack(g); g = ai_big_binop(g, vop_mul);
   if (!ai_ok(g)) return ghelp(g);
   return Unpack(g), Continue(); }
- Pack(g); g = ai_bmul_setup(g);
+ if (bigp(a) && bigp(b) && na == nb) {           // equal-length large: subquadratic Karatsuba
+  Pack(g); g = ai_kmul_setup(g);
+  if (!ai_ok(g)) return ghelp(g);
+  return Unpack(g), Continue(); }
+ Pack(g); g = ai_bmul_setup(g);                  // unequal-length large: chunked schoolbook
  if (!ai_ok(g)) return ghelp(g);
  return Unpack(g), Continue(); }
 
@@ -6661,6 +6771,108 @@ lvm(lvm_bmul) {
  word res = ai_big_canon(&g->hp, rmag, na + nb, neg);
  Unpack(g);
  return Sp += 4, Sp[0] = res, Ip = cell(ret), Continue(); }
+
+// --- resumable long division (the divmod twin of lvm_bmul) ------------------
+// `//` and `%` on big operands run yieldably: normalize once into a pinned
+// workspace [hdr | vn | un | q], then grind the Knuth-D quotient-limb loop in
+// chunks, persisting the loop index j so a peer task can interrupt a huge divide.
+// A GC during a chunk moves the workspace buffer; every entry re-reads its base
+// from the stack (Sp[1]) and recomputes the region pointers, so only offsets are
+// held across a yield (as in lvm_bmul). Cheap divides (short quotient, single-limb
+// or larger divisor, |a|<|b|) run one-shot through ai_big_binop -- the resumable
+// frame is pure overhead there. which: 0 = quotient (//), 1 = remainder (%).
+#define bdiv_chunk (1 << 14)
+#define BDIV_HDR 6           // ws header limbs: m, n, s(shift), which, nega, negb
+static union u const bdiv_loop[1] = { { .ap = lvm_bdiv } };
+
+static struct ai *ai_bdiv_setup(struct ai *g, int which) {
+ word a = g->sp[0], b = g->sp[1];
+ int mub = bigp(a) ? big_nlimbs(a) : wlimbs, nub = bigp(b) ? big_nlimbs(b) : wlimbs;
+ uintptr_t wslimbs = BDIV_HDR + (uintptr_t) nub + (mub + 1) + (mub - nub + 1);
+ uintptr_t sreq = str_type_width + b2w(wslimbs * sizeof(ai_limb));
+ uintptr_t breq = Width(struct ai_buf) + Width(struct ai_tag);
+ if (!ai_ok(g = ai_have(g, sreq + breq + 3))) return g;
+ a = g->sp[0], b = g->sp[1];                          // re-fetch (ai_have may have GC'd)
+ ai_limb sa[wlimbs], sb[wlimbs]; ai_limb const *la, *lb; bool nega, negb;
+ int m = load_int_mag(a, sa, &la, &nega), n = load_int_mag(b, sb, &lb, &negb);
+ struct ai_str *ws_s = ini_str((struct ai_str*) g->hp, wslimbs * sizeof(ai_limb));
+ g->hp += sreq;
+ ai_limb *ws = (ai_limb*) txt(ws_s);
+ ai_limb *vn = ws + BDIV_HDR, *un = vn + n, *q = un + (m + 1);
+ int s = limb_clz(lb[n-1]);                           // normalize so v[n-1]'s top bit is set
+ for (int i = n-1; i > 0; i--) vn[i] = (lb[i] << s) | (s ? (ai_dlimb) lb[i-1] >> (limb_bits - s) : 0);
+ vn[0] = lb[0] << s;
+ un[m] = s ? (ai_dlimb) la[m-1] >> (limb_bits - s) : 0;
+ for (int i = m-1; i > 0; i--) un[i] = (la[i] << s) | (s ? (ai_dlimb) la[i-1] >> (limb_bits - s) : 0);
+ un[0] = la[0] << s;
+ for (int i = 0; i < m - n + 1; i++) q[i] = 0;
+ ws[0] = (ai_limb) m, ws[1] = (ai_limb) n, ws[2] = (ai_limb) s, ws[3] = (ai_limb) which;
+ ws[4] = (ai_limb) nega, ws[5] = (ai_limb) negb;
+ union u *k = (union u*) g->hp; g->hp += breq;
+ ((struct ai_buf*) k)->ap = lvm_buf, ((struct ai_buf*) k)->str = ws_s, tagthread(k, Width(struct ai_buf));
+ union u *ret = g->ip + 1;
+ g->sp -= 1;                                          // [j, ws_buf, ret_ip]  (was [a, b])
+ g->sp[0] = putcharm(m - n), g->sp[1] = word(k), g->sp[2] = word(ret);
+ g->ip = (union u*) bdiv_loop;
+ return g; }
+
+lvm(lvm_bdiv_start, int vop) {
+ word a = Sp[0], b = Sp[1];
+ int m = bigp(a) ? big_nlimbs(a) : wlimbs, n = bigp(b) ? big_nlimbs(b) : wlimbs;
+ // one-shot the cheap cases: |a|<|b| (q=0), single-limb divisor, or a short quotient.
+ if (m < n || n < 2 || m - n < (int) (bdiv_chunk / (uintptr_t) n)) {
+  Pack(g); g = ai_big_binop(g, vop);
+  if (!ai_ok(g)) return ghelp(g);
+  return Unpack(g), Continue(); }
+ Pack(g); g = ai_bdiv_setup(g, vop == vop_rem);
+ if (!ai_ok(g)) return ghelp(g);
+ return Unpack(g), Continue(); }
+
+lvm(lvm_bdiv) {
+ ai_limb *ws = (ai_limb*) txt(buf_str(Sp[1]));
+ int m = (int) ws[0], n = (int) ws[1], s = (int) ws[2], which = (int) ws[3];
+ bool nega = ws[4], negb = ws[5];
+ ai_limb *vn = ws + BDIV_HDR, *un = vn + n, *q = un + (m + 1);
+ int j = (int) getcharm(Sp[0]);
+ ai_dlimb const B = limb_base;
+ int steps = max(1, (int) (bdiv_chunk / (uintptr_t) n));
+ for (int c = 0; c < steps && j >= 0; c++, j--) {      // one Knuth-D quotient limb per iteration
+  ai_limb rr;
+  ai_dlimb qhat = div128by64(un[j+n], un[j+n-1], vn[n-1], &rr), rhat = rr;
+  while (qhat >= B || qhat * vn[n-2] > ((rhat << limb_bits) | un[j+n-2])) {
+   qhat--; rhat += vn[n-1]; if (rhat >= B) break; }
+  ai_sdlimb borrow = 0;                                // multiply and subtract qhat*v
+  for (int i = 0; i < n; i++) {
+   ai_dlimb p = (ai_dlimb) (ai_limb) qhat * vn[i];
+   ai_sdlimb sub = (ai_sdlimb) un[i+j] - borrow - (ai_sdlimb) (ai_limb) p;
+   un[i+j] = (ai_limb) sub;
+   borrow = (ai_sdlimb) (p >> limb_bits) - (sub >> limb_bits); }
+  ai_sdlimb sub = (ai_sdlimb) un[j+n] - borrow;
+  un[j+n] = (ai_limb) sub;
+  q[j] = (ai_limb) qhat;
+  if (sub < 0) {                                       // qhat one too big: add back
+   q[j]--;
+   ai_dlimb carry = 0;
+   for (int i = 0; i < n; i++) { ai_dlimb t = (ai_dlimb) un[i+j] + vn[i] + carry; un[i+j] = (ai_limb) t; carry = t >> limb_bits; }
+   un[j+n] = (ai_limb) (un[j+n] + carry); } }
+ if (j >= 0) { Sp[0] = putcharm(j); YieldCheck(); return Continue(); }
+ // done: canonicalize the requested output. denormalize the remainder into vn (now
+ // dead), NOT in place, so a GC-retry of this tail stays idempotent. persist j=-1
+ // first so a retry skips the loop.
+ Sp[0] = putcharm(-1);
+ int outn = which ? n : (m - n + 1);
+ Have(Width(struct ai_big) + b2w((size_t) (outn + 1) * sizeof(ai_limb)));
+ ws = (ai_limb*) txt(buf_str(Sp[1]));                  // re-fetch (Have may have GC'd)
+ vn = ws + BDIV_HDR, un = vn + n, q = un + (m + 1);
+ bool rneg = which ? nega : (nega != negb);
+ word ret = Sp[2], res;
+ Pack(g);
+ if (which) {
+  for (int i = 0; i < n; i++) vn[i] = s ? (un[i] >> s) | ((ai_dlimb) un[i+1] << (limb_bits - s)) : un[i];
+  res = ai_big_canon(&g->hp, vn, n, rneg); }
+ else res = ai_big_canon(&g->hp, q, m - n + 1, rneg);
+ Unpack(g);
+ return Sp += 2, Sp[0] = res, Ip = cell(ret), Continue(); }
 
 // --- reader / printer -------------------------------------------------------
 

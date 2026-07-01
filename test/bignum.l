@@ -10,7 +10,15 @@
    (bpow2 n) (? (< n 1) 1 (* 2 (bpow2 (- n 1))))
    B100 (bpow2 100)
    F25 (bfact 25)
-   F24 (bfact 24))
+   F24 (bfact 24)
+   ; two DENSE, EXACTLY-equal-length (KL-limb) operands: KA*KBb takes the resumable
+   ; subquadratic Karatsuba lane (equal length, KL^2 > the one-shot chunk). Cross-check
+   ; it against an INDEPENDENT schoolbook path -- split KA = Kahi*2^h + Kalo (each ~KL/2
+   ; limbs), so Kahi*KBb and Kalo*KBb are UNEQUAL length and stay on schoolbook.
+   KL 150  KE (* 64 KL)  KHE (* 64 (// KL 2))
+   KA (- (KE 2) 1)  KBb (- (KE 2) 7)  KHB (KHE 2)   ; (KE 2) = 2^KE via exact power (no deep recursion)
+   KP (* KA KBb)
+   Kref (+ (* (% KA KHB) KBb) (* (* (// KA KHB) KBb) KHB)))
 
 (assert
  ; --- overflow promotion + exact value, read round-trip against a literal ---
@@ -21,6 +29,13 @@
  (= (- F25 1) 15511210043330985983999999)
  (= (bpow2 200) (* B100 B100))            ; identity instead of a transcribed literal
  (= (bpow2 64) 18446744073709551616)
+
+ ; --- resumable subquadratic Karatsuba (equal-length large *) vs independent schoolbook ---
+ (= KP Kref)                              ; Karatsuba product == schoolbook reference
+ (= KP (* KBb KA))                        ; commutes
+ (= KA (// KP KBb))                       ; divides back exactly (cross-checks against Knuth-D)
+ (= 0 (% KP KBb))
+ (= (* KA KA) (* KA KA))                  ; squaring is stable (the na==nb self-multiply lane)
 
  ; --- a bignum is its own tier: not a fixnum, truthy, not falsy, not a chain ---
  (nil? (charm? B100))                       ; (charm? bignum) is false

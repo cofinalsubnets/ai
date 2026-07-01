@@ -171,13 +171,14 @@
 
  ; --- yieldable bignum multiply ---
 
- ; A single bignum multiply is O(n^2) but now yields cooperatively: it folds a
- ; bounded chunk of the product per VM dispatch, so a peer task runs *during* the
- ; product. This is what lets the repl's Ctrl-C poller interrupt a hung eval like
- ; (3 3 3 3) (see g/repl.l do_eval). Here a worker squares a ~200k-bit number
- ; once; a ticker peer counts how often it gets scheduled mid-multiply. Before
- ; chunking, the worker held the CPU for the whole product and the ticker (capped
- ; so it can't wrap the 1-byte cask) never ran -- post-chunking it runs many times.
+ ; A big bignum multiply can be long-running yet yields cooperatively: it does a
+ ; bounded slice of work per VM dispatch (a yield check per Karatsuba job for an
+ ; equal-length product, per schoolbook chunk otherwise), so a peer task runs
+ ; *during* the product. This is what lets the repl's Ctrl-C poller interrupt a
+ ; hung eval like (3 3 3 3) (see g/repl.l do_eval). Here a worker squares a ~200k-bit
+ ; number once; a ticker peer counts how often it gets scheduled mid-multiply.
+ ; Before chunking, the worker held the CPU for the whole product and the ticker
+ ; (capped so it can't wrap the 1-byte cask) never ran -- now it runs many times.
  (: big (200000 2)
     ticks (cask 1)
     w (spin (\ _ (* big big)) 0)
