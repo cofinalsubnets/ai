@@ -420,6 +420,17 @@ ai_cflags += -Wno-unused-command-line-argument
 endif
 host: $(ho)/ai $(ho)/ai.img $(if $(STATIC),,$(ho)/libai.so) $(ho)/ai.1
 ai0: $(ai0)
+
+# dock: launch the steering dock (port/inle/serve.l) from a stable COPY out/host/dock,
+# so `adopt` can rebuild the canonical out/host/ai in place without ETXTBSY (rebuilding
+# your own running exe fails at the .img bake). loads the full crew -- the probe ladder
+# (judge), the server (serve), and the self-modify loop (drive + the model proposer patch).
+# PORT overrides the mooring; bind loopback and firewall/tunnel it -- it evals what it reads.
+.PHONY: dock
+DOCK_PORT ?= 7620
+dock: host
+	@cp $(ho)/ai $(ho)/dock
+	exec $(ho)/dock -l port/inle/judge.l -l port/inle/serve.l -l port/inle/drive.l -l port/inle/patch.l -e "(dock $(DOCK_PORT))"
 # the default BOOT IMAGE: dump the post-warm heap (the glaze baked in, x86-64) next to the binary as
 # <exe>.img, so a plain `ai` auto-loads it at ~4 ms cold start (glazed by default) instead of eval'ing
 # the egg (~230 ms). Rebuilt whenever the binary changes (which itself deps on ai.c/prel/ev/glaze).
