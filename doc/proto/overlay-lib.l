@@ -37,4 +37,6 @@
         defform (link ': (link hdr (link body ())))                  ; (: (NAME p..) body)
         _ (overlay-sig sig)                                          ; register the boundary type
         _ (overlay-chk defform)                                      ; check the body NOW (compile time)
-        defform))))                                                  ; expand to the plain def (erasable)
+        defform)))                                                   ; expand to the plain def (erasable)
+   ; (sig NAME (PARAM-TYPE..) RET) -> declare a PRIMITIVE's type ONCE (the trusted boundary: matmul, etc.)
+   _ (:: 'sig (\ a (link 'overlay-sig (link (link '\ (link a ())) ())))))   ; a IS the sig (NAME (ptypes) ret) -> (overlay-sig 'a)
