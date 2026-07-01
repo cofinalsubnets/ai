@@ -34,3 +34,45 @@
            (\ _ (y s 0))))
    (parse p s) (p s (\ r x (? (= 0 (tally r)) x ())) (\ _ ()))     ; STRICT: whole input must parse
    (runp p s)  (p s (\ r x x) (\ _ ())))                           ; LENIENT: keep the payload, ignore trailing slack
+
+; --- OVERLAY: an OPTIONAL, observe-only static-type overlay hooked at the ev seam (spike:
+;     doc/proto/overlay.l; design: memory pluggable-types). Install a user DOMAIN + SIG-TABLE with
+;     (overlay-set DOM SIGS); `ev` then REPORTS a type clash for each top-level `:` def and runs the form
+;     UNCHANGED (observe-only -- never alters eval). (overlay-off ()) uninstalls; uninstalled, `ev` is
+;     transparent (one peep per top-level form). ERASABLE by construction. Engine internals stay private
+;     inside `ov-eng`; only ov-*/overlay-*/the ev rebind leak. See overlay.l for the domain shape (a map
+;     #('join J 'tr T 'litdie L 'dice D)) and sigs ((name (param-dies..) result-die)..).
+(: ov-eng
+    (: (ov-nthl l n)     (? (= n 0) (cap l) (ov-nthl (cup l) (- n 1)))   ; nth (nthl is glaze-layer, absent in post.l)
+       (ov-sigof sigs nm) (? (atom? sigs) () (id? nm (caap sigs)) (cap sigs) (ov-sigof (cup sigs) nm))
+       (ov-look env x)    (? (atom? env) 'bot (: p (cap env) (? (id? x (cap p)) (cup p) (ov-look (cup env) x))))
+       (ov-vard? dom d)   (! (member? d (dom 'dice)))
+       (ov-bindv dom ps as) (? (atom? ps) 0 (: r (ov-bindv dom (cup ps) (cup as)) (? (ov-vard? dom (cap ps)) (link (link (cap ps) (cap as)) r) r)))
+       (ov-sub sub v)     (? (atom? sub) v (id? v (cap (cap sub))) (cup (cap sub)) (ov-sub (cup sub) v))
+       (ov-inst dom sub d)(? (ov-vard? dom d) (ov-sub sub d) d)
+       (ov-kindof dom sigs env e)
+          (? (nom? e) (ov-look env e)
+             (atom? e) ((dom 'litdie) e)
+             (: h (cap e) as (map (\ s (ov-kindof dom sigs env s)) (cup e))
+                (? (member? h '(+ *)) ((dom 'tr) h (cap as) (cap (cup as)))
+                   (&& (id? h '?) (= 4 (tally e))) ((dom 'join) (cap (cup as)) (cap (cup (cup as))))
+                   (: sg (ov-sigof sigs h) (? (two? sg) (ov-inst dom (ov-bindv dom (caup sg) as) (ov-nthl sg 2)) 'top)))))
+       (ov-zip ps ds)     (? (atom? ps) 0 (link (link (cap ps) (cap ds)) (ov-zip (cup ps) (cup ds))))
+       (ov-clash dom sigs env e) (? (atom? e) 0 (: d (ov-kindof dom sigs env e) sub (catmap (\ s (ov-clash dom sigs env s)) (cup e)) (? (id? d 'clash) (link e sub) sub)))
+       (ov-pairs bs)      (? (atom? bs) 0 (atom? (cup bs)) 0 (link (link (cap bs) (cap (cup bs))) (ov-pairs (cup (cup bs)))))
+       (ov-check1 dom sigs prog)
+          (catmap (\ p (: nm (caap p) ps (cuap p) body (cup p) sg (ov-sigof sigs nm)
+                         (? (! (two? sg)) 0
+                            (: env (ov-zip ps (caup sg)) cl (ov-clash dom sigs env body)
+                               bd (ov-kindof dom sigs env body) decl (ov-nthl sg 2)
+                               (? (&& (atom? cl) (id? ((dom 'join) bd decl) decl)) 0 (L (link nm (? (atom? cl) (L 'result bd decl) cl))))))))
+                  (filter (\ p (! (atom? (cap p)))) (ov-pairs (cup prog))))
+       (ov-run dom sigs form) (? (&& (two? form) (id? (cap form) ':))
+                                 (: r (ov-check1 dom sigs form) (? (two? r) (: _ (puts ";; overlay: type clash in ") _ (puts (show (map cap r))) (putc 10)) 0))
+                                 0)
+     ov-run)                                       ; ov-eng IS the run entry (internals private)
+   ov-slot     (tablet 0)                          ; install slot: peep 0 -> (DOM SIGS) or ()
+   overlay-set (\ dom sigs (pin ov-slot 0 (L dom sigs)))
+   overlay-off (\ _ (pin ov-slot 0 ()))
+   ov-ev0      ev                                  ; the baked (glaze) ev, captured before the rebind
+   ev (\ e (: v (peep ov-slot 0 ()) (? (two? v) (: _ (ov-eng (cap v) (caup v) e) (ov-ev0 e)) (ov-ev0 e)))))
