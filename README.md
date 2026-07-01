@@ -170,8 +170,8 @@ curated cross-cutting verbs (`test clean valg vmret bench install`).
 
 ### the crew
 
-cook is one of the **kship crew** -- a small crew of real programs that ride on
-**kship**, the freestanding ai kernel ([a ship in port](port/kship/)). each is a
+cook is one of the **inle crew** -- a small crew of real programs that ride on
+**inle**, the freestanding ai kernel ([a ship in port](port/inle/)). each is a
 tiny ai layer over a handful of host nifs; on a hosted system they `make install`
 onto PATH beside `ai`.
 
@@ -185,10 +185,10 @@ onto PATH beside `ai`.
   `bao`): raw `ai` shrinks to a bare read/eval/write filter, and bao is the editor +
   history + fault-face on top, doubling as a pty wrapper (one editor, the condition
   system). [ai/bao.l](ai/bao.l) + [host/pty.c](host/pty.c).
-- **kship** -- the ship itself: the freestanding kernel grown a NIC and a
+- **inle** -- the ship itself: the freestanding kernel grown a NIC and a
   self-driving agent loop, booting on bare metal with no OS, perceiving the network,
-  running the language over UDP -- a bare-metal network REPL. `make kernel KSHIP=1`
-  builds the bootable image. [port/kship/](port/kship/).
+  running the language over UDP -- a bare-metal network REPL. `make kernel INLE=1`
+  builds the bootable image. [port/inle/](port/inle/).
 
 ### under the hood
 - one word per value: a fixnum is a tagged odd word, anything else is a heap

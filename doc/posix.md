@@ -18,7 +18,7 @@ syscall surface." Nothing exotic.
 |---------|----------------------------------------|------------------|-------------|
 | **L0**  | host nifs over the real kernel (libc)  | any POSIX host   | near-term ★ |
 | **L1**  | same nifs, freestanding / raw syscalls | a kernel ABI     | mid         |
-| **L2**  | the freestanding KERNEL grows its own POSIX | bare metal  | kship era   |
+| **L2**  | the freestanding KERNEL grows its own POSIX | bare metal  | inle era   |
 
 **L0 is the recommendation.** L1 and L2 are the same *interface* reached without a
 host libc (L1) or without a host at all (L2) — design the surface once at L0 and the
@@ -53,7 +53,7 @@ unchanged. Drops a dependency, doesn't change the API.
 
 ### L2 — the freestanding kernel grows its own POSIX
 
-When there's no Unix under you (the `kship` bare-metal agent — see `crew/kship.md`),
+When there's no Unix under you (the `inle` bare-metal agent — see `crew/inle.md`),
 the kernel must *be* the OS. This is the only stratum that's a real OS build: a ramfs
 VFS, an in-kernel process model, signal delivery. The `k_sources[]` table in
 `kmain.c` is already "vfs-shaped" (its own comment says so, and anticipates ramfs),
@@ -122,6 +122,6 @@ Sockets are already covered by ain; fold them in as the network slice.
 
 ## See also
 
-- `crew/kship.md` — the L2 consumer (a bare-metal agent that needs its own POSIX).
+- `crew/inle.md` — the L2 consumer (a bare-metal agent that needs its own POSIX).
 - the ain / `ai_io` plan — the L0 pattern this generalizes (socket nifs in `main.c`).
 - todo `#8` (cli.l → shell.l) / `#10` (POSIX shell) — staging step 3 lives there.

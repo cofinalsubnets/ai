@@ -1,12 +1,12 @@
-; --- kship: a self-driving agent loop, modeled in ai (a runnable sketch) ---
-; the EXECUTABLE companion to crew/kship.md. the real kship is the freestanding
-; kernel (port/kship/kmain.c) grown a NIC; this file models the parts that STAY ai -- the
+; --- inle: a self-driving agent loop, modeled in ai (a runnable sketch) ---
+; the EXECUTABLE companion to crew/inle.md. the real inle is the freestanding
+; kernel (port/inle/kmain.c) grown a NIC; this file models the parts that STAY ai -- the
 ; perceive->decide->act fold, the watchdog, the checkpoint -- so the shape can be
 ; run and probed on the host before any C is written. like boot/tag.l, it is a
 ; sketch -- but milestone 1 (the heartbeat loop) is REAL on both frontends: it
 ; rides `rest`/`clock`/`spin`/`catch`, which are core nifs, so the same code runs
 ; on the host and, unchanged, in the kernel. the `; value` comments are the
-; printed intent; run `out/host/ai -l port/kship/kship.l -e "(demos 0)"` to see them
+; printed intent; run `out/host/ai -l port/inle/inle.l -e "(demos 0)"` to see them
 ; (the file only DEFINES demos now -- a plain load prints nothing; -l preloads it into
 ; the shared global scope so the -e call finds it).
 ;
@@ -18,7 +18,7 @@
 ; stream (`run-beats`) is the REAL clock -- on metal the wait becomes ai_wait_fds
 ; over {socket, clock}, the merge happening in C, but the fold is identical.
 
-; --- a tiny printer --- `note` writes a line to `out` (the console). kship's narrator:
+; --- a tiny printer --- `note` writes a line to `out` (the console). inle's narrator:
 ; a LOCAL helper named `note` so it doesn't shadow prel's port-first `say` -- which is
 ; the WIRE writer reply-to needs, (say port bytes). it uses `puts` (= prel's `say out`),
 ; NOT the `.`/dot operator: on the freestanding kernel `.` flushes after each write and
@@ -35,7 +35,7 @@
 ; --- the agent state --- a plain 2-list (replies beats): an IMMUTABLE ai value,
 ; so show/read checkpoint it for free. (a book would NOT round-trip -- it is
 ; mutable, identity-compared, and its show reparses to nothing; the list is the
-; honest carrier of crew/kship.md's "state is an ai value, persistence is
+; honest carrier of crew/inle.md's "state is an ai value, persistence is
 ; show/read".) replies = packets answered, beats = heartbeats emitted. `with`
 ; builds a fresh state, so every step is pure: the same `fresh` seeds many runs.
    fresh `(0 0)
@@ -100,7 +100,7 @@
 ; there); the kernel's net-agent build passes its `nic` port. acts on INITIATIVE the
 ; instant a packet lands -- the agent IS the server (the C echo loop is gone).
 ; reply-to writes to the WIRE with prel's port-first `say` (raw, no newline -- the old
-; `fputs`; NOT kship's local `note`), then flushes the port to its datagram's sender.
+; `fputs`; NOT inle's local `note`), then flushes the port to its datagram's sender.
    (reply-to port bytes) (: _ (say port bytes) _ (flush port) 0)
    (serve st port)
      (: d   (slurp port)                                 ; perceive: BLOCK for one datagram
@@ -118,7 +118,7 @@
 ; on its own. drive merges {nic, clock}: a reactor task BLOCKS on the nic (parks on its
 ; fd) and a heartbeat task BEATS on the timer (parks on a wake-time), and the kernel
 ; scheduler issues ONE ai_wait_fds over {nic-fd, the nearest wake} -- so the C floor
-; does the select, exactly as crew/kship.md promised, with ZERO new C (cue?/key? is
+; does the select, exactly as crew/inle.md promised, with ZERO new C (cue?/key? is
 ; stdin-only, so the clean single-task poll isn't reachable from ai -- two tasks let
 ; the scheduler do the merge instead). the two tasks share ONE mutable counter cell:
 ; the immutable 2-list can't carry a live count between concurrent tasks, and under the
@@ -129,7 +129,7 @@
 ; the freestanding kernel a symbol key baked into the egg doesn't round-trip through
 ; pin/peep (an interning seam between the baked image and live reads -- verified on
 ; metal: an integer-keyed tablet round-trips, a baked-symbol-keyed one reads back the
-; default), so the cell counts by slot index. that is also the crew/kship.md advice
+; default), so the cell counts by slot index. that is also the crew/inle.md advice
 ; ("avoid maps for state") honored at the one place state must be shared+mutable.
    (cell rep bts) (: c (tablet 0) _ (pin c 0 rep) _ (pin c 1 bts) c)   ; slot 0 replies, 1 beats
    (snap c)       `((peep c 0 0) (peep c 1 0))                ; the cell -> the 2-list
@@ -173,9 +173,9 @@
         _ (react c port)                                 ; the reactor (this task), unbounded
         (catch p))                                        ; unreachable on metal; orphan law kept
 
-; --- the OUTBOUND brain (MILESTONE 5: kship INITIATES a round-trip) --- m1-m4 only
+; --- the OUTBOUND brain (MILESTONE 5: inle INITIATES a round-trip) --- m1-m4 only
 ; REACT to packets and BEAT on the clock; the decide step was LOCAL (read+ev, a REPL).
-; (B) in crew/kship.md makes the brain REMOTE: on its own initiative kship ships a
+; (B) in crew/inle.md makes the brain REMOTE: on its own initiative inle ships a
 ; question OUT to an oracle and acts on the reply -- "the decide step being a network
 ; round-trip, one read over a socket stream." that round-trip reuses the port surface
 ; ENTIRELY: `aim` points the nic at an arbitrary (ip, oport) -- resolving the SLIRP
@@ -195,7 +195,7 @@
    (ip4 a b c d) (+ (* a 16777216) (+ (* b 65536) (+ (* c 256) d)))  ; a.b.c.d -> the fixnum aim reads
 
 ; quest: the outbound loop -- every `period` ticks, ASK the oracle the standing question
-; and narrate the reply. kship acts on its OWN initiative (no incoming packet needed),
+; and narrate the reply. inle acts on its OWN initiative (no incoming packet needed),
 ; the decide step a remote round-trip through `ask1`. bounded by n (positive: the host
 ; demo + a metal smoke test); a negative n runs unbounded on metal (counts down past 0,
 ; never back to it -- the same idiom as pulse). returns 0 when bounded out.
@@ -242,10 +242,10 @@
       (welp s a b))))
 
 ; --- the demos, as a CALLABLE function (not auto-run) --- a body-less top-level `:`
-; leaks `demos` to the global scope. the host sketch + the -kship build call (demos 0)
+; leaks `demos` to the global scope. the host sketch + the -inle build call (demos 0)
 ; explicitly; the net-agent build skips it and runs (serve fresh nic) directly (the
 ; demos' sleeps/spawns leave the NIC RX unpolled, so a live agent must start clean --
-; exactly why netecho slurps immediately). run `out/host/ai -l port/kship/kship.l -e "(demos 0)"`
+; exactly why netecho slurps immediately). run `out/host/ai -l port/inle/inle.l -e "(demos 0)"`
 ; (the -l preload shares the global scope so `demos` is defined when -e fires; a positional
 ; file arg with -e AFTER it does NOT run -- the file is the program and the -e tokens are
 ; ignored trailing argv).

@@ -23,7 +23,7 @@ void
 // (phys = virt - khhdm). 0 means identity-mapped.
 extern uintptr_t khhdm;
 
-// net.c (port/kship/<a>/): the virtio-net driver. net_init brings the NIC up
+// net.c (port/inle/<a>/): the virtio-net driver. net_init brings the NIC up
 // (PCI enum -> virtqueues -> DRIVER_OK); a no-op when no device is present.
 void net_init(void);
 

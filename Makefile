@@ -516,8 +516,8 @@ $(ho)/ai.1: doc/ai.1 out/lib/ai_version.h
 
 # ====================================================================
 # kernel (freestanding) build -- outputs under out/free. Was free/Makefile.
-# The kship kernel lives in port/kship/: arch-independent glue is kmain.c + k.h
-# there, per-arch code in port/kship/<a>/ (arch.c, *.S, *.lds). Boots via Limine.
+# The inle kernel lives in port/inle/: arch-independent glue is kmain.c + k.h
+# there, per-arch code in port/inle/<a>/ (arch.c, *.S, *.lds). Boots via Limine.
 # ====================================================================
 ko = out/free
 dl = out/dl
@@ -528,12 +528,12 @@ dl = out/dl
 ifdef K_TEST
 ksuf := -test
 endif
-# KSHIP=1 bakes the kship agent (port/kship/kship.l) into the image and boots
+# INLE=1 bakes the inle agent (port/inle/inle.l) into the image and boots
 # straight into it (the heartbeat loop on the real timer tick) instead of the
 # shell -- the kernel AS the self-driving agent. Its own suffix so it never
-# clobbers the normal interactive kernel. See port/kship/.
-ifdef KSHIP
-ksuf := -kship
+# clobbers the normal interactive kernel. See port/inle/.
+ifdef INLE
+ksuf := -inle
 endif
 # NETECHO=1 boots into an ai-driven UDP echo server over the `nic` port (stage 2e
 # gate): the agent perceives a datagram with (slurp nic) and replies with
@@ -541,7 +541,7 @@ endif
 ifdef NETECHO
 ksuf := -netecho
 endif
-# NETAGENT=1 boots into the kship AGENT loop over the `nic` port (milestone 3):
+# NETAGENT=1 boots into the inle AGENT loop over the `nic` port (milestone 3):
 # the agent perceives a UDP datagram (slurp nic), CHOOSES a reply,
 # and survives faults via the watchdog -- vs NETECHO's raw byte echo. Own suffix.
 ifdef NETAGENT
@@ -549,7 +549,7 @@ ksuf := -netagent
 endif
 # NETBRAIN=1 boots into the OUTBOUND brain (milestone 5): on its own clock the agent
 # INITIATES a UDP round-trip to a remote oracle (aim+say+flush+slurp) and acts on the
-# reply -- the (B) fork (port/kship/), the decide step gone remote. Own suffix.
+# reply -- the (B) fork (port/inle/), the decide step gone remote. Own suffix.
 ifdef NETBRAIN
 ksuf := -netbrain
 endif
@@ -561,12 +561,12 @@ KCC ?= clang
 KLD ?= ld.lld
 KCC_IS_CLANG := $(shell $(KCC) --version 2>/dev/null | grep -qiw clang && echo 1)
 
-k_arch_c = $(wildcard $(R)/port/kship/$a/*.c)
-k_asm = $(wildcard $(R)/port/kship/$a/*.asm)
-k_free_c = $R/port/kship/kmain.c
+k_arch_c = $(wildcard $(R)/port/inle/$a/*.c)
+k_asm = $(wildcard $(R)/port/inle/$a/*.asm)
+k_free_c = $R/port/inle/kmain.c
 k_shared_c = $(ai_c) $(f_c) $(c_c)
-k_S = $(wildcard $(R)/port/kship/$a/*.S)
-k_h = $(ai_h) $(wildcard *.h $(R)/port/kship/*.h $(R)/port/kship/$a/*.h)
+k_S = $(wildcard $(R)/port/inle/$a/*.S)
+k_h = $(ai_h) $(wildcard *.h $(R)/port/inle/*.h $(R)/port/inle/$a/*.h)
 
 k_odir = $(ko)/$a$(ksuf)
 
@@ -584,10 +584,10 @@ k_o = $(k_shared_o) $(k_arch_o) $(k_free_o) $(k_S_o) $(k_asm_o)
 # See gen_please (ai.c) and the budget wiring (kmain.c).
 kcflags = $(ai_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
   -ffunction-sections -fdata-sections
-kldflags := -static -nostdlib --gc-sections -T $(R)/port/kship/$a/$a.lds -z max-page-size=0x1000
+kldflags := -static -nostdlib --gc-sections -T $(R)/port/inle/$a/$a.lds -z max-page-size=0x1000
 kcppflags := \
   -I$(k_odir) \
-  -I. -I$(R)/out/host -Iout/lib -I$(R)/font -I$(R) -I$(R)/port/kship \
+  -I. -I$(R)/out/host -Iout/lib -I$(R)/font -I$(R) -I$(R)/port/inle \
   -Ilibc \
   -isystem c \
   $(kcppflags) \
@@ -602,11 +602,11 @@ ifdef K_TEST
 # the test gate now exercises tco=1 like everything else. ai0 stays the trampoline lane.
 kcppflags += -DK_TEST -Dai_tco=1
 endif
-# KSHIP boots into the agent loop -- same settings as the normal interactive
-# kernel (it is the shell's read-eval loop with kship as the program), just
-# -DKSHIP to select the boot driver in kmain.c.
-ifdef KSHIP
-kcppflags += -DKSHIP
+# INLE boots into the agent loop -- same settings as the normal interactive
+# kernel (it is the shell's read-eval loop with inle as the program), just
+# -DINLE to select the boot driver in kmain.c.
+ifdef INLE
+kcppflags += -DINLE
 endif
 ifdef NETECHO
 kcppflags += -DNETECHO
@@ -633,15 +633,15 @@ k_nasmflags := -f elf64 -g -F dwarf -Wall -w-reloc-abs-qword -w-reloc-abs-dword 
 
 kernel: $(ko)/ai-$a$(ksuf).elf
 
-$(ko)/ai-$a$(ksuf).elf: $(R)/port/kship/$a/$a.lds $(k_o)
+$(ko)/ai-$a$(ksuf).elf: $(R)/port/inle/$a/$a.lds $(k_o)
 	@echo LD	$@
 	@mkdir -p "$(dir $@)"
 	@$(KLD) $(kldflags) $(k_o) -o $@
 
 # Shared C sources (ai.c, font/, c/) + per-arch port//.
-# Under K_TEST kmain.c #includes the baked corpus out/lib/ktests.h; under KSHIP
-# the baked agent out/lib/kship.h.
-$(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/bao.h $(if $(K_TEST),out/lib/ktests.h) $(if $(KSHIP)$(NETAGENT)$(NETBRAIN),out/lib/kship.h)
+# Under K_TEST kmain.c #includes the baked corpus out/lib/ktests.h; under INLE
+# the baked agent out/lib/inle.h.
+$(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/bao.h $(if $(K_TEST),out/lib/ktests.h) $(if $(INLE)$(NETAGENT)$(NETBRAIN),out/lib/inle.h)
 	@echo CC	$@
 	@mkdir -p "$(dir $@)"
 	@$(kcc) -c $< -o $@
@@ -712,7 +712,7 @@ k_qemu_aarch64 = -M virt,gic-version=2 -cpu cortex-a72 -serial stdio $(k_qemu_ri
 k_qemu = qemu-system-$a -m 256M $(k_qemu_$a) \
   -drive if=pflash,unit=0,format=raw,file=$(dl)/edk2-ovmf/ovmf-code-$a.fd,readonly=on
 
-# --- live-NIC agent boots (x86_64 only -- the virtio-net driver is port/kship/x86_64/net.c).
+# --- live-NIC agent boots (x86_64 only -- the virtio-net driver is port/inle/x86_64/net.c).
 # net.c probes for a TRANSITIONAL virtio-net (legacy PCI id 0x1000 with an I/O BAR), so
 # disable-modern=on is REQUIRED: a modern-only device (id 0x1040, no I/O BAR) is invisible to
 # it. SLIRP user networking seats the guest at 10.0.2.15, the host/gateway at 10.0.2.2.
@@ -725,7 +725,7 @@ k_net_in = -netdev user,id=n0,hostfwd=udp::5555-:5555 $(k_net)
 # replies is what the agent narrates (`oracle <- ...`). That server is the seam for a real brain.
 k_net_out = -netdev user,id=n0 $(k_net)
 
-.PHONY: run run-hdd run-$a run-hdd-$a run-headless run-kship run-netagent run-netbrain
+.PHONY: run run-hdd run-$a run-hdd-$a run-headless run-inle run-netagent run-netbrain
 run: run-$a
 run-hdd: run-hdd-$a
 run-$a: $(ko)/ai-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
@@ -735,13 +735,13 @@ run-hdd-$a: $(ko)/ai-$a.hdd $(dl)/edk2-ovmf/ovmf-code-$a.fd
 run-headless: $(ko)/ai-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	exec $(k_qemu) -cdrom $< -display none -no-reboot
 
-# Boot the baked kship agent. KSHIP = heartbeat/watchdog/checkpoint demos then a serial shell
+# Boot the baked inle agent. INLE = heartbeat/watchdog/checkpoint demos then a serial shell
 # (no NIC); NETAGENT = the inbound ai-REPL over the wire; NETBRAIN = the outbound brain that
 # dials an oracle on its own clock. Each (re)builds its own-suffixed iso, then boots headless
 # with serial on stdio so you watch the agent narrate in this terminal (Ctrl-C to stop).
-run-kship:
-	@$(MAKE) -s KSHIP=1 $(ko)/ai-$a-kship.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
-	exec $(k_qemu) -cdrom $(ko)/ai-$a-kship.iso -display none -no-reboot
+run-inle:
+	@$(MAKE) -s INLE=1 $(ko)/ai-$a-inle.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
+	exec $(k_qemu) -cdrom $(ko)/ai-$a-inle.iso -display none -no-reboot
 ifeq ($a,x86_64)
 run-netagent:
 	@$(MAKE) -s NETAGENT=1 $(ko)/ai-$a-netagent.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
@@ -751,7 +751,7 @@ run-netbrain:
 	exec $(k_qemu) $(k_net_out) -cdrom $(ko)/ai-$a-netbrain.iso -display none -no-reboot
 else
 run-netagent run-netbrain:
-	@echo "$@: x86_64 only (virtio-net driver is port/kship/x86_64/net.c); host arch is $a"
+	@echo "$@: x86_64 only (virtio-net driver is port/inle/x86_64/net.c); host arch is $a"
 endif
 
 # Boot init AS PID 1 in a container -- the Linux altitude of "ai as the system".
@@ -798,12 +798,12 @@ out/lib/ktests.l: $(kt) $(R)/Makefile
 out/lib/ktests.h: out/lib/ktests.l $(ai0) tools/lcatv.l ai/prel.l
 	@echo AI	$@
 	@$(ai0) -l ai/prel.l tools/lcatv.l out/lib/ktests.l > $@
-# The kship agent, baked VERBATIM (lcatv) to a C string literal kmain.c #includes
-# under KSHIP and drinks form-by-form through zevs at boot -- same path as the
+# The inle agent, baked VERBATIM (lcatv) to a C string literal kmain.c #includes
+# under INLE and drinks form-by-form through zevs at boot -- same path as the
 # K_TEST corpus, one program instead of the test suite.
-out/lib/kship.h: port/kship/kship.l $(ai0) tools/lcatv.l ai/prel.l
+out/lib/inle.h: port/inle/inle.l $(ai0) tools/lcatv.l ai/prel.l
 	@echo AI	$@
-	@$(ai0) -l ai/prel.l tools/lcatv.l port/kship/kship.l > $@
+	@$(ai0) -l ai/prel.l tools/lcatv.l port/inle/inle.l > $@
 # arm64 EXECUTION validator: cross-build `ai` for aarch64 + run the corpus under
 # qemu-aarch64 (the trustworthy check for the glaze's second target -- asmtest
 # proves byte encodings, this proves they run). No-ops without qemu + a cross-gcc.

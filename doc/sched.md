@@ -92,7 +92,7 @@ Collapse `lvm_yield_sw_mono` + `yield_sw_wait` into one step: compute the extern
 (fds ∪ min-timer); if it is empty and nothing is runnable → deadlock; otherwise hand it to the host
 — **and let the host decline to block**:
 
-- **native** (`host/main.c:44` `poll`, `port/kship/kmain.c:241` halt): block as today, return when
+- **native** (`host/main.c:44` `poll`, `port/inle/kmain.c:241` halt): block as today, return when
   something fires. Zero behavioural change — native never unwinds.
 - **wasm**: it *can't* block. So instead of spinning the no-op `ai_wait_fds`, the scheduler returns
   the **yield status** up the trampoline. This rides an **existing** path: `_lvm_yieldk`

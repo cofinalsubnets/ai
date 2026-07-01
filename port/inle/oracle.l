@@ -1,5 +1,5 @@
-; oracle.l -- kship's milestone-5 BRAIN, in ai (the companion to oracle.py).
-; kship's NETBRAIN build (port/kship/kmain.c) dials a UDP oracle at 10.0.2.2:9999
+; oracle.l -- inle's milestone-5 BRAIN, in ai (the companion to oracle.py).
+; inle's NETBRAIN build (port/inle/kmain.c) dials a UDP oracle at 10.0.2.2:9999
 ; on its own clock and narrates the reply (`oracle <- ...`). This is that oracle,
 ; written in ai: `udp-recv` a question, ask claude over `(run curl)` -- curl does
 ; the TLS, so there is no TLS in the core -- and `udp-send` the answer back. Pure
@@ -9,13 +9,13 @@
 ; datagrams and its replies route back automatically.
 ;
 ; This file only DEFINES (a body-less `:` leaks the helpers); drive it with:
-;   out/host/ai -l port/kship/oracle.l -e "(oracle 0)"      ; then: make run-netbrain
+;   out/host/ai -l port/inle/oracle.l -e "(oracle 0)"      ; then: make run-netbrain
 ;
 ; With no ANTHROPIC_API_KEY it runs the ECHO brain ("<3 ping") -- a free wire
 ; smoke-test (does SLIRP route? does the reply come back?). With a key it asks
-; claude-opus-4-8. Two rules hold the design, both from kship's `slurp`: the reply
+; claude-opus-4-8. Two rules hold the design, both from inle's `slurp`: the reply
 ; must fit ONE datagram (we clip to 1400 < DG_MAX 1472), and we ALWAYS reply (any
-; parse miss returns "?? <raw>" rather than nothing, so kship never blocks forever).
+; parse miss returns "?? <raw>" rather than nothing, so inle never blocks forever).
 ;
 ; NB: the baked NETBRAIN asks the standing question "ping" every ~3s (kmain.c). For
 ; real questions, edit that `quest` call, or drive the inbound NETAGENT path
@@ -24,7 +24,7 @@
 (: (note s) (: _ (puts s) (puts "\n"))
 
    ; --- the system prompt (kept terse: one datagram, one line) ---
-   sys (+ "You are kship's remote brain, a tiny bare-metal agent reaching you over "
+   sys (+ "You are inle's remote brain, a tiny bare-metal agent reaching you over "
           "one UDP datagram. Answer in ONE short line of plain ascii, no newlines.")
 
    ; --- json string codec: escape a question in, read a reply out ---
@@ -72,7 +72,7 @@
            (+ "\",\"messages\":[{\"role\":\"user\",\"content\":\""
               (+ (jesc q) "\"}]}"))))
 
-   ; clip a reply to one datagram (1400 < kship's DG_MAX 1472), on a byte boundary.
+   ; clip a reply to one datagram (1400 < inle's DG_MAX 1472), on a byte boundary.
    (clip s) (: lim (? (< (tally s) 1400) (tally s) 1400)
                (go i acc) (? (< i lim) (go (+ 1 i) (+ acc (+ "" (s i)))) acc)
                (go 0 ""))

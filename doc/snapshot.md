@@ -140,7 +140,7 @@ Departures from the original plan above, worth noting:
 
 3. **A freestanding kernel snapshot — boot the kernel from a baked image, no eval.** `ai_image_save`/
    `ai_image_load` are now buffer-based + stdio-free (confirmed: the codec sits OUTSIDE the one
-   `#if __STDC_HOSTED__` region, so it compiles into the freestanding kernel), so the kernel (`port/kship/`,
+   `#if __STDC_HOSTED__` region, so it compiles into the freestanding kernel), so the kernel (`port/inle/`,
    `kmain.c` — no filesystem) could `objcopy` a dumped image into a C byte array and `ai_image_load(array,
    len)` at startup instead of eval'ing the baked corpus. **Knot 1 (gen-in-kernel) RESOLVED 2026-06-26;
    knot 2 (a kernel-loadable image) still open.** The two knots:

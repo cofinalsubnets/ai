@@ -1,13 +1,13 @@
-// virtio-net: the kship kernel's NIC. A minimal LEGACY virtio-net driver
+// virtio-net: the inle kernel's NIC. A minimal LEGACY virtio-net driver
 // (transitional device 1af4:1000) over PCI I/O space, FULLY POLLED -- no NIC
-// interrupt. The PIT already wakes `hlt` at 100 Hz (port/kship/x86_64/x86_64.S
+// interrupt. The PIT already wakes `hlt` at 100 Hz (port/inle/x86_64/x86_64.S
 // timer_isr), so the RX used-ring poll fits the kernel's ai_ready/ai_wait_fds
 // model; and stray PCI IRQs reboot (isrs[] 37..47 -> k_reset), so we set the
 // PCI Interrupt-Disable bit and never touch INTx/MSI-X.
 //
 // Stage 2a here: PCI enumerate -> reset/feature handshake -> set up the receive
 // (q0) and transmit (q1) virtqueues -> DRIVER_OK -> read the MAC. RX fill, TX,
-// and the IP/UDP layer land in later stages (see crew/kship.md). x86-specific for
+// and the IP/UDP layer land in later stages (see crew/inle.md). x86-specific for
 // now (PIO + PCI mechanism #1); the virtqueue/virtio-net logic is portable and
 // will factor out when aarch64 grows a NIC.
 #include <stdint.h>

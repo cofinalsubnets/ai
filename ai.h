@@ -42,7 +42,7 @@
 #endif
 
 // The generational collector is the ONLY collector: every frontend's g->alloc must supply the major
-// pool (host + the kship kernel both malloc), or ai_ini_0 fails. AI_STAT defaults ON -- it no longer
+// pool (host + the inle kernel both malloc), or ai_ini_0 fails. AI_STAT defaults ON -- it no longer
 // gates the mechanism, only names the (always-cheap) instrumentation `gauge` reports.
 #ifndef AI_STAT
 #define AI_STAT

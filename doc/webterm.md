@@ -37,7 +37,7 @@ free, because they all already live in cb and bao:
 - **the actual line editor** — cb's *read* side (`cb_getc`/`cb_ungetc`/`cb_eof`,
   `cb.c:100-116`) is exactly what feeds bao's `edln` on the kernel. Canvas+cb is
   the doorway to running bao's history, recall, and helpful prompt on the
-  identical code path as native and kship, retiring the JS REPL.
+  identical code path as native and inle, retiring the JS REPL.
 
 ## The crux: how bao reads
 
@@ -142,14 +142,14 @@ blanks, `clipboard.writeText`.
 On the **Asyncify** path, `ai/bao.l` and the core stay **untouched** — Asyncify
 lets the real shell run as-is, and the change lives entirely in `wasm/host.c`,
 `wasm/Makefile`, and `index.html` plus adding `font/cb.c` and `bao.h` to one link:
-a single frontend lane, no coordination with the kship or core threads (the
+a single frontend lane, no coordination with the inle or core threads (the
 app-boundary rule in CLAUDE.md). On the **park-based** path the renderer + bake
 stay in this lane, but the suspend itself is the core scheduler change in
 [`doc/sched.md`](sched.md) — that part is the core thread's, and is shared with
 bao and the native frontends rather than being browser-specific.
 
 Single-sourcing `fbdraw` — factoring the blit out of `kmain.c` so the kernel and
-the browser share one rasterizer in C — is the tidy end state but edits kship's
+the browser share one rasterizer in C — is the tidy end state but edits inle's
 file, so it is explicitly a **later** follow-up needing that thread, not part of
 this work. Until then the browser carries its own ~25-line JS blit.
 
@@ -170,7 +170,7 @@ this work. Until then the browser carries its own ~25-line JS blit.
 
 ## Not yet / open
 
-- Single-source `fbdraw` across kernel + browser (needs the kship thread).
+- Single-source `fbdraw` across kernel + browser (needs the inle thread).
 - Live terminal resize on viewport reflow.
 - Whether to keep `out_buf` at all once cb is the sink (debug-only mirror, or
   drop it).

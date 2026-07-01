@@ -1,6 +1,6 @@
 ; tele/xor.l -- the flagship demo: a 2-layer MLP learns XOR, written in ai over
 ; the pure constellation algebra (no host nif), so it runs on EVERY frontend --
-; the host, wasm, and kship (the freestanding kernel): a neural net on bare metal.
+; the host, wasm, and inle (the freestanding kernel): a neural net on bare metal.
 ;
 ;   run:  out/host/ai -l tele/tele.l tele/xor.l
 ;

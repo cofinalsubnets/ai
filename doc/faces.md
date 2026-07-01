@@ -32,7 +32,7 @@ was missing. The runtime `help` handles conditions in a *program*; gwen handles 
 **author's** face: when the language itself has no answer, the human is the help of last resort.)
 
 **Around the faces:** `tele` the **mind** (the `decide`, the telescope reading the constellations);
-`kship` the **body/substrate** it sails; `cook` and `mow` the **keepers** (build the ship; tend the
+`inle` the **body/substrate** it sails; `cook` and `mow` the **keepers** (build the ship; tend the
 heap green — the two-space gardener).
 
 So: one object (`top` = ai, the language), three boundaries — **source** (read/feel, *compose*),

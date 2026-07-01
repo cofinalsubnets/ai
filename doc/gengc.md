@@ -218,7 +218,7 @@ the minor.
    AI_STAT defaults on (a no-op gate naming the counters); all gen allocation routes through `g->alloc`
    (freestanding -- no raw malloc), so the collector ACTIVATES wherever the frontend's allocator supplies
    the major pool. The **host and wasm** (emscripten) run generational and pass the whole corpus; the
-   kernel/kship run it too, bounded by `g->budget` = its RAM (else two growing pools exhaust kmallocw).
+   kernel/inle run it too, bounded by `g->budget` = its RAM (else two growing pools exhaust kmallocw).
    (Gen is now the ONLY collector -- the non-generational `gcg` and the `-DAI_NOGEN` escape hatch were
    removed once they proved broken + unused; a frontend whose allocator can't supply the major pool no
    longer runs. The "today's gcg" baseline this doc compares against is therefore historical.)
@@ -287,7 +287,7 @@ for a verified glaze.
   at the major); confirm a born-old toast never enters the minor pool in the first
   place.
 - Inter-task: tasks share one pool; the remembered set is global. A per-task
-  minor pool is a later question (tied to the kship/init direction).
+  minor pool is a later question (tied to the inle/init direction).
 - Large objects: a big array allocated young then promoted is copied twice
   (minor pool→major at its first minor). A size threshold for born-old large objects
   is the standard mitigation; measure before adding.

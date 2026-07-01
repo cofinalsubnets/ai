@@ -21,7 +21,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-// kship's UDP wire (port/kship/x86_64/net.c) caps a datagram at one ethernet MTU.
+// inle's UDP wire (port/inle/x86_64/net.c) caps a datagram at one ethernet MTU.
 #define DG_MAX 1472
 
 // Is Sp-slot x a heap stream port? Same inline check main.c's lvm_close uses:
@@ -145,8 +145,8 @@ static lvm(lvm_shutdown) {
  Sp += 1; Ip += 1;
  return Continue(); }
 
-// --- UDP (kship's milestone-5 oracle wire) ---------------------------------
-// The TCP nifs above can't talk to kship: kship speaks UDP DATAGRAMS, each
+// --- UDP (inle's milestone-5 oracle wire) ---------------------------------
+// The TCP nifs above can't talk to inle: inle speaks UDP DATAGRAMS, each
 // carrying its own sender address to reply to, and a connected byte-stream port
 // (the fgetc/fputc free-read path) can't express that. So UDP gets three nifs
 // that recvfrom/sendto directly off a bound port's fd and marshal the peer as a

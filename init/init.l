@@ -1,16 +1,16 @@
 ; --- init: a service supervisor modeled in ai (a runnable sketch) ---
 ; the EXECUTABLE companion to the "ai as pid 1" idea -- the Tier-1 init (runit/s6/
-; dinit class: own unit format, no D-Bus), the Linux-altitude sibling of kship
-; (port/kship/kship.l, the freestanding-kernel altitude). SAME program, same shape:
-; a perceive->decide->act supervisor with a watchdog over checkpointable state. kship
+; dinit class: own unit format, no D-Bus), the Linux-altitude sibling of inle
+; (port/inle/inle.l, the freestanding-kernel altitude). SAME program, same shape:
+; a perceive->decide->act supervisor with a watchdog over checkpointable state. inle
 ; drives green tasks + a NIC; init drives PROCESSES + signals over the host kernel's
-; stack. the supervisor IS kship's watchdog (supervise/mission) generalized to N units.
+; stack. the supervisor IS inle's watchdog (supervise/mission) generalized to N units.
 ;
-; like kship.l and boot/tag.l this is a SKETCH -- it models the parts that STAY ai so
+; like inle.l and boot/tag.l this is a SKETCH -- it models the parts that STAY ai so
 ; the shape runs and is probed on the host. there are now TWO lanes:
 ;   (demos 0) -- the MODELED supervisor: a deterministic tour where a "service" is a
 ;     green task and a crash is a `scare` the watchdog `help` welps to () (the SAME
-;     shape recovery kship uses), so the dep graph / restart policy / checkpoint run
+;     shape recovery inle uses), so the dep graph / restart policy / checkpoint run
 ;     with no OS processes. (the oneshot lane here is already real via the `run` nif.)
 ;   (real 0) -- the REAL supervisor: services are OS processes. host/init.c adds the
 ;     two missing primitives -- (spawn argv) forks+execs and returns a pid to track,
@@ -31,7 +31,7 @@
 (: (note s) (: _ (puts s) (puts "\n"))               ; the narrator: a line to the console
 
    ; --- a unit is an IMMUTABLE list (name kind cmd restart deps) --- show/read
-   ; checkpoints it for free (the kship.md rule: state is an ai value, persistence is
+   ; checkpoints it for free (the inle.md rule: state is an ai value, persistence is
    ; show/read). `kind` is 'oneshot (a real argv for `run`) or 'service (a thunk modeling
    ; the long-running process). `restart` is 'no | 'on-fail | 'always (systemd's Restart=).
    ; `deps` is the After= list -- names that must be up before this one starts.
@@ -106,14 +106,14 @@
 ; --- install the watchdog as the global help (the floor that turns a service's fault
 ; into () so the supervisor sees a falsey `catch`) --- read control keeps the protocol;
 ; a real scare just welps (the supervisor narrates restarts itself; a true init would
-; log the fault to the journal here). mirrors kship.l / repl.l's shell-help, quieter.
+; log the fault to the journal here). mirrors inle.l / repl.l's shell-help, quieter.
 (: help (\ s a b (? (more? s) (welp s a b) (welp s a b))))
 
 ; --- the REAL supervisor (needs host/init.c: spawn + reap; kill via bao's `still`) ---
 ; the same supervisor, now over OS PROCESSES. spawn each unit (a pid to track), then
 ; poll `reap` -- the SIGCHLD core -- mapping each dead pid back to its unit and
 ; restarting on a NONZERO exit per policy. on metal this poll is driven by signalfd
-; through ai_wait_fds (perceive), exactly as {nic, clock} is in kship; here a rest-paced
+; through ai_wait_fds (perceive), exactly as {nic, clock} is in inle; here a rest-paced
 ; loop stands in. a real service's `cmd` is its argv (run by spawn); `pids` maps
 ; pid->name, `tries` counts restarts. the dep graph / checkpoint above carry over
 ; unchanged -- only start1's "modeled thunk" becomes "a real fork+exec".
