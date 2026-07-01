@@ -94,7 +94,7 @@
 ; BANDS, the TRUE-BLUE order: POINTS at the floor (() < bare mints < named syms -- mints by serial,
 ; names by name-lex then serial), then string, then all CONSTELLATIONS as ONE band ordered by NET
 ; (stars and galaxies INTERLEAVE -- a galaxy seats where its net's scalar sits, a star below on a
-; tie; reps interleave too: 1 < 1.5 < 2), then chain < tray (object array) < map < top, each band
+; tie; reps interleave too: 1 < 1.5 < 2), then tray (object array) < chain < map < top, each band
 ; ordered within itself (text and chains lexicographically, maps and tops by an alpha-invariant
 ; hash). a map has its own rung just under the tops, yet still acts as a lookup top for +/*/apply.
 ; NOTE surface `<`/`=` on an array BROADCAST to a mask, so this scalar order is observed through
@@ -213,7 +213,7 @@ $@(3 4)              ; 7
 8 | 4 | 2 | 1        ; 15      bitwise
 
 ; --- order & equality --- < <= > >= is a *total order over all values*: across kinds by the
-; true-blue lattice (point (() < bare mints < named noms) < string < number < chain < tray < map < top; a galaxy folds into the
+; true-blue lattice (point (() < bare mints < named noms) < string < number < tray < chain < map < top; a galaxy folds into the
 ; number band by its net), within a kind by value/lexicographic order (complex by (re,im); maps and
 ; lambdas by an alpha-invariant hash; an array operand broadcasts to a 0/1 mask, so the scalar order
 ; is observed through `sort`, not infix `<` on a galaxy). `=` is value equality and bridges the whole
@@ -221,10 +221,10 @@ $@(3 4)              ; 7
 ; demo:
 3 = 3.0              ; true    = bridges the numeric tower
 1 < 1.5              ; true
-'x < "a"             ; true    the floor: point (mint/nom) < string < number < chain < tray < map < top
+'x < "a"             ; true    the floor: point (mint/nom) < string < number < tray < chain < map < top
 "a" < 1              ; true    ... and string sits below the numbers
 (show (sort (L @(2 4) 5 "s")))   ; "(\"s\" 5 @(2 4))"   a galaxy (net 6) interleaves with the stars
-#(1 10) < cap        ; true    the map rung: chain < tray < map < top
+#(1 10) < cap        ; true    the map rung: tray < chain < map < top
 (id? 'a 'a)          ; true    id? is identity; !(id? '(1) '(1))
 
 ; --- comparing functions --- `=` on two closures is alpha + structural: their source \-exprs match

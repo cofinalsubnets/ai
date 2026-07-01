@@ -92,7 +92,7 @@
  ; a GALAXY folds into the number band by its net (probe via sort/show -- infix < on an array broadcasts to a mask).
  ("(@(1 1) 5 @(2 4))" = (show (sort `(@(2 4) 5 @(1 1)))))  ; nets 2 < 5 < 6, galaxies interleaving with the star
  ("(3 @(1 2))" = (show (sort `(@(1 2) 3))))          ; net tie -> a star seats below a galaxy
- ("((7 8) @('a 'b))" = (show (sort `(@('a 'b) '(7 8)))))   ; a tray (object array) stays ABOVE link
+ ("(@('a 'b) (7 8))" = (show (sort `(@('a 'b) '(7 8)))))   ; a tray (object array) stays BELOW link (chain is the grammar substrate, seated high)
  (@(5) = 5))                                          ; a one-cell array still demotes to its scalar
 
 ; --- comparing functions --- `=` on functions is alpha + structural (binders by position,

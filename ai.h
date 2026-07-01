@@ -373,7 +373,7 @@ struct ai_chain { lvm_t *ap; intptr_t a, b; };
 // lookup lambda for +/*/apply -- the rung exists for the dispatch matrix's honest cells).
 // This enum is the DISPATCH order ONLY. The total COMPARE order is a SEPARATE remap --
 // cmp_rank in ai.c -- which reseats string just below the number band and the KArrO tray
-// just ABOVE chain (point < string < number < chain < tray < map < hot). The two coincide
+// just BELOW chain (point < string < number < tray < chain < map < hot). The two coincide
 // only on the chain < map < hot tail; do NOT read this enum as the compare order.
 // KN is the matrix dimension.
 enum q { KMint, KNom, KCharm, KWide, KFlo, KCplx, KBig, KVec, KArrZ, KArrR, KArrC, KArrO, KString, KChain, KMap, KHot, KN };

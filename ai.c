@@ -381,7 +381,7 @@ static ai_inline bool Cp(word _) {
 // The elementwise arith/compare lanes divert to lvm_vbin when either operand arrp.
 static ai_inline bool arrp(word _) { return packp(_) && vec(_)->rank >= 1; }
 // A GALAXY: a numeric array (a set of stars). Bands into the number band by its net
-// (cmp_rank/cmp3); a tray (ai_O) stays above chain. type != ai_O catches Z/R/C.
+// (cmp_rank/cmp3); a tray (ai_O) stays below chain. type != ai_O catches Z/R/C.
 static ai_inline bool galaxyp(word _) { return arrp(_) && vec(_)->type != ai_O; }
 
 // Max array rank (bounds the stack index/stride arrays in the broadcast loop).
@@ -7127,11 +7127,12 @@ static intptr_t vcmp_int(int op, intptr_t a, intptr_t b) {
 // (KCharm) so fix/box/big/float/complex order by VALUE, not representation. Arrays
 // divert to lvm_vbin before this, so KArr* never appear. One source of truth:
 // the enum q order itself.
-// the true-blue total order, low -> high: () < mint < string < number < chain < set < map < hot.
+// the true-blue total order, low -> high: () < mint < string < number < set < chain < map < hot.
 // a symbol/mint is the blue floor; STRING sits above mint and just below the number band (the
 // charm -- a byte-valued fixnum -- bridges string-bytes up to the number tower, the byte law);
-// CHAIN is a special (1-D, hooked) set, so it seats just BELOW the general n-D set. numbers
-// fold to one by-value band; map/hot stay on top. The compare order is decoupled from the enum
+// CHAIN is the GRAMMAR SUBSTRATE -- the language's most capable structure -- so it seats HIGH, just
+// under book (a map only outranks it by being mutable); the general n-D set (a tray) sits just BELOW
+// it. numbers fold to one by-value band; map/hot stay on top. The compare order is decoupled from the enum
 // (dispatch) order: we remap kinds to lattice ranks here, the enum/matrices are untouched.
 static ai_inline int cmp_rank(word x) {
  if (nomp(x)) return 0;                            // mint/symbol -- the floor (a named sym is a (name . mint) chain)
@@ -7139,8 +7140,9 @@ static ai_inline int cmp_rank(word x) {
  if (k == KString) return 1;                       // string: above mint, below number
  if (isnum(x) || Cp(x)) return 2;                  // the number band, by value (charm bridges up from string)
  if (k == KArrZ || k == KArrR || k == KArrC) return 2;  // a GALAXY folds into the number band, ordered by its net
- if (k == KChain) return 3;                        // chain: a special 1-D set, just below the general set
- return (int) k; }                                 // KArrO trays (>=6), KMap, KHot -- all above chain, relative order kept
+ if (k == KArrO) return 3;                         // object tray: above the numbers, BELOW chain
+ if (k == KChain) return 4;                        // chain: the grammar substrate -- HIGH, just under book (only book's mutability seats it above)
+ return (int) k; }                                 // KMap, KHot -- above chain, relative order kept
 static ai_inline intptr_t bytes_cmp(const char *pa, uintptr_t la, const char *pb, uintptr_t lb) {
  uintptr_t n = la < lb ? la : lb;
  int c = n ? memcmp(pa, pb, n) : 0;
@@ -7189,7 +7191,7 @@ static intptr_t cmp3(struct ai *g, word a, word b) {
  int ra = cmp_rank(a), rb = cmp_rank(b);
  if (ra != rb) return ra < rb ? -1 : 1;                    // cross-kind: the true-blue lattice (cmp_rank)
  // same band -- dispatch by the actual kind (NOT the synthetic cmp_rank, which remaps mint/
- // string/chain off their enum ordinal). symbols first: a named sym IS a chain, so the chain
+ // string/tray/chain off their enum ordinal). symbols first: a named sym IS a chain, so the chain
  // recursion below would otherwise grab it.
  if (nomp(a)) return mint_cmp(g, a, b);                    // mint band: () < bare mints < named syms
  if (ra == 2) {                                            // number band: stars + galaxies, ordered by net
