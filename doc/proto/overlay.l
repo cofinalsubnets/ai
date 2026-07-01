@@ -193,35 +193,67 @@
    ; --- the generic engine: kinds.l's fix/kindof, now parameterised on `dom` ---
    (look env x)        (? (atom? env) 'bot (: p (cap env) (? (id? x (cap p)) (cup p) (look (cup env) x))))
    (joininto dom env x k) (link (link x ((dom 'join) (look env x) k)) env)              ; monotone shadow-update
-   (kindof dom env e)  (? (nom? e)  (look env e)
+   (sig-of sigs nm)    (? (atom? sigs) () (id? nm (caap sigs)) (cap sigs) (sig-of (cup sigs) nm))   ; -> (name (dies..) result) | ()
+   (kindof dom sigs env e) (? (nom? e)  (look env e)
                           (atom? e) ((dom 'litdie) e)                                    ; litdie handles every atom
-                          (: h (cap e) as (map (\ s (kindof dom env s)) (cup e))
+                          (: h (cap e) as (map (\ s (kindof dom sigs env s)) (cup e))
                              (? (member? h '(+ *)) ((dom 'tr) h (cap as) (cap (cup as)))
                                 (&& (id? h '?) (= 4 (tally e))) ((dom 'join) (cap (cup as)) (cap (cup (cup as))))  ; (? c a b) -> join branches
-                                'top)))
+                                (: sg (sig-of sigs h) (? (two? sg) (nthl sg 2) 'top)))))  ; typed callee -> its result-die (the BOUNDARY)
    (pairs bs)   (? (atom? bs) 0 (atom? (cup bs)) 0 (link (link (cap bs) (cap (cup bs))) (pairs (cup (cup bs)))))
    (alle a b)   (? (atom? a) 1 (: p (cap a) (&& (id? (cup p) (look b (cap p))) (alle (cup a) b))))
    (enveq a b)  (&& (alle a b) (alle b a))
-   (step dom ps env) (foldl (\ env p (joininto dom env (cap p) (kindof dom env (cup p)))) env ps)
-   (fix dom ps env)  (: e2 (step dom ps env) (? (enveq env e2) env (fix dom ps e2)))
-   (infer dom bs)    (fix dom (pairs bs) 0)
+   (step dom sigs ps env) (foldl (\ env p (joininto dom env (cap p) (kindof dom sigs env (cup p)))) env ps)
+   (fix dom sigs ps env)  (: e2 (step dom sigs ps env) (? (enveq env e2) env (fix dom sigs ps e2)))
+   (infer dom sigs bs)    (fix dom sigs (pairs bs) 0)
 
    ; --- self-check: reproduce kinds.l's four inferences through the generic engine ---
    fails (tablet 0)
    (chk lbl exp act) (? (id? exp act) (: _ (puts "  ok   ") _ (puts lbl) (putc 10))
                         (: _ (pin fails 0 (+ 1 (peep fails 0 0))) _ (puts "  FAIL ") _ (puts lbl)
-                           _ (puts ": exp ") _ (puts (string exp)) _ (puts " got ") _ (puts (string act)) (putc 10)))
-   _ (: e (infer kdom '(x 5 y (+ x 1) z (* y y)))                    ; A. linear chain -> charm, whole(overflow), whole
+                           _ (puts ": exp ") _ (puts (show exp)) _ (puts " got ") _ (puts (show act)) (putc 10)))
+   _ (: e (infer kdom () '(x 5 y (+ x 1) z (* y y)))                    ; A. linear chain -> charm, whole(overflow), whole
         (: _ (puts ";; A linear chain\n")
            _ (chk "x=charm" 'charm (look e 'x)) _ (chk "y=whole" 'whole (look e 'y)) _ (chk "z=whole" 'whole (look e 'z)) 0))
-   _ (: e (infer kdom '(x (? cnd 5 x)))                              ; B. fixpoint: x = 5-or-itself -> charm
+   _ (: e (infer kdom () '(x (? cnd 5 x)))                              ; B. fixpoint: x = 5-or-itself -> charm
         (: _ (puts ";; B fixpoint join\n") _ (chk "x=charm" 'charm (look e 'x)) 0))
-   _ (: e (infer kdom '(n 100 m (+ n n) p (* m m)))                  ; C. widening: charm climbs to whole
+   _ (: e (infer kdom () '(n 100 m (+ n n) p (* m m)))                  ; C. widening: charm climbs to whole
         (: _ (puts ";; C widening\n")
            _ (chk "n=charm" 'charm (look e 'n)) _ (chk "m=whole" 'whole (look e 'm)) _ (chk "p=whole" 'whole (look e 'p)) 0))
-   _ (: e (infer kdom '(s "hi" t (+ s s)))                           ; D. non-numeric: + on str -> top (no devirt)
+   _ (: e (infer kdom () '(s "hi" t (+ s s)))                           ; D. non-numeric: + on str -> top (no devirt)
         (: _ (puts ";; D non-numeric\n")
            _ (chk "s=str" 'str (look e 's)) _ (chk "t=top" 'top (look e 't)) 0))
+   ; --- M1: the checker (sig-table boundary rule) + M2: the UNITS domain & acceptance ---
+   (zipenv ps ds) (? (atom? ps) 0 (link (link (cap ps) (cap ds)) (zipenv (cup ps) (cup ds))))
+   (clashes dom sigs env e) (? (atom? e) 0                                               ; body subexprs whose die is `clash`
+                              (: d (kindof dom sigs env e) sub (catmap (\ s (clashes dom sigs env s)) (cup e))
+                                 (? (id? d 'clash) (link e sub) sub)))
+   (check dom sigs prog) (catmap (\ p (: nm (caap p) ps (cuap p) body (cup p) sg (sig-of sigs nm)   ; p = ((f params) . body)
+                                        (? (! (two? sg)) 0                               ; untyped fn -> not checked (gradual)
+                                           (: cl (clashes dom sigs (zipenv ps (caup sg)) body)        ; infer body under param dies
+                                              (? (atom? cl) 0 (L (link nm cl)))))))                    ; -> (name sites..) when clashy
+                                 (filter (\ p (! (atom? (cap p)))) (pairs (cup prog))))  ; strip `:`; function defs only
+   ; the UNITS domain -- user-supplied: meters/seconds/area; `clash` = provably-wrong, `bot` = scalar/neutral
+   (ujoin a b) (? (id? a 'bot) b (id? b 'bot) a (id? a b) a (|| (id? a 'clash) (id? b 'clash)) 'clash 'top)
+   (utr op a b) (? (|| (id? a 'clash) (id? b 'clash)) 'clash
+                   (id? op '+) (? (id? a b) a (id? a 'bot) b (id? b 'bot) a 'clash)      ; + : units must match (scalar rides), else CLASH
+                   (id? op '*) (? (id? a 'bot) b (id? b 'bot) a (&& (id? a 'meters) (id? b 'meters)) 'area 'top)  ; m*m -> area
+                   'top)
+   (ulit e) (? (charm? e) 'bot 'top)                                                     ; a bare numeral is unit-neutral
+   udom #('join ujoin 'tr utr 'litdie ulit 'dice '(bot meters seconds area top clash))
+   good '(: (room-area w h) (* w h) (room-area 3 4))
+   bad  '(: (bad w t) (+ w t) (bad 3 4))                                                 ; meters + seconds -- a clash
+   bbox '(: (f x) (+ x 1) (f 5))
+   _ (: _ (puts ";; M2 erasure -- programs run regardless of the overlay\n")
+        _ (chk "good runs =12"     12 (base-ev good))
+        _ (chk "bad still runs =7"  7 (base-ev bad)) 0)                                  ; ill-typed, yet EXECUTES (overlay is observe-only)
+   _ (: _ (puts ";; M2 rejection -- through the harness, by name\n")
+        _ (chk "good: 0 clashes"    0 (tally (check udom '((room-area (meters meters) area)) good)))
+        _ (chk "bad: 1 clash"       1 (tally (check udom '((bad (meters seconds) area)) bad)))
+        _ (chk "bad: names 'bad" 'bad (: r (check udom '((bad (meters seconds) area)) bad) (? (two? r) (caap r) 'none))) 0)
+   _ (: _ (puts ";; M2 black_box = the top die (assume nothing: never clashes, never devirts)\n")
+        _ (chk "blackbox: 0 clashes" 0 (tally (check udom '((f (top) top)) bbox))) 0)
+
    n (peep fails 0 0)
-   _ (: _ (putc 10) _ (puts (? (= n 0) ";; M0 PASS -- generic engine reproduces kinds.l\n" (+ ";; M0 FAIL: " (+ (string n) " mismatches\n")))))
+   _ (: _ (putc 10) _ (puts (? (= n 0) ";; PHASE-0 M0-M2 PASS -- pluggable domain checks + erases\n" (+ ";; FAIL: " (+ (show n) " mismatches\n")))))
    0)
