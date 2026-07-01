@@ -170,3 +170,58 @@
 ;   - Polymorphism / die-variables (Phase 1).
 ;   - Multiple simultaneous overlays, subtyping beyond a join-lattice, inference
 ;     across module boundaries.
+
+; ============================================================================
+; M0 -- the domain-generic engine (kinds.l, with `dom` lifted to a parameter).
+; The KINDS domain below is exactly doc/proto/kinds.l's hardwired lattice, now
+; PASSED IN as a value; the engine reproduces kinds.l's four inferences, proving
+; the lift is behaviour-preserving. `dom` is a map (a lookup fn): (dom 'join) etc.
+; Run: out/host/ai doc/proto/overlay.l  (prints ok/FAIL per binding + a summary).
+; ============================================================================
+(: ; --- the KINDS domain, as a value (reproduces kinds.l) ---
+   (rank k)  (? (id? k 'bot) 0 (id? k 'charm) 1 (id? k 'whole) 2 (id? k 'real) 3 (id? k 'cplx) 4 (id? k 'top) 5 -1)
+   (num? k)  (: r (rank k) (&& (< 0 r) (< r 5)))                 ; charm..cplx = the numeric lane
+   (joink a b) (? (id? a 'bot) b (id? b 'bot) a (id? a b) a
+                 (&& (num? a) (num? b)) (? (< (rank a) (rank b)) b a)
+                 'top)
+   (tnumk a b) (? (|| (id? a 'bot) (id? b 'bot)) 'bot
+                 (&& (num? a) (num? b)) (: j (joink a b) (? (id? j 'charm) 'whole j))   ; +/* may overflow charm
+                 'top)
+   (litk e)  (? (charm? e) 'charm (string? e) 'str 'top)
+   kdom  #('join joink  'tr (\ op a b (tnumk a b))  'litdie litk  'dice '(bot charm whole real cplx top str))
+
+   ; --- the generic engine: kinds.l's fix/kindof, now parameterised on `dom` ---
+   (look env x)        (? (atom? env) 'bot (: p (cap env) (? (id? x (cap p)) (cup p) (look (cup env) x))))
+   (joininto dom env x k) (link (link x ((dom 'join) (look env x) k)) env)              ; monotone shadow-update
+   (kindof dom env e)  (? (nom? e)  (look env e)
+                          (atom? e) ((dom 'litdie) e)                                    ; litdie handles every atom
+                          (: h (cap e) as (map (\ s (kindof dom env s)) (cup e))
+                             (? (member? h '(+ *)) ((dom 'tr) h (cap as) (cap (cup as)))
+                                (&& (id? h '?) (= 4 (tally e))) ((dom 'join) (cap (cup as)) (cap (cup (cup as))))  ; (? c a b) -> join branches
+                                'top)))
+   (pairs bs)   (? (atom? bs) 0 (atom? (cup bs)) 0 (link (link (cap bs) (cap (cup bs))) (pairs (cup (cup bs)))))
+   (alle a b)   (? (atom? a) 1 (: p (cap a) (&& (id? (cup p) (look b (cap p))) (alle (cup a) b))))
+   (enveq a b)  (&& (alle a b) (alle b a))
+   (step dom ps env) (foldl (\ env p (joininto dom env (cap p) (kindof dom env (cup p)))) env ps)
+   (fix dom ps env)  (: e2 (step dom ps env) (? (enveq env e2) env (fix dom ps e2)))
+   (infer dom bs)    (fix dom (pairs bs) 0)
+
+   ; --- self-check: reproduce kinds.l's four inferences through the generic engine ---
+   fails (tablet 0)
+   (chk lbl exp act) (? (id? exp act) (: _ (puts "  ok   ") _ (puts lbl) (putc 10))
+                        (: _ (pin fails 0 (+ 1 (peep fails 0 0))) _ (puts "  FAIL ") _ (puts lbl)
+                           _ (puts ": exp ") _ (puts (string exp)) _ (puts " got ") _ (puts (string act)) (putc 10)))
+   _ (: e (infer kdom '(x 5 y (+ x 1) z (* y y)))                    ; A. linear chain -> charm, whole(overflow), whole
+        (: _ (puts ";; A linear chain\n")
+           _ (chk "x=charm" 'charm (look e 'x)) _ (chk "y=whole" 'whole (look e 'y)) _ (chk "z=whole" 'whole (look e 'z)) 0))
+   _ (: e (infer kdom '(x (? cnd 5 x)))                              ; B. fixpoint: x = 5-or-itself -> charm
+        (: _ (puts ";; B fixpoint join\n") _ (chk "x=charm" 'charm (look e 'x)) 0))
+   _ (: e (infer kdom '(n 100 m (+ n n) p (* m m)))                  ; C. widening: charm climbs to whole
+        (: _ (puts ";; C widening\n")
+           _ (chk "n=charm" 'charm (look e 'n)) _ (chk "m=whole" 'whole (look e 'm)) _ (chk "p=whole" 'whole (look e 'p)) 0))
+   _ (: e (infer kdom '(s "hi" t (+ s s)))                           ; D. non-numeric: + on str -> top (no devirt)
+        (: _ (puts ";; D non-numeric\n")
+           _ (chk "s=str" 'str (look e 's)) _ (chk "t=top" 'top (look e 't)) 0))
+   n (peep fails 0 0)
+   _ (: _ (putc 10) _ (puts (? (= n 0) ";; M0 PASS -- generic engine reproduces kinds.l\n" (+ ";; M0 FAIL: " (+ (string n) " mismatches\n")))))
+   0)
