@@ -106,10 +106,10 @@ across every solver): raw search with no factorable structure, the guard against
 pigeonhole specialization. ai is timed by its own solve clock (interpreter warmup and
 the one-time kernel assembly excluded); the C solvers by process wall-clock (their
 startup is ~ms). <code>timeout</code> = exceeded the cutoff. The two families pull
-opposite ways: the big inprocessing solvers (cadical, kissat) own PHP but their
-machinery costs them the small random instances, where the light classics (picosat,
-minisat) lead &mdash; ai places second on PHP and mid-field on random, the most even
-spread in the table.</p>
+opposite ways: the big inprocessing solvers (cadical, kissat) are built for structure
+but their machinery costs them the small random instances, where the light classics
+(picosat, minisat) lead &mdash; ai leads the PHP net outright (ahead of cadical on
+PHP(5&ndash;7)) and sits mid-field on random, the most even spread in the table.</p>
 <div class="wrap">
 SAT
 awk '

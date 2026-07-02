@@ -106,9 +106,10 @@ wall() {
 
 for h in $INSTANCES; do
   # ai: its own solve clock (warmup + self-test excluded), under a process timeout.
-  # (fbcpk nvars) first: assemble+cache the size-specialized kernels OUTSIDE the solve
-  # clock, like the interpreter warmup -- the honest "solve time" is the warm one.
-  out=$(printf '(: _ (fbcpk (php-vars %s)) t0 (clock 0) r (fcdcl (php %s) (php-vars %s)) ms (- (clock 0) t0) _ (puts (+ "RESULT " (+ (show ms) (+ " " (show r))))))' "$h" "$h" "$h" \
+  # one full throwaway solve first: kernels assemble+cache AND the solver's own lisp
+  # (fbva/fmk) JITs, both OUTSIDE the clock, like the interpreter warmup -- the honest
+  # "solve time" is the warm one (the rnd lane already warms the same way).
+  out=$(printf '(: _ (fcdcl (php %s) (php-vars %s)) t0 (clock 0) r (fcdcl (php %s) (php-vars %s)) ms (- (clock 0) t0) _ (puts (+ "RESULT " (+ (show ms) (+ " " (show r))))))' "$h" "$h" "$h" "$h" \
         | cat "$R/sat/sat.l" "$R/sat/flat.l" - | timeout "$TIMEOUT" "$GL" 2>/dev/null | grep -a '^RESULT' || true)
   if [ -n "$out" ]; then
     echo "php$h ai $(echo "$out" | awk '{print $2, $3}')"

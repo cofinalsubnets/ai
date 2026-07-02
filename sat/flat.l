@@ -133,6 +133,7 @@
    ;   0 level 0 -> -1        1 clear seen           2 1-UIP (absorb + trail walk),
    ;   asserting lit to ar[cid0+1], tail collected at ar[cid0+2..]
    ;   3 minimize (self-subsumption; dropped lits STAY seen), compact in place
+   ;   3b reason-side bump: unseen vars in the learnt lits' reasons get act += vinc
    ;   4 clear seen; glue (level-mark set) + backjump level in one pass
    ;   5 backjump (save phase, unassign)   6 commit size/aru, reorder watch-2, watches
    ;   7 assert learnt[0] with reason cid0+1   -> (cid0<<6)|min(glue,63)
@@ -180,6 +181,19 @@
                         (? (= red 1) (mn (+ rd 1) wr)
                            (: _ (putw ar wr el) (mn (+ rd 1) (+ wr 1)))))))
                (+ cid0 2) (+ cid0 2))
+           ; reason-side bump (cadical's bumpreason): every UNSEEN var in a learnt
+           ; literal's reason gets an activity bump -- focuses VSIDS one step past the
+           ; learnt, the decisive lever on factored/tree instances (php8 ~4000 -> ~1500
+           ; conflicts). seen still holds the analysis marks here (czero follows).
+           _ ((: (rb j) (? (>= j wr) 0
+                  (: v (>> (getw ar j) 1) rv (getw fx (+ rso v))
+                     _ (? (= rv 0) 0
+                          ((: (go2 k) (? (> k (+ (- rv 1) (getw ar (- rv 1)))) 0
+                               (: v2 (>> (getw ar k) 1)
+                                  _ (? (= 0 (getw fx (+ seo v2)))
+                                       (putw fx (+ aco v2) (+ (getw fx (+ aco v2)) (getw fx 6))) 0)
+                                  (go2 (+ k 1))))) rv))
+                     (rb (+ j 1))))) (+ cid0 1))
            _ (czero ())
            gb ((: (go j glue bj)                            ; glue + backjump level over the kept tail
                   (? (>= j wr) (link glue bj)
@@ -405,6 +419,24 @@
                '(label mkeep) '(ldx r0 r12 r10 8 0) '(stx r12 r9 8 0 r0) '(add r9 r9 1)
                '(label mnnext) '(add r10 r10 1) '(jmp mn)
                '(label mnend) '(add sp sp 8))                     ; r9 = wend after compaction
+       ; phase 3b: reason-side bump -- every UNSEEN var in a learnt literal's reason
+       ; gets act += vinc (seen still holds the analysis marks; w7 free as scratch).
+       (cat (L '(ld r10 r11 32) '(add r10 r10 1)                  ; j = cid0+1
+               '(label rb) '(cmp r10 r9) '(br ge rbe)
+               '(ldx r0 r12 r10 8 0) '(sar r0 1)                  ; v
+               (L 'ldx 'r7 'r11 'r0 8 rso8)
+               '(cmp r7 0) '(br eq rbn)
+               '(sub r7 r7 1)
+               '(ldx r0 r12 r7 8 0) '(add r0 r0 r7) '(st r11 56 r0)   ; w7 = last lit index
+               '(add r7 r7 1)
+               '(label rk) '(ld r0 r11 56) '(cmp r7 r0) '(br gt rbn)
+               '(ldx r0 r12 r7 8 0) '(sar r0 1)                   ; v2
+               (L 'ldx 'r8 'r11 'r0 8 seo8) '(cmp r8 0) '(br ne rknx)
+               (L 'ldx 'r8 'r11 'r0 8 aco8) '(ld r3 r11 48) '(add r8 r8 r3)
+               (L 'stx 'r11 'r0 8 aco8 'r8)
+               '(label rknx) '(add r7 r7 1) '(jmp rk)
+               '(label rbn) '(add r10 r10 1) '(jmp rb)
+               '(label rbe))
        (cat (cls-ir nv seo8)                                      ; phase 4: clear seen (-> level marks)
        (cat (L '(ld r0 r11 16)                                    ; mark dl
                '(li r8 1) (L 'stx 'r11 'r0 8 seo8 'r8)
@@ -464,7 +496,7 @@
                '(label retm1) '(li r0 -1)
                '(label fin)
                '(pop r14) '(pop r13) '(pop r12) '(pop r11) '(pop r3))
-            (cat epi-ir deopt2-ir))))))))))))))))
+            (cat epi-ir deopt2-ir)))))))))))))))))
    ; --- kernel 3: DECIDE -- (dec fx). caller-saved regs only, no pushes. -------------
    (fdec-ir nv)
     (: tro8 64 lvo8 (* 8 (lvo-of nv)) rso8 (* 8 (rso-of nv)) vao8 (* 8 (vao-of nv))
@@ -694,7 +726,16 @@
            0)
        (link (map (\ cid (peep cls cid ())) (keys cls)) (peep nv 0 0)))
    (fcdcl formula nvars)
-    (: p (? (= 0 (peep fbva0 0 1)) (link formula nvars) (fbva formula nvars))
+    ; the fbva LADDER: re-run the pass on its own output with the baseline lifted (level-1
+    ; aux become "original" for level 2) while it keeps factoring -- level 2 deepens the
+    ; commander tree (php8 ~1550 -> ~1400 conflicts under the reason-side bump; WITHOUT
+    ; that bump a deeper tree actively hurts, so the ladder rides the bump). an instance
+    ; with nothing factorable exits after one pass (randoms: no ladder cost). models
+    ; still project by the ORIGINAL nvars.
+    (: p (? (= 0 (peep fbva0 0 1)) (link formula nvars)
+            ((: (go p k) (: p2 (fbva (cap p) (cup p))
+                            (? (|| (= (cup p2) (cup p)) (>= k 3)) p2 (go p2 (+ k 1)))))
+             (link formula nvars) 1))
        s (fmk (cap p) (cup p))
        (? (= 1 (peep s 'bad 0)) 'unsat
           (: r (fsearch s) (? (id? r 'unsat) 'unsat (fextract s nvars)))))

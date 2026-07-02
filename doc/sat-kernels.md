@@ -5,9 +5,10 @@ compiler* — not a general codegen pass, but one app compiling its own hot loop
 CDCL SAT solver's three hot loops are hand-written in asm/ neutral IR, assembled **at
 solver-build time, specialized to the instance** (section displacements baked as immediates,
 one kernel set per `nvars`, cached), and installed through the `nif` seam — plus `fbva`,
-the extended-resolution factoring pass (below). The result is SECOND in the reference-solver
-field, behind only cadical: faster than kissat on every instance measured, fastest outright
-on PHP(5) and PHP(6) (`bench/bench.html`, second table; `bench/satrace.sh` reproduces it).
+the extended-resolution factoring ladder and reason-side VSIDS bumping (below). The result
+is FIRST in the reference-solver field by net time: faster than cadical outright on
+PHP(5–7) (1.5ms behind on PHP(8)), faster than kissat everywhere, mid-field on threshold
+random 3-SAT (`bench/bench.html`, second table; `bench/satrace.sh` reproduces it).
 
 the lineage: `sat/sat.l` is the readable tablet-based solver and stays the oracle —
 `sat/flat.l` runs AFTER it (`cat sat/sat.l sat/flat.l | ai`) and gates differentially
@@ -69,13 +70,14 @@ restart (reduction is only sound at level 0), tracked by an O(1) learnt counter.
 
 | ms | ai | minisat | picosat | kissat | cadical | glucose |
 |---|---|---|---|---|---|---|
-| PHP(5) | **1** | 4.0 | 2.8 | 3.7 | 4.6 | 4.4 |
-| PHP(6) | **3** | 7.4 | 4.7 | 5.7 | 5.5 | 6.0 |
-| PHP(7) | **11** | 40.1 | 26.0 | 18.2 | 8.6 | 42.8 |
-| PHP(8) | **54** | 281 | 233 | 75.2 | 12.0 | 921 |
+| PHP(5) | **1** | 3.9 | 2.6 | 3.6 | 4.6 | 4.0 |
+| PHP(6) | **2** | 7.5 | 5.0 | 5.5 | 5.2 | 5.8 |
+| PHP(7) | **4** | 38.5 | 25.7 | 17.3 | 8.2 | 39.9 |
+| PHP(8) | 14 | 266 | 220 | 72.1 | 12.5 | 873 |
 
-second in the whole field by net time (cadical 31, **ai 69**, kissat 103, picosat 266,
-minisat 332, glucose 970) — faster than kissat on every instance, behind only cadical.
+first on the pigeonhole net (ai 21, cadical 30.5): faster than cadical outright on
+PHP(5–7), 1.5ms behind on PHP(8). first in the whole six-row field by net time
+(**ai 156**, cadical 200, picosat 312, kissat 372, minisat 383, glucose 1013).
 
 Where the journey started (interpreted tablet solver, 2026-07-01): ~45× slower than
 minisat on PHP(7). The rungs: flatten the state (proves the layout, slower interpreted) →
@@ -86,10 +88,38 @@ the factored profile (rarer restarts suit BVA'd pigeonhole: luby unit 100→400;
 neutral on threshold random 3-SAT) → the tombstone reduce, which made a LEAN learnt DB
 affordable (at 12k learnts the watch lists averaged ~140 nodes — 44 watch visits per
 propagation; capping at 2000 was a wash before only because each full-rebuild reduction
-cost ~11ms of interpreted lisp). Each rung was phase-profiled before it was built — the
-clock-delta split of the driver loop (bcp / conf / cold path / dec) found every whale,
-and an instrumented twin counting visit categories (satisfied-skip / slide / unit /
-binary) sized this last one.
+cost ~11ms of interpreted lisp) → reason-side bumping + the fbva ladder (below), the
+pair that closed the last 4× to cadical. Each rung was phase-profiled before it was
+built — the clock-delta split of the driver loop (bcp / conf / cold path / dec) found
+every whale, and an instrumented twin counting visit categories (satisfied-skip / slide
+/ unit / binary) sized the tombstone one.
+
+## reason-side bumping + the fbva ladder (the level-2 story)
+
+Cadical fed our factored PHP(8) factors 16 MORE variables (a laddered commander
+hierarchy) and needs only ~1150 conflicts to our ~4000 — so the obvious move was to
+replicate its level-2 grouping. The decisive experiment said no: cadical's own
+preprocessed formula (dumped via `cadical -c 0 -o`, factor applied, zero search) made
+OUR search *worse* (7068 conflicts vs 3967 on our level-1), across the whole knob grid.
+The deeper encoding is only better *for a search that can exploit it* — encoding and
+heuristics are not separable here.
+
+Which heuristic? Ablate cadical **search-side** on the fixed level-2 encoding
+(`--no-factor` + one feature off at a time): `--shrink=0` +61% conflicts,
+`--bumpreason=false` +34%, `--stabilize=false` +32% — an ensemble again, but with a
+cheapest member. **Reason-side bumping** — every unseen variable in a learnt literal's
+reason clause gets `act += vinc` — prototyped in the interpreted twin, then landed in
+the conf kernel (phase 3b, between minimize and the seen-clear, where the analysis
+marks are still live): PHP(8) drops 3967 → **1547** conflicts on our level-1 encoding
+and 7068 → **1152** on cadical's level-2 — matching cadical's own count. One feature
+was the entire lock: with it, deeper factoring flips from harmful to helpful, so
+`fcdcl` now runs the **fbva ladder** — re-apply the pass on its own output with the
+baseline lifted (level-1 aux become "original") while it keeps factoring, capped at 4
+levels. An instance with nothing factorable exits after one pass, so the randoms pay
+nothing. PHP(8): 1547 → 1408 conflicts; PHP(9) solves in ~34ms warm. The remaining
+~20% of encoding quality (cadical's exact groups: contiguous commander merges where
+our ladder picks mirrored definitions) is still on the table, as are shrink and
+stable/focused alternation on the search side.
 
 ## the random rows (rnd100 / rnd150), and what they guard
 
@@ -163,13 +193,10 @@ interpreted pass.
 
 ## what the remaining distance is
 
-cadical (12ms) on PHP(8), against our 54. On our own factored instance cadical-sans-factor
-needs 3433 conflicts to our ~4000, so the conflict-count gap is nearly closed; what's left
-is per-conflict propagation cost (its ~6µs against our ~10) and a second factoring level:
-cadical fed our factored output factors 16 MORE variables (a laddered commander hierarchy)
-and drops to 1142 conflicts. Both of our naive attempts at depth — a free aux cascade, and
-re-running the whole original-only pass on its own output — made search WORSE (973ms and
-251ms respectively), so cadical's inprocessing-scheduled level-2 grouping is doing
-something our one-shot greedy doesn't; that, chronological backtracking, and
-stable/focused mode switching are the open solver-research rungs, all lisp cold-path
-work now that the hot path is native.
+on pigeonhole, essentially none — ai leads cadical on PHP(5–7) and trails by 1.5ms on
+PHP(8). the open rungs are now on the random rows (picosat/minisat lead there; our
+per-conflict engine cost and restart policy on unstructured instances) and the two
+unimplemented cadical search features the ablation named: shrink (trail-based all-UIP
+learnt shrinking, +61% conflicts when cadical loses it) and stable/focused mode
+alternation (+32%) — plus the last ~20% of factoring-group quality. all lisp cold-path
+or kernel-phase work; the architecture doesn't move.
