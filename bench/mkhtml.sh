@@ -101,7 +101,7 @@ PHP(<i>n</i>) &mdash; (<i>n</i>+1) pigeons into <i>n</i> holes, UNSAT and resolu
 so CDCL is <b>exponential</b> here. ai is timed by its own solve clock (interpreter warmup
 and the one-time kernel assembly excluded); the C solvers by process wall-clock (their
 startup is ~ms). <code>timeout</code> = exceeded the cutoff. The engine now runs with the
-C field &mdash; the remaining spread (kissat, cadical) is solver <i>research</i>:
+C field &mdash; the remaining spread (cadical) is solver <i>research</i>:
 inprocessing and clause-management refinements, not execution speed.</p>
 <div class="wrap">
 SAT

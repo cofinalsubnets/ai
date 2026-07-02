@@ -102,7 +102,11 @@
         ((: (go p prev)
             (? (= p 0) -1
                (: cid (getw wn p)
-                  _ (? (= (getw ar (+ cid 1)) f)                         ; normalize: f sits at slot cid+2
+                  (? (= 0 (getw ar cid))                                 ; TOMBSTONE (freduce): unlink, walk on
+                     (: nx (getw wn (+ p 1))
+                        _ (? (= prev 0) (putw fx (+ who f) nx) (putw wn (+ prev 1) nx))
+                        (go nx prev))
+                  (: _ (? (= (getw ar (+ cid 1)) f)                      ; normalize: f sits at slot cid+2
                        (: t (getw ar (+ cid 2)) _ (putw ar (+ cid 2) f) (putw ar (+ cid 1) t)) 0)
                   oth (getw ar (+ cid 1))
                   (? (= 1 (lv oth)) (go (getw wn (+ p 1)) p)             ; satisfied by the other watch: keep
@@ -117,7 +121,7 @@
                               _ (putw wn (+ p 1) (getw fx (+ who e))) _ (putw fx (+ who e) p)
                               (go nx prev))
                            (= 0 (lv oth)) (: _ (fasg fx oth (+ cid 1)) (go (getw wn (+ p 1)) p))   ; unit: force oth
-                           cid))))))                                     ; oth false too: CONFLICT
+                           cid))))))))                                   ; oth false too: CONFLICT
          (getw fx (+ who f)) 0))
        ((: (drain _)
            (? (>= (getw fx 1) (getw fx 0)) -1
@@ -259,6 +263,15 @@
                '(label node)
                '(cmp r9 0) '(br eq drain)
                '(ldx r3 r13 r9 8 0)
+               '(ldx r0 r12 r3 8 0) '(cmp r0 0) '(br ne live)   ; size 0 = TOMBSTONE (freduce):
+               '(ldx r0 r13 r9 8 8)                             ; unlink the dead node, walk on
+               '(cmp r10 0) '(br ne dprev)
+               (L 'stx 'r11 'r14 8 who8 'r0) '(jmp dnext)
+               '(label dprev)
+               '(stx r13 r10 8 8 r0)
+               '(label dnext)
+               '(mov r9 r0) '(jmp node)
+               '(label live)
                '(ldx r0 r12 r3 8 8) '(cmp r0 r14) '(br ne noswap)
                '(ldx r7 r12 r3 8 16) '(stx r12 r3 8 8 r7) '(stx r12 r3 8 16 r0)
                '(label noswap)
@@ -482,7 +495,7 @@
             (cat epi-ir deopt1-ir)))))
    fkers (tablet 0)                                         ; nv -> (bcp conf dec), one assemble per nvars
    fknob #0                                                 ; pin 1 to force the interpreted twins (the differential switch)
-   fmaxl0 #3000                                             ; the initial learnt-DB cap (the gate lowers it to force reductions)
+   fmaxl0 #2000                                             ; the initial learnt-DB cap (the gate lowers it to force reductions)
    (fnif ir fb ar)                                          ; assemble + install one kernel (fb = the honest twin)
     (: bs (peep (assemble 'x64 ir) 'bytes 0)
        c (cask (tally bs))
@@ -508,8 +521,8 @@
        _ (pin s 'lvo (lvo-of nv)) _ (pin s 'rso (rso-of nv)) _ (pin s 'who (who-of nv)) _ (pin s 'vao (vao-of nv))
        _ (pin s 'ar (cask 4096)) _ (pin s 'wn (cask 4096))  ; words 0-1 of each reserved: 0 stays "none"
        _ (pin s 'bad 0)
-       _ (pin s 'nconf 0) _ (pin s 'rnum 1) _ (pin s 'climit 100)
-       _ (pin s 'learnts ()) _ (pin s 'maxl (peep fmaxl0 0 2000))
+       _ (pin s 'nconf 0) _ (pin s 'rnum 1) _ (pin s 'climit 400)
+       _ (pin s 'learnts ()) _ (pin s 'nl 0) _ (pin s 'maxl (peep fmaxl0 0 2000))
        ks (fbcpk nv)
        use (&& (two? ks) (= 0 (peep fknob 0 0)))
        _ (pin s 'bcp  (? use (cap ks) fbcp3))
@@ -537,49 +550,28 @@
              _ ((: (go v) (? (> v nv) 0 (: _ (putw fx (+ aco v) (>> (getw fx (+ aco v)) 8)) (go (+ v 1))))) 1)
              (putw fx 6 (>> vi 8)))
           (putw fx 6 vi)))
-   (fnext-restart s) (: rn (+ 1 (peep s 'rnum 1)) _ (pin s 'rnum rn) _ (pin s 'nconf 0) _ (pin s 'climit (* (luby rn) 100)) 0)
-   ; learnt-DB REDUCTION at a level-0 restart (no reason cid is live: absorb never
-   ; reads a level-0 var's reason, and those are zeroed here anyway). the worst-glue
-   ; half dies (glue <= 3 immortal), survivors compact by pour, watches re-established
-   ; vs the level-0 assignment; a level-0-satisfied clause drops, a single-nonfalse
-   ; one enqueues as a permanent fact; all-false cannot arise (propagation was drained).
-   (fswap c i j) (? (= i j) 0 (: a (getw c i) b (getw c j) _ (putw c i b) (putw c j a)))
+   (fnext-restart s) (: rn (+ 1 (peep s 'rnum 1)) _ (pin s 'rnum rn) _ (pin s 'nconf 0) _ (pin s 'climit (* (luby rn) 400)) 0)
+   ; learnt-DB REDUCTION at a level-0 restart, by TOMBSTONE: the worst-glue half
+   ; (glue <= 3 immortal) gets its arena SIZE word zeroed, and both kernels' bcp walk
+   ; unlinks a dead clause's watch nodes lazily on the next visit -- no arena
+   ; compaction, no watch rebuild, so a reduction is O(learnts) lisp. a dead clause's
+   ; words stay intact (mark, not corrupt), but the size-0 check runs FIRST in the
+   ; walk, so its stale watch slots are never read as a clause. level-0 reasons are
+   ; zeroed (absorb skips level-0 vars anyway; belt and braces). the arena only
+   ; grows -- dead slabs leak until the solve ends, the price of O(1)-amortized
+   ; reduction (fens doubles, so the growth stays geometric).
    (freduce s)
-    (: fx (peep s 'fx ()) nv (peep s 'nvars 0) who (peep s 'who 0) rso (peep s 'rso 0) ar (peep s 'ar ())
+    (: fx (peep s 'fx ()) rso (peep s 'rso 0) ar (peep s 'ar ())
        ls (peep s 'learnts ())
        srt (sortby (\ a b (<= (cup a) (cup b))) (filter (\ p (> (cup p) 3)) ls))
        nk (// (tally srt) 2)
        dead (tablet 0)
        _ (foldl (\ i p (: _ (? (>= i nk) (pin dead (cap p) 1) 0) (+ i 1))) 0 srt)
-       lt (tablet 0) _ (foldl (\ _ p (pin lt (cap p) (cup p))) 0 ls)
-       _ ((: (zw i) (? (> i (+ 1 (* 2 nv))) 0 (: _ (putw fx (+ who i) 0) (zw (+ i 1))))) 0)
-       _ (putw fx 5 2)
        _ ((: (zr t) (? (>= t (getw fx 0)) 0
               (: v (>> (getw fx (+ 8 t)) 1) _ (putw fx (+ rso v) 0) (zr (+ t 1))))) 0)
-       na (cask (tally ar)) _ (pin s 'ar na)                ; survivors compact into na (fwatch sees it)
-       end (getw fx 4)
-       res ((: (walk cid nu nls)
-               (? (>= cid end) (link nu nls)
-                  (: n (getw ar cid) nxt (+ cid (+ n 1))
-                     lits ((: (go j acc) (? (< j (+ cid 1)) acc (go (- j 1) (link (getw ar j) acc)))) (+ cid n) ())
-                     (? (! (= 0 (peep dead cid 0))) (walk nxt nu nls)
-                        (< n 2) (walk nxt nu nls)
-                        (any (\ el (= 1 (flv s el))) lits) (walk nxt nu nls)
-                        (: nf (filter (\ el (! (= -1 (flv s el)))) lits)
-                           (? (atom? nf) (scare 'freduce-allfalse cid)
-                              (atom? (cup nf)) (: _ (fenq s (cap nf) 0) (walk nxt nu nls))
-                              (: _ (pour na (* 8 nu) ar (* 8 cid) (* 8 (+ n 1)))
-                                 l1 (cap nf) l2 (caup nf)
-                                 p1 ((: (fnd j) (? (= (getw na j) l1) j (fnd (+ j 1)))) (+ nu 1))
-                                 _ (fswap na (+ nu 1) p1)
-                                 p2 ((: (fnd j) (? (= (getw na j) l2) j (fnd (+ j 1)))) (+ nu 2))
-                                 _ (fswap na (+ nu 2) p2)
-                                 _ (fwatch s nu (getw na (+ nu 1))) _ (fwatch s nu (getw na (+ nu 2)))
-                                 g (peep lt cid ())
-                                 (walk nxt (+ nu (+ n 1))
-                                       (? (whole? g) (link (link nu g) nls) nls)))))))))
-            2 2 ())
-       _ (putw fx 4 (cap res)) _ (pin s 'learnts (cup res))
+       _ (foldl (\ _ cid (: _ (putw ar cid 0) 0)) 0 (keys dead))
+       nl (filter (\ p (= 0 (peep dead (cap p) 0))) ls)
+       _ (pin s 'learnts nl) _ (pin s 'nl (tally nl))
        (pin s 'maxl (// (* (peep s 'maxl 2000) 3) 2)))
    ; --- the search loop: three kernel calls + lisp bookkeeping --------------------
    (fsearch s)                                              ; -> 'sat or 'unsat (s holds the model on SAT)
@@ -593,12 +585,15 @@
                     (? (= r -1) 'unsat
                        (: cid (>> r 6) glue (& r 63)
                           _ (? (< 1 (getw (peep s 'ar ()) cid))     ; size >= 2: track for reduction
-                               (pin s 'learnts (link (link cid glue) (peep s 'learnts ()))) 0)
+                               (: _ (pin s 'learnts (link (link cid glue) (peep s 'learnts ())))
+                                  (pin s 'nl (+ 1 (peep s 'nl 0)))) 0)
                           _ (fdecay s) _ (pin s 'nconf (+ 1 (peep s 'nconf 0)))
                           (loop ()))))
-                 (&& (> (getw fx 2) 0) (>= (peep s 'nconf 0) (peep s 'climit 0)))
+                 (&& (> (getw fx 2) 0)                              ; a full DB also forces the restart:
+                     (|| (>= (peep s 'nconf 0) (peep s 'climit 0))  ; reduction is only sound at level 0
+                         (> (peep s 'nl 0) (peep s 'maxl 2000))))
                     (: _ (fbackjump s 0) _ (fnext-restart s)
-                       _ (? (> (tally (peep s 'learnts ())) (peep s 'maxl 2000)) (freduce s) 0)
+                       _ (? (> (peep s 'nl 0) (peep s 'maxl 2000)) (freduce s) 0)
                        (loop ()))
                  (: v ((peep s 'dec ()) fx)
                     (? (= v 0) 'sat (loop ())))))) ()))

@@ -5,10 +5,9 @@ compiler* — not a general codegen pass, but one app compiling its own hot loop
 CDCL SAT solver's three hot loops are hand-written in asm/ neutral IR, assembled **at
 solver-build time, specialized to the instance** (section displacements baked as immediates,
 one kernel set per `nvars`, cached), and installed through the `nif` seam — plus `fbva`,
-the extended-resolution factoring pass (below). The result is THIRD in the reference-solver
-field, behind only cadical and kissat: fastest outright on PHP(5) and PHP(6), and ahead of
-picosat, minisat, and glucose everywhere (`bench/bench.html`, second table;
-`bench/satrace.sh` reproduces it).
+the extended-resolution factoring pass (below). The result is SECOND in the reference-solver
+field, behind only cadical: faster than kissat on every instance measured, fastest outright
+on PHP(5) and PHP(6) (`bench/bench.html`, second table; `bench/satrace.sh` reproduces it).
 
 the lineage: `sat/sat.l` is the readable tablet-based solver and stays the oracle —
 `sat/flat.l` runs AFTER it (`cat sat/sat.l sat/flat.l | ai`) and gates differentially
@@ -34,9 +33,16 @@ Three kernels, each with an interpreted **twin** over the same memory:
   with both watches, the asserting assignment; returns `(cid<<6)|glue`, −1 at level 0.
 * `dec (fx)` — highest-activity free variable, saved-phase polarity, assign; 0 means SAT.
 
-Lisp keeps only the cold path: restarts, learnt-DB reduction (worst-glue half dies at a
-level-0 restart, glue ≤ 3 immortal, survivors compact by `pour`), and activity decay. The
-caller pre-ensures arena room before `conf`; kernels never grow a cask.
+Lisp keeps only the cold path: restarts, learnt-DB reduction, and activity decay. The
+caller pre-ensures arena room before `conf`; kernels never grow a cask. Reduction is by
+**tombstone**: the worst-glue half (glue ≤ 3 immortal) gets its arena size word zeroed at
+a level-0 restart, and the bcp walk unlinks a dead clause's watch nodes lazily on the
+next visit — no arena compaction, no watch rebuild, so a reduction is O(learnts) lisp
+(~1ms) instead of the ~11ms full rebuild it replaced. Dead slabs leak until the solve
+ends; that's the price, and `fens`'s doubling keeps the growth geometric. The size-0
+check runs FIRST in the walk — an empty scan range would otherwise read a dead clause's
+two stale watch slots as a whole clause and fake a conflict. A full DB forces the
+restart (reduction is only sound at level 0), tracked by an O(1) learnt counter.
 
 ## the kernel contract (reusable for any nif kernel)
 
@@ -63,20 +69,27 @@ caller pre-ensures arena room before `conf`; kernels never grow a cask.
 
 | ms | ai | minisat | picosat | kissat | cadical | glucose |
 |---|---|---|---|---|---|---|
-| PHP(5) | **1** | 4.2 | 2.8 | 3.7 | 4.5 | 4.2 |
-| PHP(6) | **2** | 7.2 | 5.3 | 5.5 | 5.5 | 6.6 |
-| PHP(7) | 22 | 38.5 | 28.1 | 18.3 | 8.0 | 43.3 |
-| PHP(8) | 131 | 269 | 228 | 71.6 | 12.2 | 913 |
+| PHP(5) | **1** | 4.0 | 2.8 | 3.7 | 4.6 | 4.4 |
+| PHP(6) | **3** | 7.4 | 4.7 | 5.7 | 5.5 | 6.0 |
+| PHP(7) | **11** | 40.1 | 26.0 | 18.2 | 8.6 | 42.8 |
+| PHP(8) | **54** | 281 | 233 | 75.2 | 12.0 | 921 |
 
-third in the whole field by net time (cadical 31, kissat 101, **ai 161**, picosat 262,
-minisat 327, glucose 963) — ahead of every classic CDCL, trading blows with kissat.
+second in the whole field by net time (cadical 31, **ai 69**, kissat 103, picosat 266,
+minisat 332, glucose 970) — faster than kissat on every instance, behind only cadical.
 
 Where the journey started (interpreted tablet solver, 2026-07-01): ~45× slower than
 minisat on PHP(7). The rungs: flatten the state (proves the layout, slower interpreted) →
 bcp kernel (~10× over the twin) → learnt-DB reduction + minimization (kills the PHP(8)
 superlinear bloat) → conf + dec kernels (the per-conflict path was ~90% of what remained)
-→ warm timing + cadence tuning. Each rung was phase-profiled before it was built — the
-clock-delta split of the driver loop (bcp / conf / cold path / dec) found every whale.
+→ warm timing + cadence tuning → fbva (131ms on PHP(8)) → restart/decay knob retune on
+the factored profile (rarer restarts suit BVA'd pigeonhole: luby unit 100→400; validated
+neutral on threshold random 3-SAT) → the tombstone reduce, which made a LEAN learnt DB
+affordable (at 12k learnts the watch lists averaged ~140 nodes — 44 watch visits per
+propagation; capping at 2000 was a wash before only because each full-rebuild reduction
+cost ~11ms of interpreted lisp). Each rung was phase-profiled before it was built — the
+clock-delta split of the driver loop (bcp / conf / cold path / dec) found every whale,
+and an instrumented twin counting visit categories (satisfied-skip / slide / unit /
+binary) sized this last one.
 
 ## the watcher-vector experiment (built, measured, kept out)
 
@@ -131,9 +144,13 @@ interpreted pass.
 
 ## what the remaining distance is
 
-kissat (72ms) and cadical (12ms) on PHP(8). Cadical's edge over our 131ms is its faster
-plain core (103ms sans factor — chronological backtracking, stable/focused mode
-switching, aggressive shrinking) *multiplied by* better factoring integration
-(inprocessing-scheduled, not one-shot). All of that is solver research living in the
-lisp cold path — which is exactly where that kind of logic belongs now that the hot path
-is native.
+cadical (12ms) on PHP(8), against our 54. On our own factored instance cadical-sans-factor
+needs 3433 conflicts to our ~4000, so the conflict-count gap is nearly closed; what's left
+is per-conflict propagation cost (its ~6µs against our ~10) and a second factoring level:
+cadical fed our factored output factors 16 MORE variables (a laddered commander hierarchy)
+and drops to 1142 conflicts. Both of our naive attempts at depth — a free aux cascade, and
+re-running the whole original-only pass on its own output — made search WORSE (973ms and
+251ms respectively), so cadical's inprocessing-scheduled level-2 grouping is doing
+something our one-shot greedy doesn't; that, chronological backtracking, and
+stable/focused mode switching are the open solver-research rungs, all lisp cold-path
+work now that the hot path is native.
