@@ -1,25 +1,38 @@
-; sat/flat -- the CDCL solver again, over FLAT state, with a DOMAIN-SPECIFIC NATIVE
-; KERNEL: at solver-build time the two-watched-literal BCP loop is assembled through
-; asm/ (neutral IR, section offsets baked as immediates -- the kernel is SPECIALIZED
-; to the instance's nvars) and installed via the `nif` seam; the interpreted twin
-; `fbcp3` over the SAME memory is its honest deopt fallback, its differential oracle,
-; and the whole engine where the kernel can't build (no `nif` in the book -- the
-; glazed image mops it -- or a non-x64 host). Everything lives in casks: one fixed
-; cask `fx` (header + trail/lvl/rsn/watch-heads/val sections) + two growable arenas
-; (`ar` clauses, `wn` watch nodes). Words are 8-byte slots whose LOW 4 bytes carry
-; the value (getw/putw touch only those; the high bytes stay zero from the zeroed
-; cask, so the kernel's 64-bit ld/st and the byte-level accessors agree exactly).
+; sat/flat -- the CDCL solver over FLAT state, with THREE DOMAIN-SPECIFIC NATIVE
+; KERNELS: at solver-build time the hot loops are assembled through asm/ (neutral IR,
+; section offsets baked as immediates -- each kernel is SPECIALIZED to the instance's
+; nvars, cached per nv) and installed via the `nif` seam:
+;   bcp  (fx ar wn)        two-watched-literal propagation      -> conflict cid | -1
+;   conf (fx ar wn confl)  the WHOLE conflict: 1-UIP absorb (+ inline VSIDS bumps),
+;                          self-subsumption minimization (in-place compaction), glue,
+;                          backjump, learnt-clause commit + watches, asserting assign
+;                                                              -> (cid<<6)|glue | -1 at level 0
+;   dec  (fx)              highest-activity free var, phase-saved polarity, assign
+;                                                              -> the var | 0 = SAT
+; the interpreted twins (fbcp3/fconf3/fdec3) over the SAME memory are the deopt
+; fallbacks, the arm64/no-`nif` engine (the glazed image mops nif; make exports
+; AI_NO_IMAGE=1 so every gate run has it), and the differential oracle: the `fknob`
+; box forces the twins and `fboth` gates verdict equality. lisp keeps only the cold
+; path: restarts, learnt-DB reduction, activity decay/rescale.
 ; Run AFTER sat.l (it reuses the leaked oracle + instances):
 ;   cat sat/sat.l sat/flat.l | ai
 ;
 ; a literal is ENCODED: +v -> 2v, -v -> 2v+1 (neg = xor 1, var = >>1). val[v] holds
-; the TRUE encoded literal itself (0 = free), so lit-val is one load + one compare.
-; fx word layout (nv = nvars):  w0 top, w1 qhead, w2 level, w3 nv,
-;   trail at TRO=4 (nv+1 words), lvl at LVO, rsn at RSO (0 none, else cid+1),
-;   watch heads at WHO (2nv+2 words, indexed by encoded literal), val at VAO.
-; a clause at arena offset cid is [size, lit0..]; the two WATCHED literals are
-; always slots cid+1 and cid+2 (a slide swaps in place). a watch node at offset p
-; is [cid, next] (0 = nil; words 0-1 of both arenas are reserved so 0 stays "none").
+; the TRUE encoded literal itself (0 = free) so lit-val is a load + a compare. VSIDS
+; activities are INTEGERS (vinc starts 256, grows *21//20 per conflict; when it tops
+; 2^24 every activity shifts right 8 -- decay-by-shift, ratios kept, ancient bumps
+; fade to 0, which is the point). words are 8-byte slots whose LOW 4 bytes carry the
+; value (getw/putw touch only those; the high bytes stay zero from the zeroed cask,
+; so the kernels' 64-bit ld/st and the byte accessors agree exactly).
+; fx layout (word offsets; nv = nvars):
+;   w0 top  w1 qhead  w2 level  w3 nv  w4 aru  w5 wnu  w6 vinc  w7 kernel scratch
+;   TRO=8 trail | LVO lvl | RSO rsn (0 none, else cid+1) | WHO watch heads (2nv+2,
+;   by encoded lit) | VAO val | ACO activity | PHO saved phase (0 never, 1 pos, 2 neg)
+;   | SEO seen scratch (conf clears it on entry; also reused as a level-mark set)
+; a clause at arena offset cid is [size, lit0..], watches ALWAYS slots cid+1/cid+2;
+; a watch node at offset p is [cid, next] (0 = nil; words 0-1 of both arenas reserved).
+; the conf caller pre-ensures arena room (aru+nv+3 words) and node room (wnu+4): the
+; kernels never grow a cask.
 (:
    ; --- 8-byte word slots, low 4 bytes live ---------------------------------------
    (getw c i) (: b (* 8 i) (| (peep c b 0)
@@ -29,7 +42,23 @@
                    _ (pin c b (& v 255)) _ (pin c (+ b 1) (& (>> v 8) 255))
                    _ (pin c (+ b 2) (& (>> v 16) 255)) (pin c (+ b 3) (& (>> v 24) 255)))
    (enc l) (? (< l 0) (+ 1 (* 2 (- 0 l))) (* 2 l))          ; signed literal -> encoded
-   ; --- state access (the lisp driver's view; offsets cached in s) ----------------
+   ; --- the layout, from nv (twins recompute these from fx w3) --------------------
+   (lvo-of nv) (+ 8 (+ nv 1))
+   (rso-of nv) (+ (lvo-of nv) (+ nv 1))
+   (who-of nv) (+ (rso-of nv) (+ nv 1))
+   (vao-of nv) (+ (who-of nv) (+ 2 (* 2 nv)))
+   (aco-of nv) (+ (vao-of nv) (+ nv 1))
+   (pho-of nv) (+ (aco-of nv) (+ nv 1))
+   (seo-of nv) (+ (pho-of nv) (+ nv 1))
+   ; --- the twin assign, self-contained (offsets from fx w3) ----------------------
+   (fasg fx el rv)                                          ; set el TRUE at the current level, reason rv (0 = decision)
+    (: nv (getw fx 3) v (>> el 1) t (getw fx 0)
+       _ (putw fx (+ (vao-of nv) v) el)
+       _ (putw fx (+ (lvo-of nv) v) (getw fx 2))
+       _ (putw fx (+ (rso-of nv) v) rv)
+       _ (putw fx (+ 8 t) el)
+       (putw fx 0 (+ t 1)))
+   ; --- state access for the lisp driver (offsets cached in s) --------------------
    (flv s el) (: m (getw (peep s 'fx ()) (+ (peep s 'vao 0) (>> el 1)))
                  (? (= m 0) 0 (= m el) 1 -1))               ; 1 sat / -1 false / 0 free
    (flvl s el) (getw (peep s 'fx ()) (+ (peep s 'lvo 0) (>> el 1)))
@@ -38,29 +67,23 @@
        (? (<= need (tally c)) 0
           (: n2 ((: (go m) (? (>= m need) m (go (* 2 m)))) (* 2 (tally c)))
              nu (cask n2) _ (pour nu 0 c 0 (tally c)) _ (pin s k nu) 0)))
-   (fassign s el rv)                                        ; set el TRUE at the current level, reason rv (0 = decision)
-    (: fx (peep s 'fx ()) v (>> el 1) t (getw fx 0)
-       _ (putw fx (+ (peep s 'vao 0) v) el)
-       _ (putw fx (+ (peep s 'lvo 0) v) (getw fx 2))
-       _ (putw fx (+ (peep s 'rso 0) v) rv)
-       _ (putw fx (+ 4 t) el)                               ; trail (TRO = 4)
-       (putw fx 0 (+ t 1)))
-   ; --- clause DB ----------------------------------------------------------------
+   (fassign s el rv) (fasg (peep s 'fx ()) el rv)
+   ; --- clause DB (lisp side: initial load + reduction; aru/wnu live in fx) --------
    (fadd s lits)                                            ; append [size, lits..] to the arena; -> cid (word offset)
-    (: n (tally lits) aru (peep s 'aru 0)
+    (: n (tally lits) fx (peep s 'fx ()) aru (getw fx 4)
        _ (fens s 'ar (* 8 (+ aru (+ n 1))))
        ar (peep s 'ar ())
        _ (putw ar aru n)
        _ (foldl (\ j el (: _ (putw ar j el) (+ j 1))) (+ aru 1) lits)
-       _ (pin s 'aru (+ aru (+ n 1))) _ (pin s 'ncls (+ 1 (peep s 'ncls 0))) aru)
+       _ (putw fx 4 (+ aru (+ n 1))) aru)
    (fclits s cid)                                           ; the clause's encoded literals, as a list
     (: ar (peep s 'ar ()) n (getw ar cid)
        ((: (go j acc) (? (< j (+ cid 1)) acc (go (- j 1) (link (getw ar j) acc)))) (+ cid n) ()))
    (fwatch s cid el)                                        ; push a watch node [cid -> wh[el] list]
-    (: wnu (peep s 'wnu 0) _ (fens s 'wn (* 8 (+ wnu 2)))
-       wn (peep s 'wn ()) fx (peep s 'fx ()) who (peep s 'who 0)
+    (: fx (peep s 'fx ()) wnu (getw fx 5) _ (fens s 'wn (* 8 (+ wnu 2)))
+       wn (peep s 'wn ()) who (peep s 'who 0)
        _ (putw wn wnu cid) _ (putw wn (+ wnu 1) (getw fx (+ who el)))
-       _ (putw fx (+ who el) wnu) (pin s 'wnu (+ wnu 2)))
+       _ (putw fx (+ who el) wnu) (putw fx 5 (+ wnu 2)))
    (fenq s el rv)                                           ; level-0 fact: assign if free, flag bad if already false
     (: m (flv s el) (? (= m 1) 0 (= m -1) (pin s 'bad 1) (: _ (fassign s el rv) 0)))
    (fload s c0)                                             ; a source clause (signed lits) into the DB + watches
@@ -71,15 +94,9 @@
              (: cid (fadd s (map enc c))
                 _ (fwatch s cid (enc (cap c))) (fwatch s cid (enc (caup c)))))))
    ; --- the interpreted BCP twin: (fbcp3 fx ar wn) -> conflict cid or -1 ----------
-   ; self-contained over the packed layout (offsets recomputed from the nv header
-   ; word), so it IS the kernel's deopt fallback -- same arity, same memory, same
-   ; answer -- and the reference the kernel is diffed against.
    (fbcp3 fx ar wn)
-    (: nv (getw fx 3) lvo (+ 4 (+ nv 1)) rso (+ lvo (+ nv 1)) who (+ rso (+ nv 1)) vao (+ who (+ 2 (* 2 nv)))
+    (: nv (getw fx 3) who (who-of nv) vao (vao-of nv)
        lv (\ el (: m (getw fx (+ vao (>> el 1))) (? (= m 0) 0 (= m el) 1 -1)))
-       asg (\ el rv (: v (>> el 1) t (getw fx 0)
-               _ (putw fx (+ vao v) el) _ (putw fx (+ lvo v) (getw fx 2))
-               _ (putw fx (+ rso v) rv) _ (putw fx (+ 4 t) el) (putw fx 0 (+ t 1))))
        prop1 (\ f                                           ; f just became FALSE: re-examine wh[f]
         ((: (go p prev)
             (? (= p 0) -1
@@ -98,86 +115,192 @@
                               _ (? (= prev 0) (putw fx (+ who f) nx) (putw wn (+ prev 1) nx))
                               _ (putw wn (+ p 1) (getw fx (+ who e))) _ (putw fx (+ who e) p)
                               (go nx prev))
-                           (= 0 (lv oth)) (: _ (asg oth (+ cid 1)) (go (getw wn (+ p 1)) p))   ; unit: force oth
+                           (= 0 (lv oth)) (: _ (fasg fx oth (+ cid 1)) (go (getw wn (+ p 1)) p))   ; unit: force oth
                            cid))))))                                     ; oth false too: CONFLICT
          (getw fx (+ who f)) 0))
        ((: (drain _)
            (? (>= (getw fx 1) (getw fx 0)) -1
-              (: p (getw fx (+ 4 (getw fx 1))) _ (putw fx 1 (+ 1 (getw fx 1)))
+              (: p (getw fx (+ 8 (getw fx 1))) _ (putw fx 1 (+ 1 (getw fx 1)))
                  confl (prop1 (^ p 1))
                  (? (> confl -1) confl (drain ()))))) ()))
-   ; --- the NATIVE kernel: fbcp3 compiled by hand through asm/ --------------------
-   ; specialized per nvars (section displacements are immediates), cached by nv.
-   ; lvm ABI: g=rdi(r6) Ip=rsi(r5) Hp=rdx(r2) Sp=rcx(r1); params TAGGED on Sp[i].
-   ; prologue: kind-guard the three cask params (a miss deopts to fbcp3 BEFORE any
-   ; push, so the machine sp stays balanced on every path), save the callee-saved
-   ; five, unwrap byte bases (buf value -> [v+8]=backing str -> +16 = bytes).
-   ; registers: r11=fx r12=ar r13=wn r14=f (callee-saved), r3=cid (callee-saved),
-   ; r9=p r10=prev r0/r7/r8 scratch (caller-saved). result tagged into Sp[0], out
-   ; via Ip+16 -> lvm_ret, exactly the glaze's putfix epilogue.
+   ; --- the interpreted CONFLICT twin: (fconf3 fx ar wn confl) --------------------
+   ; the whole conflict handler, phase for phase what the conf kernel does:
+   ;   0 level 0 -> -1        1 clear seen           2 1-UIP (absorb + trail walk),
+   ;   asserting lit to ar[cid0+1], tail collected at ar[cid0+2..]
+   ;   3 minimize (self-subsumption; dropped lits STAY seen), compact in place
+   ;   4 clear seen; glue (level-mark set) + backjump level in one pass
+   ;   5 backjump (save phase, unassign)   6 commit size/aru, reorder watch-2, watches
+   ;   7 assert learnt[0] with reason cid0+1   -> (cid0<<6)|min(glue,63)
+   (fconf3 fx ar wn confl)
+    (: nv (getw fx 3) lvo (lvo-of nv) rso (rso-of nv) who (who-of nv)
+       vao (vao-of nv) aco (aco-of nv) pho (pho-of nv) seo (seo-of nv)
+       dl (getw fx 2)
+       (? (= dl 0) -1
+        (: cid0 (getw fx 4)
+           czero (\ _ ((: (go v) (? (> v nv) 0 (: _ (putw fx (+ seo v) 0) (go (+ v 1))))) 0))
+           _ (czero ())
+           abs1 (\ cs skipv counter widx                    ; absorb clause at cs -> (counter . widx)
+            ((: (go j c w)
+                (? (> j (+ cs (getw ar cs))) (link c w)
+                   (: el (getw ar j) v (>> el 1)
+                      (? (= v skipv) (go (+ j 1) c w)
+                         (! (= 0 (getw fx (+ seo v)))) (go (+ j 1) c w)
+                         (= 0 (getw fx (+ lvo v))) (go (+ j 1) c w)
+                         (: _ (putw fx (+ seo v) 1)
+                            _ (putw fx (+ aco v) (+ (getw fx (+ aco v)) (getw fx 6)))   ; bump
+                            (? (= (getw fx (+ lvo v)) dl) (go (+ j 1) (+ c 1) w)
+                               (: _ (putw ar w el) (go (+ j 1) c (+ w 1)))))))))
+             (+ cs 1) counter widx))
+           a0 (abs1 confl 0 0 (+ cid0 2))
+           r ((: (walk counter widx t)
+                 (: np ((: (fs i) (? (= 0 (getw fx (+ seo (>> (getw fx (+ 8 i)) 1)))) (fs (- i 1)) i)) t)
+                    el (getw fx (+ 8 np)) v (>> el 1)
+                    _ (putw fx (+ seo v) 0) c (- counter 1)
+                    (? (= c 0) (link el widx)
+                       (: a (abs1 (- (getw fx (+ rso v)) 1) v c widx)
+                          (walk (cap a) (cup a) (- np 1))))))
+              (cap a0) (cup a0) (- (getw fx 0) 1))
+           uip (cap r) wend (cup r)
+           _ (putw ar (+ cid0 1) (^ uip 1))
+           wr ((: (mn rd wr)                                ; minimize, compacting kept lits down
+                  (? (>= rd wend) wr
+                     (: el (getw ar rd) v (>> el 1) rv (getw fx (+ rso v))
+                        red (? (= rv 0) 0
+                               ((: (ck j) (? (> j (+ (- rv 1) (getw ar (- rv 1)))) 1
+                                             (: v2 (>> (getw ar j) 1)
+                                                (? (= v2 v) (ck (+ j 1))
+                                                   (= 0 (getw fx (+ lvo v2))) (ck (+ j 1))
+                                                   (! (= 0 (getw fx (+ seo v2)))) (ck (+ j 1))
+                                                   0)))) (+ rv 0)))     ; j starts at (rv-1)+1 = rv
+                        (? (= red 1) (mn (+ rd 1) wr)
+                           (: _ (putw ar wr el) (mn (+ rd 1) (+ wr 1)))))))
+               (+ cid0 2) (+ cid0 2))
+           _ (czero ())
+           gb ((: (go j glue bj)                            ; glue + backjump level over the kept tail
+                  (? (>= j wr) (link glue bj)
+                     (: L (getw fx (+ lvo (>> (getw ar j) 1)))
+                        bj2 (? (> L bj) L bj)
+                        (? (= 0 (getw fx (+ seo L)))
+                           (: _ (putw fx (+ seo L) 1) (go (+ j 1) (+ glue 1) bj2))
+                           (go (+ j 1) glue bj2)))))
+               (+ cid0 2) (: _ (putw fx (+ seo dl) 1) 1) 0)
+           glue (cap gb) bj (cup gb)
+           nt ((: (go t)                                    ; backjump: pop above bj, save phase
+                  (? (= t 0) 0
+                     (: el (getw fx (+ 8 (- t 1))) v (>> el 1)
+                        (? (> (getw fx (+ lvo v)) bj)
+                           (: _ (putw fx (+ pho v) (+ 1 (& el 1)))
+                              _ (putw fx (+ vao v) 0) _ (putw fx (+ lvo v) 0) _ (putw fx (+ rso v) 0)
+                              (go (- t 1)))
+                           t))))
+               (getw fx 0))
+           _ (putw fx 0 nt) _ (putw fx 1 nt) _ (putw fx 2 bj)
+           size (- wr (+ cid0 1))
+           _ (putw ar cid0 size) _ (putw fx 4 wr)
+           _ (? (< size 2) 0
+                (: mx ((: (go j b) (? (>= j wr) b                       ; reorder: max-level tail lit to slot 2
+                              (go (+ j 1) (? (> (getw fx (+ lvo (>> (getw ar j) 1)))
+                                               (getw fx (+ lvo (>> (getw ar b) 1)))) j b))))
+                       (+ cid0 3) (+ cid0 2))
+                   a (getw ar (+ cid0 2)) b (getw ar mx)
+                   _ (putw ar (+ cid0 2) b) _ (putw ar mx a)
+                   l0 (getw ar (+ cid0 1)) l1 (getw ar (+ cid0 2)) wnu (getw fx 5)
+                   _ (putw wn wnu cid0) _ (putw wn (+ wnu 1) (getw fx (+ who l0))) _ (putw fx (+ who l0) wnu)
+                   _ (putw wn (+ wnu 2) cid0) _ (putw wn (+ wnu 3) (getw fx (+ who l1))) _ (putw fx (+ who l1) (+ wnu 2))
+                   (putw fx 5 (+ wnu 4))))
+           _ (fasg fx (getw ar (+ cid0 1)) (+ cid0 1))
+           (| (<< cid0 6) (? (> glue 63) 63 glue)))))
+   ; --- the interpreted DECIDE twin: (fdec3 fx) -> the decided var, 0 = SAT -------
+   (fdec3 fx)
+    (: nv (getw fx 3) vao (vao-of nv) aco (aco-of nv) pho (pho-of nv)
+       v ((: (go v best ba)
+             (? (> v nv) best
+                (: a (getw fx (+ aco v))
+                   (? (&& (= 0 (getw fx (+ vao v))) (|| (= best 0) (> a ba)))
+                      (go (+ v 1) v a) (go (+ v 1) best ba)))))
+          1 0 -1)
+       (? (= v 0) 0
+          (: ph (getw fx (+ pho v))
+             _ (putw fx 2 (+ 1 (getw fx 2)))
+             _ (fasg fx (? (= ph 1) (* 2 v) (+ 1 (* 2 v))) 0) v)))
+   ; ===============================================================================
+   ; the NATIVE kernels. lvm ABI: g=rdi(r6) Ip=rsi(r5) Hp=rdx(r2) Sp=rcx(r1); params
+   ; TAGGED on Sp[i]. cask guard (deopts BEFORE any push -> machine sp balanced on
+   ; every path): fixnum test + ap word vs (apof (cask 1)); byte base = [[v+8]+16].
+   ; epilogue: tag acc, st Sp[0], Ip+16 -> lvm_ret. deopt (arity>=2): Ip <- interp
+   ; body (args still on Sp). callee-saved r3/r11-r14 pushed after the guards.
+   ; ===============================================================================
+   (guard-ir i bufk)                                        ; Sp[i] must be a cask
+    (L (L 'ld 'r0 'r1 (* 8 i)) '(test r0 1) '(br ne deopt)
+       '(ld r7 r0 0) (L 'li 'r8 bufk) '(cmp r7 r8) '(br ne deopt))
+   (fixg-ir i)                                              ; Sp[i] must be a fixnum
+    (L (L 'ld 'r0 'r1 (* 8 i)) '(test r0 1) '(br eq deopt))
+   epi-ir '((shl r0 1) (or r0 r0 1) (st r1 0 r0) (add r5 r5 16) (ld r7 r5 0) (jmpr r7))
+   deopt2-ir '((label deopt) (ld r7 r5 8) (lea r5 r7 16) (ld r7 r5 0) (jmpr r7))   ; arity>=2
+   deopt1-ir '((label deopt) (ld r7 r5 8) (mov r5 r7) (ld r7 r5 0) (jmpr r7))      ; arity 1
+   ; --- kernel 1: BCP -- (bcp fx ar wn). registers: r11=fx r12=ar r13=wn r14=f
+   ; (callee-saved) r3=cid, r9=p r10=prev r0/r7/r8 scratch. ---------------------------
    (fbcp-ir nv)
-    (: tro8 32 lvo8 (* 8 (+ 4 (+ nv 1))) rso8 (+ lvo8 (* 8 (+ nv 1))) who8 (+ rso8 (* 8 (+ nv 1)))
-       vao8 (+ who8 (* 8 (+ 2 (* 2 nv)))) bufk (apof (cask 1))
-       (gd i) (L (L 'ld 'r0 'r1 (* 8 i)) '(test r0 1) '(br ne deopt)
-                 '(ld r7 r0 0) (L 'li 'r8 bufk) '(cmp r7 r8) '(br ne deopt))
-       (cat (gd 0) (cat (gd 1) (cat (gd 2)
+    (: tro8 64 who8 (* 8 (who-of nv)) vao8 (* 8 (vao-of nv))
+       lvo8 (* 8 (lvo-of nv)) rso8 (* 8 (rso-of nv)) bufk (apof (cask 1))
+       (cat (guard-ir 0 bufk) (cat (guard-ir 1 bufk) (cat (guard-ir 2 bufk)
        (cat '((push r3) (push r11) (push r12) (push r13) (push r14)
-              (ld r0 r1 0)  (ld r0 r0 8) (lea r11 r0 16)          ; fx bytes
-              (ld r0 r1 8)  (ld r0 r0 8) (lea r12 r0 16)          ; ar bytes
-              (ld r0 r1 16) (ld r0 r0 8) (lea r13 r0 16))         ; wn bytes
+              (ld r0 r1 0)  (ld r0 r0 8) (lea r11 r0 16)
+              (ld r0 r1 8)  (ld r0 r0 8) (lea r12 r0 16)
+              (ld r0 r1 16) (ld r0 r0 8) (lea r13 r0 16))
        (cat (L '(label drain)
-               '(ld r0 r11 8) '(ld r7 r11 0) '(cmp r0 r7) '(br ge noconf)   ; qhead >= top -> done
-               (L 'ldx 'r14 'r11 'r0 8 tro8)                      ; f = trail[qhead]
-               '(xor r14 r14 1)                                   ; ... negated
-               '(add r0 r0 1) '(st r11 8 r0)                      ; qhead++
-               (L 'ldx 'r9 'r11 'r14 8 who8)                      ; p = wh[f]
-               '(li r10 0)                                        ; prev = 0
+               '(ld r0 r11 8) '(ld r7 r11 0) '(cmp r0 r7) '(br ge noconf)
+               (L 'ldx 'r14 'r11 'r0 8 tro8)
+               '(xor r14 r14 1)
+               '(add r0 r0 1) '(st r11 8 r0)
+               (L 'ldx 'r9 'r11 'r14 8 who8)
+               '(li r10 0)
                '(label node)
                '(cmp r9 0) '(br eq drain)
-               '(ldx r3 r13 r9 8 0)                               ; cid = wn[p]
-               '(ldx r0 r12 r3 8 8) '(cmp r0 r14) '(br ne noswap) ; normalize: f -> slot cid+2
+               '(ldx r3 r13 r9 8 0)
+               '(ldx r0 r12 r3 8 8) '(cmp r0 r14) '(br ne noswap)
                '(ldx r7 r12 r3 8 16) '(stx r12 r3 8 8 r7) '(stx r12 r3 8 16 r0)
                '(label noswap)
-               '(ldx r8 r12 r3 8 8)                               ; oth = ar[cid+1]
+               '(ldx r8 r12 r3 8 8)
                '(mov r0 r8) '(sar r0 1)
-               (L 'ldx 'r0 'r11 'r0 8 vao8)                       ; m = val[oth>>1]
-               '(cmp r0 r8) '(br eq keep)                         ; oth satisfied: keep watching f
-               '(ldx r7 r12 r3 8 0) '(add r7 r7 r3) '(add r7 r7 1) '(push r7)   ; [sp] = cid+size+1
-               '(add r0 r3 3)                                     ; j = cid+3
+               (L 'ldx 'r0 'r11 'r0 8 vao8)
+               '(cmp r0 r8) '(br eq keep)
+               '(ldx r7 r12 r3 8 0) '(add r7 r7 r3) '(add r7 r7 1) '(push r7)
+               '(add r0 r3 3)
                '(label scan)
                '(ld r7 sp 0) '(cmp r0 r7) '(br ge scanfail)
-               '(ldx r7 r12 r0 8 0)                               ; e = ar[j]
+               '(ldx r7 r12 r0 8 0)
                '(mov r8 r7) '(sar r8 1)
-               (L 'ldx 'r8 'r11 'r8 8 vao8)                       ; val[e>>1]
-               '(xor r7 r7 1)                                     ; e^1
-               '(cmp r8 r7) '(br ne found)                        ; not falsified -> new watch
+               (L 'ldx 'r8 'r11 'r8 8 vao8)
+               '(xor r7 r7 1)
+               '(cmp r8 r7) '(br ne found)
                '(add r0 r0 1) '(jmp scan)
                '(label found)
-               '(xor r7 r7 1)                                     ; e
-               '(stx r12 r0 8 0 r14)                              ; ar[j] = f
-               '(stx r12 r3 8 16 r7)                              ; ar[cid+2] = e
-               '(ldx r0 r13 r9 8 8)                               ; nx = wn[p+1] (read BEFORE relink)
+               '(xor r7 r7 1)
+               '(stx r12 r0 8 0 r14)
+               '(stx r12 r3 8 16 r7)
+               '(ldx r0 r13 r9 8 8)
                '(cmp r10 0) '(br ne fprev)
-               (L 'stx 'r11 'r14 8 who8 'r0) '(jmp flink)         ; wh[f] = nx
+               (L 'stx 'r11 'r14 8 who8 'r0) '(jmp flink)
                '(label fprev)
-               '(stx r13 r10 8 8 r0)                              ; wn[prev+1] = nx
+               '(stx r13 r10 8 8 r0)
                '(label flink)
-               (L 'ldx 'r8 'r11 'r7 8 who8)                       ; wh[e]
-               '(stx r13 r9 8 8 r8)                               ; wn[p+1] = wh[e]
-               (L 'stx 'r11 'r7 8 who8 'r9)                       ; wh[e] = p
-               '(mov r9 r0)                                       ; p = nx (prev unchanged)
+               (L 'ldx 'r8 'r11 'r7 8 who8)
+               '(stx r13 r9 8 8 r8)
+               (L 'stx 'r11 'r7 8 who8 'r9)
+               '(mov r9 r0)
                '(add sp sp 8) '(jmp node)
                '(label scanfail)
                '(add sp sp 8)
-               '(ldx r8 r12 r3 8 8)                               ; oth again
+               '(ldx r8 r12 r3 8 8)
                '(mov r0 r8) '(sar r0 1)
                (L 'ldx 'r7 'r11 'r0 8 vao8)
-               '(cmp r7 0) '(br ne conflict)                      ; assigned (not sat) -> false -> conflict
+               '(cmp r7 0) '(br ne conflict)
                (L 'stx 'r11 'r0 8 vao8 'r8)                       ; unit: val[v] = oth
-               '(ld r7 r11 16) (L 'stx 'r11 'r0 8 lvo8 'r7)       ; lvl[v] = level
-               '(add r7 r3 1)  (L 'stx 'r11 'r0 8 rso8 'r7)       ; rsn[v] = cid+1
-               '(ld r7 r11 0)  (L 'stx 'r11 'r7 8 tro8 'r8)       ; trail[top] = oth
-               '(add r7 r7 1) '(st r11 0 r7)                      ; top++
+               '(ld r7 r11 16) (L 'stx 'r11 'r0 8 lvo8 'r7)
+               '(add r7 r3 1)  (L 'stx 'r11 'r0 8 rso8 'r7)
+               '(ld r7 r11 0)  (L 'stx 'r11 'r7 8 tro8 'r8)
+               '(add r7 r7 1) '(st r11 0 r7)
                '(label keep)
                '(ldx r7 r13 r9 8 8) '(mov r10 r9) '(mov r9 r7) '(jmp node)
                '(label conflict)
@@ -185,144 +308,262 @@
                '(label noconf)
                '(li r0 -1)
                '(label ret)
-               '(pop r14) '(pop r13) '(pop r12) '(pop r11) '(pop r3)
-               '(shl r0 1) '(or r0 r0 1)                          ; putfix
-               '(st r1 0 r0) '(add r5 r5 16) '(ld r7 r5 0) '(jmpr r7)   ; Sp[0] = result; Continue via lvm_ret
-               '(label deopt)
-               '(ld r7 r5 8) '(lea r5 r7 16) '(ld r7 r5 0) '(jmpr r7))  ; tail-apply fbcp3 (args still on Sp)
-            ()))))))
-   fkers (tablet 0)                                         ; nv -> installed kernel (one assemble per nvars)
-   fknob #0                                                 ; pin 1 to force the interpreted twin (the differential switch)
+               '(pop r14) '(pop r13) '(pop r12) '(pop r11) '(pop r3))
+            (cat epi-ir deopt2-ir)))))))
+   ; --- kernel 2: the CONFLICT handler -- (conf fx ar wn confl). ---------------------
+   ; registers: r11=fx r12=ar r13=wn (pushed), r3 scratch (pushed), r14 counter/glue
+   ; (pushed); r9 write index, r10 trail/read index, r0/r7/r8 scratch; fx w7 (byte 56)
+   ; holds the current skip-var. the twin above is the spec, phase for phase.
+   (cls-ir nv seo8)                                         ; clear the seen section (fresh labels)
+    (: L1 (mint 0) L2 (mint 0)
+       (L '(li r0 0) '(li r8 0) (L 'label L1) (L 'cmp 'r0 nv) (L 'br 'gt L2)
+          (L 'stx 'r11 'r0 8 seo8 'r8) '(add r0 r0 1) (L 'jmp L1) (L 'label L2)))
+   (abs-ir lvo8 seo8 aco8)                                  ; absorb the clause at r7 (fresh labels);
+    (: Ll (mint 0) Lt (mint 0) Ln (mint 0) Le (mint 0)      ; counter r14, write r9, skipv fx w7
+       (L '(ldx r0 r12 r7 8 0) '(add r0 r0 r7) '(add r0 r0 1) '(push r0)
+          '(add r7 r7 1)
+          (L 'label Ll) '(ld r0 sp 0) '(cmp r7 r0) (L 'br 'ge Le)
+          '(ldx r3 r12 r7 8 0)
+          '(mov r0 r3) '(sar r0 1)
+          '(ld r8 r11 56) '(cmp r0 r8) (L 'br 'eq Ln)
+          (L 'ldx 'r8 'r11 'r0 8 seo8) '(cmp r8 0) (L 'br 'ne Ln)
+          (L 'ldx 'r8 'r11 'r0 8 lvo8) '(cmp r8 0) (L 'br 'eq Ln)
+          '(li r8 1) (L 'stx 'r11 'r0 8 seo8 'r8)
+          (L 'ldx 'r8 'r11 'r0 8 aco8) '(ld r3 r11 48) '(add r8 r8 r3) (L 'stx 'r11 'r0 8 aco8 'r8)
+          (L 'ldx 'r8 'r11 'r0 8 lvo8) '(ld r3 r11 16) '(cmp r8 r3) (L 'br 'ne Lt)
+          '(add r14 r14 1) (L 'jmp Ln)
+          (L 'label Lt) '(ldx r3 r12 r7 8 0) '(stx r12 r9 8 0 r3) '(add r9 r9 1)
+          (L 'label Ln) '(add r7 r7 1) (L 'jmp Ll)
+          (L 'label Le) '(add sp sp 8)))
+   (fconf-ir nv)
+    (: tro8 64 lvo8 (* 8 (lvo-of nv)) rso8 (* 8 (rso-of nv)) who8 (* 8 (who-of nv))
+       vao8 (* 8 (vao-of nv)) aco8 (* 8 (aco-of nv)) pho8 (* 8 (pho-of nv)) seo8 (* 8 (seo-of nv))
+       bufk (apof (cask 1))
+       (cat (guard-ir 0 bufk) (cat (guard-ir 1 bufk) (cat (guard-ir 2 bufk) (cat (fixg-ir 3)
+       (cat '((push r3) (push r11) (push r12) (push r13) (push r14)
+              (ld r0 r1 0)  (ld r0 r0 8) (lea r11 r0 16)
+              (ld r0 r1 8)  (ld r0 r0 8) (lea r12 r0 16)
+              (ld r0 r1 16) (ld r0 r0 8) (lea r13 r0 16)
+              (ld r7 r1 24) (sar r7 1)                            ; confl -> r7 (first absorb's clause)
+              (ld r0 r11 16) (cmp r0 0) (br eq retm1))            ; level 0 -> -1
+       (cat (cls-ir nv seo8)                                      ; phase 1: clear seen
+       (cat '((li r14 0)                                          ; counter
+              (ld r9 r11 32) (add r9 r9 2)                        ; widx = cid0+2
+              (li r0 0) (st r11 56 r0))                           ; skipv = 0
+       (cat (abs-ir lvo8 seo8 aco8)                               ; phase 2: absorb the conflict clause
+       (cat (L '(ld r10 r11 0) '(sub r10 r10 1)                   ; t = top-1
+               '(label walk)
+               (L 'ldx 'r0 'r11 'r10 8 tro8)                      ; np = trail[t]
+               '(mov r3 r0) '(sar r3 1)
+               (L 'ldx 'r8 'r11 'r3 8 seo8) '(cmp r8 0) '(br ne got)
+               '(sub r10 r10 1) '(jmp walk)
+               '(label got)
+               '(li r8 0) (L 'stx 'r11 'r3 8 seo8 'r8)            ; seen[v] = 0
+               '(sub r14 r14 1) '(cmp r14 0) '(br eq uip)
+               (L 'ldx 'r7 'r11 'r3 8 rso8) '(sub r7 r7 1)        ; cs = rsn[v]-1
+               '(st r11 56 r3)                                    ; skipv = v
+               '(push r10))
+       (cat (abs-ir lvo8 seo8 aco8)                               ; absorb the reason clause
+       (cat '((pop r10) (sub r10 r10 1) (jmp walk)
+              (label uip)
+              (xor r0 r0 1)                                       ; asserting literal
+              (ld r7 r11 32) (stx r12 r7 8 8 r0)                  ; ar[cid0+1] = it
+              ; phase 3: minimize in place. rd=r10, wr=r9, wend on the stack.
+              (push r9)
+              (ld r10 r11 32) (add r10 r10 2) (mov r9 r10)
+              (label mn) (ld r0 sp 0) (cmp r10 r0) (br ge mnend)
+              (ldx r0 r12 r10 8 0)
+              (mov r3 r0) (sar r3 1)
+              (st r11 56 r3))                                     ; w7 = v
+       (cat (L (L 'ldx 'r7 'r11 'r3 8 rso8)
+               '(cmp r7 0) '(br eq mkeep)
+               '(sub r7 r7 1)
+               '(ldx r0 r12 r7 8 0) '(add r0 r0 r7) '(push r0)    ; inner lim (inclusive)
+               '(add r7 r7 1)
+               '(label mck) '(ld r0 sp 0) '(cmp r7 r0) '(br gt mred)
+               '(ldx r0 r12 r7 8 0) '(sar r0 1)
+               '(ld r8 r11 56) '(cmp r0 r8) '(br eq mcknx)
+               (L 'ldx 'r8 'r11 'r0 8 lvo8) '(cmp r8 0) '(br eq mcknx)
+               (L 'ldx 'r8 'r11 'r0 8 seo8) '(cmp r8 0) '(br ne mcknx)
+               '(add sp sp 8) '(jmp mkeep)                        ; a fresh lit -> NOT redundant
+               '(label mcknx) '(add r7 r7 1) '(jmp mck)
+               '(label mred) '(add sp sp 8) '(jmp mnnext)
+               '(label mkeep) '(ldx r0 r12 r10 8 0) '(stx r12 r9 8 0 r0) '(add r9 r9 1)
+               '(label mnnext) '(add r10 r10 1) '(jmp mn)
+               '(label mnend) '(add sp sp 8))                     ; r9 = wend after compaction
+       (cat (cls-ir nv seo8)                                      ; phase 4: clear seen (-> level marks)
+       (cat (L '(ld r0 r11 16)                                    ; mark dl
+               '(li r8 1) (L 'stx 'r11 'r0 8 seo8 'r8)
+               '(li r14 1) '(li r10 0)                            ; glue=1, bj=0
+               '(ld r7 r11 32) '(add r7 r7 2)
+               '(label gb) '(cmp r7 r9) '(br ge gbe)
+               '(ldx r0 r12 r7 8 0) '(sar r0 1)
+               (L 'ldx 'r0 'r11 'r0 8 lvo8)                       ; L
+               '(cmp r10 r0) '(br ge gb1) '(mov r10 r0)
+               '(label gb1)
+               (L 'ldx 'r8 'r11 'r0 8 seo8) '(cmp r8 0) '(br ne gb2)
+               '(li r8 1) (L 'stx 'r11 'r0 8 seo8 'r8) '(add r14 r14 1)
+               '(label gb2) '(add r7 r7 1) '(jmp gb)
+               '(label gbe)
+               ; phase 5: backjump to bj (r10)
+               '(ld r7 r11 0)
+               '(label bjl) '(cmp r7 0) '(br eq bje)
+               '(mov r8 r7) '(sub r8 r8 1)
+               (L 'ldx 'r0 'r11 'r8 8 tro8)                       ; el = trail[t-1]
+               '(mov r3 r0) '(sar r3 1)
+               (L 'ldx 'r8 'r11 'r3 8 lvo8) '(cmp r8 r10) '(br le bje)
+               '(and r0 r0 1) '(add r0 r0 1) (L 'stx 'r11 'r3 8 pho8 'r0)
+               '(li r0 0) (L 'stx 'r11 'r3 8 vao8 'r0) (L 'stx 'r11 'r3 8 lvo8 'r0) (L 'stx 'r11 'r3 8 rso8 'r0)
+               '(sub r7 r7 1) '(jmp bjl)
+               '(label bje) '(st r11 0 r7) '(st r11 8 r7) '(st r11 16 r10)
+               ; phase 6: size, aru, reorder, watches
+               '(ld r3 r11 32)                                    ; cid0
+               '(mov r0 r9) '(sub r0 r0 r3) '(sub r0 r0 1)        ; size
+               '(stx r12 r3 8 0 r0) '(st r11 32 r9)               ; ar[cid0]=size; aru=wend
+               '(cmp r0 2) '(br lt assert)
+               '(mov r10 r3) '(add r10 r10 2)                     ; reorder: argmax level
+               '(ldx r0 r12 r10 8 0) '(sar r0 1) (L 'ldx 'r8 'r11 'r0 8 lvo8)
+               '(mov r7 r10) '(add r7 r7 1)
+               '(label ro) '(cmp r7 r9) '(br ge roe)
+               '(ldx r0 r12 r7 8 0) '(sar r0 1) (L 'ldx 'r0 'r11 'r0 8 lvo8)
+               '(cmp r0 r8) '(br le ro2) '(mov r8 r0) '(mov r10 r7)
+               '(label ro2) '(add r7 r7 1) '(jmp ro)
+               '(label roe)
+               '(ldx r0 r12 r3 8 16) '(ldx r7 r12 r10 8 0) '(stx r12 r3 8 16 r7) '(stx r12 r10 8 0 r0)
+               '(ldx r7 r12 r3 8 8) '(ldx r8 r12 r3 8 16)         ; l0, l1
+               '(ld r10 r11 40)                                   ; wnu
+               '(stx r13 r10 8 0 r3)
+               (L 'ldx 'r0 'r11 'r7 8 who8) '(stx r13 r10 8 8 r0) (L 'stx 'r11 'r7 8 who8 'r10)
+               '(add r10 r10 2)
+               '(stx r13 r10 8 0 r3)
+               (L 'ldx 'r0 'r11 'r8 8 who8) '(stx r13 r10 8 8 r0) (L 'stx 'r11 'r8 8 who8 'r10)
+               '(add r10 r10 2) '(st r11 40 r10)
+               '(label assert)                                    ; phase 7: assign learnt[0], reason cid0+1
+               '(ldx r8 r12 r3 8 8) '(mov r0 r8) '(sar r0 1)
+               (L 'stx 'r11 'r0 8 vao8 'r8)
+               '(ld r7 r11 16) (L 'stx 'r11 'r0 8 lvo8 'r7)
+               '(mov r7 r3) '(add r7 r7 1) (L 'stx 'r11 'r0 8 rso8 'r7)
+               '(ld r7 r11 0) (L 'stx 'r11 'r7 8 tro8 'r8) '(add r7 r7 1) '(st r11 0 r7)
+               '(mov r0 r3) '(shl r0 6)                           ; return (cid0<<6)|min(glue,63)
+               '(cmp r14 63) '(br le pk) '(li r14 63)
+               '(label pk) '(or r0 r0 r14) '(jmp fin)
+               '(label retm1) '(li r0 -1)
+               '(label fin)
+               '(pop r14) '(pop r13) '(pop r12) '(pop r11) '(pop r3))
+            (cat epi-ir deopt2-ir))))))))))))))))
+   ; --- kernel 3: DECIDE -- (dec fx). caller-saved regs only, no pushes. -------------
+   (fdec-ir nv)
+    (: tro8 64 lvo8 (* 8 (lvo-of nv)) rso8 (* 8 (rso-of nv)) vao8 (* 8 (vao-of nv))
+       aco8 (* 8 (aco-of nv)) pho8 (* 8 (pho-of nv)) bufk (apof (cask 1))
+       (cat (guard-ir 0 bufk)
+       (cat '((ld r9 r1 0) (ld r9 r9 8) (lea r9 r9 16)
+              (li r7 0) (li r8 -1) (li r0 1))
+       (cat (L '(label dl) (L 'cmp 'r0 nv) '(br gt dle)
+               (L 'ldx 'r3 'r9 'r0 8 vao8) '(cmp r3 0) '(br ne dn)
+               (L 'ldx 'r3 'r9 'r0 8 aco8)
+               '(cmp r7 0) '(br eq take)
+               '(cmp r3 r8) '(br gt take) '(jmp dn)
+               '(label take) '(mov r7 r0) '(mov r8 r3)
+               '(label dn) '(add r0 r0 1) '(jmp dl)
+               '(label dle) '(cmp r7 0) '(br eq ret0)
+               '(ld r0 r9 16) '(add r0 r0 1) '(st r9 16 r0)       ; level++
+               (L 'ldx 'r3 'r9 'r7 8 pho8)
+               '(mov r0 r7) '(add r0 r0 r0)                       ; el = 2v (+1 unless phase 1)
+               '(cmp r3 1) '(br eq pos) '(add r0 r0 1)
+               '(label pos)
+               (L 'stx 'r9 'r7 8 vao8 'r0)                        ; assign(el, 0)
+               '(ld r3 r9 16) (L 'stx 'r9 'r7 8 lvo8 'r3)
+               '(li r3 0) (L 'stx 'r9 'r7 8 rso8 'r3)
+               '(ld r3 r9 0) (L 'stx 'r9 'r3 8 tro8 'r0) '(add r3 r3 1) '(st r9 0 r3)
+               '(mov r0 r7) '(jmp dfin)
+               '(label ret0) '(li r0 0)
+               '(label dfin))
+            (cat epi-ir deopt1-ir)))))
+   fkers (tablet 0)                                         ; nv -> (bcp conf dec), one assemble per nvars
+   fknob #0                                                 ; pin 1 to force the interpreted twins (the differential switch)
    fmaxl0 #2000                                             ; the initial learnt-DB cap (the gate lowers it to force reductions)
-   (fbcpk nv)                                               ; the specialized native BCP, or () when it can't build
+   (fnif ir fb ar)                                          ; assemble + install one kernel (fb = the honest twin)
+    (: bs (peep (assemble 'x64 ir) 'bytes 0)
+       c (cask (tally bs))
+       _ (foldl (\ i b (: _ (pin c i b) (+ i 1))) 0 bs)
+       (nif c fb '(\ q (q)) ar))
+   (fbcpk nv)                                               ; -> (bcp conf dec), or () when they can't build
     (? (! (&& (lit? nif) (id? (intern ai-arch) 'x64))) ()
        (: hit (peep fkers nv ())
-          (? (lit? hit) hit
-             (: bs (peep (assemble 'x64 (fbcp-ir nv)) 'bytes 0)
-                c (cask (tally bs))
-                _ (foldl (\ i b (: _ (pin c i b) (+ i 1))) 0 bs)
-                k (nif c fbcp3 '(\ fx ar wn (fbcp3 fx ar wn)) 3)
-                _ (pin fkers nv k) k))))
+          (? (two? hit) hit
+             (: ks (L (fnif (fbcp-ir nv) fbcp3 3)
+                      (fnif (fconf-ir nv) fconf3 4)
+                      (fnif (fdec-ir nv) fdec3 1))
+                _ (pin fkers nv ks) ks))))
    (fmk formula nvars)                                      ; build the flat solver state
     (: s (tablet 0) nv nvars
-       tro 4 lvo (+ tro (+ nv 1)) rso (+ lvo (+ nv 1)) who (+ rso (+ nv 1)) vao (+ who (+ 2 (* 2 nv)))
-       fx (cask (* 8 (+ vao (+ nv 1))))
-       _ (putw fx 3 nv)
+       fx (cask (* 8 (+ (seo-of nv) (+ nv 1))))
+       _ (putw fx 3 nv) _ (putw fx 4 2) _ (putw fx 5 2) _ (putw fx 6 256)
        _ (pin s 'nvars nv) _ (pin s 'fx fx)
-       _ (pin s 'lvo lvo) _ (pin s 'rso rso) _ (pin s 'who who) _ (pin s 'vao vao)
-       _ (pin s 'phase (cask (+ nv 1)))
-       _ (pin s 'ar (cask 4096)) _ (pin s 'aru 2)           ; words 0-1 reserved: 0 stays "no clause"
-       _ (pin s 'wn (cask 4096)) _ (pin s 'wnu 2)
-       _ (pin s 'ncls 0) _ (pin s 'bad 0)
-       _ (pin s 'act (tablet 0)) _ (pin s 'vinc 1.0)
+       _ (pin s 'lvo (lvo-of nv)) _ (pin s 'rso (rso-of nv)) _ (pin s 'who (who-of nv)) _ (pin s 'vao (vao-of nv))
+       _ (pin s 'ar (cask 4096)) _ (pin s 'wn (cask 4096))  ; words 0-1 of each reserved: 0 stays "none"
+       _ (pin s 'bad 0)
        _ (pin s 'nconf 0) _ (pin s 'rnum 1) _ (pin s 'climit 100)
        _ (pin s 'learnts ()) _ (pin s 'maxl (peep fmaxl0 0 2000))
-       k (fbcpk nv)
-       _ (pin s 'bcp (? (&& (lit? k) (= 0 (peep fknob 0 0))) k fbcp3))
+       ks (fbcpk nv)
+       use (&& (two? ks) (= 0 (peep fknob 0 0)))
+       _ (pin s 'bcp  (? use (cap ks) fbcp3))
+       _ (pin s 'conf (? use (caup ks) fconf3))
+       _ (pin s 'dec  (? use (caup (cup ks)) fdec3))
        _ (foldl (\ _ c (fload s c)) 0 formula) s)
-   (fpropagate s) ((peep s 'bcp ()) (peep s 'fx ()) (peep s 'ar ()) (peep s 'wn ()))
-   ; --- 1-UIP analysis / backjump (sat.l's algorithm, reading the arena) ----------
-   (fbump s v) (: a (peep s 'act ()) (pin a v (+ (peep a v 0.0) (peep s 'vinc 1.0))))
-   (fabs s seen dl skipv c acc)                             ; absorb a clause's encoded lits into (counter . learnt)
-    (foldl (\ st el
-              (: v (>> el 1)
-                 (? (= v skipv) st
-                    (! (= 0 (peep seen v 0))) st
-                    (= 0 (getw (peep s 'fx ()) (+ (peep s 'lvo 0) v))) st
-                    (: _ (pin seen v 1) _ (fbump s v)
-                       (? (= (getw (peep s 'fx ()) (+ (peep s 'lvo 0) v)) dl) (link (+ 1 (cap st)) (cup st))
-                          (link (cap st) (link el (cup st))))))))
-           acc c)
-   (ffind-seen fx seen idx) (? (= 0 (peep seen (>> (getw fx (+ 4 idx)) 1) 0)) (ffind-seen fx seen (- idx 1)) idx)
-   ; a learnt tail literal is REDUNDANT (self-subsumed) when its var's reason clause is
-   ; entirely covered by the learnt clause + level-0 facts -- dropping it keeps the
-   ; clause implied. dropped literals STAY seen, so they still cover later checks.
-   (fred? s seen el)
-    (: v (>> el 1) rv (getw (peep s 'fx ()) (+ (peep s 'rso 0) v))
-       (? (= rv 0) 0
-          (all (\ l2 (: v2 (>> l2 1)
-                        (|| (= v2 v) (|| (= 0 (getw (peep s 'fx ()) (+ (peep s 'lvo 0) v2)))
-                                         (= 1 (peep seen v2 0))))))
-               (fclits s (- rv 1)))))
-   (flbd s lits)                                            ; the clause's GLUE: distinct decision levels among its lits
-    (: t (tablet 0) _ (foldl (\ _ el (pin t (flvl s el) 1)) 0 lits) $t)
-   (fbj-level s learnt) (foldl (\ m el (: lv (flvl s el) (? (> lv m) lv m))) 0 learnt)
-   (fmax-lit s ls) (foldl (\ b el (? (> (flvl s el) (flvl s b)) el b)) (cap ls) (cup ls))
-   (freorder s learnt)                                      ; learnt[1] must be the max-level tail literal
-    (? (atom? (cup learnt)) learnt
-       (: a0 (cap learnt) rest (cup learnt) mx (fmax-lit s rest) (link a0 (link mx (rem-lit mx rest)))))
-   (fanalyze s confl)                                       ; -> (learnt-clause . backjump-level), learnt[0] asserting
-    (: fx (peep s 'fx ()) dl (getw fx 2) seen (tablet 0)
-       a0 (fabs s seen dl 0 (fclits s confl) (link 0 ()))
-       res ((: (go counter learnt idx)
-               (: ix (ffind-seen fx seen idx) np (getw fx (+ 4 ix)) v (>> np 1)
-                  _ (pin seen v 0) cnt (- counter 1)
-                  (? (= cnt 0) (link np learnt)
-                     (: rv (getw fx (+ (peep s 'rso 0) v))
-                        a (fabs s seen dl v (fclits s (- rv 1)) (link cnt learnt))
-                        (go (cap a) (cup a) (- ix 1))))))
-            (cap a0) (cup a0) (- (getw fx 0) 1))
-       uip (cap res) learnt (filter (\ el (! (fred? s seen el))) (cup res))   ; minimize: drop self-subsumed tail lits
-       learntc (link (^ uip 1) learnt)
-       (link learntc (fbj-level s learnt)))
-   (fbackjump s lvl)                                        ; pop + unassign every trail entry above level lvl
-    (: fx (peep s 'fx ()) ph (peep s 'phase ()) lvo (peep s 'lvo 0) rso (peep s 'rso 0) vao (peep s 'vao 0)
+   ; --- the cold path: restarts, decay, learnt-DB reduction (lisp side) -----------
+   (fbackjump s lvl)                                        ; pop + unassign above lvl (restarts: lvl = 0)
+    (: fx (peep s 'fx ()) nv (peep s 'nvars 0) lvo (peep s 'lvo 0) rso (peep s 'rso 0)
+       vao (peep s 'vao 0) pho (pho-of nv)
        nt ((: (go t)
               (? (= t 0) 0
-                 (: el (getw fx (+ 4 (- t 1))) v (>> el 1)
+                 (: el (getw fx (+ 8 (- t 1))) v (>> el 1)
                     (? (> (getw fx (+ lvo v)) lvl)
-                       (: m (getw fx (+ vao v))
-                          _ (pin ph v (? (= 0 (& m 1)) 1 2))          ; save phase (1 = was positive)
+                       (: _ (putw fx (+ pho v) (+ 1 (& el 1)))
                           _ (putw fx (+ vao v) 0) _ (putw fx (+ lvo v) 0) _ (putw fx (+ rso v) 0)
                           (go (- t 1)))
                        t))))
            (getw fx 0))
        _ (putw fx 0 nt) _ (putw fx 1 nt) (putw fx 2 lvl))
-   ; --- VSIDS + Luby restarts + phase saving (lisp-side heuristics) ---------------
-   (frescale s) (foldl (\ _ v (: a (peep s 'act ()) (pin a v (* (peep a v 0.0) 1e-100)))) 0 (rng 1 (+ (peep s 'nvars 0) 1)))
-   (fdecay s) (: vi (* (peep s 'vinc 1.0) 1.05)
-                 (? (> vi 1e100) (: _ (frescale s) (pin s 'vinc (* vi 1e-100))) (pin s 'vinc vi)))
-   (fpick s)                                                ; highest-activity free var, 0 if none
-    (: fx (peep s 'fx ()) vao (peep s 'vao 0) act (peep s 'act ()) nv (peep s 'nvars 0)
-       ((: (go v best ba)
-           (? (> v nv) best
-              (: a (peep act v 0.0)
-                 (? (&& (= 0 (getw fx (+ vao v))) (|| (= best 0) (> a ba))) (go (+ v 1) v a) (go (+ v 1) best ba)))))
-        1 0 -1.0))
+   (fdecay s)                                               ; integer VSIDS: vinc *= 21/20; rescale by >>8
+    (: fx (peep s 'fx ()) vi (// (* (getw fx 6) 21) 20)
+       (? (> vi 16777216)
+          (: nv (peep s 'nvars 0) aco (aco-of nv)
+             _ ((: (go v) (? (> v nv) 0 (: _ (putw fx (+ aco v) (>> (getw fx (+ aco v)) 8)) (go (+ v 1))))) 1)
+             (putw fx 6 (>> vi 8)))
+          (putw fx 6 vi)))
    (fnext-restart s) (: rn (+ 1 (peep s 'rnum 1)) _ (pin s 'rnum rn) _ (pin s 'nconf 0) _ (pin s 'climit (* (luby rn) 100)) 0)
-   ; --- learnt-DB REDUCTION (at a level-0 restart, so no reason cid is live: absorb
-   ; never reads a level-0 var's reason, and we zero those anyway). drop the worst-glue
-   ; half of the learnt clauses (glue <= 3 is kept forever), drop anything level-0
-   ; satisfied or retired, compact the survivors into a fresh arena (pour per slab),
-   ; re-establish the two watches per clause vs the level-0 assignment, and rebuild
-   ; every watch list. a clause down to ONE non-false literal is a permanent unit
-   ; (enqueue it); all-false cannot arise (level-0 propagation ran to fixpoint).
+   ; learnt-DB REDUCTION at a level-0 restart (no reason cid is live: absorb never
+   ; reads a level-0 var's reason, and those are zeroed here anyway). the worst-glue
+   ; half dies (glue <= 3 immortal), survivors compact by pour, watches re-established
+   ; vs the level-0 assignment; a level-0-satisfied clause drops, a single-nonfalse
+   ; one enqueues as a permanent fact; all-false cannot arise (propagation was drained).
    (fswap c i j) (? (= i j) 0 (: a (getw c i) b (getw c j) _ (putw c i b) (putw c j a)))
    (freduce s)
-    (: fx (peep s 'fx ()) nv (peep s 'nvars 0) who (peep s 'who 0) ar (peep s 'ar ())
+    (: fx (peep s 'fx ()) nv (peep s 'nvars 0) who (peep s 'who 0) rso (peep s 'rso 0) ar (peep s 'ar ())
        ls (peep s 'learnts ())
-       srt (sortby (\ a b (<= (cup a) (cup b))) (filter (\ p (> (cup p) 3)) ls))   ; ascending glue; the back half dies
+       srt (sortby (\ a b (<= (cup a) (cup b))) (filter (\ p (> (cup p) 3)) ls))
        nk (// (tally srt) 2)
        dead (tablet 0)
        _ (foldl (\ i p (: _ (? (>= i nk) (pin dead (cap p) 1) 0) (+ i 1))) 0 srt)
-       lt (tablet 0) _ (foldl (\ _ p (pin lt (cap p) (cup p))) 0 ls)               ; cid -> glue (the learnt set)
-       _ ((: (zw i) (? (> i (+ 1 (* 2 nv))) 0 (: _ (putw fx (+ who i) 0) (zw (+ i 1))))) 0)   ; clear watch heads
-       _ (pin s 'wnu 2)                                                            ; ... and nodes
-       _ ((: (zr t) (? (>= t (getw fx 0)) 0                                        ; zero the (level-0) trail reasons
-              (: v (>> (getw fx (+ 4 t)) 1) _ (putw fx (+ (peep s 'rso 0) v) 0) (zr (+ t 1))))) 0)
-       na (cask (tally ar)) _ (pin s 'ar na)                                       ; survivors compact into na (fwatch sees it)
-       end (peep s 'aru 0)
-       res ((: (walk cid nu nls nc)                                                ; -> (nu nls nc): new aru / learnts / count
-               (? (>= cid end) (L nu nls nc)
+       lt (tablet 0) _ (foldl (\ _ p (pin lt (cap p) (cup p))) 0 ls)
+       _ ((: (zw i) (? (> i (+ 1 (* 2 nv))) 0 (: _ (putw fx (+ who i) 0) (zw (+ i 1))))) 0)
+       _ (putw fx 5 2)
+       _ ((: (zr t) (? (>= t (getw fx 0)) 0
+              (: v (>> (getw fx (+ 8 t)) 1) _ (putw fx (+ rso v) 0) (zr (+ t 1))))) 0)
+       na (cask (tally ar)) _ (pin s 'ar na)                ; survivors compact into na (fwatch sees it)
+       end (getw fx 4)
+       res ((: (walk cid nu nls)
+               (? (>= cid end) (link nu nls)
                   (: n (getw ar cid) nxt (+ cid (+ n 1))
-                     lits (: (go j acc) (? (< j (+ cid 1)) acc (go (- j 1) (link (getw ar j) acc))) (go (+ cid n) ()))
-                     (? (! (= 0 (peep dead cid 0))) (walk nxt nu nls nc)           ; reduced away
-                        (< n 2) (walk nxt nu nls nc)                               ; retired unit
-                        (any (\ el (= 1 (flv s el))) lits) (walk nxt nu nls nc)    ; level-0 satisfied: gone for good
+                     lits ((: (go j acc) (? (< j (+ cid 1)) acc (go (- j 1) (link (getw ar j) acc)))) (+ cid n) ())
+                     (? (! (= 0 (peep dead cid 0))) (walk nxt nu nls)
+                        (< n 2) (walk nxt nu nls)
+                        (any (\ el (= 1 (flv s el))) lits) (walk nxt nu nls)
                         (: nf (filter (\ el (! (= -1 (flv s el)))) lits)
                            (? (atom? nf) (scare 'freduce-allfalse cid)
-                              (atom? (cup nf)) (: _ (fenq s (cap nf) 0) (walk nxt nu nls nc))   ; permanent unit
-                              (: _ (pour na (* 8 nu) ar (* 8 cid) (* 8 (+ n 1)))   ; copy the slab
+                              (atom? (cup nf)) (: _ (fenq s (cap nf) 0) (walk nxt nu nls))
+                              (: _ (pour na (* 8 nu) ar (* 8 cid) (* 8 (+ n 1)))
                                  l1 (cap nf) l2 (caup nf)
                                  p1 ((: (fnd j) (? (= (getw na j) l1) j (fnd (+ j 1)))) (+ nu 1))
                                  _ (fswap na (+ nu 1) p1)
@@ -331,33 +572,31 @@
                                  _ (fwatch s nu (getw na (+ nu 1))) _ (fwatch s nu (getw na (+ nu 2)))
                                  g (peep lt cid ())
                                  (walk nxt (+ nu (+ n 1))
-                                       (? (whole? g) (link (link nu g) nls) nls) (+ nc 1)))))))))
-            2 2 () 0)
-       _ (pin s 'aru (cap res)) _ (pin s 'learnts (caup res)) _ (pin s 'ncls (caup (cup res)))
-       (pin s 'maxl (// (* (peep s 'maxl 2000) 13) 10)))                           ; the cap grows geometrically
+                                       (? (whole? g) (link (link nu g) nls) nls)))))))))
+            2 2 ())
+       _ (putw fx 4 (cap res)) _ (pin s 'learnts (cup res))
+       (pin s 'maxl (// (* (peep s 'maxl 2000) 13) 10)))
+   ; --- the search loop: three kernel calls + lisp bookkeeping --------------------
    (fsearch s)                                              ; -> 'sat or 'unsat (s holds the model on SAT)
-    (: fx (peep s 'fx ())
+    (: fx (peep s 'fx ()) nv (peep s 'nvars 0)
        ((: (loop _)
-           (: confl (fpropagate s)
+           (: confl ((peep s 'bcp ()) fx (peep s 'ar ()) (peep s 'wn ()))
               (? (> confl -1)
-                 (? (= 0 (getw fx 2)) 'unsat
-                    (: res (fanalyze s confl) learnt (freorder s (cap res)) cid (fadd s learnt)
-                       glue (flbd s learnt)                                       ; before the backjump unassigns the head
-                       _ (fdecay s) _ (pin s 'nconf (+ 1 (peep s 'nconf 0)))
-                       _ (fbackjump s (cup res))
-                       _ (? (atom? (cup learnt)) 0
-                            (: _ (fwatch s cid (cap learnt)) _ (fwatch s cid (caup learnt))
-                               (pin s 'learnts (link (link cid glue) (peep s 'learnts ())))))
-                       _ (fassign s (cap learnt) (+ cid 1)) (loop ())))
+                 (: _ (fens s 'ar (* 8 (+ (getw fx 4) (+ nv 3))))   ; room for the learnt clause
+                    _ (fens s 'wn (* 8 (+ (getw fx 5) 4)))          ; ... and its two watch nodes
+                    r ((peep s 'conf ()) fx (peep s 'ar ()) (peep s 'wn ()) confl)
+                    (? (= r -1) 'unsat
+                       (: cid (>> r 6) glue (& r 63)
+                          _ (? (< 1 (getw (peep s 'ar ()) cid))     ; size >= 2: track for reduction
+                               (pin s 'learnts (link (link cid glue) (peep s 'learnts ()))) 0)
+                          _ (fdecay s) _ (pin s 'nconf (+ 1 (peep s 'nconf 0)))
+                          (loop ()))))
                  (&& (> (getw fx 2) 0) (>= (peep s 'nconf 0) (peep s 'climit 0)))
                     (: _ (fbackjump s 0) _ (fnext-restart s)
                        _ (? (> (tally (peep s 'learnts ())) (peep s 'maxl 2000)) (freduce s) 0)
                        (loop ()))
-                 (: v (fpick s)
-                    (? (= v 0) 'sat
-                       (: ph (peep (peep s 'phase ()) v 0)
-                          _ (putw fx 2 (+ 1 (getw fx 2)))
-                          _ (fassign s (? (= ph 1) (* 2 v) (+ 1 (* 2 v))) 0) (loop ()))))))) ()))
+                 (: v ((peep s 'dec ()) fx)
+                    (? (= v 0) 'sat (loop ())))))) ()))
    (fextract s nvars) (: fx (peep s 'fx ()) vao (peep s 'vao 0)
                          (map (\ v (link v (? (= 0 (& (getw fx (+ vao v)) 1)) 1 -1))) (rng 1 (+ nvars 1))))
    (fcdcl formula nvars)
@@ -371,11 +610,11 @@
        dsat (! (id? d 'unsat)) csat (! (id? c 'unsat))
        (? (! (= dsat csat)) 0  (! csat) 1  (sat? c f)))
    (ffuzz k n m) (all (\ i (= 1 (fdiff (+ 1009 (* i 7919)) n m))) (jot k))
-   (fboth f n)                                              ; kernel and twin agree exactly (same engine, two lanes)
+   (fboth f n)                                              ; kernels and twins agree, verdict for verdict
     (: _ (pin fknob 0 1) a (fcdcl f n) _ (pin fknob 0 0) b (fcdcl f n)
        (? (id? a 'unsat) (id? b 'unsat) (&& (! (id? b 'unsat)) (sat? b f))))
 
- ; --- the gate: the flat layout answers exactly like the tablet solver + the oracle
+ ; --- the gate: the flat engine answers exactly like the oracle, kernels == twins
  _ (assert
     ; tiny SAT / UNSAT
     (: f '((1 2) (-1 3) (-2 -3)) m (fcdcl f 3) (&& (! (id? m 'unsat)) (sat? m f)))
@@ -391,9 +630,10 @@
     (ffuzz 40 10 30)
     (ffuzz 30 12 50)
     (ffuzz 20 14 58)
-    ; native kernel == interpreted twin, verdict for verdict (a no-op switch where the kernel can't build)
+    ; native kernels == interpreted twins, verdict for verdict (a no-op switch where they can't build)
     (fboth (cyclic 14) 14)
     (fboth (php 4) (php-vars 4))
+    (fboth (php 5) (php-vars 5))
     ; pigeonhole PHP(5): UNSAT + resolution-hard (learning, restarts, arena growth end to end)
     (id? (fcdcl (php 5) (php-vars 5)) 'unsat)
     ; force the learnt-DB REDUCTION path hard (a tiny cap -> compaction every few restarts)
@@ -403,4 +643,4 @@
               (&& (ffuzz 30 12 50) (fboth (php 4) (php-vars 4))))
        _ (pin fmaxl0 0 2000) ok))
  _ (say err (+ "sat/flat: ok -- flat-arena CDCL == DPLL on 150 fuzzed + PHP(5) + #SAT==Lucas"
-               (? (lit? (fbcpk 8)) " (native BCP kernel live)\n" " (interpreted twin)\n"))))
+               (? (two? (fbcpk 8)) " (native bcp+conf+dec kernels live)\n" " (interpreted twins)\n"))))
