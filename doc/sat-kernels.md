@@ -4,10 +4,11 @@
 compiler* — not a general codegen pass, but one app compiling its own hot loops? It can. The
 CDCL SAT solver's three hot loops are hand-written in asm/ neutral IR, assembled **at
 solver-build time, specialized to the instance** (section displacements baked as immediates,
-one kernel set per `nvars`, cached), and installed through the `nif` seam. The result runs
-with the reference C solvers: fastest in the field on PHP(5) and PHP(6), within ~10% of
-minisat on PHP(7), ahead of glucose on PHP(8) and on net time (`bench/bench.html`, second
-table; `bench/satrace.sh` reproduces it).
+one kernel set per `nvars`, cached), and installed through the `nif` seam — plus `fbva`,
+the extended-resolution factoring pass (below). The result is THIRD in the reference-solver
+field, behind only cadical and kissat: fastest outright on PHP(5) and PHP(6), and ahead of
+picosat, minisat, and glucose everywhere (`bench/bench.html`, second table;
+`bench/satrace.sh` reproduces it).
 
 the lineage: `sat/sat.l` is the readable tablet-based solver and stays the oracle —
 `sat/flat.l` runs AFTER it (`cat sat/sat.l sat/flat.l | ai`) and gates differentially
