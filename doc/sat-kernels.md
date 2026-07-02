@@ -62,10 +62,13 @@ caller pre-ensures arena room before `conf`; kernels never grow a cask.
 
 | ms | ai | minisat | picosat | kissat | cadical | glucose |
 |---|---|---|---|---|---|---|
-| PHP(5) | **1.0** | 4.4 | 2.8 | 3.8 | 5.1 | 4.2 |
-| PHP(6) | **4.0** | 8.0 | 5.3 | 6.7 | 5.6 | 6.6 |
-| PHP(7) | 45–56 | 41.6 | 28.1 | 19.0 | 8.9 | 43.3 |
-| PHP(8) | 882–888 | 283 | 234 | 75.8 | 13.3 | 928 |
+| PHP(5) | **1** | 4.2 | 2.8 | 3.7 | 4.5 | 4.2 |
+| PHP(6) | **2** | 7.2 | 5.3 | 5.5 | 5.5 | 6.6 |
+| PHP(7) | 22 | 38.5 | 28.1 | 18.3 | 8.0 | 43.3 |
+| PHP(8) | 131 | 269 | 228 | 71.6 | 12.2 | 913 |
+
+third in the whole field by net time (cadical 31, kissat 101, **ai 161**, picosat 262,
+minisat 327, glucose 963) — ahead of every classic CDCL, trading blows with kissat.
 
 Where the journey started (interpreted tablet solver, 2026-07-01): ~45× slower than
 minisat on PHP(7). The rungs: flatten the state (proves the layout, slower interpreted) →
@@ -86,13 +89,50 @@ satisfied, which conflict-storm propagation rarely grants. The spike survives wi
 verdict in `doc/proto/sat-watcher-vectors.l` — a sound base if a blocker-friendly workload
 (high satisfied-visit rates, e.g. large industrial SAT instances) ever shows up.
 
+## fbva — the factoring pass, and how it was found
+
+Ablating cadical itself (probe the binary, never trust a prior) located the pigeonhole
+killer: with **every** technique disabled except `factor`, cadical solves PHP(8) in 14ms;
+add `--no-factor` and it collapses to minisat-class. Factoring is **bounded variable
+addition** — introduce a fresh variable to stand for shared clause structure — and adding
+definitional variables is the *extended resolution* move: PHP has polynomial ER
+refutations (Cook 1976) where plain resolution — and therefore ANY amount of clause
+learning — is provably exponential (Haken 1985). Cadical doesn't search pigeonhole
+faster; it re-encodes it into a proof system where the search is easy. (Beware the
+ablation trap en route: single-flag ablations all read "no effect" because the ensemble
+is redundant, and one invalid option — `--preprocessing=1` — produced 3ms "results" that
+were the error path. Check exit codes.)
+
+`fbva` (sat/flat.l) is the Manthey–Heule–Biere greedy: for a literal l, grow M_lit ×
+M_cls with every (m | C\{l}) present, then a fresh x replaces |M_lit|·|M_cls| clauses
+with |M_cls|+|M_lit|+1. Three details carried ALL the value, found by diffing our
+factored output against cadical's (decoded from its binary DRAT proof — the added
+definitional clauses are right there):
+* **structured tiebreaks**: on symmetric instances every match count ties, and a
+  hash-order pick yields ragged overlapping groups that HURT search (they slowed even
+  cadical 2.5× when fed our early output). Max count, ties to the lowest literal →
+  contiguous groups → the commander/AMO-tree structure. This one change took our PHP(8)
+  from 2713ms to 120ms — the entire prize was in the tiebreak (the "structured" in
+  structured reencoding).
+* **complete definitions**: emit the reverse long clause (x | ¬m₁ | … | ¬mₖ) too, so
+  x ↔ AND(M_lit) propagates both ways instead of leaving x free for CDCL to wander on.
+* **no aux cascade**: factor the original structure only (`fbvac0`); re-factoring the
+  definitional clauses tangles instead of laddering (measured ~9× worse).
+
+Soundness rides the existing discipline: equisatisfiable both ways (resolving on x
+recovers every original; a model extends by x := AND(M_lit)), models project by dropping
+vars > nvars, and the whole differential gate — 150 fuzzed instances vs DPLL, #SAT ==
+Lucas — flows through the pass since `fcdcl` runs it by default (`fbva0` pins it off).
+`fmk` lays the solver out for a power-of-2 variable bucket so the kernel cache survives
+BVA's varying variable counts (phantom vars are sound: never watched, decided dead last,
+popped clean). Cost on unstructured instances: ~8µs/clause of intake, the floor of an
+interpreted pass.
+
 ## what the remaining distance is
 
-Look at cadical's column: 5.6 → 8.9 → 13.3ms while every other solver goes exponential.
-That is not execution speed — its inprocessing *dissolves* pigeonhole structure instead of
-searching through it. The engine here is done; the spread that remains is solver research,
-in rough order of leverage: inprocessing (vivification, bounded variable elimination,
-subsumption), recursive learnt-clause minimization (ours is one-level self-subsumption),
-finer clause-DB management (activity/tier-based deletion vs glue-halving at restarts), and
-restart/phase policy. All of it would live in the lisp cold path — which is exactly where
-that kind of logic belongs now that the hot path is native.
+kissat (72ms) and cadical (12ms) on PHP(8). Cadical's edge over our 131ms is its faster
+plain core (103ms sans factor — chronological backtracking, stable/focused mode
+switching, aggressive shrinking) *multiplied by* better factoring integration
+(inprocessing-scheduled, not one-shot). All of that is solver research living in the
+lisp cold path — which is exactly where that kind of logic belongs now that the hot path
+is native.

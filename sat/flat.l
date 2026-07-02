@@ -497,7 +497,11 @@
                       (fnif (fdec-ir nv) fdec3 1))
                 _ (pin fkers nv ks) ks))))
    (fmk formula nvars)                                      ; build the flat solver state
-    (: s (tablet 0) nv nvars
+    ; the LAYOUT nv is nvars rounded up to a power-of-2 bucket, so the kernel cache
+    ; (keyed per layout) survives BVA's varying variable counts. phantom vars above
+    ; the real count are sound: never watched, activity 0 (decided dead last, after
+    ; every real var -- the ascending scan keeps the FIRST max), popped clean.
+    (: s (tablet 0) nv ((: (go k) (? (>= k nvars) k (go (* 2 k)))) 16)
        fx (cask (* 8 (+ (seo-of nv) (+ nv 1))))
        _ (putw fx 3 nv) _ (putw fx 4 2) _ (putw fx 5 2) _ (putw fx 6 256)
        _ (pin s 'nvars nv) _ (pin s 'fx fx)
@@ -600,8 +604,103 @@
                     (? (= v 0) 'sat (loop ())))))) ()))
    (fextract s nvars) (: fx (peep s 'fx ()) vao (peep s 'vao 0)
                          (map (\ v (link v (? (= 0 (& (getw fx (+ vao v)) 1)) 1 -1))) (rng 1 (+ nvars 1))))
+   ; --- BVA: bounded variable ADDITION (clause factoring), the preprocessing pass ---
+   ; the ablation-found pigeonhole killer (doc/sat-kernels.md): cadical minus factoring
+   ; collapses to minisat-class. for a literal l, GROW a set of literals M_lit and a set
+   ; of clauses M_cls (all containing l) such that (m | C\{l}) is in the formula for
+   ; every pairing; then a fresh variable x replaces the |M_lit|*|M_cls| clauses with
+   ; |M_cls| clauses (x | C\{l}) + |M_lit| definitions (-x | m). resolving on x recovers
+   ; every original (UNSAT preserved); a model extends by x := AND of M_lit (SAT
+   ; preserved); models of the new formula project by DROPPING vars > nvars. adding
+   ; definitional variables is the extended-resolution move -- the proof system where
+   ; pigeonhole has POLYNOMIAL refutations (Cook 1976), which plain resolution (and so
+   ; ANY amount of clause learning) provably lacks (Haken 1985).
+   fbva0 #1                                                 ; pin 0 to solve raw (the A/B switch)
+   fbvar0 #8                                                ; BVA round cap
+   fbvac0 #1                                                ; 1 = factor ORIGINAL structure only (no aux cascade)
+   (bva-sub? r d)                                           ; sorted lists: is r a subset of d?
+    (? (atom? r) 1 (atom? d) 0
+       (= (cap r) (cap d)) (bva-sub? (cup r) (cup d))
+       (< (cap d) (cap r)) (bva-sub? r (cup d)) 0)
+   (bva-x1 d r)                                             ; the ONE literal of d beyond r (|d| = |r|+1)
+    (? (atom? r) (cap d) (= (cap d) (cap r)) (bva-x1 (cup d) (cup r)) (cap d))
+   (fbva formula nvars)                                     ; -> (formula2 . nvars2), equisatisfiable
+    (: cls (tablet 0) ckey (tablet 0) occ (tablet 0) ncid #0 nv #0
+       _ (pin nv 0 nvars)
+       addc (\ c0                                           ; canon + dedupe + index; drops tautologies
+        (: c (sort (dedup-lits c0))
+           (? (= 1 (taut? c)) 0
+              (: k (show c)
+                 (? (whole? (peep ckey k ())) 0
+                    (: cid (peep ncid 0 0) _ (pin ncid 0 (+ cid 1))
+                       _ (pin cls cid c) _ (pin ckey k cid)
+                       _ (foldl (\ _ m (: _ (pin occ m (link cid (peep occ m ()))) 0)) 0 c)
+                       1))))))
+       delc (\ cid (: c (peep cls cid ())
+                      (? (! (two? c)) 0 (: _ (pull cls cid 0) _ (pull ckey (show c) 0) 1))))
+       livec (\ l (filter (\ cid (< 1 (tally (peep cls cid ())))) (peep occ l ())))
+       orig (\ m (<= (>> (abs m) 0) nvars))                 ; an ORIGINAL-variable literal
+       ofree (\ c (all orig c))                             ; ... clause of only those
+       try (\ l                                             ; one greedy factoring attempt at l -> 1 if applied
+        (: mcls0 (? (&& (= 1 (peep fbvac0 0 0)) (! (orig l))) ()
+                    (? (= 1 (peep fbvac0 0 0)) (filter (\ cid (= 1 (ofree (peep cls cid ())))) (livec l))
+                       (livec l)))
+           (? (< (tally mcls0) 4) 0
+              (: g ((: (grow mlit mcls red)                  ; extend M_lit while the reduction strictly grows
+                       (: pc (tablet 0) pl (tablet 0)        ; candidate -> match count / matched cids
+                          _ (foldl (\ _ cid
+                               (: c (peep cls cid ()) r (rem-lit l c)
+                                  k (foldl (\ b m2 (? (< (tally (peep occ m2 ())) (tally (peep occ b ()))) m2 b))
+                                           (cap r) (cup r))
+                                  (foldl (\ _ did
+                                       (: d (peep cls did ())
+                                          (? (! (two? d)) 0
+                                             (= did cid) 0
+                                             (! (= (tally d) (tally c))) 0
+                                             (! (= 1 (bva-sub? r d))) 0
+                                             (: m (bva-x1 d r)
+                                                (? (&& (= 1 (peep fbvac0 0 0)) (! (orig m))) 0
+                                                   (member? m mlit) 0
+                                                   (: _ (pin pc m (+ 1 (peep pc m 0)))
+                                                      _ (pin pl m (link cid (peep pl m ()))) 0))))))
+                                     0 (peep occ k ()))))
+                             0 mcls)
+                          ks (keys pc)
+                          (? (atom? ks) (link mlit mcls)
+                             (: best (foldl (\ b m (: cm (peep pc m 0) cb (peep pc b 0)   ; max count; ties -> LOWEST literal
+                                               (? (|| (> cm cb) (&& (= cm cb) (< m b))) m b)))   ; (symmetric instances: keeps groups contiguous)
+                                            (cap ks) (cup ks))
+                                nc (peep pc best 0) nl (+ 1 (tally mlit))
+                                red2 (- (* nl nc) (+ nl nc))
+                                (? (> red2 red) (grow (link best mlit) (peep pl best ()) red2)
+                                   (link mlit mcls))))))
+                    (link l ()) mcls0 -1)
+                 mlit (cap g) mcls (cup g)
+                 nl (tally mlit) ncl (tally mcls)
+                 (? (< (- (* nl ncl) (+ nl ncl)) 1) 0        ; apply only when it strictly shrinks the formula
+                    (: x (+ 1 (peep nv 0 0)) _ (pin nv 0 x)
+                       rs (map (\ cid (rem-lit l (peep cls cid ()))) mcls)
+                       _ (foldl (\ _ m (: _ (foldl (\ _ r
+                              (: k (show (sort (link m r))) did (peep ckey k ())
+                                 (? (whole? did) (delc did) (scare 'bva-miss k))))
+                            0 rs) 0)) 0 mlit)
+                       _ (foldl (\ _ r (: _ (addc (link x r)) 0)) 0 rs)
+                       _ (foldl (\ _ m (: _ (addc (link (- 0 x) (link m ()))) 0)) 0 mlit)
+                       _ (addc (link x (map (\ m (- 0 m)) mlit)))   ; the OTHER direction: x <- AND(m) --
+                       1))))))                                       ; a COMPLETE definition (pure extended
+                                                                     ; resolution), so x propagates instead of
+                                                                     ; wandering: without it CDCL decides x freely
+       _ (foldl (\ _ c (: _ (addc c) 0)) 0 formula)
+       _ ((: (round r)                                       ; sweep most-occurring literals first; stop on a quiet round
+             (: ls (sortby (\ a b (? (= (cap a) (cap b)) (<= (cup a) (cup b)) (> (cap a) (cap b))))
+                           (filter (\ p (>= (cap p) 4)) (map (\ m (link (tally (livec m)) m)) (keys occ))))
+                ch (foldl (\ a p (+ a (try (cup p)))) 0 ls)
+                (? (&& (> ch 0) (&& (< r (peep fbvar0 0 8)) (< (peep nv 0 0) (+ (* 4 nvars) 64)))) (round (+ r 1)) 0)))
+           0)
+       (link (map (\ cid (peep cls cid ())) (keys cls)) (peep nv 0 0)))
    (fcdcl formula nvars)
-    (: s (fmk formula nvars)
+    (: p (? (= 0 (peep fbva0 0 1)) (link formula nvars) (fbva formula nvars))
+       s (fmk (cap p) (cup p))
        (? (= 1 (peep s 'bad 0)) 'unsat
           (: r (fsearch s) (? (id? r 'unsat) 'unsat (fextract s nvars)))))
    (count-fcdcl formula nvars)                              ; #SAT by blocking clauses, on the flat engine
