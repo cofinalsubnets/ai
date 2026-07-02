@@ -24,7 +24,7 @@ export AI_NO_IMAGE := 1
 
 .PHONY: all install uninstall clean distclean
 .PHONY: host kernel wasm ai0
-.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_gc test_hostnif test_glaze test_sat test_asm test_extract test_arm64
+.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_gc test_hostnif test_glaze test_sat test_asm test_wm test_extract test_arm64
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench nettest
 # `make test` is the FAST gate: just the two egg self-tests (the host binary `ai`
 # from-source under AI_NO_IMAGE, and ai0 -- c0 + the self-hosted ev, twice). It does
@@ -41,7 +41,7 @@ test:
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_gc test_extract test_tools test_hostnif test_glaze test_sat test_asm nettest test_arm64 test_kernel test_wasm
+test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_gc test_extract test_tools test_hostnif test_glaze test_sat test_asm test_wm nettest test_arm64 test_kernel test_wasm
 # ai0 bakes prel+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prel (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
@@ -113,6 +113,18 @@ test_sat: host
 	  cat out/host/.test_sat.out; \
 	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out && grep -q "sat/dimacs: ok" out/host/.test_sat.out && grep -q "sat/flat: ok" out/host/.test_sat.out; } \
 	    || { echo "FAIL sat (exit $$r)"; exit 1; }
+# The wm app's pure core (wm/core.l): xmonad's StackSet -- the focus zipper, the
+# workspace sheaf, the floating half -- with xmonad's QuickCheck laws + a seeded
+# fuzz (wm/law.l). Pure ai (no nif), so it self-tests portably; the X layers
+# (wire.l/wm.l) need connectu and are proven against Xephyr, not here. Gate = the
+# sentinel AND exit 0 (a reader-stop or strict-assert scare both miss it).
+.PHONY: test_wm
+test_wm: host
+	@echo "WM wm/core.l + wm/law.l"; \
+	  cat test/00-init.l wm/core.l wm/law.l | $m > out/host/.test_wm.out 2>&1; r=$$?; \
+	  cat out/host/.test_wm.out; \
+	  { [ $$r -eq 0 ] && grep -q "wm/law: StackSet" out/host/.test_wm.out; } \
+	    || { echo "FAIL wm (exit $$r)"; exit 1; }
 # The neutral assembler (asm/) + its x86-64 backend: every encoder golden is
 # objdump-checked (asm/asmtest.l). A host-only app (like sat) -- it rides the
 # core's lists/tablets, adds no nif, and is NOT baked into ai0. The gate greps
