@@ -104,5 +104,40 @@
       ; a message ||| doesn't know (shrink) delegates to the active sublayout
       (= (nthl (ch-cur (lay-msg (choice (L L1 full)) 'shrink z3)) 2) 0.48)))
 
-(say err "wm/law: StackSet zipper + sheaf + floating + layout laws ok
+; --- the layout modifiers (wm/layout.l rung 4): each wraps a layout ---
+(: (area p) (* (nthl p 3) (nthl p 4))
+   (sumarea ps) (foldl (\ a p (+ a (area p))) 0 ps)
+   r (rct 0 0 800 600) z3 (zfrom '(10 20 30)) z1 (zfrom '(10))
+   L1 (resizable-tall 1 0.02 0.5)
+   base (choice (L L1 (dwindle 1.618)))
+   stk (minimize (smart-borders (toggle-full (mirror base))))                    ; the config's t (l1 ||| l2) shape
+   (assert
+      ; MIRROR transposes: master moves to the TOP, the partition is preserved
+      (: m (lay-msg (mirror L1) 'mirror z3) p (cap (lay-tile m r z3))            ; toggle MIRROR on
+         (&& (= (cap p) '(10 0 0 800 300)) (= (sumarea p) 480000)))               ; master owns the top strip
+      (= (lay-tile (mirror L1) r z3) (L (cap (lay-tile L1 r z3)) (mirror L1)))    ; MIRROR off is a pass-through
+      ; Dwindle is a golden spiral: the focus takes phi/(1+phi) of the width, still a partition
+      (: p (cap (lay-tile (dwindle 1.618) r z3))
+         (&& (= (nthl (cap p) 3) (int (* (/ 1.618 2.618) 800))) (= (sumarea p) 480000) (= (tally p) 3)))
+      ; toggleLayouts Full: off = inner, on = the focus fullscreen
+      (= (tally (cap (lay-tile (toggle-full L1) r z3))) 3)
+      (= (cap (cap (lay-tile (lay-msg (toggle-full L1) 'toggle-layout z3) r z3))) '(10 0 0 800 600))
+      ; smartBorders: a lone window (or a fullscreen one) gets a border-0 hint (a 6th field)
+      (: p (cap (lay-tile (smart-borders L1) r z1)) (&& (= (tally (cap p)) 6) (= (nthl (cap p) 5) 0)))
+      (: p (cap (lay-tile (smart-borders L1) r z3)) (all (\ q (= (tally q) 5)) p))   ; multi-window: no border hint
+      ; minimize filters a window out of the row; the rest re-tile; restore brings it back
+      (: p (cap (lay-tile (lay-msg (minimize L1) (L 'minimize-window 20) z3) r z3))
+         (&& (= (tally p) 2) (! (afind (\ q (= (nthl q 0) 20)) p))))
+      (: mm (lay-msg (lay-msg (minimize L1) (L 'minimize-window 20) z3) 'restore z3)
+         (= (tally (cap (lay-tile mm r z3))) 3))
+      ; windowNavigation geometry: nearest window in a direction
+      (: pls (cap (lay-tile L1 r z3))
+         (&& (= (nav-target pls 10 'right) 20) (! (nav-target pls 10 'left))     ; master: right -> a slave, nothing left
+             (= (nav-target pls 20 'left) 10) (= (nav-target pls 20 'down) 30))) ; slave: left -> master, down -> the other slave
+      ; the WHOLE config stack composes: message pass-through reaches the base, partition holds
+      (= (sumarea (cap (lay-tile stk r z3))) 480000)
+      (= (tally (cap (lay-tile (lay-msg stk 'next-layout z3) r z3))) 3)          ; next-layout reaches the ||| at the bottom
+      (: q (cap (lay-tile (lay-msg stk 'toggle-layout z3) r z3)) (&& (= (tally q) 1) (= (nthl (cap q) 5) 0)))))   ; toggle-full through the stack -> fullscreen, borderless
+
+(say err "wm/law: StackSet zipper + sheaf + floating + layout + modifier laws ok
 ")

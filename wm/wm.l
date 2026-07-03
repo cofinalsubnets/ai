@@ -19,23 +19,26 @@
 
    ; --- keyboard: locate keycodes, grab mod4 + the digits (plain and shifted) ---
    mod (<< 1 6)                                                                  ; mod4 = super = 0x40
-   km (x-keymap s (scr-mink sc) (scr-maxk sc) '(106 107 65293 32 44 46 49 50 51 52 53 54 55 56 57))
+   km (x-keymap s (scr-mink sc) (scr-maxk sc) '(106 107 65293 32 44 46 102 109 49 50 51 52 53 54 55 56 57))
    kj (peep km 106 0) kk (peep km 107 0) kret (peep km 65293 0)
    ksp (peep km 32 0) kcomma (peep km 44 0) kperiod (peep km 46 0)              ; space=NextLayout, ,/.=IncMaster / shift+,/.=Shrink/Expand
+   kf (peep km 102 0) kmm (peep km 109 0)                                       ; f=ToggleLayout(Full), m=Toggle MIRROR
    digits (map (\ d (L d (peep km (+ 48 d) 0))) (map (+ 1) (jot 9)))            ; ((tag keycode)..), tags 1..9
    _ (map (\ p (: kc (caup p) _ (x-grab s root mod kc) (x-grab s root (| mod 1) kc))) digits)
-   _ (map (\ kc (x-grab s root mod kc)) (L kj kk kret ksp))
+   _ (map (\ kc (x-grab s root mod kc)) (L kj kk kret ksp kf kmm))
    _ (map (\ kc (: _ (x-grab s root mod kc) (x-grab s root (| mod 1) kc))) (L kcomma kperiod))
    _ (x-flush s)
-   _ (line "wm: grabbed mod+{j,k,ret,space,comma,period,1..9} and mod+shift+{comma,period,1..9}")
+   _ (line "wm: grabbed mod+{j,k,ret,space,comma,period,f,m,1..9} and mod+shift+{comma,period,1..9}")
 
    ; --- the layout engine (wm/layout.l) renders the current workspace ---
    (nth l i) (? (< i 1) (cap l) (nth (cup l) (- i 1)))
+   defb 3                                                                        ; the config's border-width; a layout may override per-window (a 6th field)
    (render sh lay)                                                               ; ask the layout for placements, configure them, unmap the dropped
     (: z (wsget sh (wscur sh)) rect (L 0 0 wpx hpx)
        pls (cap (lay-tile lay rect z)) placed (map cap pls)
-       _ (map (\ t (x-configure s (nth t 0) (nth t 1) (nth t 2) (nth t 3) (nth t 4))) pls)
-       _ (map (\ w (? (any (\ p (= p w)) placed) 0 (x-unmap s w))) (wsrow sh))   ; windows the layout dropped (Full): hide them
+       _ (map (\ t (: _ (x-border s (nth t 0) (? (< (tally t) 6) defb (nth t 5)))   ; smartBorders sets 0 on a singleton/fullscreen
+                       (x-configure s (nth t 0) (nth t 1) (nth t 2) (nth t 3) (nth t 4)))) pls)
+       _ (map (\ w (? (any (\ p (= p w)) placed) 0 (x-unmap s w))) (wsrow sh))   ; windows the layout dropped (Full/minimize): hide them
        _ (map (\ w (x-map s w)) placed)                                          ; (re)map placed -- a no-op on the already-mapped
        (x-flush s))
    (refocus sh) (? (wsfoc sh) (: _ (x-focus s (wsfoc sh)) (x-flush s)) 0)        ; focus the current top -- only when it is mapped/viewable
@@ -72,6 +75,8 @@
                                     _ (line "wm: next-layout") (loop sh lay2 live))
                       (= kc kcomma) (: lay2 (msg-or lay (lay-msg lay (? shifted 'shrink 'inc-master) z)) _ (render sh lay2) _ (refocus sh) (loop sh lay2 live))
                       (= kc kperiod) (: lay2 (msg-or lay (lay-msg lay (? shifted 'expand 'dec-master) z)) _ (render sh lay2) _ (refocus sh) (loop sh lay2 live))
+                      (= kc kf) (: lay2 (msg-or lay (lay-msg lay 'toggle-layout z)) _ (render sh lay2) _ (refocus sh) _ (line "wm: toggle Full") (loop sh lay2 live))
+                      (= kc kmm) (: lay2 (msg-or lay (lay-msg lay 'mirror z)) _ (render sh lay2) _ (refocus sh) _ (line "wm: toggle MIRROR") (loop sh lay2 live))
                       (: hit (afind (\ p (= (caup p) kc)) digits)
                          (? (! (two? hit)) (loop sh lay live)
                             (: t (cap hit)
@@ -81,6 +86,9 @@
                 (= code 23) (: _ (? (wsknownw? sh win) (render sh lay) 0) (loop sh lay live))   ; ConfigureRequest: the layout answers
                 (loop sh lay live)))))
    (msg-or old new) (? new new old)                                             ; keep the old layout when a message is unhandled (())
-   _ (loop (sheaf (map (+ 1) (jot 9))) (choice (L (resizable-tall 1 0.02 0.5) full)) 0)   ; ws 1..9; layout = ResizableTall ||| Full
+   ; ws 1..9; layout = the config's t (l1 ||| l2): minimize . smartBorders . toggleLayouts Full . MIRROR $ (ResizableTall ||| Dwindle)
+   _ (loop (sheaf (map (+ 1) (jot 9)))
+           (minimize (smart-borders (toggle-full (mirror (choice (L (resizable-tall 1 0.02 0.5) (dwindle 1.618)))))))
+           0)
    _ (close s)
    (line "wm: done"))

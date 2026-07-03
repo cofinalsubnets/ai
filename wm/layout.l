@@ -74,6 +74,91 @@
    full (L 'full)
    (full-tile lay rect z) (: f (zfoc z) (L (? f (L (link f rect)) ()) lay))
 
+   ; --- Dwindle: the golden spiral. Each window takes a phi-fraction of the
+   ;     remaining rect, the split axis alternating -- windows dwindle. Pure. ---
+   (dwindle ratio) (L 'dwindle ratio)
+   (dw-go rect wins ratio axis)
+    (? (! (two? wins)) ()
+       (! (two? (cup wins))) (L (link (cap wins) rect))                          ; last window fills the remainder
+       (: f (/ ratio (+ 1.0 ratio))                                              ; the focused window's fraction (phi/(1+phi))
+          hs (? (= axis 0)                                                        ; axis 0 = split left|right, 1 = top|bottom
+                (: fw (int (* f (rw rect))) (L (rct (rx rect) (ry rect) fw (rh rect)) (rct (+ (rx rect) fw) (ry rect) (- (rw rect) fw) (rh rect))))
+                (: fh (int (* f (rh rect))) (L (rct (rx rect) (ry rect) (rw rect) fh) (rct (rx rect) (+ (ry rect) fh) (rw rect) (- (rh rect) fh)))))
+          (link (link (cap wins) (cap hs)) (dw-go (caup hs) (cup wins) ratio (- 1 axis)))))
+   (dw-tile lay rect z) (L (dw-go rect (zrow z) (nthl lay 1) 0) lay)
+   (dw-msg lay msg z) (? (= msg 'expand) (rt-set lay 1 (* (nthl lay 1) 1.1))     ; expand/shrink nudge the spiral ratio
+                          (= msg 'shrink) (rt-set lay 1 (mx2 1.05 (/ (nthl lay 1) 1.1))) ())
+
+   ; --- modifiers: layout -> layout. A modifier record holds an inner layout;
+   ;     it transforms the inner's placements and/or intercepts its own messages,
+   ;     delegating the rest (() from lay-msg = unhandled, so the stack composes) ---
+   (with-border p b) (L (nthl p 0) (nthl p 1) (nthl p 2) (nthl p 3) (nthl p 4) b)   ; a 6th field: the border width hint
+   (keep-border src dst) (? (< (tally src) 6) dst (cat dst (L (nthl src 5))))       ; carry a border hint through a transform
+
+   ; smartBorders: a lone tiled window (or a fullscreen one) wears no border ---
+   (smart-borders inner) (L 'smart inner)
+   (sb-tile lay rect z) (: inner (nthl lay 1) res (lay-tile inner rect z) pls (cap res)
+                           pls2 (? (= (tally pls) 1) (map (\ p (with-border p 0)) pls)
+                                   (map (\ p (? (&& (= (nthl p 3) (rw rect)) (= (nthl p 4) (rh rect))) (with-border p 0) p)) pls))
+                           (L pls2 (L 'smart (caup res))))
+   (sb-msg lay msg z) (: r (lay-msg (nthl lay 1) msg z) (? r (L 'smart r) ()))
+
+   ; MIRROR (mkToggle (single MIRROR)): transpose every output rect. Starts OFF ---
+   (mirror inner) (L 'mirror 0 inner)
+   (mir-place p rect) (: base (L (nthl p 0) (+ (rx rect) (- (nthl p 2) (ry rect))) (+ (ry rect) (- (nthl p 1) (rx rect))) (nthl p 4) (nthl p 3))
+                         (keep-border p base))                                    ; reflect across the rect's diagonal
+   (mir-tile lay rect z)
+    (: on (nthl lay 1) inner (nthl lay 2)
+       (? (! on) (: res (lay-tile inner rect z) (L (cap res) (L 'mirror on (caup res))))
+          (: res (lay-tile inner (rct (rx rect) (ry rect) (rh rect) (rw rect)) z)   ; tile in the transposed rect
+             (L (map (\ p (mir-place p rect)) (cap res)) (L 'mirror on (caup res))))))
+   (mir-msg lay msg z)
+    (: on (nthl lay 1) inner (nthl lay 2)
+       (? (= msg 'mirror) (L 'mirror (? on 0 1) inner)                            ; Toggle MIRROR
+          (: r (lay-msg inner msg z) (? r (L 'mirror on r) ()))))
+
+   ; toggleLayouts Full: hold the inner layout + a flag; ToggleLayout flips to
+   ;     Full (focus owns the whole rect) and back. Starts OFF. ---
+   (toggle-full inner) (L 'toggle-lay 0 inner)
+   (tf-tile lay rect z)
+    (: on (nthl lay 1) inner (nthl lay 2)
+       (? on (: f (zfoc z) (L (? f (L (link f rect)) ()) lay))                    ; Full: only the focus, whole rect
+          (: res (lay-tile inner rect z) (L (cap res) (L 'toggle-lay on (caup res))))))
+   (tf-msg lay msg z)
+    (: on (nthl lay 1) inner (nthl lay 2)
+       (? (= msg 'toggle-layout) (L 'toggle-lay (? on 0 1) inner)
+          (: r (lay-msg inner msg z) (? r (L 'toggle-lay on r) ()))))
+
+   ; minimize: filter the minimized windows out of the row before tiling (the
+   ;     driver then unmaps them, since they fall out of the placements). The
+   ;     message carries a window: (minimize-window w) hides, restore un-hides. ---
+   (minimize inner) (L 'minimize () inner)
+   (mn-tile lay rect z)
+    (: mins (nthl lay 1) inner (nthl lay 2)
+       z2 (foldl (\ zz w (zdel w zz)) z mins)
+       res (lay-tile inner rect z2)
+       (L (cap res) (L 'minimize mins (caup res))))
+   (mn-msg lay msg z)
+    (: mins (nthl lay 1) inner (nthl lay 2)
+       (? (&& (two? msg) (= (cap msg) 'minimize-window)) (L 'minimize (link (caup msg) mins) inner)
+          (= msg 'restore) (L 'minimize (? (two? mins) (cup mins) ()) inner)      ; un-hide the most recent
+          (: r (lay-msg inner msg z) (? r (L 'minimize mins r) ()))))
+
+   ; windowNavigation: pure 2D geometry. nav-target names the window nearest the
+   ;     focus in a direction ('left/'right/'up/'down); the DRIVER refocuses or
+   ;     swaps to it (Go / Swap dir), since focus/swap are StackSet ops, not
+   ;     layout state. nav-swap gives the (focus target) pair to exchange. ---
+   (pcx p) (+ (nthl p 1) (// (nthl p 3) 2))  (pcy p) (+ (nthl p 2) (// (nthl p 4) 2))
+   (in-dir dir fx fy px py) (? (= dir 'left) (< px fx) (= dir 'right) (> px fx) (= dir 'up) (< py fy) (> py fy))
+   (dist2 ax ay bx by) (+ (* (- ax bx) (- ax bx)) (* (- ay by) (- ay by)))
+   (nav-target pls focus dir)
+    (: fp (afind (\ p (= (nthl p 0) focus)) pls)
+       (? (! (two? fp)) ()
+          (: fx (pcx fp) fy (pcy fp)
+             cands (filter (\ p (&& (! (= (nthl p 0) focus)) (in-dir dir fx fy (pcx p) (pcy p)))) pls)
+             (? (! (two? cands)) ()
+                (nthl (foldl (\ b p (? (! (two? b)) p (? (< (dist2 fx fy (pcx p) (pcy p)) (dist2 fx fy (pcx b) (pcy b))) p b))) () cands) 0)))))
+
    ; --- ||| : a list of layouts + an index; NextLayout bumps it ---
    (choice subs) (L 'choice 0 subs)
    (ch-cur lay) (nthl (nthl lay 2) (nthl lay 1))
@@ -91,7 +176,17 @@
    ; --- the dispatch: case on the record tag ---
    (lay-tile lay rect z) (: k (cap lay) (? (= k 'rtall) (rt-tile lay rect z)
                                             (= k 'full)  (full-tile lay rect z)
+                                            (= k 'dwindle) (dw-tile lay rect z)
+                                            (= k 'smart) (sb-tile lay rect z)
+                                            (= k 'mirror) (mir-tile lay rect z)
+                                            (= k 'toggle-lay) (tf-tile lay rect z)
+                                            (= k 'minimize) (mn-tile lay rect z)
                                             (= k 'choice) (ch-tile lay rect z) (L () lay)))
    (lay-msg lay msg z) (: k (cap lay) (? (= k 'rtall) (rt-msg lay msg z)
                                           (= k 'full)  ()
+                                          (= k 'dwindle) (dw-msg lay msg z)
+                                          (= k 'smart) (sb-msg lay msg z)
+                                          (= k 'mirror) (mir-msg lay msg z)
+                                          (= k 'toggle-lay) (tf-msg lay msg z)
+                                          (= k 'minimize) (mn-msg lay msg z)
                                           (= k 'choice) (ch-msg lay msg z) ())))
