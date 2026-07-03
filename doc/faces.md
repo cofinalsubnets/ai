@@ -42,7 +42,7 @@ and `theory.html` (the "One core, faces" aside in the implementation section). R
 
 ## Rocq demo (proposed — "a great demo," user 2026-06-19)
 
-Axiom-free, ~25 lines, a new `Section Faces` in `rocq/spec.v` (gated by `test_proof`/coqc).
+Axiom-free, ~25 lines, a new `Section Faces` in `proof/rocq/spec.v` (gated by `test_proof`/coqc).
 Honest register: the **composition** half is *definitional* (`source := feel ∘ read` → `reflexivity`);
 the **coproduct** half is the one real (standard) universal-property proof; uniqueness stated
 **pointwise** to stay axiom-free (no funext). The value is pinning the faces structure formally —
@@ -77,7 +77,7 @@ End Faces.
 Optional flourish: `top_vacuous` — "everything is top." (Gotcha when landing: `I` is shadowed in
 spec.v by the imaginary unit `I : Zi`, so prove `True` via `constructor`, not the `I` ctor.)
 
-**LANDED 2026-06-19** — `Section Faces` in `rocq/spec.v`, axiom-free, gated by coqc: `source_factors`
+**LANDED 2026-06-19** — `Section Faces` in `proof/rocq/spec.v`, axiom-free, gated by coqc: `source_factors`
 (reflexivity), `world_inl`/`world_inr`, `world_unique` (coproduct UP, pointwise), `top_vacuous`. The
 axiom audit runs `Print Assumptions world_unique` / `source_factors` → both "Closed under the global
 context." `theory.html` (the "One core, faces" aside in the implementation section) points here for the fuller reading.

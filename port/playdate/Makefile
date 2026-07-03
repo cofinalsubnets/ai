@@ -16,11 +16,11 @@ pd_cc = $(pd_gcc) -g3
 pd_as = $(pd_gcc) -x assembler-with-cpp
 pd_opt = -Os -falign-functions=16 -fomit-frame-pointer
 pd_fpu = -mfloat-abi=hard -mfpu=fpv5-sp-d16 -D__FPU_USED=1
-pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R) $(R)/out/host $(R)/font)
+pd_incdir = $(patsubst %,-I %, . $(pd_sdk)/C_API $(R) $(R)/out/host $(R)/port/quay)
 pd_defs = -DTARGET_PLAYDATE=1 -DTARGET_EXTENSION=1 -Dai_tco=0
 
 # Sources split by group so the obj-path patsubst works cleanly:
-# local pd/*.c stay rooted in cwd, shared kernel/*.c + font/*.c + libc/*.c carry
+# local pd/*.c stay rooted in cwd, shared kernel/*.c + port/quay/*.c + libc/*.c carry
 # the $(R)/ prefix, and the SDK helper has an absolute path we map by hand.
 pd_local_c = $(wildcard *.c)
 pd_shared_c = $(g_c) $(f_c) $R/libc/str.c
@@ -94,7 +94,7 @@ $(o)/Source/pdex.%: $(o)/pdex.%
 $(o)/data.o: $(R)/data.c | $(R)/out/lib/prel.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/out/host -I$(R)/font $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I. -I$(R)/out/host -I$(R)/port/quay $(pd_incdir) $< -o $@
 
 $(o)/data.h: $(o)/data.o $(gen_data) | $(m)
 	@echo GEN	$@
@@ -108,13 +108,13 @@ $(o)/data.h: $(o)/data.o $(gen_data) | $(m)
 $(o)/%.o: %.c $(data_h) | $(R)/out/lib/prel.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/out/host -I$(R)/font $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/out/host -I$(R)/port/quay $(pd_incdir) $< -o $@
 
-# Shared C sources from l.c/data.c and font/.
+# Shared C sources from l.c/data.c and port/quay/.
 $(o)/%.o: $(R)/%.c $(data_h) | $(R)/out/lib/prel.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/out/host -I$(R)/font $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/out/host -I$(R)/port/quay $(pd_incdir) $< -o $@
 
 # Local pd/*.s assembly (rule preserved from original; no .s files exist
 # today but keep the pattern in case one shows up).
@@ -128,7 +128,7 @@ $(o)/%.o: %.s
 $(o)/setup.o: $(pd_sdk)/C_API/buildsupport/setup.c $(data_h) | $(R)/out/lib/prel.h
 	@echo CC	$@
 	@mkdir -p $(dir $@)
-	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/out/host -I$(R)/font $(pd_incdir) $< -o $@
+	@$(pd_cc) -c $(pd_cpflags) -I$(o) -I. -I$(R)/out/host -I$(R)/port/quay $(pd_incdir) $< -o $@
 
 $(o)/pdex.elf: $(pd_o) $(pd_lds)
 	@echo CC	$@

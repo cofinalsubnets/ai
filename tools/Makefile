@@ -32,27 +32,27 @@ test_vmret: | $(m)
 	done; rm -f $(R)/out/host/.vmret.py $(R)/out/host/.vmret.l
 
 
-# cook/cook.l: run its Makefile-importer test suite. cooktest.l writes fixture
+# apps/cook/cook.l: run its Makefile-importer test suite. cooktest.l writes fixture
 # Makefiles to a temp dir and runs cook on them as a subprocess, asserting over
 # the captured output (variable expansion, the make functions, conditionals,
 # include, pattern + static-pattern rules). It uses paths relative to the repo
 # root, so run it from there.
 test_cook: | $(m)
 	@echo TEST cook.l
-	@cd $(R) && out/host/ai cook/cooktest.l
+	@cd $(R) && out/host/ai apps/cook/cooktest.l
 
-# tele/tele.l: the PyTorch-style autograd library (pure ai over the constellation
+# apps/tele/tele.l: the PyTorch-style autograd library (pure ai over the constellation
 # algebra). teletest.l grad-checks every op -- the analytic gradient (from `back`)
 # vs the central finite difference -- so the oracle is self-validating. tele loads
 # as a user `-l` (NOT in the corpus), so `make test` is untouched; this is its gate.
 test_tele: | $(m)
 	@echo TEST tele.l
-	@cd $(R) && out/host/ai -l tele/tele.l tele/teletest.l
+	@cd $(R) && out/host/ai -l apps/tele/tele.l apps/tele/teletest.l
 
-# tele/xor.l: the flagship integration demo -- a 2-8-1 MLP learns XOR (the
+# apps/tele/xor.l: the flagship integration demo -- a 2-8-1 MLP learns XOR (the
 # not-linearly-separable problem a single linear layer can't solve). seeded, so it
 # converges identically every run; exits nonzero if the four outputs don't round
 # right. proves the whole stack (autograd + nn + optim) trains a real net.
 test_xor: | $(m)
 	@echo TEST xor.l
-	@cd $(R) && out/host/ai -l tele/tele.l tele/xor.l
+	@cd $(R) && out/host/ai -l apps/tele/tele.l apps/tele/xor.l

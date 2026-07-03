@@ -40,7 +40,7 @@ a loop param; the result is discarded (we return a fixnum, not the pointer), enf
 by `bumpok?`. So `hash`'s read passes (`scan`×2) AND its update pass (`bump`) are all
 native; only the allocating `ins` (which grows the table) stays interpreted —
 ~1.8× on the `hash` bench (2.30 → 1.29 ms/it, host). The probe itself is now emitted
-through the **asm/ assembler**, baked into the post-egg layer as a core language
+through the **apps/asm/ assembler**, baked into the post-egg layer as a core language
 service (the glaze is its client, like the parser combinators): `mpeep`'s probe is
 written as readable IR — `(label loop) … (br eq hit) …` — and the assembler resolves
 the hit/miss/loop branches to rel32, retiring the hand-counted `je`/`jmp` offsets that

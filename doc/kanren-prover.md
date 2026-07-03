@@ -78,6 +78,6 @@ specialized to uu's term syntax (quoted lists; kanren vars are the holes).
 Σ/Type-paths (74→200) + the Lean backend gave a wide corpus certified across two kernels.
 The frontier left is AUTONOMY — ai writing its own proofs. Start narrow with path-algebra
 `auto`: that is where the search is tractable AND the payoff (equality obligations) is highest.
-It complements, does not replace, the differential-oracle leg (`rocq/extract.v`, which ties the
+It complements, does not replace, the differential-oracle leg (`proof/rocq/extract.v`, which ties the
 model to the binary): export ties DISCOVERED laws to independent kernels. Keep the kernel small;
 keep exporting to Rocq + Lean. See `doc/archive/uu-rocq-bridge.md` for the rung roadmap.

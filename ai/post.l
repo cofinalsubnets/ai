@@ -9,9 +9,9 @@
 ; First tenant: gw.js-style PARSER COMBINATORS. A parser is (\ s y n) over a string s, with a SUCCESS
 ; continuation y = (\ rest payload) and a FAILURE continuation n = (\ rest); payloads are lists that
 ; `seq` concatenates. The leaves are `lit` (a literal prefix), `one` (one char by predicate) and `span`
-; (a maximal run) -- ai has no regex. cook/cook.l grew this set (kept private to dodge the old "leak
+; (a maximal run) -- ai has no regex. apps/cook/cook.l grew this set (kept private to dodge the old "leak
 ; collides with egg globals" worry -- now only `sat`/$ actually collide, and none of these do); it and
-; sat/dimacs.l now share THIS copy. `parse` requires the whole input consumed; `runp` is the lenient
+; apps/sat/dimacs.l now share THIS copy. `parse` requires the whole input consumed; `runp` is the lenient
 ; twin (keeps the payload, ignores trailing slack).
 ; the module span opens here: the trailer at the bottom sweeps the combinators into
 ; the `parse` book and the overlay internals into `overlay` (measured, never listed).

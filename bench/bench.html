@@ -69,9 +69,9 @@ source &rarr; trivial result, so compiled languages pay their compile).</p>
 </div>
 <div class="wrap"><div id="t"></div></div>
 <h2>SAT solvers &mdash; milliseconds to solve</h2>
-<p class="note">A separate field: ai&rsquo;s own CDCL solver (<code>sat/flat.l</code>:
+<p class="note">A separate field: ai&rsquo;s own CDCL solver (<code>apps/sat/flat.l</code>:
 flat cask-resident state driven by three native kernels &mdash; propagation, the whole
-conflict handler, and the decision &mdash; each assembled through <code>asm/</code> at
+conflict handler, and the decision &mdash; each assembled through <code>apps/asm/</code> at
 solver-build time, specialized to the instance size) against reference C solvers.
 Two row families: PHP(<i>n</i>) &mdash; (<i>n</i>+1) pigeons into <i>n</i> holes, UNSAT
 and resolution-hard, where clause learning alone is <b>exponential</b> and ai&rsquo;s

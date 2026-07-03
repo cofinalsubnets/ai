@@ -157,7 +157,7 @@ came up:
 The model's 11 checks (`doc/proto/sched.l`) are the spec the C must meet: the join pull-predicate
 **(1)**, joins-never-hit-the-host **(2)**, quiescence-parks-not-spins **(3)**, the load-bearing
 deadlock-vs-spin pair **(4)**, fairness **(5)**, and the reborn `do_eval` shape **(6)**. The
-existing task/GC stress tests are the runtime oracle for the node-layout change. A `rocq/` proof
+existing task/GC stress tests are the runtime oracle for the node-layout change. A `proof/rocq/` proof
 that the C scheduler refines the model — "no live task is starved while a wake condition it is
 parked on is satisfiable" — is the same larger effort `gc.v` represents for the collector.
 

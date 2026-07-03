@@ -32,7 +32,7 @@ t = $R/test/00-init.l $R/test/spec.l $(filter-out %/00-init.l %/spec.l %/glaze-x
 
 ai_h = $(wildcard $R/*.h)
 ai_c = $R/ai.c
-f_c = $(wildcard $R/font/*.c)
+f_c = $(wildcard $R/port/quay/*.c)
 c_c = $(wildcard $R/libc/*.c)
 
 # -std spelling: clang accepts `gnu23` only from ~clang 18 (Xcode 16). Older Apple

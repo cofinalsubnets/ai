@@ -8,7 +8,7 @@ cook \- a dependency-driven build tool, make in ai
 .br
 .B ai
 .B \-l
-.I cook/cook.l
+.I apps/cook/cook.l
 .RI [ options ]
 .RI [ recipe ...]
 .SH DESCRIPTION
@@ -158,7 +158,7 @@ cook \-\-emit \-f Makefile > Cookfile
 Without the installed symlink, loading cook by hand:
 .RS
 .EX
-ai \-l cook/cook.l Makefile host
+ai \-l apps/cook/cook.l Makefile host
 .EE
 .RE
 .SH EXIT STATUS

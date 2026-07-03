@@ -104,14 +104,14 @@ else
 test_glaze:
 	@echo "test_glaze: skipped (host arch $a is not x86_64)"
 endif
-# sat/ -- the CDCL SAT solver app. Portable ai (no glaze), so it runs on every arch.
+# apps/sat/ -- the CDCL SAT solver app. Portable ai (no glaze), so it runs on every arch.
 # Gate = exit 0 AND the sentinel (a reader-stop or a strict-assert scare both miss it).
 .PHONY: test_sat
 test_sat: host
-	@echo "SAT sat/sat.l + sat/dimacs.l + sat/flat.l"; \
-	  cat sat/sat.l sat/dimacs.l sat/flat.l | $m > out/host/.test_sat.out 2>&1; r=$$?; \
+	@echo "SAT apps/sat/sat.l + apps/sat/dimacs.l + apps/sat/flat.l"; \
+	  cat apps/sat/sat.l apps/sat/dimacs.l apps/sat/flat.l | $m > out/host/.test_sat.out 2>&1; r=$$?; \
 	  cat out/host/.test_sat.out; \
-	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out && grep -q "sat/dimacs: ok" out/host/.test_sat.out && grep -q "sat/flat: ok" out/host/.test_sat.out; } \
+	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out && grep -q "apps/sat/dimacs: ok" out/host/.test_sat.out && grep -q "apps/sat/flat: ok" out/host/.test_sat.out; } \
 	    || { echo "FAIL sat (exit $$r)"; exit 1; }
 # The DRAT lane's EXTERNAL check: flat.l's emitted refutations (fdrat0) verified by
 # drat-trim, the SAT competition's independent checker (fetched + built into out/drat
@@ -120,27 +120,27 @@ test_sat: host
 # raw-RUP row. Not in test_all (network on first run); run after touching the emitter.
 .PHONY: test_drat
 test_drat: host
-	@cd sat && ./dratcheck.sh || { echo "FAIL drat"; exit 1; }
-# The wm app's pure core (wm/core.l): xmonad's StackSet -- the focus zipper, the
+	@cd apps/sat && ./dratcheck.sh || { echo "FAIL drat"; exit 1; }
+# The wm app's pure core (apps/wm/core.l): xmonad's StackSet -- the focus zipper, the
 # workspace sheaf, the floating half -- with xmonad's QuickCheck laws + a seeded
-# fuzz (wm/law.l). Pure ai (no nif), so it self-tests portably; the X layers
+# fuzz (apps/wm/law.l). Pure ai (no nif), so it self-tests portably; the X layers
 # (wire.l/wm.l) need connectu and are proven against Xephyr, not here. Gate = the
 # sentinel AND exit 0 (a reader-stop or strict-assert scare both miss it).
 .PHONY: test_wm
 test_wm: host
-	@echo "WM wm/core.l ... wm/config.l + wm/law.l (the whole app, host)"; \
-	  cat test/00-init.l wm/core.l wm/layout.l wm/wire.l wm/ewmh.l wm/manage.l wm/keys.l wm/config.l wm/law.l | $m > out/host/.test_wm.out 2>&1; r=$$?; \
+	@echo "WM apps/wm/core.l ... apps/wm/config.l + apps/wm/law.l (the whole app, host)"; \
+	  cat test/00-init.l apps/wm/core.l apps/wm/layout.l apps/wm/wire.l apps/wm/ewmh.l apps/wm/manage.l apps/wm/keys.l apps/wm/config.l apps/wm/law.l | $m > out/host/.test_wm.out 2>&1; r=$$?; \
 	  cat out/host/.test_wm.out; \
-	  { [ $$r -eq 0 ] && grep -q "wm/law: StackSet" out/host/.test_wm.out; } \
+	  { [ $$r -eq 0 ] && grep -q "apps/wm/law: StackSet" out/host/.test_wm.out; } \
 	    || { echo "FAIL wm (exit $$r)"; exit 1; }
-# The neutral assembler (asm/) + its x86-64 backend: every encoder golden is
-# objdump-checked (asm/asmtest.l). A host-only app (like sat) -- it rides the
+# The neutral assembler (apps/asm/) + its x86-64 backend: every encoder golden is
+# objdump-checked (apps/asm/asmtest.l). A host-only app (like sat) -- it rides the
 # core's lists/tablets, adds no nif, and is NOT baked into ai0. The gate greps
 # the "N passed, 0 failed" sentinel AND exit 0 (a silent reader-stop exits 0).
 .PHONY: test_asm
 test_asm: host
-	@echo "ASM asm/asmtest.l"; \
-	  cat asm/asm.l asm/x64.l asm/arm64.l asm/text.l asm/elf.l asm/asmtest.l | $m > out/host/.test_asm.out 2>&1; r=$$?; \
+	@echo "ASM apps/asm/asmtest.l"; \
+	  cat apps/asm/asm.l apps/asm/x64.l apps/asm/arm64.l apps/asm/text.l apps/asm/elf.l apps/asm/asmtest.l | $m > out/host/.test_asm.out 2>&1; r=$$?; \
 	  cat out/host/.test_asm.out; \
 	  { [ $$r -eq 0 ] && grep -q ", 0 failed" out/host/.test_asm.out; } \
 	    || { echo "FAIL asm (exit $$r)"; exit 1; }
@@ -161,7 +161,7 @@ nettest: host
 # tools/py/ (gen_data / vmret). See tools/Makefile + tools/py/README.md.
 test_tools: host
 	@$(MAKE) -C tools
-# Machine-check rocq/spec.v -- ai's headline laws (the numeral / function /
+# Machine-check proof/rocq/spec.v -- ai's headline laws (the numeral / function /
 # absence core of test/spec.l) as Rocq theorems, axiom-free (every proof
 # "Closed under the global context"). This is what upgrades the executable
 # spec from DEMONSTRATED on every target to PROVED in a consistent metatheory
@@ -177,11 +177,11 @@ test_proof:
 	@echo "test_proof: skipped (needs rocq/coqc)"
 else
 test_proof:
-	@echo TEST rocq/spec.v "(coqc)"
-	@$(COQC) -q rocq/spec.v
-	@rm -f rocq/spec.vo rocq/spec.vok rocq/spec.vos rocq/spec.glob rocq/.spec.aux
+	@echo TEST proof/rocq/spec.v "(coqc)"
+	@$(COQC) -q proof/rocq/spec.v
+	@rm -f proof/rocq/spec.vo proof/rocq/spec.vok proof/rocq/spec.vos proof/rocq/spec.glob proof/rocq/.spec.aux
 endif
-# Machine-check rocq/gc.v -- the generational MINOR is SOUND: under a complete
+# Machine-check proof/rocq/gc.v -- the generational MINOR is SOUND: under a complete
 # write barrier (rem_complete) the nursery scan reaches every live young object,
 # so no live young is lost (barrier_sound) -- the Coq proof of doc/proto/gengc.l's
 # load-bearing self-check (3b, the barrier is necessary). Axiom-free like spec.v;
@@ -191,12 +191,12 @@ test_gc:
 	@echo "test_gc: skipped (needs rocq/coqc)"
 else
 test_gc:
-	@echo TEST rocq/gc.v "(coqc)"
-	@$(COQC) -q rocq/gc.v
-	@rm -f rocq/gc.vo rocq/gc.vok rocq/gc.vos rocq/gc.glob rocq/.gc.aux
+	@echo TEST proof/rocq/gc.v "(coqc)"
+	@$(COQC) -q proof/rocq/gc.v
+	@rm -f proof/rocq/gc.vo proof/rocq/gc.vok proof/rocq/gc.vos proof/rocq/gc.glob proof/rocq/.gc.aux
 endif
 # The .l -> .v pipeline: tools/spec2coq.l (run on the host binary $m) reads
-# test/spec.l and EMITS rocq/gen.v -- the spec generating Coq theorems for its
+# test/spec.l and EMITS proof/rocq/gen.v -- the spec generating Coq theorems for its
 # own pure-numeral corpus facts, each closed by computation (over Z, since nat
 # is unary and 3^27 would blow up vm_compute). coqc then checks them. Drift-proof:
 # the asserts and their proofs cannot diverge -- regenerated every run from .l.
@@ -206,16 +206,16 @@ test_gen:
 	@echo "test_gen: skipped (needs rocq/coqc)"
 else
 test_gen: host
-	@echo AI	rocq/gen.v "(tools/spec2coq.l on $m)"
-	@$m tools/spec2coq.l > rocq/gen.v
-	@echo TEST rocq/gen.v "(coqc, against spec.v's shared model)"
-	@cd rocq && $(COQC) -R . "" spec.v >/dev/null && $(COQC) -R . "" gen.v
-	@rm -f rocq/spec.vo rocq/spec.vok rocq/spec.vos rocq/spec.glob rocq/.spec.aux \
-	  rocq/gen.vo rocq/gen.vok rocq/gen.vos rocq/gen.glob rocq/.gen.aux
+	@echo AI	proof/rocq/gen.v "(tools/spec2coq.l on $m)"
+	@$m tools/spec2coq.l > proof/rocq/gen.v
+	@echo TEST proof/rocq/gen.v "(coqc, against spec.v's shared model)"
+	@cd proof/rocq && $(COQC) -R . "" spec.v >/dev/null && $(COQC) -R . "" gen.v
+	@rm -f proof/rocq/spec.vo proof/rocq/spec.vok proof/rocq/spec.vos proof/rocq/spec.glob proof/rocq/.spec.aux \
+	  proof/rocq/gen.vo proof/rocq/gen.vok proof/rocq/gen.vos proof/rocq/gen.glob proof/rocq/.gen.aux
 endif
 # The PROOF half of the .l -> .v pipeline (cf. test_gen, which exports concrete
 # ASSERTS): tools/uu2coq.l loads uu's kernel (test/uu.l), has it TYPE-CHECK a proof
-# term against its theorem, and EMITS rocq/uugen.v -- the same term in Gallina, which
+# term against its theorem, and EMITS proof/rocq/uugen.v -- the same term in Gallina, which
 # coqc re-checks independently. So a LAW (forall x, x^0 = 1 -- spec.v's const_one) is
 # proved in ai's own kernel and certified by Rocq, axiom-free. Drift-proof like gen.v:
 # regenerated every run, so the internal proof and the exported one cannot diverge.
@@ -225,11 +225,11 @@ test_uugen:
 	@echo "test_uugen: skipped (needs rocq/coqc)"
 else
 test_uugen: host
-	@echo AI	rocq/uugen.v "(tools/uu2coq.l on $m)"
-	@$m tools/uu2coq.l > rocq/uugen.v
-	@echo TEST rocq/uugen.v "(coqc)"
-	@$(COQC) -q rocq/uugen.v
-	@rm -f rocq/uugen.vo rocq/uugen.vok rocq/uugen.vos rocq/uugen.glob rocq/.uugen.aux
+	@echo AI	proof/rocq/uugen.v "(tools/uu2coq.l on $m)"
+	@$m tools/uu2coq.l > proof/rocq/uugen.v
+	@echo TEST proof/rocq/uugen.v "(coqc)"
+	@$(COQC) -q proof/rocq/uugen.v
+	@rm -f proof/rocq/uugen.vo proof/rocq/uugen.vok proof/rocq/uugen.vos proof/rocq/uugen.glob proof/rocq/.uugen.aux
 endif
 
 # The LEAN leg of the proof bridge (cf. test_uugen, the Rocq leg): tools/uu2lean.l emits
@@ -242,16 +242,16 @@ test_uulean:
 else
 test_uulean: host
 	@mkdir -p lean
-	@echo AI	lean/uugen.lean "(tools/uu2lean.l on $m)"
-	@$m tools/uu2lean.l > lean/uugen.lean
-	@echo TEST lean/uugen.lean "(lean)"
-	@$(LEAN) lean/uugen.lean > out/host/.uulean.out 2>&1; r=$$?; \
+	@echo AI	proof/lean/uugen.lean "(tools/uu2lean.l on $m)"
+	@$m tools/uu2lean.l > proof/lean/uugen.lean
+	@echo TEST proof/lean/uugen.lean "(lean)"
+	@$(LEAN) proof/lean/uugen.lean > out/host/.uulean.out 2>&1; r=$$?; \
 	  if [ $$r -ne 0 ] || grep -q sorryAx out/host/.uulean.out; then cat out/host/.uulean.out; exit 1; fi
 endif
 
 # test_extract: the differential oracle with a ROCQ-EXTRACTED reference. coqc
-# extracts rocq/extract.v (the n-ary/CBV/weak/saturating normalizer built on
-# spec.v's PROVEN subst/shift) to OCaml; rocq/oracle_drive.ml generates random
+# extracts proof/rocq/extract.v (the n-ary/CBV/weak/saturating normalizer built on
+# spec.v's PROVEN subst/shift) to OCaml; proof/rocq/oracle_drive.ml generates random
 # closed affine terms, normalizes each with the extracted `nf`, and emits an ai
 # program that checks ev EXTENSIONALLY agrees. So the reference the fuzzer runs
 # IS the proven definitions (up to the standard nat->int mapping) -- machine-
@@ -264,16 +264,16 @@ test_extract:
 	@echo "test_extract: skipped (needs coqc + ocamlopt)"
 else
 test_extract: host
-	@echo TEST rocq/extract.v "(coqc extraction -> ocaml ref vs ev)"
-	@cd rocq && $(COQC) -R . "" spec.v >/dev/null && $(COQC) -R . "" extract.v >/dev/null \
+	@echo TEST proof/rocq/extract.v "(coqc extraction -> ocaml ref vs ev)"
+	@cd proof/rocq && $(COQC) -R . "" spec.v >/dev/null && $(COQC) -R . "" extract.v >/dev/null \
 	  && rm -f normalizer.mli && $(OCAMLOPT) -w -a normalizer.ml oracle_drive.ml -o oracle_drive
-	@rocq/oracle_drive 2000 6 1 > out/.extract_oracle.l
+	@proof/rocq/oracle_drive 2000 6 1 > out/.extract_oracle.l
 	@$m out/.extract_oracle.l | grep -q "2000 / 2000 PASS" \
 	  || { echo "EXTRACT ORACLE FAILED:"; $m out/.extract_oracle.l; exit 1; }
 	@$m out/.extract_oracle.l
-	@rm -f rocq/spec.vo rocq/spec.vok rocq/spec.vos rocq/spec.glob rocq/.spec.aux \
-	  rocq/extract.vo rocq/extract.vok rocq/extract.vos rocq/extract.glob rocq/.extract.aux \
-	  rocq/normalizer.ml rocq/normalizer.mli rocq/oracle_drive rocq/*.cmi rocq/*.cmx rocq/*.o \
+	@rm -f proof/rocq/spec.vo proof/rocq/spec.vok proof/rocq/spec.vos proof/rocq/spec.glob proof/rocq/.spec.aux \
+	  proof/rocq/extract.vo proof/rocq/extract.vok proof/rocq/extract.vos proof/rocq/extract.glob proof/rocq/.extract.aux \
+	  proof/rocq/normalizer.ml proof/rocq/normalizer.mli proof/rocq/oracle_drive proof/rocq/*.cmi proof/rocq/*.cmx proof/rocq/*.o \
 	  out/.extract_oracle.l
 endif
 all: host kernel wasm
@@ -288,7 +288,7 @@ all: host kernel wasm
 # #include these and assemble the bootstrap with G_EGG_PRE/POST (ai.h).
 # Drop a .l into ai/ and it is picked up automatically -- no rule to edit.
 lib_h = $(patsubst ai/%.l,out/lib/%.h,$(wildcard ai/*.l))
-# the asm/ assembler baked into BOTH runtimes as a core language service: the
+# the apps/asm/ assembler baked into BOTH runtimes as a core language service: the
 # neutral core + BOTH backends. They are pure ai (produce machine-code bytes as
 # DATA, never execute them), so every backend is arch-neutral and rides along on
 # every host -- only the glaze, which EXECUTES the bytes, is arch-bound (and it is
@@ -322,33 +322,33 @@ lcat_h = @mkdir -p out/lib; echo AI	$@; \
     || { rm -f $@.tmp; echo "FAIL: $@ empty (ai0 lcat failed -- broken bootstrap?)"; exit 1; }
 $(lib_h): out/lib/%.h: ai/%.l tools/lcat.l   # + $(ai0), stated below where it is in scope
 	$(lcat_h)
-# the asm/ assembler (asm/asm.l + asm/x64.l) rides the SAME lcat pipeline into the
+# the apps/asm/ assembler (apps/asm/asm.l + apps/asm/x64.l) rides the SAME lcat pipeline into the
 # post-egg layer -- a core language service (the glaze is its client). Explicit rules
-# (their sources live in asm/, not ai/, so the pattern rule above misses them).
-out/lib/asm.h: asm/asm.l tools/lcat.l
+# (their sources live in apps/asm/, not ai/, so the pattern rule above misses them).
+out/lib/asm.h: apps/asm/asm.l tools/lcat.l
 	$(lcat_h)
-out/lib/x64.h: asm/x64.l tools/lcat.l
+out/lib/x64.h: apps/asm/x64.l tools/lcat.l
 	$(lcat_h)
-out/lib/arm64.h: asm/arm64.l tools/lcat.l
+out/lib/arm64.h: apps/asm/arm64.l tools/lcat.l
 	$(lcat_h)
-out/lib/export.h: asm/export.l tools/lcat.l
+out/lib/export.h: apps/asm/export.l tools/lcat.l
 	$(lcat_h)
 # ai0's sed-wrapped raw source of the same three (no interpreter -- the l reader
 # strips ; comments at read time), baked into the bootstrap so the corpus can test
 # the assembler under BOTH compilers (c0 + the self-hosted ev), like prel/ev/bao.
-out/lib/asm0.h: asm/asm.l
+out/lib/asm0.h: apps/asm/asm.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/x640.h: asm/x64.l
+out/lib/x640.h: apps/asm/x64.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/arm640.h: asm/arm64.l
+out/lib/arm640.h: apps/asm/arm64.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/export0.h: asm/export.l
+out/lib/export0.h: apps/asm/export.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
@@ -489,15 +489,15 @@ $(ho)/ai.img $(ho)/ai.cand.img: %.img: %
 .PHONY: candidate
 candidate: $(ho)/ai.cand.img
 
-# cook/Cookfile: this Makefile transpiled into a resolved cook recipe by
-# `cook --emit` (cook/cook.l). cook reads this Makefile directly too, but the
+# apps/cook/Cookfile: this Makefile transpiled into a resolved cook recipe by
+# `cook --emit` (apps/cook/cook.l). cook reads this Makefile directly too, but the
 # emitted Cookfile is the build with every $(shell)/$(wildcard)/var/pattern
 # RESOLVED -- a flat, self-documenting snapshot. Regenerate it whenever the
-# Makefile changes. (A baked snapshot: re-run `make cook/Cookfile` after adding
+# Makefile changes. (A baked snapshot: re-run `make apps/cook/Cookfile` after adding
 # a source/test file, since the wildcard lists are frozen at emit time.)
-cook/Cookfile: Makefile cook/cook.l $(ho)/ai
+apps/cook/Cookfile: Makefile apps/cook/cook.l $(ho)/ai
 	@echo AI	$@
-	@$(ho)/ai -l cook/cook.l --emit Makefile > $@
+	@$(ho)/ai -l apps/cook/cook.l --emit Makefile > $@
 
 # The lcat'd lib headers (egg.h et al) are PRODUCED BY running ai0, so re-lay
 # them whenever ai0 changes. This dep belongs in the rule above, but $(ai0) is
@@ -645,7 +645,7 @@ kcflags = $(ai_cflags) -nostdinc -ffreestanding -fno-lto -fno-PIC \
 kldflags := -static -nostdlib --gc-sections -T $(R)/port/inle/$a/$a.lds -z max-page-size=0x1000
 kcppflags := \
   -I$(k_odir) \
-  -I. -I$(R)/out/host -Iout/lib -I$(R)/font -I$(R) -I$(R)/port/inle \
+  -I. -I$(R)/out/host -Iout/lib -I$(R)/port/quay -I$(R) -I$(R)/port/inle \
   -Ilibc \
   -isystem c \
   $(kcppflags) \
@@ -696,7 +696,7 @@ $(ko)/ai-$a$(ksuf).elf: $(R)/port/inle/$a/$a.lds $(k_o)
 	@mkdir -p "$(dir $@)"
 	@$(KLD) $(kldflags) $(k_o) -o $@
 
-# Shared C sources (ai.c, font/, c/) + per-arch port//.
+# Shared C sources (ai.c, port/quay/, c/) + per-arch port//.
 # Under K_TEST kmain.c #includes the baked corpus out/lib/ktests.h; under INLE
 # the baked agent out/lib/inle.h.
 $(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/bao.h $(if $(K_TEST),out/lib/ktests.h) $(if $(INLE)$(NETAGENT)$(NETBRAIN),out/lib/inle.h)
@@ -922,7 +922,7 @@ wasm:
 
 clean:
 	rm -rf out
-	@rm -f rocq/*.vo rocq/*.vok rocq/*.vos rocq/*.glob rocq/.*.aux
+	@rm -f proof/rocq/*.vo proof/rocq/*.vok proof/rocq/*.vos proof/rocq/*.glob proof/rocq/.*.aux
 	@$(MAKE) -C wasm clean
 distclean: clean
 
@@ -1008,11 +1008,11 @@ $d/bin/ai.img: out/host/ai.img
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-# cook: the build tool (cook/cook.l) installed as an executable `cook` on PATH.
+# cook: the build tool (apps/cook/cook.l) installed as an executable `cook` on PATH.
 # Its `#!/usr/bin/env -S ai -l` shebang re-execs the installed `ai` to load it,
 # then it discovers a Makefile/Cookfile/Cards.l in the cwd. Installed as a SYMLINK
-# to the source so edits to cook/cook.l are picked up without a reinstall.
-$d/bin/cook: cook/cook.l
+# to the source so edits to apps/cook/cook.l are picked up without a reinstall.
+$d/bin/cook: apps/cook/cook.l
 	@echo LN	$(abspath $@)
 	@mkdir -p $(@D)
 	@ln -sf $(abspath $<) $@
@@ -1023,17 +1023,17 @@ $d/bin/ain: tools/ain.l
 	@echo CP	$(abspath $@)
 	@install -D -m 755 $< $@
 
-# wm: the window manager (wm/*.l), the seven modules catted into one shebang
-# script. DISPLAY picks the socket, ~/.Xauthority the cookie (wm/config.l);
+# wm: the window manager (apps/wm/*.l), the seven modules catted into one shebang
+# script. DISPLAY picks the socket, ~/.Xauthority the cookie (apps/wm/config.l);
 # mod+q restarts in place by exec'ing this same script.
-wmfiles = wm/core.l wm/layout.l wm/wire.l wm/ewmh.l wm/manage.l wm/keys.l wm/config.l wm/wm.l
+wmfiles = apps/wm/core.l apps/wm/layout.l apps/wm/wire.l apps/wm/ewmh.l apps/wm/manage.l apps/wm/keys.l apps/wm/config.l apps/wm/wm.l
 $d/bin/wm: $(wmfiles)
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
 	@{ echo '#!/usr/bin/env -S ai -l'; cat $(wmfiles); } > $@
 	@chmod 755 $@
 
-# bao: the interactive shell. Unlike cook/ain, ai/bao.l is DEFINE-ONLY (the
+# bao: the interactive shell. Unlike apps/cook/ain, ai/bao.l is DEFINE-ONLY (the
 # launch `(bao 0)` is normally fired by main.c on a tty), so the bin is a tiny
 # relocatable launcher: it loads the installed bao.l next door and fires it.
 $d/bin/bao: Makefile

@@ -1,6 +1,6 @@
 ; spec2coq: generate Coq from test/spec.l, in ai.
 ;
-; The GENERATED half of the verification (see rocq/spec.v for the hand-written
+; The GENERATED half of the verification (see proof/rocq/spec.v for the hand-written
 ; LAWS -- the half a generator structurally can't do). Each top-level (assert ..)
 ; operand is `opfix`-factored (infix -> prefix) and translated to a Coq theorem
 ; closed by vm_compute, over two models that together cover every EXACT, computable
@@ -15,7 +15,7 @@
 ; honest misses) and the universally-quantified LAWS. Untranslatable asserts are
 ; SKIPPED and COUNTED -- never silently dropped (the trailing comment reports it).
 ; Z not nat: (3 3 3) = 3^27 would blow up unary-nat vm_compute.
-; Reads test/spec.l, writes Coq to `out`.  Run: out/host/ai tools/spec2coq.l > rocq/gen.v
+; Reads test/spec.l, writes Coq to `out`.  Run: out/host/ai tools/spec2coq.l > proof/rocq/gen.v
 
 (: (cat l) (foldl (+) "" l)                            ; join a list of strings
 
@@ -175,7 +175,7 @@
                    (walk (cup fs))))
 
    _ (. (cat (L
-     "(* rocq/gen.v -- GENERATED from test/spec.l by tools/spec2coq.l. Do not edit;" (string 10)
+     "(* proof/rocq/gen.v -- GENERATED from test/spec.l by tools/spec2coq.l. Do not edit;" (string 10)
      "   regenerate with `make test_gen`. Each integer-comparison corpus assert is" (string 10)
      "   translated to Coq, with its source assert shown in the comment above it." (string 10)
      "   The proofs are `vm_compute. reflexivity.`: every goal is a CLOSED computation," (string 10)
@@ -183,7 +183,7 @@
      "   2^64) to a normal form, and reflexivity checks the two results are identical." (string 10)
      "   A church numeral n applied to x is x ** n (`appZ`); a list/string nets the" (string 10)
      "   sum of its elements/bytes (`asum`). The MODEL IS SHARED: this file imports" (string 10)
-     "   rocq/spec.v and checks against ITS definitions -- appZ/asum/aprod/amax/vscale/srep" (string 10)
+     "   proof/rocq/spec.v and checks against ITS definitions -- appZ/asum/aprod/amax/vscale/srep" (string 10)
      "   verbatim, iotaZ the Z-arg face, app_appZ proving appZ IS the nat `app` -- so the" (string 10)
      "   generated instances and the hand-written LAWS speak one model. The defs below are" (string 10)
      "   gen-only (no spec.v twin): amin, leqb, the TOTAL vaddt (spec.v's vadd is option-" (string 10)

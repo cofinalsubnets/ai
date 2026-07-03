@@ -64,7 +64,7 @@ is arch+build-specific → a Makefile dep on prel/ev/post/asm + the binary. · G
 boots from the image; cold start measured (target <20 ms, from 233); spec+ai0 green.
 
 **Phase 4 — Bake the glaze (the payoff).** Split emit.l/auto.l's inline asserts into
-`emit-test.l`/`auto-test.l` (the asm/asmtest.l precedent) so the baked lib is assert-free; add the
+`emit-test.l`/`auto-test.l` (the apps/asm/asmtest.l precedent) so the baked lib is assert-free; add the
 assert-free glaze to the boot corpus BEFORE the dump, x86-64-gated. The snapshot is taken with the
 glaze loaded and `ev` already rebound to `auto-ev`, but BEFORE any closure is natively compiled (no
 W^X arenas to serialize — natives JIT lazily at first `ev`, as today). Remove run.sh's glazed list;
@@ -125,8 +125,8 @@ Departures from the original plan above, worth noting:
    aarch64 host image works (cross-built + qemu-tested) but is glaze-LESS: the glaze emits x86-64 machine
    code, so `main.c` gates the dump-time glaze load on `__x86_64__`. The recognizers (`ai/glaze/auto.l`)
    are arch-NEUTRAL (they analyze ai source); only the codegen (`ai/glaze/emit.l` — `cgv`/`cgn`/
-   `loopcode`/the SSE/register layer) is x86. The `asm/` assembler already has an arm64 backend
-   (`asm/arm64.l`, emits bytes as DATA), so the scope is a parallel arm64 instruction-selection path in
+   `loopcode`/the SSE/register layer) is x86. The `apps/asm/` assembler already has an arm64 backend
+   (`apps/asm/arm64.l`, emits bytes as DATA), so the scope is a parallel arm64 instruction-selection path in
    emit.l + an arch dispatch in `auto-ev`'s `njit`, then dump a glazed aarch64 image. Biggest payoff for
    the embedded/Nerves target.
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # arm64check.sh -- the aarch64 EXECUTION validator. Cross-builds `ai` for aarch64
 # (reusing the native ai0-generated headers in out/lib) and RUNS a test corpus
-# under qemu-aarch64. asm/asmtest.l proves the arm64 byte ENCODINGS; this proves
+# under qemu-aarch64. apps/asm/asmtest.l proves the arm64 byte ENCODINGS; this proves
 # they RUN -- the only trustworthy check for the glaze's second target, since the
 # glaze self-test executes the machine code it emits.
 #

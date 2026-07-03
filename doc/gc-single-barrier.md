@@ -2,7 +2,7 @@
 
 Status: **plan / spike, not started.** Pick-up doc from the 2026-06-27 session.
 Companion to [`doc/gengc.md`](gengc.md) (the generational design as shipped) and
-[`rocq/gc.v`](../rocq/gc.v) (the soundness proof of the *model*).
+[`proof/rocq/gc.v`](../proof/rocq/gc.v) (the soundness proof of the *model*).
 
 ## The goal
 
@@ -170,7 +170,7 @@ keep the C connected to the model exactly as today. Consider promoting `gen_audi
 - `ai.c`: `gen_wb ~1204`, `gen_dirty ~1207`, dirty rationale `~1182–1208`, "subsumes the
   dirty case" `~1317`, major decision `~1413`, resets `~1425/~1471`, c0 entry `~1684`,
   `lvm_poke ~2967–2970`, reader build `~4135–4148`, map barrier `~4356–4396`.
-- [`rocq/gc.v`](../rocq/gc.v): `barrier_sound` (the theorem), `minor_loses_only_if_barrier_incomplete`
+- [`proof/rocq/gc.v`](../proof/rocq/gc.v): `barrier_sound` (the theorem), `minor_loses_only_if_barrier_incomplete`
   (3b's converse), `rem_complete` (the hypothesis = what `gen_audit` checks), `Seeds` (the
   minor's roots).
 - [`doc/gengc.md`](gengc.md): §"The write barrier", §"What the audit found: the compiler

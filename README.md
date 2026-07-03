@@ -150,7 +150,7 @@ cook an item -- check its date, prep its ingredients, follow the recipe's
 steps, record what shipped, from the cards; the ticket names what to make
 (default: the first card, the standing check).
 
-- `ai -l cook/cook.l [ticket]` -- cook a ticket (cook discovers the build file:
+- `ai -l apps/cook/cook.l [ticket]` -- cook a ticket (cook discovers the build file:
   a `Makefile` if present, else a `Cookfile`, else a legacy `Cards.l`; name one
   explicitly to override)
 - cook reads a real **Makefile** directly -- a reasonably GNU-make-compatible
@@ -160,12 +160,12 @@ steps, record what shipped, from the cards; the ticket names what to make
   order-only prereqs, and the `$@ $< $^ $*` automatics
 - `make -f cook.mk test` -- the make-shaped stub: bootstraps the binary, then
   forwards to cook (it names the `Cookfile` explicitly)
-- [cook/example/](cook/example/) is a worked C build;
-  [cook/cooktest.l](cook/cooktest.l) (`make test_cook`) tests the importer
+- [apps/cook/example/](apps/cook/example/) is a worked C build;
+  [apps/cook/cooktest.l](apps/cook/cooktest.l) (`make test_cook`) tests the importer
 
-ai builds itself this way too: `ai -l cook/cook.l Makefile host` runs g's own
+ai builds itself this way too: `ai -l apps/cook/cook.l Makefile host` runs g's own
 Makefile from scratch, and the cook-built binary passes the whole corpus. cook
-runs *on* ai, so you need an ai to begin; the [cook/Cookfile](cook/Cookfile) is the
+runs *on* ai, so you need an ai to begin; the [apps/cook/Cookfile](apps/cook/Cookfile) is the
 curated cross-cutting verbs (`test clean valg vmret bench install`).
 
 ### the crew

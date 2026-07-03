@@ -2,8 +2,8 @@
 
 The live glaze (`ai/glaze/emit.l` + `auto.l`) emits **raw x86-64 byte lists inline** and is x86-only.
 The path to an aarch64 glaze is to route `emit.l`'s codegen through the neutral assembler
-(`asm/asm.l` + backends), after which `asm/arm64.l` carries the second target. This doc is the ABI
-spec the retarget needs. The assembler side is **done and gated** (`asm/asmtest.l`); the codegen
+(`apps/asm/asm.l` + backends), after which `apps/asm/arm64.l` carries the second target. This doc is the ABI
+spec the retarget needs. The assembler side is **done and gated** (`apps/asm/asmtest.l`); the codegen
 retarget is the remaining work.
 
 ## How native code is reached (why the ABI is what it is)
@@ -35,8 +35,8 @@ final `lvm_ret` returns to C). So the accumulator need not be the ABI return reg
 
 ## The register-role map (the crux)
 
-`asm/x64.l`'s abstract file is deliberately tuned to SysV: g/Ip/Hp/Sp = abstract **r6/r5/r2/r1**,
-acc = r0. `asm/arm64.l` is an **identity** file (rN→xN), so the *same abstract numbers* would land
+`apps/asm/x64.l`'s abstract file is deliberately tuned to SysV: g/Ip/Hp/Sp = abstract **r6/r5/r2/r1**,
+acc = r0. `apps/asm/arm64.l` is an **identity** file (rN→xN), so the *same abstract numbers* would land
 g/Ip/Hp/Sp in x6/x5/x2/x1 — wrong. AAPCS needs x0/x1/x2/x3. **The arm64 glaze therefore uses a
 different role→register map**; the retargeted `emit.l` must select it per target.
 
@@ -80,7 +80,7 @@ are now exposed.
 
 ## status
 
-- **Assembler — done & gated** (`asm/asmtest.l`, both targets, every encoding objdump/llvm-mc-verified):
+- **Assembler — done & gated** (`apps/asm/asmtest.l`, both targets, every encoding objdump/llvm-mc-verified):
   P0 `jmpr`/`adds`/`subs`/`vs`/`vc`/`mulo`/`set`; P1 shifts/`test`/`div`/`rem`/indexed + the bitmask-
   immediate encoder + the bignum-`li` fix; `lr`/`fp` + the callee-saved bank; the sp-via-`lea` idiom.
 
@@ -95,7 +95,7 @@ are now exposed.
   - **leaf** `jitir` (arity 1): `var | int | +-*//%&|^ | cmp | ?`; machine-stack nesting; deopt→interp.
   - **n-ary** `jitnir` (arity ≥2): `Sp[i]` param fetch (`fxir`); deopt→interp BODY (`value[1]+16`).
   - **group** `jitgroupir` (mutual recursion): `cggir`/`gargsir`/`mkhir`/`mkouterir`. Calls = `(call
-    <name>)`+`(label <name>)` (asm/ resolves rel offsets — the byte path's two-pass offset math is
+    <name>)`+`(label <name>)` (apps/asm/ resolves rel offsets — the byte path's two-pass offset math is
     gone). Callee-saved arg bank + OVF anchor; per-H save/load/restore + arm64 `lr`-save; the shared
     OVF handler `lea`s sp from the anchor (abandons all frames) then deopts. `slotsz` (8/16) unifies
     the stack math. Covers fib/tak/even-odd + overflow→deopt→bignum.
@@ -112,13 +112,13 @@ are now exposed.
   3. **value-mode** (`cggv`) — list-returning group fns (a `(link A B)` cons body): a room-guard + heap
      write, value-epilogue (store rax as-is, no putfix). Needs `consemit` in IR.
   4. **special ops** — `peep`/`tally` (string), `mpeep`/`mpin` (map — already neutral IR via the
-     `asm/` probe, just wire it in), `pin` (cask), `cap`/`cup`/`two?` (chain). Needs byte load/store
+     `apps/asm/` probe, just wire it in), `pin` (cask), `cap`/`cup`/`two?` (chain). Needs byte load/store
      (`ldrb`/`strb`) on the arm64 backend (P2 item) for the string/cask sub-cases.
   5. **wire into `auto.l`** — once a lane is proven equal to the byte path, pick the host target and
      route `auto.l`'s recognizers through the IR entries; then retire the byte path. Add the I-cache
      flush in `nat`/`toast` (`ai.c`) so arm64 can actually run installed code.
   - **P2 (separate sub-project):** the **float/grid lane** (`cgf`/`jitfr`/`loopcode-gridn`) — needs a
-    FLOAT register file in `asm/` (xmm/NEON + `movsd`/`addsd`/`mulsd`/`divsd`/`cvtsi2sd`/`ucomisd`/
+    FLOAT register file in `apps/asm/` (xmm/NEON + `movsd`/`addsd`/`mulsd`/`divsd`/`cvtsi2sd`/`ucomisd`/
     `movq`), which the integer-only IR doesn't model yet.
 
   **How to add a lane** (the proven loop): prototype in scratchpad against `cat emit.l proto.l | ai`

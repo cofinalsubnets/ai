@@ -1,7 +1,7 @@
 #include "limine.h"
 #include "k.h"
 #include "ai.h"
-#include "cb.h"
+#include "quay.h"
 #include <stdarg.h>
 #include <limits.h>
 
@@ -78,7 +78,7 @@ static ai_inline void kwait(void) { asm volatile (
 #endif
   ); }
 
-#include "cb.h"
+#include "quay.h"
 #include <stdarg.h>
 __attribute__((used, section(".limine_requests_start")))
 static volatile LIMINE_REQUESTS_START_MARKER;

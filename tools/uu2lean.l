@@ -17,7 +17,7 @@
 ; Sigma carrier. Defs are `noncomputable` -- we CERTIFY the terms, never run them, so
 ; the code generator (which rejects bare recursors) is irrelevant.
 ;
-; Run: out/host/ai tools/uu2lean.l > lean/uugen.lean   then  lean lean/uugen.lean
+; Run: out/host/ai tools/uu2lean.l > proof/lean/uugen.lean   then  lean proof/lean/uugen.lean
 
 (: _ (reads (open "test/uu.l" "r"))            ; load + CERTIFY uu's corpus (populates GLOB)
    bs (intern "\\")
@@ -158,9 +158,9 @@
    exports (foldl (\ a e (? (peep keep (e2 e) 0) (link e a) a)) () ents)   ; foldl reverses -> source order
 
    _ (. (lines `(
-       "/- lean/uugen.lean -- GENERATED from test/uu.l by tools/uu2lean.l. Do not edit;"
+       "/- proof/lean/uugen.lean -- GENERATED from test/uu.l by tools/uu2lean.l. Do not edit;"
        "   regenerate with `make test_uulean`. The SAME uu proof terms Rocq certifies"
-       "   (rocq/uugen.v) re-checked by a SECOND independent kernel, Lean 4 -- so each law"
+       "   (proof/rocq/uugen.v) re-checked by a SECOND independent kernel, Lean 4 -- so each law"
        "   is agreed by two unrelated implementations (the de Bruijn criterion, diversified)."
        "   uu's kernel type-checked each term against its theorem (test/uu.l, green under"
        "   `make test`); this is the same term in Lean. Lean gives structure-eta and universe"

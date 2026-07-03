@@ -3,7 +3,7 @@
 Goal: an **ai window manager with the same features** as `/home/gwen/.xmonad/xmonad.hs` —
 not the Haskell config kept alive, but a fresh, idiomatic **ai config** that does everything
 yours does. The DSL borrows xmonad's *vocabulary* (layouts, messages, manageHook rules,
-a keymap) because those names are good and you know them — but `wm/config.l` is genuine ai,
+a keymap) because those names are good and you know them — but `apps/wm/config.l` is genuine ai,
 read and edited as ai, not a transliteration of Haskell. **Single monitor** throughout (no
 Xinerama) — the model is simpler for it. The X mechanics already work
 (the `doc/proto/{x11,wm,xsend}.l` spike ladder, rungs 1–5): raw X11 wire protocol, the
@@ -17,16 +17,16 @@ manageHook rule, and keybinding in `xmonad.hs` is accounted for below.
 
 ---
 
-## 1. Architecture: the `wm/` app
+## 1. Architecture: the `apps/wm/` app
 
 The spike lives in one giant body-having `:`, which shares ONE flat scope with every nif
 and all of prel. That is a collision minefield — rung 6 died because a sheaf helper named
 `put` shadowed the `put` nif the wire codec depends on. A whole window manager cannot live
-in one `:`. So the port graduates into a proper **`wm/` app** beside ain/bao/cook, each
+in one `:`. So the port graduates into a proper **`apps/wm/` app** beside ain/bao/cook, each
 file its own scope, helpers local, only entry points leaking:
 
 ```
-wm/
+apps/wm/
   core.l      the pure StackSet: zipper + sheaf + FLOATING map. No X, no sockets.
               (test/wm.l's core, extended with floats. Corpus-testable, all targets.)
   wire.l      the X11 codec: connect, setup, request writers, event decoder, atoms.
@@ -50,7 +50,7 @@ Xephyr integration runs.
 
 ## 2. The DSL: how the config reads
 
-The target — `wm/config.l`, an ai config with your config's features. Same vocabulary, ai
+The target — `apps/wm/config.l`, an ai config with your config's features. Same vocabulary, ai
 shape: `mod4` is `sup`, layouts are constructors returning closures, `|||` is a choice
 combinator, messages are symbols. Idioms that were Haskell (the inline `fib` for Dwindle's
 ratio, the `M.union . M.fromList` comprehension) are just written in ai — a constant or a
@@ -109,7 +109,7 @@ that builds the directional keys becomes a `map`/`for` over the same `(dir keys 
 | `manageHook` | `manage-hook ...` | 2 | §5 |
 | `keys` | `keys ...` | 2 | §6 |
 
-### Contrib modules → wm/ modules
+### Contrib modules → apps/wm/ modules
 | import | provides (used here) | ai home | tier |
 |---|---|---|---|
 | `XMonad` core | the WM, `def`, `spawn`, `kill`, `windows`, `sendMessage` | wm.l/core.l | ✓ done |
@@ -235,7 +235,7 @@ separates "manages my windows" from "my taskbar and fullscreen video work."
 
 ## 8. Rung order (each Xephyr-testable, like rungs 1–5)
 
-1. **wm/ scaffold** — split rungs 1–5 into core.l/wire.l/wm.l, kill the single-`:` collision
+1. **apps/wm/ scaffold** — split rungs 1–5 into core.l/wire.l/wm.l, kill the single-`:` collision
    trap. Rung 6 (workspaces 1–9) lands here, clean. *Unblocks everything.*
 2. **Float half of StackSet** (core.l) — `floating` map, `W.sink`, `f_t`; corpus laws for it.
 3. **Layout engine** (layout.l) — the closure/message protocol + Tall/ResizableTall/Full/

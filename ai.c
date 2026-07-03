@@ -1106,7 +1106,7 @@ static ai_inline void evac_data(struct ai *g, word const *const p0, word const*c
 // object still points at through the REMEMBERED SET -- gen_wb records any old `src`
 // that takes a young `p`, so the minor rescans src. Every old->young edge EXECUTION
 // or the READER mints (a map pin, a reader set-tail) goes through gen_wb, so a minor
-// under a complete rem set is sound -- exactly the barrier rocq/gc.v's `barrier_sound`
+// under a complete rem set is sound -- exactly the barrier proof/rocq/gc.v's `barrier_sound`
 // proves (rem_complete => the minor reaches every young object the mutator can). See
 // doc/gengc.md, doc/gc-single-barrier.md.
 //

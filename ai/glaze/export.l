@@ -1,4 +1,4 @@
-; ai/glaze/export.l -- the glaze's MODULE BOUNDARY, the twin of asm/export.l. emit.l +
+; ai/glaze/export.l -- the glaze's MODULE BOUNDARY, the twin of apps/asm/export.l. emit.l +
 ; auto.l leak every helper and analysis pass onto the global book (autogroup, jitir,
 ; loopinfo, dechurch, the cf-*/cb-*/anat-* families, the memo cache ..); this trailer
 ; sweeps the whole span into ONE book pinned under `glaze` and pulls the names back off.

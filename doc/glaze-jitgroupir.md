@@ -3,7 +3,7 @@
 The integer group compiler exists in two forms. The **byte path** (`jitgroup`/`cgg`/`cggv`/`cggt`/
 `mkouter` in `ai/glaze/emit.l`) emits raw x86-64 byte lists with hand-counted rel32 offsets and owns
 every lane. The **IR path** (`jitgroupir`/`cggir`/`cggvir`/`consir`/`mkouterir`/`mkhir`) emits neutral
-asm/ IR — labels, no hand offsets — and currently owns only **integer arithmetic** and **value-mode
+apps/asm/ IR — labels, no hand offsets — and currently owns only **integer arithmetic** and **value-mode
 cons** groups. A transitional gate (`jgir-ok?`) routes a group to the IR path when it fits, else falls
 back to the byte path; `auto.l`'s `rewrite-bindings` calls it (line ~833). This doc plans porting the
 **five remaining lanes** so the gate becomes vacuous and the byte path retires.
@@ -26,7 +26,7 @@ is true for any admitted group and the byte path (`jitgroup`) is unreachable. St
 
 The string lane needed a new assembler primitive: the IR had no byte-width memory op, but `peep` is a
 `movzx` byte read (and `pin`, stage 3, a byte store). Added **`ldxb`/`stxb`** (indexed zero-extend
-load / low-byte store) to `asm/x64.l` — objdump-verified, `asmtest.l` entries, baked into ai0. Shared
+load / low-byte store) to `apps/asm/x64.l` — objdump-verified, `asmtest.l` entries, baked into ai0. Shared
 prerequisite for string + cask.
 
 The IR path's neutral register roles are stable: `argregir` = the callee-saved arg bank (x64
@@ -107,7 +107,7 @@ All new IR written with the backtick list ctor `` ` `` (per house pref), wrapped
   `V`'s low byte at `[r9 + i + 16]` (`stx`-byte); `(mov A R)` — result is the cask (raw ptr; usually
   `_`-bound for effect). `r9` is free scratch.
 
-**map** — `R` = the map param reg. The probe (`mprobe-ir` + tails) already IS asm/ IR with symbolic
+**map** — `R` = the map param reg. The probe (`mprobe-ir` + tails) already IS apps/asm/ IR with symbolic
 labels `loop`/`hit`/`miss`/`end`(/`deopt` for `mpin`). Splicing it inline N times would collide those
 labels in the single group `assemble`. Fix with a **generic relabel pass** `(relabel ir alist)` that
 deep-substitutes symbols in the IR forms (labels are bare-symbol operands, disjoint from `r0`..`rN`):
@@ -134,7 +134,7 @@ porting a lane just re-routes its asserts from `jitgroup` to `jitgroupir` with n
    `jgir-supported`; behavioral no-op.
 2. **string** ✅ — `peep`/`tally` in `cggir`; `mkouterir` grew four masks (`smask mmask bufmask cmask`,
    all computed now, only `smask` populated this stage) with per-param guards (int fixnum-guard + sar;
-   string/map/cask kind-guard `(test;br ne)` + raw; chain raw); `ldxb`/`stxb` in `asm/x64.l`.
+   string/map/cask kind-guard `(test;br ne)` + raw; chain raw); `ldxb`/`stxb` in `apps/asm/x64.l`.
    Verified through `make test_glaze` (NOT a standalone run — see gotchas).
 3. **cask** ✅ — `pin` in `cggir` (`stxb` byte store into `[C+8]`'s backing + idx; returns `C`, so it
    threads as a sibling-call cask arg); `bufmask` already computed+guarded (stage 2). `leff` stays

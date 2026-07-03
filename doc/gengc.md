@@ -265,7 +265,7 @@ The model's invariants (`doc/proto/gengc.l`, 19 asserts) are the spec the C must
 meet — most importantly that the barrier is load-bearing (3b reproduces the bug a
 missing barrier *is*). The GC-stress differential test is the runtime oracle.
 
-`rocq/gc.v` PROVES the load-bearing one (axiom-free, wired into `make test` as
+`proof/rocq/gc.v` PROVES the load-bearing one (axiom-free, wired into `make test` as
 `test_gc` beside `test_proof`): it lifts the proto's heap/region/rem-set model to
 Coq and shows `barrier_sound` — under `rem_complete` (every old→young edge
 remembered) the minor's nursery scan reaches every young object the mutator can

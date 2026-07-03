@@ -396,7 +396,7 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "prel0.h"
 #include "bao0.h"
   );
-  g = ai_evals_(g,                                    // the asm/ assembler service (neutral core + both backends),
+  g = ai_evals_(g,                                    // the apps/asm/ assembler service (neutral core + both backends),
 #include "asm0.h"                                     //   baked into the bootstrap so the corpus can test it under c0
 #include "x640.h"                                     //   AND the self-hosted ev. Globals persist across the egg warm
 #include "arm640.h"                                   //   below, so one eval here serves both corpus passes.
@@ -492,7 +492,7 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "ev.h"
     "))"
 #include "post.h"                                       // the post-egg layer (parser combinators, ...), evaled ONCE after the egg
-#include "asm.h"                                         // the neutral assembler core (asm/asm.l) -- a post-egg language SERVICE
+#include "asm.h"                                         // the neutral assembler core (apps/asm/asm.l) -- a post-egg language SERVICE
 #include "x64.h"                                         // + BOTH backends: they produce machine-code bytes as DATA (never
 #include "arm64.h"                                       //   execute), so every target is arch-neutral. the glaze (x86 client) executes x64
 #include "bao.h"
@@ -502,7 +502,7 @@ static struct ai *boot(struct ai *g, bool argp) {
   g = ai_evals_(g, glaze_auto);                          // (no fragile stale image; base-ev captures the hatched ev).
   g = ai_evals_(g, glaze_export);                        // the glaze module boundary: its names sweep into the `glaze` book
 #endif                                                   // ~680ms from-scratch; the image snapshots past it. arm64: integer lanes native, x86-only lanes (float/loops) fall to interp -- see auto.l's `x86?` gate.
-  g = ai_evals_(g,                                       // the asm module boundary (asm/export.l): the assembler's names
+  g = ai_evals_(g,                                       // the asm module boundary (apps/asm/export.l): the assembler's names
 #include "export.h"                                      //   sweep into the ONE public `asm` book and off the global book.
   );                                                     //   AFTER the glaze, whose direct references folded at its compile.
 

@@ -1,8 +1,8 @@
-# the sat kernels — a domain-specific compiler over asm/
+# the sat kernels — a domain-specific compiler over apps/asm/
 
-`sat/flat.l` is the answer to a question: can the in-tree assembler carry a *domain-specific
+`apps/sat/flat.l` is the answer to a question: can the in-tree assembler carry a *domain-specific
 compiler* — not a general codegen pass, but one app compiling its own hot loops? It can. The
-CDCL SAT solver's three hot loops are hand-written in asm/ neutral IR, assembled **at
+CDCL SAT solver's three hot loops are hand-written in apps/asm/ neutral IR, assembled **at
 solver-build time, specialized to the instance** (section displacements baked as immediates,
 one kernel set per `nvars`, cached), and installed through the `nif` seam — plus `fbva`,
 the extended-resolution factoring ladder, reason-side VSIDS bumping, and the rephase
@@ -12,14 +12,14 @@ the proven-UNSAT sets (ai 1618, picosat 2047, cadical 2216, kissat 3975): faster
 cadical outright on PHP(5–7), mid-field on the pure random rows (`bench/bench.html`,
 second table; `bench/satrace.sh` reproduces it).
 
-the lineage: `sat/sat.l` is the readable tablet-based solver and stays the oracle —
-`sat/flat.l` runs AFTER it (`cat sat/sat.l sat/flat.l | ai`) and gates differentially
+the lineage: `apps/sat/sat.l` is the readable tablet-based solver and stays the oracle —
+`apps/sat/flat.l` runs AFTER it (`cat apps/sat/sat.l apps/sat/flat.l | ai`) and gates differentially
 against its DPLL baseline on every load. `make test_sat` runs the whole stack.
 
 ## the shape
 
 State lives flat, laid out for `ldx`/`stx` (the authoritative layout comment is at the top
-of `sat/flat.l`): one `fx` cask holds the header scalars (top/qhead/level/aru/wvu/vinc) and
+of `apps/sat/flat.l`): one `fx` cask holds the header scalars (top/qhead/level/aru/wvu/vinc) and
 the per-variable sections (trail, levels, reasons, watch heads, values, activities, phases,
 a seen scratch); two growable casks hold the clause arena and the watch nodes. Literals are
 encoded (`+v → 2v`, `-v → 2v+1`, so negation is xor 1); `val[v]` stores the *true encoded
@@ -168,7 +168,7 @@ ablation trap en route: single-flag ablations all read "no effect" because the e
 is redundant, and one invalid option — `--preprocessing=1` — produced 3ms "results" that
 were the error path. Check exit codes.)
 
-`fbva` (sat/flat.l) is the Manthey–Heule–Biere greedy: for a literal l, grow M_lit ×
+`fbva` (apps/sat/flat.l) is the Manthey–Heule–Biere greedy: for a literal l, grow M_lit ×
 M_cls with every (m | C\{l}) present, then a fresh x replaces |M_lit|·|M_cls| clauses
 with |M_cls|+|M_lit|+1. Three details carried ALL the value, found by diffing our
 factored output against cadical's (decoded from its binary DRAT proof — the added
@@ -296,7 +296,7 @@ two checkers, deliberately unequal: `fd-check` (flat.l) is a from-scratch in-gat
 RUP/RAT checker — naive propagation, small refutations, zero dependencies — that
 `make test_sat` runs on the tiny UNSATs, php(4) (RAT lines live), and a forced-
 reduction php(4) (`d` lines live), plus a corrupted-proof rejection probe; and
-`make test_drat` (`sat/dratcheck.sh`) aims **drat-trim**, Heule's independent checker
+`make test_drat` (`apps/sat/dratcheck.sh`) aims **drat-trim**, Heule's independent checker
 (fetched + built into `out/drat` on first use), at php(5–8) and a raw-RUP row —
 `s VERIFIED` across the board, with the BVA lemmas load-bearing in the verified core
 (php5: 20 RAT lemmas). emission is off by default and costs the hot loop one box-peep

@@ -1,26 +1,26 @@
 vgcore.*
 .gdb_history
 /out/
-# rocq/coqc build artifacts (rocq/spec.v is checked by `make test_proof`).
-# rocq/gen.v, rocq/uugen.v, lean/uugen.lean are GENERATED proof artifacts but are now
+# proof/rocq/coqc build artifacts (proof/rocq/spec.v is checked by `make test_proof`).
+# proof/rocq/gen.v, proof/rocq/uugen.v, proof/lean/uugen.lean are GENERATED proof artifacts but are now
 # CHECKED IN (they regen + re-check in seconds) and regenerated every run -- drift-proof:
 # the gate fails if a checked-in copy is stale. Only the compiled outputs below are ignored.
 # (Benches are the exception -- regenerated manually, too slow for per-commit.)
-lean/*.olean
+proof/lean/*.olean
 *.vo
 *.vok
 *.vos
 *.glob
-rocq/.*.aux
+proof/rocq/.*.aux
 .*.cache
-# rocq/extract.v EXTRACTS this (test_extract); oracle_drive.ml is the source driver
-rocq/normalizer.ml
-rocq/normalizer.mli
-rocq/oracle_drive
+# proof/rocq/extract.v EXTRACTS this (test_extract); oracle_drive.ml is the source driver
+proof/rocq/normalizer.ml
+proof/rocq/normalizer.mli
+proof/rocq/oracle_drive
 *.cmi
 *.cmx
 *.cmo
-rocq/*.o
+proof/rocq/*.o
 
 # private dev notes / squeezed memory archive (keep local, out of the public cut)
 doc/archive/

@@ -144,7 +144,7 @@ raw: $(call txt,$(PRESENT))
 # solvers on PHP(5..8). Cached like the language results -- re-run only when the
 # runner or the solver changes. `make satrace` to refresh it on its own.
 SATRACE := $(BDIR)/satrace.txt
-$(SATRACE): satrace.sh $(R)/sat/sat.l $(GL) | $(BDIR)
+$(SATRACE): satrace.sh $(R)/apps/sat/sat.l $(GL) | $(BDIR)
 	@./satrace.sh $(TIMEOUT) > $@
 satrace: $(SATRACE)
 	@cat $(SATRACE)

@@ -27,7 +27,7 @@
 (: (le8 n) (: u (? (< n 0) (+ n 18446744073709551616) n)                            ; two's-complement; & is broken on
               ((: (go i) (? (< i 8) (link (% (// u (i 256)) 256) (go (+ i 1))) ())) 0))   ; a bignum >= 2^63, so use //% (n -> 8 LE bytes)
    (le4 n) ((: (go i) (? (< i 4) (link (& (>> n (* 8 i)) 255) (go (+ i 1))) ())) 0)  ; n -> 4 LE bytes (offsets < 2^31, & ok)
-   ; the raw-byte x86 lane is fully RETIRED: every codegen helper now emits neutral asm/ IR (cgir/cgvir for
+   ; the raw-byte x86 lane is fully RETIRED: every codegen helper now emits neutral apps/asm/ IR (cgir/cgvir for
    ; arith, the float lanes cgf/jitfr, the grid kernels gridn/grid2), assembled per target. The old byte
    ; blobs (deopt/guard/guardz/fetch/untag/fxv/epilogue) are gone -- their IR twins are deoptbody/ldeopt/
    ; zdeopt/fxvir/loopepi, which serve BOTH x86 and arm64.
@@ -45,8 +45,8 @@
    chainkind (apof (link 0 0))                                                      ; lvm_chain's ap sentinel, for the inline two?/cap/cup kind test (cf. (apof "") for the string lane)
    mapkind (apof (tablet 0))                                                        ; lvm_map_lookup's sentinel, for the map-param entry guard + the (mpeep ..) probe
    mapmix 11400714819323198485                                                      ; the hash multiplier 0x9e3779b97f4a7c15 (= ai.c's map hash mult), for the inline probe
-   ; -- the map probe, via the asm/ assembler SERVICE (baked into the post-egg layer; the glaze is its
-   ;    client). asm/ resolves the hit/miss/loop labels to rel32 -- no hand-counted je/jmp offsets, the
+   ; -- the map probe, via the apps/asm/ assembler SERVICE (baked into the post-egg layer; the glaze is its
+   ;    client). apps/asm/ resolves the hit/miss/loop labels to rel32 -- no hand-counted je/jmp offsets, the
    ;    fragile bit. reg map: asm r0=rax, r7=x86-r8, r8=x86-r9, r9=x86-r10, r10=x86-r11. The probe wants
    ;    the MAP in rax and the TAGGED key in r11 (asm r10); it ends branched to `hit` (match) / `miss` (gap).
    (asmx ir) (peep (assemble 'x64 ir) 'bytes 0)                                     ; assemble neutral IR -> flat bytes, X86 (the post-egg `assemble` service; emit.l's own `asm` is byte-concat, untouched)
@@ -177,7 +177,7 @@
                   (= op '/) '((divsd f1 f0) (movsd f0 f1))           ; f1 = f1 / f0 ; f0 = f1
                   ())                                                ; reg-reg double IR (two-address: x86 SSE / arm64 scalar-double), both targets
    ; cgf: a FLOAT subexpr over {x (the fixnum param -> cvtsi2sd) ; numeric consts} -> xmm0/d0, as neutral
-   ; asm/ IR (both targets). the param load is fxvir (fixnum-guarded, inline deopt) then int->double.
+   ; apps/asm/ IR (both targets). the param load is fxvir (fixnum-guarded, inline deopt) then int->double.
    (cgf tgt v e d) (? (= e v)   ((fxvir tgt 0 d) + `(`('cvtsi2sd 'f0 (greg tgt 'acc))))   ; param: fixnum-guarded untag in acc, cvtsi2sd
                   (gem? e)  (fconst tgt e)                           ; a float constant
                   (whole? e)(fconst tgt (+ e 0.0))                   ; an int constant -> promote to double
@@ -209,7 +209,7 @@
    (jitfr lam tgt)
     (: v (caup lam)  kind (apof 1.5)                                 ; lvm_flo's address, captured now (code never moves)
        A (greg tgt 'acc) S (greg tgt 'sp) HP (greg tgt 'hp) IP (greg tgt 'ip) T (greg tgt 'tmp) ok (mint 0)
-       ; neutral asm/ IR (both targets): the room-guard skips the deopt by LABEL; the box store is `stsd`;
+       ; neutral apps/asm/ IR (both targets): the room-guard skips the deopt by LABEL; the box store is `stsd`;
        ; the deopt is deoptbody (no pending spills here -- cgf balances its own); nanc is arch-aware.
        (nif (emit (asmt tgt ((cgf tgt v (caup (cup lam)) 0)
           + `(`('lea A HP 80) `('cmp S A) `('br 'ae ok))                  ; cmp Sp,Hp+10w ; room? skip deopt
@@ -276,7 +276,7 @@
                                    (? (member? op '(+ - * /)) ((cgFd tgt ht ce a) + (xpushir tgt) + (cgFd tgt ht ce b) + (xpop1ir tgt) + (fbinop op)) ()))
                      ())
    (loopcode-gridn dims cnames invs invd fvars updates testexpr cmpop bound lim tgt)
-    ; the scalar D-dim grid kernel as a neutral asm/ IR PROGRAM, BOTH targets: control flow is LABELS (no
+    ; the scalar D-dim grid kernel as a neutral apps/asm/ IR PROGRAM, BOTH targets: control flow is LABELS (no
     ; hand offsets), the recurrence is allocp's CSE'd named-SSE forms, the cold derives (cgFd) are IR too.
     ; k=r7(iter), acc=r8, counters=r9..(gr); SCR=scratch (greg acc), the deopt tail uses greg ip. xmm: consts
     ; f2.., invariants f8.., fvars next, the rest the DAG pool. On x86 D>=3 spills the callee-saved counters
@@ -311,7 +311,7 @@
        (pushsv + preload + '((li r8 0)) + (loop-nest 0 cell) + popsv2 + `(`('mov SCR 'r8))))   ; IR program: push saved; consts; acc=0; NEST; pop; result -> SCR(=acc)
    ; --- 2-WIDE PACKED-SSE2 grid kernel (loopcode-grid2): the SAME D-dim float-recurrence grid, but the
    ;     INNERMOST dim is processed TWO cells at a time -- lanes [c, c+1] packed [low,high] in each xmm.
-   ;     The recurrence runs PACKED (addpd/mulpd/subpd via the asm/ SSE2 lane) so both pixels advance per op; the
+   ;     The recurrence runs PACKED (addpd/mulpd/subpd via the apps/asm/ SSE2 lane) so both pixels advance per op; the
    ;     two independent chains hide the mul latency the SCALAR kernel (one z, serial dependency) is bound
    ;     by -- ~2.4x on mandelbrot. The escape test -> a per-lane mask (cmplepd) ANDed into a sticky `alive`;
    ;     the per-lane iteration count is a packed-int vector bumped by `psubq count,alive` (alive lane =
@@ -320,12 +320,12 @@
    ;     Gated (grid2-ok?) to the mandelbrot/float shape: D<=2, M+N<=4 (invs/fvars at xmm8..11), <=2 inner
    ;     consts (xmm2,3 -> xmm4,5,6 free for count/alive/scratch), cmpop in {< <=}, even innermost dim. The
    ;     acc adds keep the lane-law overflow guard (deopt to the faithful interp nest). ⚠ x86-64 (SSE2).
-   (fr n)   (intern ("f" + (show n)))                                                    ; an xmm NUMBER -> its asm/ IR symbol f0..f15
+   (fr n)   (intern ("f" + (show n)))                                                    ; an xmm NUMBER -> its apps/asm/ IR symbol f0..f15
    (gr p)   (intern ("r" + (show (- p 1))))                                              ; a physical GPR encoding (>=8) -> its abstract-file IR name (r10->r9 ..)
    (sseop op) (? (= op '+) 'addpd (= op '*) 'mulpd (= op '-) 'subpd (= op '/) 'divpd 'movupd)   ; DAG op -> PACKED-double mnemonic (grid2)
    (sseops op) (? (= op '+) 'addsd (= op '*) 'mulsd (= op '-) 'subsd (= op '/) 'divsd 'movsd)   ; DAG op -> SCALAR-double mnemonic (gridn)
    (ucmpx op) (? (= op '<=) 'above (= op '<) 'ae (= op '>=) 'be (= op '>) 'below ())     ; EXIT cc after ucomisd = inverse of the continue cmp
-   (allocp dag rv env n pool mv opmap)                                                   ; the float-body allocator (CSE + linear-scan); emits asm/ IR FORMS via mv (move) + opmap (op->mnemonic): scalar OR packed
+   (allocp dag rv env n pool mv opmap)                                                   ; the float-body allocator (CSE + linear-scan); emits apps/asm/ IR FORMS via mv (move) + opmap (op->mnemonic): scalar OR packed
     (: rg (tablet 0) pl (tablet 0) _ (pin pl 'p pool)
        (pop u) (: p (peep pl 'p ()) _ (pin pl 'p (cup p)) (cap p))
        (push r) (pin pl 'p (link r (peep pl 'p ())))
@@ -344,7 +344,7 @@
     (&& (member? cmpop '(< <=)) (< (tally dims) 3) (< 1 (last dims)) (= 0 (% (last dims) 2))
         (< (+ (tally invs) (tally fvars)) 5)
         (< (tally (htbl (fcc bound (fccl updates (fcc testexpr ()))) 2)) 3))
-   ; the kernel as a neutral asm/ IR PROGRAM (asmx): control flow is LABELS (no hand-counted offsets),
+   ; the kernel as a neutral apps/asm/ IR PROGRAM (asmx): control flow is LABELS (no hand-counted offsets),
    ; the SSE ops are NAMED (no raw opcode bytes). GP IR regs: r0=rax(scratch), r5=rsi(Ip, the deopt
    ; tail), r7=k(iter), r8=acc, r9../r10..=the grid counters. XMM: f2,f3=consts, f4=count, f5=alive,
    ; f6=scratch, f8,f9=invariants, f10,f11=fvars, f0,f1,f12..15=the DAG pool. The cold per-cell DERIVES
@@ -419,8 +419,8 @@
        (? (&& (= 2 (tally invs)) (= 2 (tally fvars)))
           (jitfgrid glam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim tgt) ()))
    ; --- the NEUTRAL-IR retarget (leaf + n-ary lanes) ---------------------------------------------
-   ; the byte-emitting lanes above are x86-64-only (raw byte lists). this lane emits the asm/ neutral
-   ; IR instead and assembles for a TARGET ('x64 or 'arm64), so aarch64 falls out of asm/arm64.l. it is
+   ; the byte-emitting lanes above are x86-64-only (raw byte lists). this lane emits the apps/asm/ neutral
+   ; IR instead and assembles for a TARGET ('x64 or 'arm64), so aarch64 falls out of apps/asm/arm64.l. it is
    ; ADDITIVE -- the live byte path is untouched; auto.l still drives `jit`/`njit`. spec in doc/glaze-arm64.md.
    ; greg: a logical role -> the abstract asm register, PER TARGET. x86 lands g/Ip/Hp/Sp in rdi/rsi/rdx/rcx
    ; (= abstract r6/r5/r2/r1, SysV's first 4 args -- the convention IS the calling convention); aarch64's
@@ -433,7 +433,7 @@
           (id? role 'acc)     (? x 'r0 'r4)   (id? role 'tmp)     (? x 'r7 'r5)
           (id? role 'anchor)  (? x 'r8 'r9)   (id? role 'scratch) (? x 'r4 'r10) ()))
    (ccof op) (? (id? op '<) 'lt (id? op '<=) 'le (id? op '>) 'gt (id? op '>=) 'ge (id? op '=) 'eq ())
-   (bitop op) (? (id? op '&) 'and (id? op '|) 'or (id? op '^) 'xor ())   ; source bitwise symbol -> the asm/ IR ALU op
+   (bitop op) (? (id? op '&) 'and (id? op '|) 'or (id? op '^) 'xor ())   ; source bitwise symbol -> the apps/asm/ IR ALU op
 
    ; fxir: fetch param i from Sp[i], fixnum-guard (low bit), untag -> acc. a non-fixnum jumps to deopt.
    (fxir tgt i) (: A (greg tgt 'acc) S (greg tgt 'sp) (L (L 'ld A S (* 8 i)) (L 'test A 1) '(br eq deopt) (L 'sar A 1)))
@@ -529,7 +529,7 @@
                 ()))
           ())))
    ; --- the NEUTRAL-IR group lane (jitgroupir) -- a GROUP of mutually-recursive first-order integer fns
-   ;     to native, both targets. `call H_g` is `(call <name>)`, each H opens `(label <name>)`, and asm/
+   ;     to native, both targets. `call H_g` is `(call <name>)`, each H opens `(label <name>)`, and apps/asm/
    ;     resolves the rel offsets. IR chunks concatenate FLAT via `asm` (foldl-(+); on lists of IR forms,
    ;     + appends). Covers the full op grammar: int arith, TCO, value-mode cons, string/map/cask lanes.
    ; arg-register ABI: args in the CALLEE-SAVED bank (x86 rbx/r13/r14/r15 = r3/r12/r13/r14; arm64 x19..x22),
@@ -552,7 +552,7 @@
    ; --- register/immediate-operand peephole (the cgg lane's, ported into the neutral IR) ---
    ; the generic binary lane is push-acc..pop-tmp per op -- the gap vs a register machine. when one operand
    ; is already a PARAM (in an arg reg) or a small immediate, combine it DIRECTLY: acc OP= reg|imm, no stack
-   ; traffic. e.g. primes' (* d d), (< n (* d d)), (+ d 1), (= 0 ..) all run flat. both targets: the asm/ ALU
+   ; traffic. e.g. primes' (* d d), (< n (* d d)), (+ d 1), (= 0 ..) all run flat. both targets: the apps/asm/ ALU
    ; takes a reg or an imm for adds/subs/cmp (arm64 imm is 12-bit -> pimm?); mulo is register-only on arm64,
    ; so the imm lane skips `*` (the param-`*` case -- d*d -- is the one that matters and IS a register).
    (pimm? x) (&& (whole? x) (<= (? (< x 0) (- 0 x) x) 4095))                     ; a small immediate both arches add/sub/cmp directly

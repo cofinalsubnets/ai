@@ -64,9 +64,9 @@ Route order assertions through `sort` (→ `cmp3`) and assert via `show` — **n
 - tray stays above link: a chain before `@('a 'b)`.
 - demotion still holds: `(@(5) = 5)`.
 
-`make test` regenerates `rocq/gen.v` via `tools/spec2coq.l`.
+`make test` regenerates `proof/rocq/gen.v` via `tools/spec2coq.l`.
 
-## Edit 4 — Rocq (`rocq/spec.v`)
+## Edit 4 — Rocq (`proof/rocq/spec.v`)
 
 `O` has 6 keys, no set band (already a documented near-omission in `theory.html`, lattice & order). After the C
 lands, decide: fold galaxies into `Onum` by net, or keep arrays as an explicit omission. Make

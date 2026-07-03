@@ -1,12 +1,12 @@
-; the asm/ assembler -- a CORE language service, baked into the post-egg layer of both
+; the apps/asm/ assembler -- a CORE language service, baked into the post-egg layer of both
 ; the host `ai` and the bootstrap `ai0` (host/main.c), so the corpus exercises it under
 ; BOTH compilers, like prel/ev. Its whole surface is ONE public name: `asm`, a book --
 ; and a book is a lookup function, so (asm 'assemble) is the call; the internals live
-; in the book too (asm/export.l sweeps the whole load span: namespacing, not hiding).
+; in the book too (apps/asm/export.l sweeps the whole load span: namespacing, not hiding).
 ; NOT in the kernel/wasm frontends (a host-only bake, like the parser combinators), so
 ; guard on its presence: (peep book 'asm 0) is the whole service in one read -- no
 ; helpless-read warning where it isn't baked. The full encoder gate (every backend
-; golden, objdump-checked, + the text/elf frontends) stays in asm/asmtest.l (`make
+; golden, objdump-checked, + the text/elf frontends) stays in apps/asm/asmtest.l (`make
 ; test_asm`, its own cat-stream of the sources, untouched by the module sweep); this is
 ; the SMOKE that the MODULE reaches the runtime and assembles bit-identically.
 ; reg map: r0=rax, r7=x86-r8 .. r10=x86-r11; goldens copied from asmtest.l (objdump-verified).

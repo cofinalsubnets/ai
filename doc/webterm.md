@@ -1,7 +1,7 @@
 # The browser terminal as a third cb renderer
 
 The web REPL (`index.html`) is the odd frontend out: it bypasses the **console
-buffer** (`font/cb.c`) entirely and lets the browser's font paint `<div>`s
+buffer** (`port/quay/quay.c`) entirely and lets the browser's font paint `<div>`s
 (`index.html:66-83`, a bespoke JS line-reader). This study plans the move to a
 `<canvas>` rendered from a `struct cb` — so the page draws the same bitmap fonts,
 through the same ANSI parser, as the freestanding kernel — and, on top of that,
@@ -10,12 +10,12 @@ runs the **real bao shell** in the browser instead of the JS imitation.
 **Design study — not yet built.** The reasoning is below; the work is staged so
 each step leaves `make test` green and the page usable.
 
-Touches `wasm/` + `index.html` only, plus adding `font/cb.c` and `bao.h` to one
+Touches `wasm/` + `index.html` only, plus adding `port/quay/quay.c` and `bao.h` to one
 link. No edit to `ai/bao.l` or the core — see "What it does not touch".
 
 ## Why
 
-`cb` was built to be rendered by something other than itself. `cb.h:11-13` says
+`cb` was built to be rendered by something other than itself. `quay.h:11-13` says
 it outright — "cb only stores [colour/font indices]; the renderer maps colour
 indices to pixels and font indices to glyph sets." There are already **two**
 renderers over one cb:
@@ -29,13 +29,13 @@ A browser canvas is a natural **third**. The index terminal is the only frontend
 that doesn't share the console, and that costs it three things it could have for
 free, because they all already live in cb and bao:
 
-- **the retro bitmap fonts** (`cga_8x8` 8×8, `moderndos_8x16` 8×16, `cb.h:43`);
+- **the retro bitmap fonts** (`cga_8x8` 8×8, `moderndos_8x16` 8×16, `quay.h:43`);
 - **ANSI colour + cursor motion** — cb's `cb_putc` parses the VT subset bao's
   editor emits (CR, BS, LF+scroll, ESC 7/8, CSI K/J/A/C/D, SGR 256-colour;
-  `cb.c:52-98`), so bao's coloured prompt (the cyan helm, `bao.l:264`) just
+  `quay.c:52-98`), so bao's coloured prompt (the cyan helm, `bao.l:264`) just
   renders;
 - **the actual line editor** — cb's *read* side (`cb_getc`/`cb_ungetc`/`cb_eof`,
-  `cb.c:100-116`) is exactly what feeds bao's `edln` on the kernel. Canvas+cb is
+  `quay.c:100-116`) is exactly what feeds bao's `edln` on the kernel. Canvas+cb is
   the doorway to running bao's history, recall, and helpful prompt on the
   identical code path as native and inle, retiring the JS REPL.
 
@@ -90,9 +90,9 @@ ever moves behind isolation headers, this is the better engine.
 
 ## What's already done for us
 
-- cb is renderer-agnostic by construction (`cb.h:11-13`) — no change to its
+- cb is renderer-agnostic by construction (`quay.h:11-13`) — no change to its
   parser; we only *link* it.
-- the glyph tables are `extern const` (`cb.h:43`) — export their addresses or
+- the glyph tables are `extern const` (`quay.h:43`) — export their addresses or
   embed the ~4-6 KB byte tables in JS.
 - the canvas rasterizer **is** `fbdraw` transliterated: the inner blit
   (`kmain.c:391-396`) and `palette_init` (the 16 ANSI + 6×6×6 cube + grey ramp,
@@ -102,7 +102,7 @@ ever moves behind isolation headers, this is the better engine.
 
 ## Staging (each stage keeps the page working)
 
-**Stage 1 — cb in wasm, canvas renders output.** Add `font/cb.c` to the wasm
+**Stage 1 — cb in wasm, canvas renders output.** Add `port/quay/quay.c` to the wasm
 link (`core_o` is `ai.c` alone today, `wasm/Makefile`). Give `wasm/host.c` a
 static `struct cb term` + `rows*cols` backing store, set the default pen
 (`cb_attr`) and `show_cursor`. Route `_putc` through `cb_putc(&term, c)` (keep
@@ -141,7 +141,7 @@ blanks, `clipboard.writeText`.
 
 On the **Asyncify** path, `ai/bao.l` and the core stay **untouched** — Asyncify
 lets the real shell run as-is, and the change lives entirely in `wasm/host.c`,
-`wasm/Makefile`, and `index.html` plus adding `font/cb.c` and `bao.h` to one link:
+`wasm/Makefile`, and `index.html` plus adding `port/quay/quay.c` and `bao.h` to one link:
 a single frontend lane, no coordination with the inle or core threads (the
 app-boundary rule in CLAUDE.md). On the **park-based** path the renderer + bake
 stay in this lane, but the suspend itself is the core scheduler change in
