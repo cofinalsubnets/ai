@@ -7542,12 +7542,55 @@ static intptr_t vcmp_sign(int op, int s) {
 static ai_inline uintptr_t bdim(uintptr_t da, uintptr_t db) {
  return da == 1 ? db : db == 1 ? da : da; }
 
+// The broadcast plumbing shared by the elementwise lanes (vbin / vmap2 / obin /
+// cbin / cplx-build). The lvm wrappers keep scalar locals only (TCO), so the
+// shape walk runs twice -- once to gate size before Have, once to fill the
+// fresh result -- re-deriving from the operand words each time (they move).
+// The broadcast element count of a and b, right-aligned; (uintptr_t) -1 when
+// some axis pair doesn't conform.
+static uintptr_t bshape_n(word a, word b) {
+ bool aarr = arrp(a), barr = arrp(b);
+ uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
+ uintptr_t R = ra > rb ? ra : rb, n = 1;
+ for (uintptr_t k = 0; k < R; k++) {
+  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
+  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
+  if (da != db && da != 1 && db != 1) return (uintptr_t) -1;
+  n *= bdim(da, db); }
+ return n; }
+
+// Fill shape[0..R) with the broadcast shape of a and b (conformance already
+// gated by bshape_n).
+static void bshape_put(uintptr_t *shape, uintptr_t R, word a, word b) {
+ bool aarr = arrp(a), barr = arrp(b);
+ uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
+ for (uintptr_t k = 0; k < R; k++) {
+  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
+  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
+  shape[R - 1 - k] = bdim(da, db); } }
+
+// c[j]: the operand's flat-offset contribution of result axis j (0 when that
+// axis is absent in the operand or is a size-1 broadcast axis); v == 0 reads
+// a scalar operand (all zeros).
+static void bstride(struct ai_vec *v, uintptr_t R, intptr_t *c) {
+ for (uintptr_t j = 0; j < R; j++) c[j] = 0;
+ if (!v) return;
+ intptr_t s = 1;
+ for (intptr_t o = (intptr_t) v->rank - 1; o >= 0; o--) {
+  intptr_t j = o + (intptr_t) R - (intptr_t) v->rank;
+  c[j] = v->shape[o] == 1 ? 0 : s, s *= (intptr_t) v->shape[o]; } }
+
+// One odometer tick over shape[0..R), rightmost axis fastest.
+static ai_inline void odo_step(intptr_t *idx, uintptr_t R, uintptr_t const *shape) {
+ for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {
+  if (++idx[j] < (intptr_t) shape[j]) break;
+  idx[j] = 0; } }
+
 // Fill the (already-shaped) result r with a `op` b, broadcasting. All the
 // &-taking stack arrays (strides, odometer) live here so the lvm wrapper stays
 // TCO-clean. No allocation inside, so operand pointers can't move under us.
 static ai_noinline void vbin_fill(struct ai_vec *r, word a, word b, int op, bool fdom) {
- uintptr_t R = r->rank, n = 1;
- for (uintptr_t i = 0; i < R; i++) n *= r->shape[i];
+ uintptr_t R = r->rank, n = vec_nelem(r);
  bool aarr = arrp(a), barr = arrp(b);
  struct ai_vec *va = aarr ? vec(a) : 0, *vb = barr ? vec(b) : 0;
  // CONTIGUOUS MONOTYPE FAST PATH: no size-1 broadcasting (each operand is either a
@@ -7596,18 +7639,9 @@ static ai_noinline void vbin_fill(struct ai_vec *r, word a, word b, int op, bool
         case vop_rem: VBF((bv==0||(av==INTPTR_MIN&&bv==-1))?0:av%bv); return; }
       #undef VBF
      } } } }
- // ca[j]/cb[j]: the operand flat-offset contribution of result axis j (0 when
- // that axis is absent in the operand or is a size-1 broadcast axis).
  intptr_t ca[maxrank], cb[maxrank], idx[maxrank];
- for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
- if (aarr) { intptr_t s = 1;
-  for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
-   intptr_t j = oa + R - va->rank;
-   ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
- if (barr) { intptr_t s = 1;
-  for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
-   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank;
-   cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ for (uintptr_t j = 0; j < R; j++) idx[j] = 0;
+ bstride(va, R, ca), bstride(vb, R, cb);
  bool cmp = op >= vop_lt;
  // scalar values: the float domain widens a bignum full-magnitude (ai_big_to_flo
  // via toflo); the int domain has no room for a bignum, so arithmetic demotes it
@@ -7632,9 +7666,7 @@ static ai_noinline void vbin_fill(struct ai_vec *r, word a, word b, int op, bool
     intptr_t t = (abig || bbig) ? vcmp_sign(op, abig ? asign : -bsign) : vcmp_int(op, av, bv);
     vec_put_int(r, p, t ? 1 : 0); }
    else vec_put_int(r, p, vop_int(op, av, bv)); }
-  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {  // odometer
-   if (++idx[j] < (intptr_t) r->shape[j]) break;
-   idx[j] = 0; } } }
+  odo_step(idx, R, r->shape); } }
 
 // For `/` (vop_quot) over the integer domain: true if some broadcast element chain
 // (av, bv) divides inexactly (bv == 0 or av % bv != 0), so the whole result must
@@ -7645,24 +7677,19 @@ static ai_noinline bool vquot_needs_float(word a, word b) {
  bool aarr = arrp(a), barr = arrp(b);
  if ((!aarr && bigp(a)) || (!barr && bigp(b))) return true;
  struct ai_vec *va = aarr ? vec(a) : 0, *vb = barr ? vec(b) : 0;
- uintptr_t ra = aarr ? va->rank : 0, rb = barr ? vb->rank : 0, R = ra > rb ? ra : rb, n = 1;
- intptr_t ca[maxrank], cb[maxrank], idx[maxrank], shp[maxrank];
- for (uintptr_t k = 0; k < R; k++) {
-  uintptr_t da = (aarr && k < ra) ? va->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vb->shape[rb - 1 - k] : 1;
-  shp[R - 1 - k] = (intptr_t) bdim(da, db); n *= bdim(da, db); }
- for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
- if (aarr) { intptr_t s = 1; for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
-   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank; ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
- if (barr) { intptr_t s = 1; for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
-   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank; cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ uintptr_t ra = aarr ? va->rank : 0, rb = barr ? vb->rank : 0, R = ra > rb ? ra : rb;
+ uintptr_t n = bshape_n(a, b), shp[maxrank];
+ intptr_t ca[maxrank], cb[maxrank], idx[maxrank];
+ bshape_put(shp, R, a, b);
+ for (uintptr_t j = 0; j < R; j++) idx[j] = 0;
+ bstride(va, R, ca), bstride(vb, R, cb);
  intptr_t ia = aarr ? 0 : toint(a), ib = barr ? 0 : toint(b);
  for (uintptr_t p = 0; p < n; p++) {
   intptr_t oa = 0, ob = 0;
   for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
   intptr_t av = aarr ? vec_get_int(va, oa) : ia, bv = barr ? vec_get_int(vb, ob) : ib;
   if (bv == 0 || av % bv != 0) return true;
-  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) { if (++idx[j] < shp[j]) break; idx[j] = 0; } }
+  odo_step(idx, R, shp); }
  return false; }
 
 lvm(lvm_vbin, int op) {
@@ -7687,14 +7714,8 @@ lvm(lvm_vbin, int op) {
  int tb = barr ? (int) vec(b)->type : flop(b) ? (int) ai_R : (int) ai_Z;
  int ct = ta > tb ? ta : tb;
  bool fdom = ct >= ai_R, cmp = op >= vop_lt;
- // broadcast shape + conformance, right-aligned; scalar locals only (no array,
- // so the trailing tail call below survives).
- uintptr_t n = 1;
- for (uintptr_t k = 0; k < R; k++) {
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
-  n *= bdim(da, db); }
+ uintptr_t n = bshape_n(a, b);                     // conformance + result size
+ if (n == (uintptr_t) -1) return *++Sp = ZeroPoint, Ip++, Continue();
  // `/` over an all-integer broadcast promotes the whole result to f64 the moment
  // any element divides inexactly (matching the scalar `/`); `//` (vop_fquot) stays
  // integer. Sound only after conformance is known good (offsets are then in range).
@@ -7702,13 +7723,10 @@ lvm(lvm_vbin, int op) {
  enum ai_vec_type rt = cmp ? ai_Z : (enum ai_vec_type) ct;   // compare -> 0/1 Z mask
  uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[rt];
  Have(b2w(bytes));
- a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);       // re-read post-Have
+ a = Sp[0], b = Sp[1];                                       // re-read post-Have
  struct ai_vec *r = (struct ai_vec*) Hp; Hp += b2w(bytes);
  ini_vec(r, rt, R);
- for (uintptr_t k = 0; k < R; k++) {
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  r->shape[R - 1 - k] = bdim(da, db); }
+ bshape_put(r->shape, R, a, b);
  vbin_fill(r, a, b, op, fdom);
  return *++Sp = word(r), Ip++, Continue(); }
 
@@ -7720,29 +7738,19 @@ lvm(lvm_vbin, int op) {
 // All the &-taking stack arrays live in this ai_noinline fill so the wrapper's
 // trailing tail call survives.
 static ai_noinline void vmap2_fill(struct ai_vec *r, word a, word b, ai_flo_t (*fn)(ai_flo_t, ai_flo_t)) {
- uintptr_t R = r->rank, n = 1;
- for (uintptr_t i = 0; i < R; i++) n *= r->shape[i];
+ uintptr_t R = r->rank, n = vec_nelem(r);
  bool aarr = arrp(a), barr = arrp(b);
  struct ai_vec *va = aarr ? vec(a) : 0, *vb = barr ? vec(b) : 0;
  intptr_t ca[maxrank], cb[maxrank], idx[maxrank];
- for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
- if (aarr) { intptr_t s = 1;
-  for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
-   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank;
-   ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
- if (barr) { intptr_t s = 1;
-  for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
-   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank;
-   cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ for (uintptr_t j = 0; j < R; j++) idx[j] = 0;
+ bstride(va, R, ca), bstride(vb, R, cb);
  ai_flo_t sa = aarr ? 0 : toflo(a), sb = barr ? 0 : toflo(b);
  for (uintptr_t p = 0; p < n; p++) {
   intptr_t oa = 0, ob = 0;
   for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
   ai_flo_t av = aarr ? vec_get_flo(va, oa) : sa, bv = barr ? vec_get_flo(vb, ob) : sb;
   vec_put_flo(r, p, fn(av, bv));
-  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {  // odometer
-   if (++idx[j] < (intptr_t) r->shape[j]) break;
-   idx[j] = 0; } } }
+  odo_step(idx, R, r->shape); } }
 
 lvm(lvm_vmap2, ai_flo_t (*fn)(ai_flo_t, ai_flo_t)) {
  word a = Sp[0], b = Sp[1];
@@ -7750,21 +7758,14 @@ lvm(lvm_vmap2, ai_flo_t (*fn)(ai_flo_t, ai_flo_t)) {
  if (!(aarr || isnum(a)) || !(barr || isnum(b)))   // each operand: array or scalar
   return *++Sp = ZeroPoint, Ip++, Continue();
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
- uintptr_t R = ra > rb ? ra : rb, n = 1;
- for (uintptr_t k = 0; k < R; k++) {               // broadcast shape, right-aligned
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
-  n *= bdim(da, db); }
+ uintptr_t R = ra > rb ? ra : rb, n = bshape_n(a, b);
+ if (n == (uintptr_t) -1) return *++Sp = ZeroPoint, Ip++, Continue();
  uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[ai_R];
  Have(b2w(bytes));
- a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);       // re-read post-Have
+ a = Sp[0], b = Sp[1];                                       // re-read post-Have
  struct ai_vec *r = (struct ai_vec*) Hp; Hp += b2w(bytes);
  ini_vec(r, ai_R, R);
- for (uintptr_t k = 0; k < R; k++) {
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  r->shape[R - 1 - k] = bdim(da, db); }
+ bshape_put(r->shape, R, a, b);
  vmap2_fill(r, a, b, fn);
  return *++Sp = word(r), Ip++, Continue(); }
 
@@ -7861,13 +7862,10 @@ static struct ai *obin_run(struct ai *g, int op) {
  if (barr && vec(b)->type != ai_O) { if (!ai_ok(g = arr_to_obj(g, 1))) return g; }
  a = g->sp[0], b = g->sp[1], aarr = arrp(a), barr = arrp(b);
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
- uintptr_t R = ra > rb ? ra : rb, n = 1, shp[maxrank];
- for (uintptr_t k = 0; k < R; k++) {                           // broadcast shape, right-aligned
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) {                        // non-conforming -> nil
-   g->sp[1] = nil, g->sp++, g->ip = (union u*) g->ip + 1; return g; }
-  shp[R - 1 - k] = bdim(da, db); n *= bdim(da, db); }
+ uintptr_t R = ra > rb ? ra : rb, n = bshape_n(a, b), shp[maxrank];
+ if (n == (uintptr_t) -1) {                                    // non-conforming -> nil
+  g->sp[1] = nil, g->sp++, g->ip = (union u*) g->ip + 1; return g; }
+ bshape_put(shp, R, a, b);
  uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[ai_O];
  if (!ai_ok(g = ai_have(g, b2w(bytes)))) return g;
  struct ai_vec *r = (struct ai_vec*) g->hp; g->hp += b2w(bytes);
@@ -7876,15 +7874,8 @@ static struct ai *obin_run(struct ai *g, int op) {
  for (uintptr_t p = 0; p < n; p++) vec_put_obj(r, p, nil);     // nil-fill before any GC
  if (!ai_ok(g = ai_push(g, 1, word(r)))) return g;               // sp: [0]=r [1]=a [2]=b
  intptr_t ca[maxrank], cb[maxrank], idx[maxrank];
- for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
- if (aarr) { intptr_t s = 1; struct ai_vec *va = vec(g->sp[1]);
-  for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
-   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank;
-   ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
- if (barr) { intptr_t s = 1; struct ai_vec *vb = vec(g->sp[2]);
-  for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
-   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank;
-   cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ for (uintptr_t j = 0; j < R; j++) idx[j] = 0;
+ bstride(aarr ? vec(g->sp[1]) : 0, R, ca), bstride(barr ? vec(g->sp[2]) : 0, R, cb);
  for (uintptr_t p = 0; p < n; p++) {
   intptr_t oa = 0, ob = 0;
   for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
@@ -7893,9 +7884,7 @@ static struct ai *obin_run(struct ai *g, int op) {
   word res = obin_elem(&g, op, ae, be);
   if (!ai_ok(g)) return g;
   vec_put_obj(vec(g->sp[0]), p, res);                          // re-fetch result post-alloc
-  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {
-   if (++idx[j] < (intptr_t) shp[j]) break;
-   idx[j] = 0; } }
+  odo_step(idx, R, shp); }
  word result = g->sp[0];                                       // collapse [r,a,b] -> r, advance ip
  g->sp += 2, g->sp[0] = result, g->ip = (union u*) g->ip + 1;
  return g; }
@@ -7939,18 +7928,24 @@ static ai_inline void cplx_parts(word x, ai_flo_t *re, ai_flo_t *im) {
  if (Cp(x)) *re = cplx_re(x), *im = cplx_im(x);
  else *re = toflo(x), *im = 0; }
 
+// (ar,ai) `vop` (br,bi) in components: the one set of complex formulas, shared
+// by the scalar lane (cplx_fill) and the packed array lane (cbin_fill).
+static ai_inline void cplx_op(int vop, ai_flo_t ar, ai_flo_t ai, ai_flo_t br, ai_flo_t bi,
+                             ai_flo_t *re, ai_flo_t *im) {
+ switch (vop) {
+  case vop_sub: *re = ar - br; *im = ai - bi; break;
+  case vop_mul: *re = ar * br - ai * bi; *im = ar * bi + ai * br; break;
+  case vop_quot: { ai_flo_t d = br * br + bi * bi;   // (ac+bd)/(c^2+d^2) + ...
+   *re = (ar * br + ai * bi) / d; *im = (ai * br - ar * bi) / d; break; }
+  default: *re = ar + br; *im = ai + bi; } }        // vop_add
+
 // Fill the rank-0 complex box v with a `vop` b. All the &-taking lives in this
 // ai_noinline helper so the lvm wrapper keeps its trailing tail call; no
 // allocation inside, so the operand pointers can't move under us.
 static ai_noinline void cplx_fill(struct ai_cplx *v, word a, word b, int vop) {
  ai_flo_t ar, ai, br, bi, re, im;
  cplx_parts(a, &ar, &ai); cplx_parts(b, &br, &bi);
- switch (vop) {
-  case vop_sub: re = ar - br; im = ai - bi; break;
-  case vop_mul: re = ar * br - ai * bi; im = ar * bi + ai * br; break;
-  case vop_quot: { ai_flo_t d = br * br + bi * bi;   // (ac+bd)/(c^2+d^2) + ...
-   re = (ar * br + ai * bi) / d; im = (ai * br - ar * bi) / d; break; }
-  default: re = ar + br; im = ai + bi; }            // vop_add
+ cplx_op(vop, ar, ai, br, bi, &re, &im);
  cplx_set(v, re, im); }
 
 // The complex arithmetic lane. Reached from the arith slow paths when either
@@ -7981,20 +7976,12 @@ static ai_inline void cbin_part(bool isarr, struct ai_vec *v, ai_flo_t sre, ai_f
  else { *re = vec_get_flo(v, o); *im = 0; } }
 
 static ai_noinline void cbin_fill(struct ai_vec *r, word a, word b, int op, bool cmp) {
- uintptr_t R = r->rank, n = 1;
- for (uintptr_t i = 0; i < R; i++) n *= r->shape[i];
+ uintptr_t R = r->rank, n = vec_nelem(r);
  bool aarr = arrp(a), barr = arrp(b);
  struct ai_vec *va = aarr ? vec(a) : 0, *vb = barr ? vec(b) : 0;
  intptr_t ca[maxrank], cb[maxrank], idx[maxrank];
- for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
- if (aarr) { intptr_t s = 1;
-  for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
-   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank;
-   ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
- if (barr) { intptr_t s = 1;
-  for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
-   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank;
-   cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ for (uintptr_t j = 0; j < R; j++) idx[j] = 0;
+ bstride(va, R, ca), bstride(vb, R, cb);
  ai_flo_t sar = 0, sai = 0, sbr = 0, sbi = 0;
  if (!aarr) { if (Cp(a)) sar = cplx_re(a), sai = cplx_im(a); else sar = toflo(a); }
  if (!barr) { if (Cp(b)) sbr = cplx_re(b), sbi = cplx_im(b); else sbr = toflo(b); }
@@ -8007,16 +7994,9 @@ static ai_noinline void cbin_fill(struct ai_vec *r, word a, word b, int op, bool
   cbin_part(barr, vb, sbr, sbi, ob, &br, &bi);
   if (cmp) vec_put_int(r, p, (ar == br && ai == bi) ? 1 : 0);
   else {
-   switch (op) {
-    case vop_sub: re = ar - br; im = ai - bi; break;
-    case vop_mul: re = ar * br - ai * bi; im = ar * bi + ai * br; break;
-    case vop_quot: { ai_flo_t d = br * br + bi * bi;
-     re = (ar * br + ai * bi) / d; im = (ai * br - ar * bi) / d; break; }
-    default: re = ar + br; im = ai + bi; }            // vop_add
+   cplx_op(op, ar, ai, br, bi, &re, &im);
    rf[2*p] = re; rf[2*p+1] = im; }
-  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) {  // odometer
-   if (++idx[j] < (intptr_t) r->shape[j]) break;
-   idx[j] = 0; } } }
+  odo_step(idx, R, r->shape); } }
 
 lvm(lvm_cbin, int op) {
  word a = Sp[0], b = Sp[1];
@@ -8028,22 +8008,15 @@ lvm(lvm_cbin, int op) {
   return *++Sp = ZeroPoint, Ip++, Continue();
  bool cmp = op == vop_eq;
  uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
- uintptr_t R = ra > rb ? ra : rb, n = 1;
- for (uintptr_t k = 0; k < R; k++) {                  // broadcast shape + conformance, right-aligned
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
-  n *= bdim(da, db); }
+ uintptr_t R = ra > rb ? ra : rb, n = bshape_n(a, b);
+ if (n == (uintptr_t) -1) return *++Sp = ZeroPoint, Ip++, Continue();
  enum ai_vec_type rt = cmp ? ai_Z : ai_C;              // compare -> i64 mask, else packed complex
  uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[rt];
  Have(b2w(bytes));
- a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);     // re-read post-Have
+ a = Sp[0], b = Sp[1];                                 // re-read post-Have
  struct ai_vec *r = (struct ai_vec*) Hp; Hp += b2w(bytes);
  ini_vec(r, rt, R);
- for (uintptr_t k = 0; k < R; k++) {
-  uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-  uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-  r->shape[R - 1 - k] = bdim(da, db); }
+ bshape_put(r->shape, R, a, b);
  cbin_fill(r, a, b, op, cmp);
  return *++Sp = word(r), Ip++, Continue(); }
 
@@ -8111,16 +8084,12 @@ lvm(lvm_pow) {
 // broadcast; a, b are real (ai_Z/ai_R) arrays or real scalars. &-taking stride/
 // odometer arrays live in this ai_noinline fill so lvm_cplx keeps its tail call.
 static ai_noinline void cplx_build_fill(struct ai_vec *r, word a, word b) {
- uintptr_t R = r->rank, n = 1;
- for (uintptr_t i = 0; i < R; i++) n *= r->shape[i];
+ uintptr_t R = r->rank, n = vec_nelem(r);
  bool aarr = arrp(a), barr = arrp(b);
  struct ai_vec *va = aarr ? vec(a) : 0, *vb = barr ? vec(b) : 0;
  intptr_t ca[maxrank], cb[maxrank], idx[maxrank];
- for (uintptr_t j = 0; j < R; j++) ca[j] = cb[j] = idx[j] = 0;
- if (aarr) { intptr_t s = 1; for (intptr_t oa = (intptr_t) va->rank - 1; oa >= 0; oa--) {
-   intptr_t j = oa + (intptr_t) R - (intptr_t) va->rank; ca[j] = va->shape[oa] == 1 ? 0 : s; s *= (intptr_t) va->shape[oa]; } }
- if (barr) { intptr_t s = 1; for (intptr_t ob = (intptr_t) vb->rank - 1; ob >= 0; ob--) {
-   intptr_t j = ob + (intptr_t) R - (intptr_t) vb->rank; cb[j] = vb->shape[ob] == 1 ? 0 : s; s *= (intptr_t) vb->shape[ob]; } }
+ for (uintptr_t j = 0; j < R; j++) idx[j] = 0;
+ bstride(va, R, ca), bstride(vb, R, cb);
  ai_flo_t sa = aarr ? 0 : toflo(a), sb = barr ? 0 : toflo(b);
  ai_flo_t *rf = vec_data(r);
  for (uintptr_t p = 0; p < n; p++) {
@@ -8128,7 +8097,7 @@ static ai_noinline void cplx_build_fill(struct ai_vec *r, word a, word b) {
   for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
   rf[2*p]   = aarr ? vec_get_flo(va, oa) : sa;
   rf[2*p+1] = barr ? vec_get_flo(vb, ob) : sb;
-  for (intptr_t j = (intptr_t) R - 1; j >= 0; j--) { if (++idx[j] < (intptr_t) r->shape[j]) break; idx[j] = 0; } } }
+  odo_step(idx, R, r->shape); } }
 
 // (C re im): build a complex from two reals. Scalars -> a rank-0 complex box;
 // a real array operand (with the other broadcasting) -> a packed ai_C array, so
@@ -8142,21 +8111,14 @@ lvm(lvm_cplx) {
       || (!aarr && !isnum(a)) || (!barr && !isnum(b)))
    return *++Sp = ZeroPoint, Ip++, Continue();
   uintptr_t ra = aarr ? vec(a)->rank : 0, rb = barr ? vec(b)->rank : 0;
-  uintptr_t R = ra > rb ? ra : rb, n = 1;
-  for (uintptr_t k = 0; k < R; k++) {
-   uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-   if (da != db && da != 1 && db != 1) return *++Sp = ZeroPoint, Ip++, Continue();
-   n *= bdim(da, db); }
+  uintptr_t R = ra > rb ? ra : rb, n = bshape_n(a, b);
+  if (n == (uintptr_t) -1) return *++Sp = ZeroPoint, Ip++, Continue();
   uintptr_t bytes = sizeof(struct ai_vec) + R * sizeof(word) + n * ai_T[ai_C];
   Have(b2w(bytes));
-  a = Sp[0], b = Sp[1], aarr = arrp(a), barr = arrp(b);     // re-read post-Have
+  a = Sp[0], b = Sp[1];                                     // re-read post-Have
   struct ai_vec *r = (struct ai_vec*) Hp; Hp += b2w(bytes);
   ini_vec(r, ai_C, R);
-  for (uintptr_t k = 0; k < R; k++) {
-   uintptr_t da = (aarr && k < ra) ? vec(a)->shape[ra - 1 - k] : 1;
-   uintptr_t db = (barr && k < rb) ? vec(b)->shape[rb - 1 - k] : 1;
-   r->shape[R - 1 - k] = bdim(da, db); }
+  bshape_put(r->shape, R, a, b);
   cplx_build_fill(r, a, b);
   return *++Sp = word(r), Ip++, Continue(); }
  if (!isnum(a) || !isnum(b)) return *++Sp = ZeroPoint, Ip++, Continue();
