@@ -532,6 +532,18 @@
    fcmp0 #1048576                                           ; arena-words threshold for the real compaction
    fru0 #400                                                ; the luby restart unit (conflicts per luby-1 block)
    fst0 #10000                                              ; the stable/focused mode budget in conflicts (x3/2 per switch)
+   ; --- DRAT proof emission: pin a JUG into fdrat0 and every UNSAT solve leaves a
+   ; checkable refutation in it -- each learnt commit a RUP line, each tombstoned
+   ; learnt a `d` line, each BVA application its extended-resolution lines (RAT on
+   ; the fresh variable), and fcdcl caps an UNSAT verdict with the empty clause.
+   ; the proof checks against the ORIGINAL formula: in-gate by fd-check (below),
+   ; externally by drat-trim (sat/dratcheck.sh).
+   fdrat0 #0                                                ; 0 off; a jug records the proof
+   (fdlit el) (: v (>> el 1) (? (= 1 (& el 1)) (- 0 v) v))  ; encoded -> signed DIMACS literal
+   (fdsay j pre c)                                          ; one proof line: prefix, lits, the closing 0
+    (: _ (say j pre)
+       _ (foldl (\ _ l (: _ (say j (show l)) (say j " "))) 0 c)
+       (say j "0\n"))
    (fnif ir fb ar)                                          ; assemble + install one kernel (fb = the honest twin)
     (: bs (peep (assemble 'x64 ir) 'bytes 0)
        c (cask (tally bs))
@@ -629,7 +641,10 @@
        ; the tombstone stashes the slab's true length at cid+1 (nothing reads a dead
        ; clause's lits -- the size-0 check precedes every access), so fcompact can walk
        ; the arena without it.
-       _ (foldl (\ _ cid (: n (getw ar cid) _ (putw ar cid 0) _ (putw ar (+ cid 1) n) 0)) 0 (keys dead))
+       j (peep fdrat0 0 0)
+       _ (foldl (\ _ cid (: n (getw ar cid)
+                            _ (? (hot? j) (fdsay j "d " (map fdlit (fclits s cid))) 0)
+                            _ (putw ar cid 0) _ (putw ar (+ cid 1) n) 0)) 0 (keys dead))
        nl (filter (\ p (= 0 (peep dead (cap p) 0))) ls)
        _ (pin s 'learnts nl) _ (pin s 'nl (tally nl))
        ; the cap grows LINEARLY: geometric (x3/2 per reduce) compounds to an unbounded
@@ -704,6 +719,8 @@
                     r ((peep s 'conf ()) fx (peep s 'ar ()) (peep s 'wn ()) confl)
                     (? (= r -1) 'unsat
                        (: cid (>> r 6) glue (& r 63)
+                          _ (: j (peep fdrat0 0 0)              ; the learnt is RUP: log it
+                               (? (hot? j) (fdsay j "" (map fdlit (fclits s cid))) 0))
                           _ (? (< 1 (getw (peep s 'ar ()) cid))     ; size >= 2: track for reduction
                                (: _ (pin s 'learnts (link (link cid glue) (peep s 'learnts ())))
                                   (pin s 'nl (+ 1 (peep s 'nl 0)))) 0)
@@ -830,6 +847,17 @@
                  (? (< (- (* nl ncl) (+ nl ncl)) 1) 0        ; apply only when it strictly shrinks the formula
                     (: x (+ 1 (peep nv 0 0)) _ (pin nv 0 x)
                        rs (map (\ cid (rem-lit l (peep cls cid ()))) mcls)
+                       ; the proof lines, in RAT-checkable order: the definitions
+                       ; (-x m) while NO clause carries x (blocked on -x), then the
+                       ; x-clauses (RAT on x: every resolvent is an original (m r),
+                       ; still present, or a tautology), then the originals deleted
+                       _ (: j (peep fdrat0 0 0)
+                            (? (hot? j)
+                               (: _ (foldl (\ _ m (: _ (fdsay j "" (L (- 0 x) m)) 0)) 0 mlit)
+                                  _ (fdsay j "" (link x (map (\ m (- 0 m)) mlit)))
+                                  _ (foldl (\ _ r (: _ (fdsay j "" (link x r)) 0)) 0 rs)
+                                  (foldl (\ _ m (foldl (\ _ r (: _ (fdsay j "d " (link m r)) 0)) 0 rs)) 0 mlit))
+                               0))
                        _ (foldl (\ _ m (: _ (foldl (\ _ r
                               (: k (sort (link m r)) did (peep ckey k ())
                                  (? (whole? did) (delc did) (scare 'bva-miss k))))
@@ -865,8 +893,11 @@
                             (? (|| (<= (* 16 (- (cup p2) (cup p))) (cup p)) (>= k 3)) p2 (go p2 (+ k 1)))))
              (link formula nvars) 1))
        s (fmk (cap p) (cup p))
-       (? (= 1 (peep s 'bad 0)) 'unsat
-          (: r (fsearch s) (? (id? r 'unsat) 'unsat (fextract s nvars)))))
+       r (? (= 1 (peep s 'bad 0)) 'unsat
+            (: r (fsearch s) (? (id? r 'unsat) 'unsat (fextract s nvars))))
+       j (peep fdrat0 0 0)                                  ; cap an UNSAT proof with the empty clause
+       _ (? (&& (hot? j) (id? r 'unsat)) (fdsay j "" ()) 0)
+       r)
    (count-fcdcl formula nvars)                              ; #SAT by blocking clauses, on the flat engine
     ((: (go fm c) (: r (fcdcl fm nvars) (? (id? r 'unsat) c (go (link (block r) fm) (+ c 1))))) formula 0)
    (fdiff seed n m)                                         ; flat CDCL == the DPLL oracle (and models check)
@@ -877,6 +908,66 @@
    (fboth f n)                                              ; kernels and twins agree, verdict for verdict
     (: _ (pin fknob 0 1) a (fcdcl f n) _ (pin fknob 0 0) b (fcdcl f n)
        (? (id? a 'unsat) (id? b 'unsat) (&& (! (id? b 'unsat)) (sat? b f))))
+
+   ; --- the in-gate DRAT checker: RUP + RAT on the first literal, a from-scratch
+   ; reimplementation of the CHECKING side (shares nothing with the emitter but
+   ; fd-parse's inverse relation to fdsay). naive O(lines * db) unit propagation --
+   ; the gate runs it on small refutations; drat-trim (sat/dratcheck.sh) is the
+   ; independent external checker for the bench-scale ones.
+   (fd-parse txt)                                           ; DRAT text -> steps (tag . lits), tag 1 = delete
+    (: n (tally txt)
+       ((: (go i tag num sgn lits steps)
+           (? (>= i n) (rev steps)
+              (: ch (txt i)
+                 (? (= ch 100) (go (+ i 1) 1 0 0 lits steps)
+                    (= ch 45) (go (+ i 1) tag 0 -1 lits steps)
+                    (&& (>= ch 48) (<= ch 57))
+                       (go (+ i 1) tag (+ (* 10 num) (- ch 48)) (? (= sgn 0) 1 sgn) lits steps)
+                    (= sgn 0) (go (+ i 1) tag 0 0 lits steps)
+                    (: v (* num sgn)
+                       (? (= v 0) (go (+ i 1) 0 0 0 () (link (link tag (rev lits)) steps))
+                          (go (+ i 1) tag 0 0 (link v lits) steps)))))))
+        0 0 0 0 () ()))
+   (fd-up db asg)                                           ; propagate units over asg; -> 1 conflict / 0 fixpoint
+    ((: (pass rest ch)
+        (? (atom? rest) (? (= ch 1) (pass db 0) 0)
+           (: r ((: (scan c sat un)
+                    (? (atom? c) (? (= sat 1) 'sat (? (atom? un) 'conf un))
+                       (: l (cap c)
+                          (? (= 1 (peep asg l 0)) (scan (cup c) 1 un)
+                             (= 1 (peep asg (neg l) 0)) (scan (cup c) sat un)
+                             (scan (cup c) sat (link l un))))))
+                 (cap rest) 0 ())
+              (? (id? r 'conf) 1
+                 (id? r 'sat) (pass (cup rest) ch)
+                 (atom? (cup r)) (: _ (pin asg (cap r) 1) (pass (cup rest) 1))
+                 (pass (cup rest) ch)))))
+     db 0)
+   (fd-rup? db c)                                           ; does the negation propagate to a conflict?
+    (: asg (tablet 0) _ (foldl (\ _ l (: _ (pin asg (neg l) 1) 0)) 0 c) (fd-up db asg))
+   (fd-rat? db c)                                           ; RAT on (cap c): every resolvent taut or RUP
+    (? (atom? c) 0
+       (: p (cap c)
+          (all (\ d (? (member? (neg p) d)
+                       (: rv (+ (cup c) (rem-lit (neg p) d))
+                          (? (= 1 (taut? rv)) 1 (fd-rup? db rv)))
+                       1))
+               db)))
+   (fd-del db c)                                            ; drop ONE clause equal as a set
+    (: k (sort c)
+       ((: (go d) (? (atom? d) ()
+                     (= (sort (cap d)) k) (cup d)
+                     (link (cap d) (go (cup d))))) db))
+   (fd-check f proof)                                       ; 1 iff every step checks and one derives ()
+    ((: (go db ps)
+        (? (atom? ps) 0
+           (: st (cap ps) c (cup st)
+              (? (= 1 (cap st)) (go (fd-del db c) (cup ps))
+                 (: ok (? (= 1 (fd-rup? db c)) 1 (fd-rat? db c))
+                    (? (= 0 ok) 0
+                       (atom? c) 1
+                       (go (link c db) (cup ps))))))))
+     (map dedup-lits f) proof)
 
  ; --- the gate: the flat engine answers exactly like the oracle, kernels == twins
  _ (assert
@@ -900,6 +991,23 @@
     (fboth (php 5) (php-vars 5))
     ; pigeonhole PHP(5): UNSAT + resolution-hard (learning, restarts, arena growth end to end)
     (id? (fcdcl (php 5) (php-vars 5)) 'unsat)
+    ; DRAT: an UNSAT solve's emitted proof re-checks against the ORIGINAL formula --
+    ; pure RUP on the tiny ones, BVA's RAT lines on php(4), `d` lines under a tiny
+    ; learnt cap. fd-check is the in-gate eye; sat/dratcheck.sh aims drat-trim at php.
+    (: f '((1) (-1)) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f 1) _ (pin fdrat0 0 0)
+       (&& (id? r 'unsat) (= 1 (fd-check f (fd-parse (slurp j))))))
+    (: f '((1 2) (1 -2) (-1 2) (-1 -2)) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f 2) _ (pin fdrat0 0 0)
+       (&& (id? r 'unsat) (= 1 (fd-check f (fd-parse (slurp j))))))
+    (: f (php 4) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f (php-vars 4)) _ (pin fdrat0 0 0)
+       ps (fd-parse (slurp j))
+       bad (map (\ st (? (&& (= 0 (cap st)) (= 2 (tally (cup st))))    ; negate a literal in every
+                         (link 0 (link (- 0 (cap (cup st))) (cup (cup st)))) st))  ; 2-lit add line:
+            ps)                                                        ; the checker must refuse
+       (&& (id? r 'unsat) (&& (= 1 (fd-check f ps)) (= 0 (fd-check f bad)))))
+    (: keep (peep fmaxl0 0 0) _ (pin fmaxl0 0 24)
+       f (php 4) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f (php-vars 4))
+       _ (pin fdrat0 0 0) _ (pin fmaxl0 0 keep)
+       (&& (id? r 'unsat) (= 1 (fd-check f (fd-parse (slurp j))))))
     ; force the learnt-DB REDUCTION path hard (a tiny cap -> reduction every few restarts)
     ; and re-run the differential battery through it, both engines
     (: keep (peep fmaxl0 0 0) _ (pin fmaxl0 0 24)

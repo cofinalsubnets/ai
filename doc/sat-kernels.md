@@ -276,6 +276,32 @@ panel improves ~25% (and the machinery — modes, budgets, best phases — is no
 place as knobs), the raced uf250 row lands at ~1.7s, php and the small rows are
 untouched.
 
+## the DRAT lane — proofs, not trust
+
+every verdict the solver reports is now *certifiable to a skeptic who trusts none of
+this code*. SAT was always self-certifying (the model is in `s`, `sat?` checks it, the
+fuzz gate does); UNSAT now emits **DRAT**, the SAT-competition proof format. pin a jug
+into the `fdrat0` box and the solve leaves a refutation in it: every learnt commit one
+RUP line (read back off the arena in the driver — the kernels are untouched), every
+tombstoned learnt a `d` line, every BVA application its extended-resolution lines, and
+`fcdcl` caps an UNSAT verdict with the empty clause. the proof checks against the
+ORIGINAL formula: BVA's fresh-variable definitions go out in RAT-checkable order —
+the `(-x m)` definitions first (blocked while nothing carries x), then the `(x C\l)`
+clauses (each RAT resolvent is an original `(m C\l)`, still present, or a tautology),
+then the replaced originals deleted. that DRAT swallows extended resolution is the
+whole point: the factoring step that makes pigeonhole polynomial rides the same proof
+as the clause learning.
+
+two checkers, deliberately unequal: `fd-check` (flat.l) is a from-scratch in-gate
+RUP/RAT checker — naive propagation, small refutations, zero dependencies — that
+`make test_sat` runs on the tiny UNSATs, php(4) (RAT lines live), and a forced-
+reduction php(4) (`d` lines live), plus a corrupted-proof rejection probe; and
+`make test_drat` (`sat/dratcheck.sh`) aims **drat-trim**, Heule's independent checker
+(fetched + built into `out/drat` on first use), at php(5–8) and a raw-RUP row —
+`s VERIFIED` across the board, with the BVA lemmas load-bearing in the verified core
+(php5: 20 RAT lemmas). emission is off by default and costs the hot loop one box-peep
+per conflict; the kernel ABI and the bench numbers are unchanged.
+
 ## what the remaining distance is
 
 the eleven-row net is now a statistical three-way tie at the top (picosat ~2030,
