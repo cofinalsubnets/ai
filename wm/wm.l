@@ -1,13 +1,13 @@
-; wm/wm.l -- the driver: wire the pure core (wm/core.l) and the X protocol
-; (wm/wire.l) into a running window manager. Concatenate them:
-;   cat wm/core.l wm/layout.l wm/wire.l wm/manage.l wm/wm.l | ai   (against `Xephyr :7 -ac`)
-; This is the scaffold's proof that the modular split composes -- rungs 1-5 of the
-; spike (manage/tile/focus/keyboard) plus workspaces (rung 6, clean this time: no
-; single-`:` name collisions, because the WM vocabulary lives in core.l/wire.l and
-; never shadows a nif). Tall is inlined here for now; layout.l lifts it out later.
-; The bindings are a scaffold subset of the target config (mod = super/mod4):
-;   mod+j / mod+k  focus down/up      mod+Return  focused -> master
-;   mod+1..9       view workspace      mod+shift+1..9  send focused there
+; wm/wm.l -- the driver: wire the pure core (wm/core.l), the layout engine
+; (wm/layout.l), the manageHook (wm/manage.l), and the keymap (wm/keys.l) over
+; the X protocol (wm/wire.l) into a running window manager. Concatenate them:
+;   cat wm/core.l wm/layout.l wm/wire.l wm/manage.l wm/keys.l wm/wm.l | ai
+; (against `Xephyr :7 -ac`). Rung 6: the keyboard is DATA-DRIVEN -- the-keys
+; (keys.l) is grabbed and dispatched by lookup; do-act interprets the action
+; vocabulary. The f_t hinge: a float-focused chord moves/resizes the float, a
+; tile-focused one messages the layout / navigates (windowNavigation's Go/Swap
+; via nav-target + zfocto/zswapw). ffoc tracks the focused FLOAT (the zipper
+; only holds tiles); hist is nextMatch's MRU focus ring.
 (: s (x-connect "/tmp/.X11-unix/X7")
    _ (? s 0 (: _ (say err "wm: no display :7 -- Xephyr up?\n") (nap 1)))
    (line m) (: _ (say out m) _ (say out "\n") (flush out))
@@ -17,25 +17,21 @@
    _ (? (x-redirect s root) 0 (: _ (say err "wm: another WM owns :7\n") (nap 1)))
    _ (line (+ "wm: managing " (+ (show root) (+ " " (+ (show wpx) (+ "x" (show hpx)))))))
 
-   ; --- keyboard: locate keycodes, grab mod4 + the digits (plain and shifted) ---
-   mod (<< 1 6)                                                                  ; mod4 = super = 0x40
-   km (x-keymap s (scr-mink sc) (scr-maxk sc) '(106 107 65293 32 44 46 102 109 116 119 49 50 51 52 53 54 55 56 57))
-   kj (peep km 106 0) kk (peep km 107 0) kret (peep km 65293 0)
-   ksp (peep km 32 0) kcomma (peep km 44 0) kperiod (peep km 46 0)              ; space=NextLayout, ,/.=IncMaster / shift+,/.=Shrink/Expand
-   kf (peep km 102 0) kmm (peep km 109 0) kt (peep km 116 0) kw (peep km 119 0) ; f=ToggleLayout(Full), m=MIRROR, t=sink all, w=float focused
-   digits (map (\ d (L d (peep km (+ 48 d) 0))) (map (+ 1) (jot 9)))            ; ((tag keycode)..), tags 1..9
-   _ (map (\ p (: kc (caup p) _ (x-grab s root mod kc) (x-grab s root (| mod 1) kc))) digits)
-   _ (map (\ kc (x-grab s root mod kc)) (L kj kk kret ksp kf kmm kt kw))
-   _ (map (\ kc (: _ (x-grab s root mod kc) (x-grab s root (| mod 1) kc))) (L kcomma kperiod))
+   ; --- keyboard: resolve the-keys' keysyms to keycodes, grab every chord ---
+   km (x-keymap s (scr-mink sc) (scr-maxk sc) (keys-syms the-keys))
+   ktab (filter (\ r (> (caup r) 0))                                             ; rows (mods keycode action); keysym absent -> dropped
+                (map (\ r (L (kb-mods r) (peep km (kb-sym r) 0) (kb-act r))) the-keys))
+   _ (map (\ r (x-grab s root (cap r) (caup r))) ktab)
    _ (x-flush s)
-   _ (line "wm: grabbed mod+{j,k,ret,space,comma,period,f,m,t,w,1..9} and mod+shift+{comma,period,1..9}")
+   _ (line (+ "wm: grabbed " (+ (show (tally ktab)) " chords")))
 
-   ; --- the layout engine (wm/layout.l) renders the current workspace ---
+   ; --- rendering (the layout engine answers, X obeys) ---
    (nth l i) (? (< i 1) (cap l) (nth (cup l) (- i 1)))
    defb 3                                                                        ; the config's border-width; a layout may override per-window (a 6th field)
+   scrn (L 0 0 wpx hpx)
    (render sh lay)                                                               ; ask the layout for placements, configure them, unmap the dropped
-    (: z (wsget sh (wscur sh)) rect (L 0 0 wpx hpx)
-       pls (cap (lay-tile lay rect z)) placed (map cap pls)
+    (: z (wsget sh (wscur sh))
+       pls (cap (lay-tile lay scrn z)) placed (map cap pls)
        _ (map (\ t (: _ (x-border s (nth t 0) (? (< (tally t) 6) defb (nth t 5)))   ; smartBorders sets 0 on a singleton/fullscreen
                        (x-configure s (nth t 0) (nth t 1) (nth t 2) (nth t 3) (nth t 4)))) pls)
        _ (map (\ w (? (any (\ p (= p w)) placed) 0 (x-unmap s w))) (wsrow sh))   ; windows the layout dropped (Full/minimize): hide them
@@ -53,58 +49,99 @@
           _ (map (\ w (x-unmap s w)) old) _ (x-flush s)
           _ (line (+ "wm: view " (+ (show t) (+ " " (show (wsrow sh2))))))
           sh2))
+   (msg-or old new) (? new new old)                                              ; keep the old layout when a message is unhandled (())
 
-   ; --- the event loop: (sheaf, layout, live?) ---
-   (loop sh lay live)
-    (: e (x-next s)
+   ; --- do-act: interpret one keys.l action. Returns by looping. ---
+   (do-act a sh lay live hist ffoc)
+    (: k (cap a) z (wsget sh (wscur sh)) fw (? ffoc ffoc (wsfoc sh))
+       (relay sh2 lay2 f2) (: _ (render sh2 lay2) _ (refocus sh2) (loop sh2 lay2 live hist f2))
+       (? (= k 'msg) (relay sh (msg-or lay (lay-msg lay (caup a) z)) ffoc)
+          (= k 'focus-dn) (relay (wsmap sh zfocdn) lay ())
+          (= k 'focus-up) (relay (wsmap sh zfocup) lay ())
+          (= k 'focus-master) (relay (wsmap sh (\ zz (zfocto (? (two? (zrow zz)) (cap (zrow zz)) ()) zz))) lay ())
+          (= k 'swap-dn) (relay (wsmap sh zswapdn) lay ffoc)
+          (= k 'swap-up) (relay (wsmap sh zswapup) lay ffoc)
+          (= k 'swap-master) (relay (wsmap sh zmaster) lay ffoc)
+          (= k 'view) (loop (switch sh lay (caup a)) lay live hist ffoc)
+          (= k 'shift) (: sh2 (shiftto sh (caup a)) _ (render sh2 lay)
+                          _ (line (+ "wm: sent -> " (show (caup a)))) (loop sh2 lay live hist ffoc))
+          (= k 'spawn) (: p (spawn (caup a)) _ (line (+ "wm: spawn " (+ (cap (caup a)) (+ " " (show p)))))
+                          (loop sh lay live hist ffoc))
+          (= k 'exec) (: _ (line "wm: exec -- abdicating") _ (exec (caup a))     ; returns only on failure
+                         (loop sh lay live hist ffoc))
+          (= k 'kill) (: _ (? fw (: _ (x-kill s fw) (x-flush s)) 0)              ; DestroyNotify does the eviction
+                         _ (line (+ "wm: kill " (show fw))) (loop sh lay live hist ffoc))
+          (= k 'quit) (line "wm: quit")                                          ; fall out of the loop
+          (= k 'restart) (: _ (line "wm: restart -- rung 9 (dock adopt)") (loop sh lay live hist ffoc))
+          (= k 'refresh) (relay sh lay ffoc)
+          (= k 'reset-layout) (relay sh lay0 ffoc)
+          (= k 'sink) (? (wsfloating? sh fw) (relay (wssink sh fw) lay ()) (loop sh lay live hist ffoc))
+          (= k 'float-toggle)
+          (? (! fw) (loop sh lay live hist ffoc)
+             (wsfloating? sh fw) (relay (wssink sh fw) lay ())
+             (: _ (line (+ "wm: float " (show fw))) (relay (wsdofloat sh fw (x-getgeom s fw)) lay fw)))
+          (= k 'next-match)
+          (: t (nm-pick (wsrow sh) (wsfoc sh) hist (caup a))
+             (? t (relay (wsmap sh (zfocto t)) lay ()) (loop sh lay live hist ffoc)))
+          ; --- the directional trio: the f_t hinge ---
+          (wsfloating? sh fw)                                                    ; float focused: move (go) or resize (swapd/resize)
+          (: r (wsrect sh fw) d (nthl a 2) dx (cap d) dy (caup d)
+             r2 (? (= k 'go) (L (+ (nth r 0) dx) (+ (nth r 1) dy) (nth r 2) (nth r 3))
+                   (L (nth r 0) (nth r 1) (mx2 20 (+ (nth r 2) dx)) (mx2 20 (+ (nth r 3) dy))))
+             (relay (wsdofloat sh fw r2) lay ffoc))
+          (: dir (caup a) pls (cap (lay-tile lay scrn z)) tgt (nav-target pls (wsfoc sh) dir)
+             (? (= k 'go) (? tgt (relay (wsmap sh (zfocto tgt)) lay ()) (loop sh lay live hist ffoc))
+                (= k 'swapd) (? tgt (relay (wsmap sh (zswapw (wsfoc sh) tgt)) lay ffoc) (loop sh lay live hist ffoc))
+                (relay sh (msg-or lay (lay-msg lay (? (|| (= dir 'left) (= dir 'down)) 'shrink 'expand) z)) ffoc)))))
+
+   ; --- the event loop: (sheaf, layout, live?, focus-history, focused-float) ---
+   (loop sh lay live hist ffoc)
+    (: f (wsfoc sh)
+       hist (? (&& f (! (= f (? (two? hist) (cap hist) ())))) (link f (znub f hist)) hist)
+       _ (reap 0)                                                                ; harvest one spawned zombie, if any
+       e (x-next s)
        (? (! e) (line "wm: display gone")
-          (= (ev-code e) 0) (: _ (line (+ "wm: X error " (show (ev-detail e)))) (loop sh lay live))
+          (= (ev-code e) 0) (: _ (line (+ "wm: X error " (show (ev-detail e)))) (loop sh lay live hist ffoc))
           (: code (ev-code e) win (ev-window e)
              (? (= code 20)                                                      ; MapRequest: admit tiled, run the manageHook, then place
                 (: sh1 (admit sh win)
-                   c (mg-ctx s win (L 0 0 wpx hpx) (x-getgeom s win))
+                   c (mg-ctx s win scrn (x-getgeom s win))
                    sh2 (manage-window manage-default c sh1)
+                   ffoc2 (? (wsfloating? sh2 win) win ffoc)                      ; a hook-floated window takes the float focus
                    (? (wsknownw? sh2 win)                                        ; managed (tiled or floated) -> place it
                       (: _ (render sh2 lay) _ (x-map s win) _ (x-flush s)
-                         _ (line (+ "wm: + " (+ (show win) (+ " " (show (wsrow sh2)))))) (loop sh2 lay 1))
+                         _ (line (+ "wm: + " (+ (show win) (+ " " (show (wsrow sh2)))))) (loop sh2 lay 1 hist ffoc2))
                       (: _ (x-map s win) _ (x-raise s win) _ (x-flush s)         ; ignored (dock/notification): map raw, on top
-                         _ (line (+ "wm: ignore " (show win))) (loop sh2 lay live))))
-                (= code 19) (: _ (? (= win (wsfoc sh)) (: _ (x-focus s win) (x-flush s)) 0) (loop sh lay live))   ; MapNotify: focus if it's the top
+                         _ (line (+ "wm: ignore " (show win))) (loop sh2 lay live hist ffoc))))
+                (= code 19) (: _ (? (= win (wsfoc sh)) (: _ (x-focus s win) (x-flush s)) 0) (loop sh lay live hist ffoc))   ; MapNotify: focus if it's the top
                 (= code 17)                                                      ; DestroyNotify: unmanage + tile
-                (: (? (! (wsknownw? sh win)) (loop sh lay live)
+                (: (? (! (wsknownw? sh win)) (loop sh lay live hist ffoc)
                       (: sh2 (evict sh win) _ (render sh2 lay)
+                         ffoc2 (? (= win ffoc) () ffoc)
                          _ (line (+ "wm: - " (+ (show win) (+ " " (show (wsrow sh2))))))
-                         (? (&& live (! (wswins sh2))) (line "wm: empty -- down") (loop sh2 lay live)))))
-                (= code 2)                                                       ; KeyPress: drive the core / message the layout
-                (: kc (ev-detail e) st (ev-state e) shifted (& st 1) z (wsget sh (wscur sh))
-                   (? (= kc kj) (: sh2 (wsmap sh zfocdn) _ (render sh2 lay) _ (refocus sh2) (loop sh2 lay live))
-                      (= kc kk) (: sh2 (wsmap sh zfocup) _ (render sh2 lay) _ (refocus sh2) (loop sh2 lay live))
-                      (= kc kret) (: sh2 (wsmap sh zmaster) _ (render sh2 lay) _ (refocus sh2) (loop sh2 lay live))
-                      (= kc ksp) (: lay2 (msg-or lay (lay-msg lay 'next-layout z)) _ (render sh lay2) _ (refocus sh)
-                                    _ (line "wm: next-layout") (loop sh lay2 live))
-                      (= kc kcomma) (: lay2 (msg-or lay (lay-msg lay (? shifted 'shrink 'inc-master) z)) _ (render sh lay2) _ (refocus sh) (loop sh lay2 live))
-                      (= kc kperiod) (: lay2 (msg-or lay (lay-msg lay (? shifted 'expand 'dec-master) z)) _ (render sh lay2) _ (refocus sh) (loop sh lay2 live))
-                      (= kc kf) (: lay2 (msg-or lay (lay-msg lay 'toggle-layout z)) _ (render sh lay2) _ (refocus sh) _ (line "wm: toggle Full") (loop sh lay2 live))
-                      (= kc kmm) (: lay2 (msg-or lay (lay-msg lay 'mirror z)) _ (render sh lay2) _ (refocus sh) _ (line "wm: toggle MIRROR") (loop sh lay2 live))
-                      (= kc kw) (: fw (wsfoc sh) sh2 (? fw (wsdofloat sh fw (x-getgeom s fw)) sh)   ; float the focused tiled window at its geometry
-                                   _ (render sh2 lay) _ (line (+ "wm: float " (show fw))) (loop sh2 lay live))
-                      (= kc kt) (: sh2 (foldl (\ ss p (wssink ss (cap p))) sh (wsfloat sh))         ; sink every floating window back to the tiles
-                                   _ (render sh2 lay) _ (refocus sh2) _ (line "wm: sink floats") (loop sh2 lay live))
-                      (: hit (afind (\ p (= (caup p) kc)) digits)
-                         (? (! (two? hit)) (loop sh lay live)
-                            (: t (cap hit)
-                               (? shifted (: sh2 (shiftto sh t) _ (render sh2 lay)
-                                             _ (line (+ "wm: sent -> " (show t))) (loop sh2 lay live))
-                                  (loop (switch sh lay t) lay live)))))))
-                (= code 23) (: _ (? (wsknownw? sh win) (render sh lay) 0) (loop sh lay live))   ; ConfigureRequest: the layout answers
-                (loop sh lay live)))))
-   (msg-or old new) (? new new old)                                             ; keep the old layout when a message is unhandled (())
+                         (? (&& live (! (wswins sh2))) (line "wm: empty -- down") (loop sh2 lay live hist ffoc2)))))
+                (= code 2)                                                       ; KeyPress: the table answers
+                (: kc (ev-detail e) stm (& (ev-state e) kmodmask)
+                   hit (afind (\ r (&& (= (cap r) stm) (= (caup r) kc))) ktab)
+                   (? (two? hit) (do-act (nthl hit 2) sh lay live hist ffoc)
+                      (loop sh lay live hist ffoc)))
+                (= code 23)                                                      ; ConfigureRequest: managed -> the layout answers;
+                (? (wsknownw? sh win) (: _ (render sh lay) (loop sh lay live hist ffoc))
+                   (: pkt (ev-raw e) mask (u16 pkt 26) g (x-getgeom s win)       ; unmanaged (pre-map): GRANT it -- a client WAITS on
+                      gx (? (& mask 1) (u16 pkt 16) (nth g 0))                   ; this configure before mapping (deny = no MapRequest,
+                      gy (? (& mask 2) (u16 pkt 18) (nth g 1))                   ; the 1x1 deadlock); fields absent from the value-mask
+                      gw (? (& mask 4) (u16 pkt 20) (nth g 2))                   ; keep their current geometry
+                      gh (? (& mask 8) (u16 pkt 22) (nth g 3))
+                      _ (x-configure s win gx gy gw gh) _ (x-flush s)
+                      (loop sh lay live hist ffoc)))
+                (loop sh lay live hist ffoc)))))
+
    ; ws 1..9; layout = the config's t (l1 ||| l2): minimize . smartBorders . toggleLayouts Full . MIRROR $ (ResizableTall ||| Dwindle)
    lay0 (minimize (smart-borders (toggle-full (mirror (choice (L (resizable-tall 1 0.02 0.5) (dwindle 1.618)))))))
    ; adopt the windows already mapped before we grabbed the redirect (closes the startup race; survives a restart-in-place)
    kids (filter (\ w (x-manageable? s w)) (x-querytree s root))
    sh0 (foldl (\ ss w (admit ss w)) (sheaf (map (+ 1) (jot 9))) kids)
    _ (? (two? kids) (: _ (render sh0 lay0) _ (refocus sh0) (line (+ "wm: adopted " (show kids)))) 0)
-   _ (loop sh0 lay0 (? (two? kids) 1 0))
+   _ (loop sh0 lay0 (? (two? kids) 1 0) () ())
    _ (close s)
    (line "wm: done"))

@@ -163,5 +163,41 @@
       ; manage-default is the assembled config hook -- a runnable closure (X-driven; not called here)
       (lit? manage-default)))
 
-(say err "wm/law: StackSet zipper + sheaf + floating + layout + modifier + manage laws ok
+; --- the Go/Swap zipper halves (wm/core.l rung 6): focus/swap by NAME ---
+(: z3 (zmk 2 '(1) '(3))                                                          ; row (1 2 3), 2 focused
+   (assert
+      (= (zfoc (zfocto 3 z3)) 3) (= (zrow (zfocto 3 z3)) '(1 2 3))               ; zfocto moves ONLY the focus
+      (= (zfocto 2 z3) z3) (= (zfocto 9 z3) z3)                                  ; to self / to absent: no-ops
+      (= (zrow (zswapw 1 3 z3)) '(3 2 1)) (= (zfoc (zswapw 1 3 z3)) 2)           ; zswapw exchanges positions, focus keeps its window
+      (= (zrow (zswapw 2 3 z3)) '(1 3 2)) (= (zfoc (zswapw 2 3 z3)) 2)           ; ... even when the focus is a swap party
+      (= (zswapw 1 3 (zswapw 1 3 z3)) z3)                                        ; an involution
+      (= (zswapw 1 9 z3) z3)))                                                   ; a missing party: no-op
+
+; --- the keymap (wm/keys.l rung 6): the table's shape, the union law, nextMatch ---
+(: (assert
+      ; every binding is (mods keysym action), the action a tagged list
+      (all (\ r (&& (= (tally r) 3) (two? (kb-act r)) (name? (cap (kb-act r))))) the-keys)
+      (= kmodmask (| shiftm (| ctrlm (| altm supm))))
+      ; the directional generator: 4 dirs x 2 keysyms x 3 modifier rows
+      (= (tally keys-dir) 24)
+      (= (keys-find keys-dir supm 104) '(go left (-20 0)))                       ; sup+h
+      (= (keys-find keys-dir (| supm shiftm) xk-up) '(swapd up (0 -20)))         ; sup+shift+Up
+      (= (keys-find keys-dir (| supm ctrlm) 106) '(resize down (0 20)))          ; sup+ctrl+j
+      ; the union: custom wins on a collision, stock survives elsewhere
+      (= (tally keys-custom) 45) (= (tally keys-def) 39) (= (tally the-keys) 70) ; 14 stock rows shadowed
+      (= (keys-find the-keys supm xk-ret) '(spawn ("xfce4-terminal")))           ; custom sup+ret over stock swap-master
+      (= (keys-find the-keys supm 109) '(msg mirror))                            ; custom sup+m over stock focus-master
+      (= (keys-find the-keys (| supm shiftm) xk-ret) '(spawn ("xterm")))         ; the stock terminal survives
+      (= (keys-find the-keys supm 116) '(sink))                                  ; stock mod+t survives
+      (= (keys-find the-keys supm 49) '(view 1))                                 ; the digit rows
+      (= (keys-find the-keys (| supm shiftm) 57) '(shift 9))
+      (! (keys-find the-keys supm 999))                                          ; an unbound chord reads ()
+      ; nextMatch's MRU pick: forward = most recent other, backward = oldest
+      (= (nm-pick '(10 20 30) 10 '(10 20 30) 1) 20)
+      (= (nm-pick '(10 20 30) 10 '(10 20 30) 0) 30)
+      (= (nm-pick '(10 20 30) 10 '(10) 1) 20)                                    ; never-focused windows count as oldest
+      (= (nm-pick '(10 20) 10 '(99 20 10) 1) 20)                                 ; other-workspace history is ignored
+      (! (nm-pick '(10) 10 '(10) 1))))                                           ; nowhere to go
+
+(say err "wm/law: StackSet zipper + sheaf + floating + layout + modifier + manage + keymap laws ok
 ")

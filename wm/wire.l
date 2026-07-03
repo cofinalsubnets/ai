@@ -106,6 +106,7 @@
        (L (u16 hdr 12) (u16 hdr 14) (u16 hdr 16) (u16 hdr 18)))
    (x-raise s win) (: _ (x-w8 s 12) _ (x-w8 s 0) _ (x-w16 s 4) _ (x-w32 s win)   ; ConfigureWindow CWStackMode=Above
                       _ (x-w16 s 64) _ (x-w16 s 0) (x-w32 s 0))
+   (x-kill s win) (: _ (x-w8 s 113) _ (x-w8 s 0) _ (x-w16 s 2) (x-w32 s win))    ; KillClient: the `kill` action's teeth
 
    ; --- QueryTree (opcode 15) + GetWindowAttributes (opcode 3): at startup we
    ;     ADOPT the windows that mapped before the redirect took hold (closing the
@@ -146,9 +147,10 @@
    ; --- the event decoder: one 32-byte event -> (code detail window state) | ()
    ;     code 0 = X error (window is garbage). window at byte 8, state at byte 28,
    ;     detail (keycode) at byte 1 -- enough for every event the WM handles. ---
-   (x-decode pkt) (L (& 127 (cap pkt)) (nthl pkt 1) (u32 pkt 8) (u16 pkt 28))    ; code, detail(keycode), window@8, state@28
+   (x-decode pkt) (L (& 127 (cap pkt)) (nthl pkt 1) (u32 pkt 8) (u16 pkt 28) pkt)   ; code, detail(keycode), window@8, state@28, + the raw bytes
    (x-next s)                                                                    ; a stashed event first, else the socket
     (: q (peep evq 0 ())
        (? (two? q) (: _ (pin evq 0 (cup q)) (x-decode (cap q)))
           (: b0 (get s) (? (= b0 -1) () (x-decode (link b0 (x-rbytes s 31)))))))
-   (ev-code e) (cap e)  (ev-detail e) (caup e)  (ev-window e) (nthl e 2)  (ev-state e) (nthl e 3))
+   (ev-code e) (cap e)  (ev-detail e) (caup e)  (ev-window e) (nthl e 2)  (ev-state e) (nthl e 3)
+   (ev-raw e) (nthl e 4))                                                        ; the 32 raw bytes (ConfigureRequest reads its geometry here)

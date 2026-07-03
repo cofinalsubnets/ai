@@ -36,6 +36,13 @@
                        (two? up) (zmk (cap up) (cup up) ())
                        ())))
    (zhas? w z) (any (\ x (= x w)) (zrow z))
+   (zfromrow row f) (: (go up m) (? (! (two? m)) ()                              ; a row -> a zipper focused at f (() if absent)
+                                    (= (cap m) f) (zmk f up (cup m))
+                                    (go (link (cap m) up) (cup m)))
+                       (go () row))
+   (zfocto w z) (? (zhas? w z) (zfromrow (zrow z) w) z)                          ; focus the named window (Go dir's StackSet half)
+   (zswapw a b z) (? (&& (zhas? a z) (zhas? b z))                                ; exchange a and b in place; focus follows its window
+                     (zfromrow (map (\ x (? (= x a) b (= x b) a x)) (zrow z)) (zfoc z)) z)
 
    ; --- the sheaf: (cur board floating). board = ((tag stack)..), one tag current;
    ;     floating = an alist ((window rect)..), the un-tiled windows (rect = (x y w h)). ---
