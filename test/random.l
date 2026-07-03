@@ -3,8 +3,8 @@
 ; by n -- positive int -> int in [0,n), float -> float in [0,n), n <= 0 -> a
 ; full-width int. The state is copied not mutated, so a seed repeats on every target
 ; (the tuple is a Z array on a 64-bit word, a C array on wasm -- the draw canonicalizes
-; to 62 bits). GLOBAL (hidden clock-seeded stream, non-reproducible): (rand n) -> int
-; in [0,n) (n<=0 full-width); (randf n) -> float in [0,n) (n<=0 -> [0,1)).
+; to 62 bits). GLOBAL (hidden clock-seeded stream; (rng-set (seed n)) pins it): (rand n)
+; -> int in [0,n) (n<=0 full-width); (randf n) -> float in [0,n) (n<=0 -> [0,1)).
 
 (: (rdraw s) (cap (random (seed s) 0))                  ; 1st full-width functional draw
    (rseq3 s) (: st (seed s) a (random st 0) b (random (cup a) 0) c (random (cup b) 0)
@@ -54,6 +54,14 @@
  (< (randf 1) 1)   (<= 0 (randf 1))                     ; (randf 1) -> [0,1)
  (: u (randf 4) (&& (<= 0 u) (< u 4)))                  ; (randf n) -> [0,n)
  (gem? (randf 100))
+
+ ; --- rng-set pins the global stream: (rng-set (seed n)) makes rand/randf
+ ; reproducible -- the public writer beside the public readers; rng-get reads it ---
+ (: _ (rng-set (seed 5)) a (rand 0) _ (rng-set (seed 5)) b (rand 0) (= a b))
+ (: _ (rng-set (seed 5)) a (randf 0) _ (rng-set (seed 5)) b (randf 0) (= a b))
+ (: _ (rng-set (seed 5)) a (rand 0) _ (rng-set (seed 6)) b (rand 0) !(= a b))
+ (= 0 (rng-set 'junk))                          ; a bad state answers 0, the stream unchanged
+ (= 4 (tally (rng-get 0)))
 
  ; --- cross-target reproducibility pins (the same on host, kernel, and wasm) ---
  (= (rseq3 42) '(1186220554705070239 1269524112903976849 4314585860703317388))

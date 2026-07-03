@@ -516,9 +516,10 @@
 ; the RNG, two layers over the pure C steps (seed -> a fresh 256-bit state; C holds
 ; no state). FUNCTIONAL (reproducible): (random st n) draws once -> (value . st'),
 ; value's TYPE by n -- float -> float in [0,n), positive int -> int in [0,n), n <= 0
-; -> a full-width int. GLOBAL (hidden stream on book ('rng-state), lazily clock-seeded
-; -> non-reproducible; use seed/random for a fixed sequence): (rand n) -> int in [0,n)
-; (n<=0 full-width); (randf n) -> float in [0,n) (n<=0 -> [0,1)). rng-get/rng-set plumb it.
+; -> a full-width int. GLOBAL (hidden stream on book ('rng-state), lazily clock-seeded):
+; (rand n) -> int in [0,n) (n<=0 full-width); (randf n) -> float in [0,n) (n<=0 -> [0,1)).
+; rng-get/rng-set are the stream's PUBLIC plumbing -- (rng-set (seed n)) pins it, making
+; rand/randf reproducible (a bad state answers 0, the stream unchanged); rng-get reads it.
 (: (random st n) (? (gem? n) (: r (randf-next st) (link (* n (cap r)) (cup r)))
                     (< 0 n)  (: r (rand-next st)  (link (% (cap r) n) (cup r)))
                     (rand-next st))
