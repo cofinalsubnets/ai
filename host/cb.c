@@ -21,6 +21,7 @@
 //                                home to the pty master) as byte charms; () quiet
 #include "ai.h"
 #include "../port/quay/quay.c"
+#include "../port/quay/moderndos_8x16.c"   // the blit's glyphs (host links no font objects)
 
 // Re-derive the struct cb from a cask arg, or 0 if it isn't one / doesn't
 // hold a sane screen. The cask is OPEN DATA -- the ai side can pin any byte
@@ -109,6 +110,59 @@ static lvm(lvm_gaze) {
   Sp[1] = out;
   Sp += 1; Ip += 1; return Continue(); }
 
+// the xterm-256 palette, laid once: 16 classics + the 6x6x6 cube + greys.
+// same recipe as the kernel's fbdraw palette -- a cell means the same
+// pixels on the framebuffer and in a window.
+static uint32_t xpal[256];
+static void xpal_ini(void) {
+  static const uint32_t base[16] = {
+    0x000000, 0x800000, 0x008000, 0x808000,
+    0x000080, 0x800080, 0x008080, 0xc0c0c0,
+    0x808080, 0xff0000, 0x00ff00, 0xffff00,
+    0x0000ff, 0xff00ff, 0x00ffff, 0xffffff };
+  static const uint8_t cube[6] = { 0, 95, 135, 175, 215, 255 };
+  for (int i = 0; i < 16; i++) xpal[i] = base[i];
+  for (int i = 0; i < 216; i++) {
+    int r = i / 36, g_ = i / 6 % 6, b_ = i % 6;
+    xpal[16 + i] = (uint32_t) cube[r] << 16 | (uint32_t) cube[g_] << 8 | cube[b_]; }
+  for (int i = 0; i < 24; i++) {
+    uint32_t v = 8 + 10u * i;
+    xpal[232 + i] = v << 16 | v << 8 | v; } }
+
+// (blit fb wpx cell x y): paint one 8x16 cell into a 32bpp little-endian
+// cask framebuffer wpx pixels wide, glyphs from moderndos, faces rendered
+// like the kernel's fbdraw (bright bold, swapped reverse, underline on the
+// last scanline). bounds-checked against the cask; misuse is nothing.
+static lvm(lvm_blit) {
+  ai_word fb = Sp[0], out = ZeroPoint;
+  intptr_t w = (Sp[1] & 1) ? getcharm(Sp[1]) : -1,
+           cl = (Sp[2] & 1) ? getcharm(Sp[2]) : -1,
+           x = (Sp[3] & 1) ? getcharm(Sp[3]) : -1,
+           y = (Sp[4] & 1) ? getcharm(Sp[4]) : -1;
+  if (!(fb & 1) && ((union u*) fb)->ap == lvm_buf
+      && w > 0 && cl >= 0 && x >= 0 && y >= 0 && x + 8 <= w) {
+    struct ai_str *s = ((struct ai_buf*) fb)->str;
+    if ((uintptr_t) (y + 16) * (uintptr_t) w * 4 <= s->len) {
+      if (!xpal[255]) xpal_ini();
+      uint32_t cell = (uint32_t) cl;
+      uint8_t g_ = cb_ch(cell), face = cb_face(cell), fgx = cb_fg(cell);
+      if (face & cb_bold && fgx < 8) fgx = (uint8_t) (fgx + 8);
+      uint32_t fg = xpal[fgx], bg = xpal[cb_bg(cell)];
+      if (face & cb_rev) { uint32_t t_ = fg; fg = bg, bg = t_; }
+      uint8_t const *bmp = moderndos_8x16[g_];
+      for (int r = 0; r < 16; r++) {
+        int ul = face & cb_under && r == 15;
+        uint8_t *row = (uint8_t*) s->bytes + ((uintptr_t) (y + r) * w + x) * 4;
+        for (uint8_t o = bmp[r], k = 8; k--; o >>= 1) {
+          uint32_t px = ul || o & 1 ? fg : bg;
+          row[k * 4] = (uint8_t) px;
+          row[k * 4 + 1] = (uint8_t) (px >> 8);
+          row[k * 4 + 2] = (uint8_t) (px >> 16);
+          row[k * 4 + 3] = 0; } }
+      out = fb; } }
+  Sp[4] = out;
+  Sp += 4; Ip += 1; return Continue(); }
+
 // (unfold g): a cp437 glyph byte's unicode codepoint, 0 when it has none --
 // the outward half of the utf-8 fold, for a painter re-emitting the grid
 // to a utf-8 terminal (berth caches these per glyph).
@@ -149,10 +203,12 @@ static union u const
   nif_glass[]  = {{lvm_cur}, {.x = putcharm(2)}, {lvm_glass},  {lvm_ret0}},
   nif_gaze[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_gaze},   {lvm_ret0}},
   nif_reply[]  = {{lvm_reply}, {lvm_ret0}},
-  nif_unfold[] = {{lvm_unfold}, {lvm_ret0}};
+  nif_unfold[] = {{lvm_unfold}, {lvm_ret0}},
+  nif_blit[]   = {{lvm_cur}, {.x = putcharm(5)}, {lvm_blit}, {lvm_ret0}};
 AI_NIF("screen", nif_screen);
 AI_NIF("scribe", nif_scribe);
 AI_NIF("glass", nif_glass);
 AI_NIF("gaze", nif_gaze);
 AI_NIF("reply", nif_reply);
 AI_NIF("unfold", nif_unfold);
+AI_NIF("blit", nif_blit);

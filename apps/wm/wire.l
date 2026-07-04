@@ -61,11 +61,14 @@
              _ (x-skip s (* 8 nfmt))
              root (x-r32 s) cmap (x-r32 s) _ (x-r32 s) _ (x-r32 s) _ (x-r32 s)
              wpx (x-r16 s) hpx (x-r16 s)
-             _ (x-skip s (- (* 4 alen) (+ 32 (+ (+ vlen (x-pad4 vlen)) (+ (* 8 nfmt) 24)))))
-             (L root wpx hpx minkc maxkc idbase cmap))))
+             _ (x-skip s 8)                                                      ; mm sizes, min/max installed maps
+             vis (x-r32 s) _ (x-r8 s) _ (x-r8 s)                                 ; root visual; backing-stores, save-unders
+             depth (x-r8 s) _ (x-r8 s)                                           ; root depth (a drawing client's PutImage needs it)
+             _ (x-skip s (- (* 4 alen) (+ 32 (+ (+ vlen (x-pad4 vlen)) (+ (* 8 nfmt) 40)))))
+             (L root wpx hpx minkc maxkc idbase cmap vis depth))))
    (scr-root sc) (cap sc)  (scr-w sc) (caup sc)  (scr-h sc) (caup (cup sc))
    (scr-mink sc) (nthl sc 3)  (scr-maxk sc) (nthl sc 4)  (scr-idbase sc) (nthl sc 5)
-   (scr-cmap sc) (nthl sc 6)
+   (scr-cmap sc) (nthl sc 6)  (scr-visual sc) (nthl sc 7)  (scr-depth sc) (nthl sc 8)
 
    ; --- requests ---
    (x-cwa-events s win mask)                                                     ; ChangeWindowAttributes: CWEventMask
