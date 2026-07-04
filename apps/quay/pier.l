@@ -17,57 +17,65 @@
 ; host-only, never in the corpus; boot/pier.l proves it against a headless
 ; Xvfb, reading the painted window back with GetImage.
 
-(:
- (px-min a b) (? (< a b) a b)
- (px-upto n f) ((: (go i) (? (< i n) (: _ (f i) (go (+ i 1))) ())) 0)
+
+(: (px-min a b) (? (< a b) a b))
+
+(: (px-upto n f) ((: (go i) (? (< i n) (: _ (f i) (go (+ i 1))) ())) 0))
+
 
  ; --- the new requests wire.l never needed: draw ---
- (px-mkwin s win parent x y w h)              ; CreateWindow: InputOutput, black
-  (: _ (x-w8 s 1) _ (x-w8 s 0) _ (x-w16 s 10) ; ground, keys+expose+structure
+
+(: (px-mkwin s win parent x y w h) (: _ (x-w8 s 1) _ (x-w8 s 0) _ (x-w16 s 10) ; ground, keys+expose+structure
      _ (x-w32 s win) _ (x-w32 s parent)
      _ (x-w16 s x) _ (x-w16 s y) _ (x-w16 s w) _ (x-w16 s h)
      _ (x-w16 s 0) _ (x-w16 s 1) _ (x-w32 s 0)
      _ (x-w32 s 2050)                         ; CWBackPixel | CWEventMask
      _ (x-w32 s 0)
-     (x-w32 s 163841))                        ; KeyPress|Exposure|StructureNotify
- (px-gc s gc win)                             ; CreateGC, all defaults
-  (: _ (x-w8 s 55) _ (x-w8 s 0) _ (x-w16 s 4) _ (x-w32 s gc) _ (x-w32 s win) (x-w32 s 0))
- (px-title s win t)                           ; ChangeProperty WM_NAME <- STRING
-  (: n (tally t)
+     (x-w32 s 163841)))
+                        ; KeyPress|Exposure|StructureNotify
+
+(: (px-gc s gc win) (: _ (x-w8 s 55) _ (x-w8 s 0) _ (x-w16 s 4) _ (x-w32 s gc) _ (x-w32 s win) (x-w32 s 0)))
+
+(: (px-title s win t) (: n (tally t)
      _ (x-w8 s 18) _ (x-w8 s 0) _ (x-w16 s (+ 6 (/ (+ n (x-pad4 n)) 4)))
      _ (x-w32 s win) _ (x-w32 s 39) _ (x-w32 s 31) _ (x-w8 s 8)
-     _ (x-w8 s 0) _ (x-w16 s 0) _ (x-w32 s n) (x-wpad s t))
- (px-protocols s win)                         ; say we speak WM_DELETE_WINDOW; the atom
-  (: prot (x-intern s "WM_PROTOCOLS") del (x-intern s "WM_DELETE_WINDOW")
+     _ (x-w8 s 0) _ (x-w16 s 0) _ (x-w32 s n) (x-wpad s t)))
+
+(: (px-protocols s win) (: prot (x-intern s "WM_PROTOCOLS") del (x-intern s "WM_DELETE_WINDOW")
      _ (x-w8 s 18) _ (x-w8 s 0) _ (x-w16 s 7)
      _ (x-w32 s win) _ (x-w32 s prot) _ (x-w32 s 4) _ (x-w8 s 32)
      _ (x-w8 s 0) _ (x-w16 s 0) _ (x-w32 s 1) _ (x-w32 s del)
-     del)
+     del))
+
 
  ; PutImage, chunked: the request length is 16 bits of 4-byte WORDS, so a
  ; band must fit 262112 data bytes NO MATTER THE WIDTH -- a wm retiling us
  ; to a wide monitor makes rows fat, and one over-long request corrupts the
  ; whole stream (the server reads pixels as opcodes: garble, then silence)
- (px-putimg s win gc depth fb wpix hpix)
-  (: img (string fb)
-     rowb (* wpix 4)
-     band (: v (// 262112 rowb) (? (< v 1) 1 (px-min 60 v)))
-     (go y) (? (< y hpix)
-               (: n (px-min band (- hpix y))
+ ; ships pyn PIXEL rows starting at py0; each band pours into a scratch
+ ; cask so only the shipped bytes ever copy (never the whole framebuffer)
+
+(: (px-ship s win gc depth fb wpix py0 pyn) (: rowb (* wpix 4)
+     band (: v (// 262112 rowb) (? (< v 1) 1 (px-min 64 v)))
+     (go y left) (? (< 0 left)
+               (: n (px-min band left)
                   bytes (* n rowb)
+                  t (cask bytes)
+                  _ (pour t 0 fb (* y rowb) bytes)
                   _ (x-w8 s 72) _ (x-w8 s 2) _ (x-w16 s (+ 6 (/ bytes 4)))
                   _ (x-w32 s win) _ (x-w32 s gc)
                   _ (x-w16 s wpix) _ (x-w16 s n)
                   _ (x-w16 s 0) _ (x-w16 s y)
                   _ (x-w8 s 0) _ (x-w8 s depth) _ (x-w16 s 0)
-                  _ (say s (snip img (* y rowb) (+ (* y rowb) bytes)))
-                  (go (+ y n)))
+                  _ (say s (string t))
+                  (go (+ y n) (- left n)))
                (x-flush s))
-     (go 0))
+     (go py0 pyn)))
+
 
  ; --- keyboard: the full keycode -> (sym shifted-sym) table, once ---
- (px-keysyms s mink maxk)
-  (: nkc (+ 1 (- maxk mink))
+
+(: (px-keysyms s mink maxk) (: nkc (+ 1 (- maxk mink))
      _ (x-w8 s 101) _ (x-w8 s 0) _ (x-w16 s 2)
      _ (x-w8 s mink) _ (x-w8 s nkc) _ (x-w16 s 0) _ (x-flush s)
      hdr (x-reply s) kpc (nthl hdr 1)
@@ -76,13 +84,14 @@
                             s1 (? (< 1 kpc) (x-r32 s) 0)
                             _ (x-skip s (* 4 (? (< 2 kpc) (- kpc 2) 0)))
                             (pin km (+ mink k) (L s0 s1)))))
-     km)
+     km))
+
 
  ; a KeyPress -> the bytes a terminal sends. shift picks the second column;
  ; ctrl folds letters onto C0; the specials speak escape; latin-1 goes out
  ; as utf-8 (berth's encoder). anything else is silence.
- (px-keybytes km kc st)
-  (: p (peep km kc ())
+
+(: (px-keybytes km kc st) (: p (peep km kc ())
      (? (! (two? p)) ""
       (: sym (? (&& (& 1 st) (< 0 (caup p))) (caup p) (cap p))
          (? (&& (<= 32 sym) (< sym 127))
@@ -96,34 +105,64 @@
             (= sym 65365) "\e[5~"    (= sym 65366) "\e[6~"
             (= sym 65535) "\e[3~"    (= sym 65379) "\e[2~"
             (= sym 65421) "\r"
-            ""))))
+            "")))))
 
- ; --- the painter: every cell blits (C does the pixels), the cursor cell
- ; wears reverse, then the frame ships. geometry rides boxes so a resize
- ; swaps grid and framebuffer under us; a torn read just paints one odd
- ; frame (the blit bounds-check keeps it safe) and the next is true.
- (px-paint s win gc depth bx fx)
-  (: sc (bx -> 0 0) fb (fx -> 0 0)
+
+ ; --- the painter, damage-driven: the screen names its dirty rows (the cb
+ ; marks every write; damage reads-and-clears), the cursor's row and its
+ ; last berth join them, blitrow renders each in one C call, and each
+ ; contiguous run ships as its own PutImage band. a keystroke repaints one
+ ; row of pixels, not a monitor's worth -- that is the whole speed story.
+ ; geometry rides boxes so a resize swaps grid and framebuffer under us;
+ ; a torn read paints one odd frame (bounds-checked) and the next is true.
+
+(: (px-dirty sc all) (: r (gaze sc 1)
+     (bits d base i acc) (? (< i 32)
+                            (bits d base (+ i 1)
+                                  (? (& 1 (>> d i)) (link (+ base i) acc) acc))
+                            acc)
+     (go k acc) (? (< k 8) (go (+ k 1) (bits (damage sc k) (* 32 k) 0 acc)) acc)
+     ds (go 0 ())
+     (? all (jot r) ds)))
+
+(: (px-paint s win gc depth bx fx all lc) (: sc (bx -> 0 0) fb (fx -> 0 0)
      r (gaze sc 1) c (gaze sc 2) w (gaze sc 0) f (gaze sc 3)
-     wpix (* c 8) hpix (* r 16)
-     _ (px-upto r (\ i (px-upto c (\ q
-        (: pos (+ (* i c) q)
-           cell (glass sc pos)
-           cell2 (? (&& (& 1 f) (= pos w)) (^ cell (<< 4 28)) cell)
-           (blit fb wpix cell2 (* q 8) (* i 16)))))))
-     (px-putimg s win gc depth fb wpix hpix))
-
- (px-paintloop s win gc depth bx fx dirty)
-  (: _ (? (dirty -> 0 0)
-          (: _ (pin dirty 0 0) (px-paint s win gc depth bx fx))
+     wpix (* c 8)
+     cur (? (& 1 f) w -1)
+     seen (tablet 8)
+     _ (map (\ x (? (< x r) (pin seen x 1) 0)) (px-dirty sc all))
+     _ (? (< -1 cur) (: v (// cur c) (? (< v r) (pin seen v 1) 0)) 0)
+     _ (? (&& (< -1 lc) (! (= lc cur)))
+          (: v (// lc c) (? (< v r) (pin seen v 1) 0))
           0)
+     ds (sort (keys seen))
+     _ (? (two? ds)
+          (: _ (map (\ row (blitrow fb wpix sc row cur)) ds)
+             ; ship each contiguous run of rows as one band
+             (run a b rest) (? (two? rest)
+                              (: x (cap rest)
+                                 (? (= x (+ b 1)) (run a x (cup rest))
+                                    (: _ (px-ship s win gc depth fb wpix
+                                                  (* a 16) (* (+ (- b a) 1) 16))
+                                       (run x x (cup rest)))))
+                              (px-ship s win gc depth fb wpix
+                                       (* a 16) (* (+ (- b a) 1) 16)))
+             (run (cap ds) (cap ds) (cup ds)))
+          0)
+     cur))
+
+(: (px-paintloop s win gc depth bx fx dirty lc) (: d (dirty -> 0 0)
+     lc2 (? d (: _ (pin dirty 0 0)
+                 (px-paint s win gc depth bx fx (= d 2) lc))
+             lc)
      _ (rest 33)
-     (px-paintloop s win gc depth bx fx dirty))
+     (px-paintloop s win gc depth bx fx dirty lc2)))
+
 
  ; --- resize: the wm retiled us. a fresh grid and framebuffer to fit,
  ; and the pty learns its new size (SIGWINCH is the kernel's errand) ---
- (px-resize bx fx m dirty wp hp)
-  (: r (: v (// hp 16) (? (< 1 v) v 1))
+
+(: (px-resize bx fx m dirty wp hp) (: r (: v (// hp 16) (? (< 1 v) v 1))
      c (: v (// wp 8) (? (< 1 v) v 2))
      sc (bx -> 0 0)
      (? (&& (= r (gaze sc 1)) (= c (gaze sc 2))) ()
@@ -131,13 +170,14 @@
          _ (fx <- 0 (cask (* (* c 8) (* (* r 16) 4))))
          _ (setwinsize m r c)
          _ (pin dirty 0 1)
-         ())))
+         ()))))
+
 
  ; --- the shore watch: X events in the main task; berth's moor pumps the
  ; child in another and SEALS the socket read when the child hangs up, so
  ; x-next wakes with () and the watch steps away ---
- (px-watch s m km del bx fx dirty)
-  (: e (x-next s)
+
+(: (px-watch s m km del bx fx dirty) (: e (x-next s)
      (? (! (two? e)) ()
       (: code (ev-code e)
          (? (= code 2)
@@ -145,19 +185,20 @@
                _ (? (tally b) (: _ (say m b) (flush m)) 0)
                (px-watch s m km del bx fx dirty))
             (= code 12)
-            (: _ (pin dirty 0 1) (px-watch s m km del bx fx dirty))
+            (: _ (pin dirty 0 2) (px-watch s m km del bx fx dirty))   ; expose: repaint ALL
             (= code 22)
             (: raw (ev-raw e)
                _ (px-resize bx fx m dirty (u16 raw 20) (u16 raw 22))
                (px-watch s m km del bx fx dirty))
             (= code 33)
             (? (= del (u32 (ev-raw e) 12)) () (px-watch s m km del bx fx dirty))
-            (px-watch s m km del bx fx dirty)))))
+            (px-watch s m km del bx fx dirty))))))
+
 
  ; --- pier: tie argv up at the shore. returns the child's status pair,
  ; or a nom naming what refused ---
- (pier argv dpy auth)
-  (: s (x-connect dpy)
+
+(: (pier argv dpy auth) (: s (x-connect dpy)
      (? (! (lit? s)) 'no-socket
       (: sc (x-setup s auth)
          (? (! (two? sc)) (: _ (close s) 'refused)
@@ -181,7 +222,7 @@
                  dirty #1
                  _ (setwinsize m r c)
                  up (spin (\ _ (: _ (moor bx m dirty) (seal s 0))) 0)
-                 pnt (spin (\ _ (px-paintloop s win gc depth bx fx dirty)) 0)
+                 pnt (spin (\ _ (px-paintloop s win gc depth bx fx dirty -1)) 0)
                  _ (px-watch s m km del bx fx dirty)
                  _ (freeze pnt)
                  _ (? (back? up) (catch up) (: _ (still pid 15) (freeze up)))

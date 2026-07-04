@@ -129,10 +129,26 @@ static void xpal_ini(void) {
     uint32_t v = 8 + 10u * i;
     xpal[232 + i] = v << 16 | v << 8 | v; } }
 
-// (blit fb wpx cell x y): paint one 8x16 cell into a 32bpp little-endian
-// cask framebuffer wpx pixels wide, glyphs from moderndos, faces rendered
-// like the kernel's fbdraw (bright bold, swapped reverse, underline on the
-// last scanline). bounds-checked against the cask; misuse is nothing.
+// the pixel core: one 8x16 cell into a 32bpp little-endian framebuffer,
+// glyphs from moderndos, faces rendered like the kernel's fbdraw (bright
+// bold, swapped reverse, underline on the last scanline). caller bounds.
+static void cb_px1(uint8_t *base, intptr_t w, uint32_t cell, intptr_t x, intptr_t y) {
+  uint8_t g_ = cb_ch(cell), face = cb_face(cell), fgx = cb_fg(cell);
+  if (face & cb_bold && fgx < 8) fgx = (uint8_t) (fgx + 8);
+  uint32_t fg = xpal[fgx], bg = xpal[cb_bg(cell)];
+  if (face & cb_rev) { uint32_t t_ = fg; fg = bg, bg = t_; }
+  uint8_t const *bmp = moderndos_8x16[g_];
+  for (int r = 0; r < 16; r++) {
+    int ul = face & cb_under && r == 15;
+    uint8_t *row = base + ((uintptr_t) (y + r) * (uintptr_t) w + (uintptr_t) x) * 4;
+    for (uint8_t o = bmp[r], k = 8; k--; o >>= 1) {
+      uint32_t px = ul || o & 1 ? fg : bg;
+      row[k * 4] = (uint8_t) px;
+      row[k * 4 + 1] = (uint8_t) (px >> 8);
+      row[k * 4 + 2] = (uint8_t) (px >> 16);
+      row[k * 4 + 3] = 0; } } }
+
+// (blit fb wpx cell x y): one cell, bounds-checked; misuse is nothing.
 static lvm(lvm_blit) {
   ai_word fb = Sp[0], out = ZeroPoint;
   intptr_t w = (Sp[1] & 1) ? getcharm(Sp[1]) : -1,
@@ -144,24 +160,49 @@ static lvm(lvm_blit) {
     struct ai_str *s = ((struct ai_buf*) fb)->str;
     if ((uintptr_t) (y + 16) * (uintptr_t) w * 4 <= s->len) {
       if (!xpal[255]) xpal_ini();
-      uint32_t cell = (uint32_t) cl;
-      uint8_t g_ = cb_ch(cell), face = cb_face(cell), fgx = cb_fg(cell);
-      if (face & cb_bold && fgx < 8) fgx = (uint8_t) (fgx + 8);
-      uint32_t fg = xpal[fgx], bg = xpal[cb_bg(cell)];
-      if (face & cb_rev) { uint32_t t_ = fg; fg = bg, bg = t_; }
-      uint8_t const *bmp = moderndos_8x16[g_];
-      for (int r = 0; r < 16; r++) {
-        int ul = face & cb_under && r == 15;
-        uint8_t *row = (uint8_t*) s->bytes + ((uintptr_t) (y + r) * w + x) * 4;
-        for (uint8_t o = bmp[r], k = 8; k--; o >>= 1) {
-          uint32_t px = ul || o & 1 ? fg : bg;
-          row[k * 4] = (uint8_t) px;
-          row[k * 4 + 1] = (uint8_t) (px >> 8);
-          row[k * 4 + 2] = (uint8_t) (px >> 16);
-          row[k * 4 + 3] = 0; } }
+      cb_px1((uint8_t*) s->bytes, w, (uint32_t) cl, x, y);
       out = fb; } }
   Sp[4] = out;
   Sp += 4; Ip += 1; return Continue(); }
+
+// (blitrow fb wpx scr row curpos): a whole grid row in one call -- the
+// painter's hot lane (a keystroke repaints one row, a scroll a bandful,
+// and the loop stays in C either way). curpos names the cursor's cell,
+// worn in reverse; a non-charm curpos means no cursor on this row.
+static lvm(lvm_blitrow) {
+  ai_word fb = Sp[0], out = ZeroPoint;
+  intptr_t w = (Sp[1] & 1) ? getcharm(Sp[1]) : -1,
+           row = (Sp[3] & 1) ? getcharm(Sp[3]) : -1,
+           cur = (Sp[4] & 1) ? getcharm(Sp[4]) : -1;
+  struct cb *c = scr_ok(Sp[2]);
+  if (c && !(fb & 1) && ((union u*) fb)->ap == lvm_buf
+      && w > 0 && row >= 0 && row < (intptr_t) c->rows) {
+    struct ai_str *s = ((struct ai_buf*) fb)->str;
+    intptr_t cols = c->cols;
+    if (cols * 8 > w) cols = w / 8;
+    if ((uintptr_t) (row * 16 + 16) * (uintptr_t) w * 4 <= s->len) {
+      if (!xpal[255]) xpal_ini();
+      for (intptr_t q = 0; q < cols; q++) {
+        uint32_t cell = c->cb[(uintptr_t) row * c->cols + (uintptr_t) q];
+        if ((intptr_t) ((uintptr_t) row * c->cols + (uintptr_t) q) == cur)
+          cell ^= (uint32_t) cb_rev << 28;
+        cb_px1((uint8_t*) s->bytes, w, cell, q * 8, row * 16); }
+      out = fb; } }
+  Sp[4] = out;
+  Sp += 4; Ip += 1; return Continue(); }
+
+// (damage scr k): dirty-row bits for rows 32k..32k+31, read-and-cleared --
+// the renderer's shopping list. bit 255 stands for row 255 and past.
+static lvm(lvm_damage) {
+  struct cb *c = scr_ok(Sp[0]);
+  ai_word out = ZeroPoint;
+  if (c && (Sp[1] & 1)) {
+    intptr_t k = getcharm(Sp[1]);
+    if (k >= 0 && k < 8) {
+      out = putcharm(c->dmg[k]);
+      c->dmg[k] = 0; } }
+  Sp[1] = out;
+  Sp += 1; Ip += 1; return Continue(); }
 
 // (unfold g): a cp437 glyph byte's unicode codepoint, 0 when it has none --
 // the outward half of the utf-8 fold, for a painter re-emitting the grid
@@ -204,7 +245,9 @@ static union u const
   nif_gaze[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_gaze},   {lvm_ret0}},
   nif_reply[]  = {{lvm_reply}, {lvm_ret0}},
   nif_unfold[] = {{lvm_unfold}, {lvm_ret0}},
-  nif_blit[]   = {{lvm_cur}, {.x = putcharm(5)}, {lvm_blit}, {lvm_ret0}};
+  nif_blit[]   = {{lvm_cur}, {.x = putcharm(5)}, {lvm_blit}, {lvm_ret0}},
+  nif_blitrow[] = {{lvm_cur}, {.x = putcharm(5)}, {lvm_blitrow}, {lvm_ret0}},
+  nif_damage[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_damage}, {lvm_ret0}};
 AI_NIF("screen", nif_screen);
 AI_NIF("scribe", nif_scribe);
 AI_NIF("glass", nif_glass);
@@ -212,3 +255,5 @@ AI_NIF("gaze", nif_gaze);
 AI_NIF("reply", nif_reply);
 AI_NIF("unfold", nif_unfold);
 AI_NIF("blit", nif_blit);
+AI_NIF("blitrow", nif_blitrow);
+AI_NIF("damage", nif_damage);

@@ -6,10 +6,17 @@
 static uint32_t cb_blank(struct cb *c) {
   return cb_cell(0, c->cur_fg, c->cur_bg, c->cur_font); }
 
+// mark rows r1..r2 dirty (inclusive; rows past 255 fold onto bit 255).
+static void cb_dirt(struct cb *c, uint32_t r1, uint32_t r2) {
+  if (r1 > 255) r1 = 255;
+  if (r2 > 255) r2 = 255;
+  for (uint32_t r = r1; r <= r2; r++) c->dmg[r >> 5] |= (uint32_t) 1 << (r & 31); }
+
 void cb_fill(struct cb *c, uint8_t _) {
   uint32_t cell = cb_cell(_, c->cur_fg, c->cur_bg, c->cur_font);
   for (uint32_t i = 0, j = (uint32_t) c->rows * c->cols; i < j; i++)
-    c->cb[i] = cell; }
+    c->cb[i] = cell;
+  cb_dirt(c, 0, c->rows - 1u); }
 
 void cb_clear(struct cb *c) { cb_fill(c, 0); }
 
@@ -23,7 +30,9 @@ void cb_attr(struct cb *c, uint8_t fg, uint8_t bg, uint8_t font) {
 // interpretation -- the escape-free lane for callers (the playdate's
 // progress fill) that mean every byte as a picture.
 void cb_stamp(struct cb *c, uint8_t i) {
+  uint32_t r = c->wpos / c->cols;
   c->cb[c->wpos] = cb_cell(i, c->cur_fg, c->cur_bg, c->cur_font);
+  cb_dirt(c, r, r);
   if (++c->wpos == (uint32_t) c->rows * c->cols) c->wpos = 0; }
 
 void cb_open(struct cb *c, uint16_t rows, uint16_t cols) {
@@ -32,6 +41,7 @@ void cb_open(struct cb *c, uint16_t rows, uint16_t cols) {
   c->flag = cb_show | cb_wrap;
   c->arg = 0, c->esc = 0, c->pn = 0, c->on = 0;
   c->ucp = 0, c->un = 0;
+  for (int k = 0; k < 8; k++) c->dmg[k] = 0;
   c->cur_fg = c->def_fg = c->spen[0] = 7;
   c->cur_bg = c->def_bg = c->spen[1] = 0;
   c->cur_font = c->spen[2] = 0;
@@ -53,6 +63,7 @@ static void cb_scup(struct cb *c, uint32_t t, uint32_t b, uint32_t n) {
   uint32_t cs = c->cols, e = cb_blank(c);
   for (uint32_t i = t * cs, j = (b + 1u - n) * cs; i < j; i++) c->cb[i] = c->cb[i + n * cs];
   for (uint32_t i = (b + 1u - n) * cs, j = (b + 1u) * cs; i < j; i++) c->cb[i] = e;
+  cb_dirt(c, t, b);
   cb_ride(c, &c->rpos, t, b, -1, n), cb_ride(c, &c->spos, t, b, -1, n); }
 
 static void cb_scdn(struct cb *c, uint32_t t, uint32_t b, uint32_t n) {
@@ -61,6 +72,7 @@ static void cb_scdn(struct cb *c, uint32_t t, uint32_t b, uint32_t n) {
   uint32_t cs = c->cols, e = cb_blank(c);
   for (uint32_t i = (b + 1u) * cs; i-- > (t + n) * cs;) c->cb[i] = c->cb[i - n * cs];
   for (uint32_t i = t * cs, j = (t + n) * cs; i < j; i++) c->cb[i] = e;
+  cb_dirt(c, t, b);
   cb_ride(c, &c->rpos, t, b, +1, n), cb_ride(c, &c->spos, t, b, +1, n); }
 
 // index: down one row, scrolling at the region's bottom margin. a
@@ -132,6 +144,7 @@ static void cb_glyph(struct cb *c, uint8_t i) {
   if (c->flag & cb_pend)
     c->flag &= (uint16_t) ~cb_pend, c->wpos -= c->wpos % cs, cb_ind(c);
   c->cb[c->wpos] = cb_cell(i, c->cur_fg, c->cur_bg, c->cur_font);
+  cb_dirt(c, c->wpos / cs, c->wpos / cs);
   if (c->wpos % cs == cs - 1u) { if (c->flag & cb_wrap) c->flag |= cb_pend; }
   else c->wpos++; }
 
@@ -231,11 +244,13 @@ static void cb_csi(struct cb *c, uint8_t i) {
     uint32_t lo = c->pv[0] == 1 ? 0 : c->wpos, hi = c->pv[0] == 1 ? c->wpos + 1u : all;
     if (c->pv[0] >= 2) lo = 0, hi = all;
     for (uint32_t p = lo; p < hi; p++) c->cb[p] = e;
+    if (hi > lo) cb_dirt(c, lo / cs, (hi - 1u) / cs);
     return; }
    case 'K': { uint32_t e = cb_blank(c);
     uint32_t lo = c->pv[0] == 1 ? rb : c->wpos, hi = c->pv[0] == 1 ? c->wpos + 1u : re;
     if (c->pv[0] >= 2) lo = rb, hi = re;
     for (uint32_t p = lo; p < hi; p++) c->cb[p] = e;
+    cb_dirt(c, r, r);
     return; }
    case 'L': if (r >= c->top && r <= c->bot) cb_scdn(c, r, c->bot, n); return;
    case 'M': if (r >= c->top && r <= c->bot) cb_scup(c, r, c->bot, n); return;
@@ -243,15 +258,18 @@ static void cb_csi(struct cb *c, uint8_t i) {
     uint32_t e = cb_blank(c);
     for (uint32_t p = re; p-- > c->wpos + n;) c->cb[p] = c->cb[p - n];
     for (uint32_t p = c->wpos, j = c->wpos + n; p < j; p++) c->cb[p] = e;
+    cb_dirt(c, r, r);
     return; }
    case 'P': { if (n > cs - col) n = cs - col;
     uint32_t e = cb_blank(c);
     for (uint32_t p = c->wpos; p < re - n; p++) c->cb[p] = c->cb[p + n];
     for (uint32_t p = re - n; p < re; p++) c->cb[p] = e;
+    cb_dirt(c, r, r);
     return; }
    case 'X': { if (n > cs - col) n = cs - col;
     uint32_t e = cb_blank(c);
     for (uint32_t p = c->wpos, j = c->wpos + n; p < j; p++) c->cb[p] = e;
+    cb_dirt(c, r, r);
     return; }
    case 'S': return cb_scup(c, c->top, c->bot, n);
    case 'T': return cb_scdn(c, c->top, c->bot, n);
@@ -419,6 +437,7 @@ int cb_ungetc(struct cb *c, int i) {
   c->rpos = r;
   // rewind one cell and replace its char, keeping the cell's colour/font
   c->cb[r] = (c->cb[r] & ~(uint32_t) 0xff) | (uint8_t) i;
+  cb_dirt(c, r / c->cols, r / c->cols);
   return i; }
 
 int cb_eof(struct cb *c) {

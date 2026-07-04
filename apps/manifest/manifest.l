@@ -26,7 +26,7 @@
 (:
  ; --- reading a cell: repl-style, one form, unreadable text is a label ---
  (chars s i) (? (< i (tally s)) (link (s i) (chars s (+ i 1))) ())
- (parse s) (: e (mint 0)
+ (glean s) (: e (mint 0)
               d (sound (tap (chars (+ "(" (+ s ")")) 0)) e)
               (? (id? d e) () (two? d) d ()))
 
@@ -70,7 +70,7 @@
  ; --- worth: demand-evaluate, memoize. the formula becomes a lambda over
  ; its deps and is applied to their worths (cells recurse; labels are their
  ; spelling), so nothing global is touched and no missing ever fires ---
- (worth1 sh s) (: f (parse s)
+ (worth1 sh s) (: f (glean s)
                   (? (! (two? f)) s                     ; unreadable: the text itself
                    (: ds (deps f)
                       lam (? ds (ev (+ (L (\ \)) (+ ds (L f)))) (ev f))

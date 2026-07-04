@@ -76,9 +76,9 @@
                         (moor bx m dirty))))
 
  ; --- keys: raw stdin pours onto the master; VEOF follows the user's own eof ---
- (keys m) (: ch (get in)
+ (oars m) (: ch (get in)
             (? (= ch -1) (: _ (put m 4) (flush m))
-             (: _ (put m ch) _ (flush m) (keys m))))
+             (: _ (put m ch) _ (flush m) (oars m))))
 
  ; --- the tide: mirror the outer terminal's size onto the pty. a change
  ; opens a fresh grid (content is the guest's to repaint on its SIGWINCH)
@@ -117,7 +117,7 @@
                      _ (raw 1)
                      _ (say out "\e[?1049h\e[2J")
                      _ (flush out)
-                     up (spin (\ _ (keys m)) 0)
+                     up (spin (\ _ (oars m)) 0)
                      sw (spin (\ _ (swim bx m dirty 1)) 0)
                      _ (moor bx m dirty)            ; ... until the child hangs up
                      _ (freeze sw)

@@ -47,6 +47,9 @@ struct cb {
   uint16_t top, bot;  // the scroll region, inclusive rows
   uint8_t out[cb_outn], on;  // the reply queue (DSR/DA answers ride home here)
   uint32_t ucp; uint8_t un;  // utf-8 in flight: the codepoint, continuations to come
+  uint32_t dmg[8];  // dirty rows, one bit each (row 255 stands for 255-and-past);
+                    // every grid write marks, a renderer reads-and-clears --
+                    // repainting only what moved is what keeps a wide window quick
   uint32_t cb[]; };
 
 void

@@ -323,4 +323,30 @@
  _ (scribe s "w")
  _ (assert (= 7 (cfg s 0)) (= 0 (cface s 0))))
 
+; --- 19. damage: every write names its rows; a read clears the ledger ---
+(: s (mkscr 4 10)
+ _ (assert (= 15 (& 15 (damage s 0))))       ; fresh: every row dirty
+ _ (assert (= 0 (damage s 0)))               ; read-and-cleared
+ _ (scribe s "\e[3;1Hx")
+ _ (assert (= 4 (damage s 0)))               ; row 2 alone
+ _ (scribe s "hi\nyo")
+ _ (assert (= 12 (damage s 0)))              ; rows 2 and 3 (\n keeps the column)
+ _ (scribe s "\e[2J")
+ _ (assert (= 15 (damage s 0)))              ; erase display: everything
+ _ (scribe s "\e[1;5r\e[4;1H\n")             ; a region scroll dirties the region
+ _ (damage s 0)
+ _ (scribe s "\e[2;1H\e[L")
+ _ (assert (= 14 (& 14 (damage s 0)))))      ; IL at row 1: rows 1..3
+
+; --- 20. blitrow: a grid row to pixels in one call, cursor in reverse ---
+(: s (mkscr 2 4)
+ _ (scribe s "A")
+ fb (cask (* 32 (* 32 4)))
+ r (blitrow fb 32 s 0 ())
+ lit (foldl (\ a i (+ a (? (= 192 (peep fb i 0)) 1 0))) 0 (jot 2048))
+ _ (assert (id? r fb) (= 126 lit))           ; the A's 42 strokes, 3 channels each
+ _ (blitrow fb 32 s 0 0)                     ; the cursor sits on the A: reverse
+ lit2 (foldl (\ a i (+ a (? (= 192 (peep fb i 0)) 1 0))) 0 (jot 2048))
+ _ (assert (= 258 lit2)))                    ; (128-42)*3: the ground lit instead
+
 (puts "cb: ok")
