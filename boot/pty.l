@@ -31,7 +31,8 @@
  st (waitfor (cap r))     ; gather the child
  _ (assert
     (two? st)           ; reaped: a PAIR, not () "still running"
-    (= 0 (cap st))))      ; echo exited 0 -- the pair keeps 0 truthy/present
+    (= 0 (cap st))      ; echo exited 0 -- the pair keeps 0 truthy/present
+    (= st (L 0))))      ; ... a REAL ()-tailed list (not the charm-0 dotted fossil)
 
 ; --- (still pid sig) + signal-death gather: cat waits forever; SIGKILL it ---
 (: r (mind `("cat"))

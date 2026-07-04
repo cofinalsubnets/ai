@@ -152,7 +152,7 @@ ai_noinline static struct ai *host_reap(struct ai *g, ai_word pidw) {
   if (r < 0)  { g->sp[0] = putcharm(errno); return g; }   // waitpid error
   if (!ai_ok(g = ai_have(g, Width(struct ai_chain)))) return g;
   struct ai_chain *w = ini_chain((struct ai_chain*) bump(g, Width(struct ai_chain)),
-                                 putcharm(proc_status(st)), ai_nil);
+                                 putcharm(proc_status(st)), ZeroPoint);   // a REAL ()-tailed list, not the charm-0 fossil
   g->sp[0] = word(w);
   return g; }
 

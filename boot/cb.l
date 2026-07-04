@@ -275,7 +275,9 @@
  _ (scribe s "\e(B\e)0\e=\e>z")                  ; charsets + keypad chatter
  _ (assert (= 122 (chat s 2)))
  _ (scribe s "\e[?2004h\e[>1c\e[0 q!")           ; odd modes, intermediates: junked
- _ (assert (= 33 (chat s 3))))
+ _ (assert (= 33 (chat s 3)))
+ _ (scribe s "a\x7fb\e[\x7f1D")                  ; DEL: nothing, anywhere (mid-CSI too)
+ _ (assert (= 97 (chat s 4)) (= 98 (chat s 5)) (= 5 (cur s))))
 
 ; --- 17. DECALN: the adjustment screen ---
 (: s (mkscr 3 8)

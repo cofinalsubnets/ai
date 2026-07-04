@@ -299,6 +299,7 @@ void cb_putc(struct cb *c, char _i) {
      default: return; }                     // '=' '>' and friends: nothing to keep
    case 2:                                  // within CSI ESC [ ...
     if (i == 27) { c->esc = 1; return; }    // a fresh ESC abandons the sequence
+    if (i == 127) return;                   // DEL: nothing, anywhere
     if (i < ' ') return cb_ctl(c, i);       // C0 controls run even mid-sequence
     if (i >= '0' && i <= '9') {
       if (c->arg < 6553) c->arg = (uint16_t) (c->arg * 10 + (i - '0'));
@@ -327,6 +328,7 @@ void cb_putc(struct cb *c, char _i) {
     return;
    default:
     if (i == 27) { c->esc = 1; return; }    // ESC: begin a sequence
+    if (i == 127) return;                   // DEL: nothing, anywhere
     if (i < ' ') return cb_ctl(c, i);
     return cb_glyph(c, i); } }
 
