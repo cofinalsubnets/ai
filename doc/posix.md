@@ -103,8 +103,15 @@ Two mappings are the elegant ones, and both are *already built*:
 3. **the shell uses it** — extend the ai shell (#8 cli.l → shell.l, #10) to run external
    programs: PATH lookup, `fork`+`exec`, pipelines, redirection, `$?`/exit codes,
    env. *This is the "Linux/BSD as a shell" deliverable.*
-4. **signals → conditions** — `sigaction` wiring so `^C` etc. arrive as conditions; job
-   control (`SIGTSTP`/`SIGCONT`) over `chill`/thaw.
+4. **signals → conditions + job control** — DONE: `(signal sig disp)` (sigaction
+   default/ignore), `sigfd` takes a signal LIST (any signal becomes perceive DATA,
+   `(signo . pid)`, re-raisable as `(scare 'sigint pid)` through `help` — the
+   conditions mapping, gated in boot/sh.l), `wait` reports stops (256+sig,
+   WUNTRACED), and the shell got real job control: per-job process groups +
+   tcsetpgrp handoff (`spawnio pg/fg`, `ttyfg`), ^C/^Z to the foreground job only,
+   jobs/fg/bg/&. (The pgrp lesson: a stop signal to an ORPHANED group is discarded,
+   so in-shell-pgrp children can never ^Z under a nested session.) Task-level
+   `chill`/thaw stays separate — tasks are not processes.
 5. **env + std-stream polish** — `getenv`/`setenv`/`environ`, exit-code conventions (#10).
 
 Sockets are already covered by ain; fold them in as the network slice.

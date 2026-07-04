@@ -38,6 +38,13 @@
 #define portp(x) (((x) & 1) == 0 && ((union u*) (x))->ap == lvm_port_io)
 #define port_fd(x) ((int) getcharm(((struct ai_io*) (x))->fd))
 
+// the child side of the ignore dance: a disposition set to SIG_IGN SURVIVES exec,
+// so a shell that ignores the job-control signals must undo that in every child
+// between fork and exec -- or ^C could never kill anything it launches.
+static void sig_dfl_job(void) {
+ signal(SIGINT, SIG_DFL); signal(SIGQUIT, SIG_DFL);
+ signal(SIGTSTP, SIG_DFL); signal(SIGTTIN, SIG_DFL); signal(SIGTTOU, SIG_DFL); }
+
 // (spawn argv) -> the child pid, or a negated errno (negative, so a caller tells
 // a pid (positive) from a failure (negative) without a second value). fork +
 // execvp; the parent returns immediately -- NON-BLOCKING, unlike run (waits +
@@ -65,7 +72,7 @@ ai_noinline static struct ai *host_spawn(struct ai *g, ai_word argv) {
   fflush(NULL);                                               // flush now, not twice in the child
   pid_t pid = fork();
   if (pid < 0) return ai_push(g, 1, putcharm(-errno));
-  if (!pid) { execvp(cav[0], cav); _exit(127); }             // child: exec or die 127
+  if (!pid) { sig_dfl_job(); execvp(cav[0], cav); _exit(127); }   // child: default signals, exec or die 127
   return ai_push(g, 1, putcharm(pid)); }                      // parent: the live pid
 
 static lvm(lvm_spawn) {
@@ -101,7 +108,8 @@ static lvm(lvm_reapany) {
   Ip += 1; return Continue(); }
 
 // --- the signal perceive source (Linux signalfd) --------------------------------
-// (sigfd _)     -> a PORT over a signalfd watching SIGCHLD + SIGTERM, those signals
+// (sigfd sigs)  -> a PORT over a signalfd watching `sigs` (a list of signal numbers;
+//                  a non-list keeps the supervisor default SIGCHLD + SIGTERM), those signals
 //                  first BLOCKED (sigprocmask) so they QUEUE to the fd instead of
 //                  their default disposition -- SIGCHLD's discard, SIGTERM's KILL.
 //                  That queuing is exactly what turns a TERM into a graceful EVENT,
@@ -112,11 +120,16 @@ static lvm(lvm_reapany) {
 // story for {signals, clock}), then sigtake reads the record. SIGCHLD coalesces, so a
 // 'chld wake still loops `reap` to harvest every zombie.
 #if defined(__linux__)
+// the arg may be a LIST of signal numbers to watch; anything else (the dummy-0
+// convention) keeps the supervisor's classic pair, SIGCHLD + SIGTERM.
 ai_noinline static struct ai *host_sigfd(struct ai *g) {
  sigset_t m;
  sigemptyset(&m);
- sigaddset(&m, SIGCHLD);
- sigaddset(&m, SIGTERM);
+ ai_word a = g->sp[0];
+ if (chainp(a))
+  for (ai_word p = a; chainp(p); p = B(p)) {
+   if (A(p) & 1) sigaddset(&m, (int) getcharm(A(p))); }
+ else { sigaddset(&m, SIGCHLD); sigaddset(&m, SIGTERM); }
  if (sigprocmask(SIG_BLOCK, &m, NULL)) return g->sp[0] = ZeroPoint, g;
  int fd = signalfd(-1, &m, SFD_NONBLOCK | SFD_CLOEXEC);
  if (fd < 0) return g->sp[0] = ZeroPoint, g;
@@ -156,9 +169,16 @@ static lvm(lvm_sigtake) { Sp[0] = ZeroPoint; return Ip++, Continue(); }
 #endif
 
 // --- foreground job control + cwd (the muscle a real shell needs) ---------------
-// (wait pid)   -> BLOCK until pid exits; its proc_status (exit / 128+sig), or -errno.
-//                 the foreground wait: spawn (inherited stdio) then wait, so a command
-//                 owns the terminal and the prompt returns only when it is done.
+// (wait pid)   -> BLOCK until pid exits OR STOPS: an exit is its proc_status (exit /
+//                 128+sig), a stop (^Z: SIGTSTP/SIGSTOP) is 256 + the stopping signal
+//                 -- a charm above every exit status, so a shell tells "stopped, job
+//                 it" (< 255 st) from "done". -errno on failure. the foreground wait:
+//                 spawn (inherited stdio) then wait, so a command owns the terminal
+//                 and the prompt returns only when it is done or parked.
+// (signal sig disp) -> sigaction: disp 0 = default, 1 = ignore. () | positive errno |
+//                 EINVAL misuse (the effect convention). the shell ignores INT/QUIT/
+//                 TSTP so the tty's ^C/^Z reach only the foreground child; spawn's
+//                 child side resets them (an IGNORED disposition survives exec).
 // (chdir path) -> () ok | -errno | -1 misuse. the `cd` builtin.
 // (cwd _)      -> the current directory as a string, or () on failure. for the prompt.
 // The syscall body lives in an ai_noinline helper so the lvm_ wrapper stays a pure tail-jump (no ret):
@@ -167,9 +187,23 @@ ai_noinline static ai_word host_waitpid(ai_word arg) {
  intptr_t pid = (arg & 1) ? getcharm(arg) : 0;
  int st;
  pid_t r;
- do r = waitpid((pid_t) pid, &st, 0); while (r < 0 && errno == EINTR);
- return (r < 0) ? putcharm(-errno) : putcharm(proc_status(st)); }
+ do r = waitpid((pid_t) pid, &st, WUNTRACED); while (r < 0 && errno == EINTR);
+ if (r < 0) return putcharm(-errno);
+ if (WIFSTOPPED(st)) return putcharm(256 + WSTOPSIG(st));
+ return putcharm(proc_status(st)); }
 static lvm(lvm_waitpid) { Sp[0] = host_waitpid(Sp[0]); return Ip++, Continue(); }
+
+ai_noinline static ai_word host_posix_signal(ai_word sigw, ai_word dw) {
+ if (!(sigw & 1) || !(dw & 1)) return putcharm(EINVAL);
+ struct sigaction sa;
+ memset(&sa, 0, sizeof sa);
+ sa.sa_handler = getcharm(dw) ? SIG_IGN : SIG_DFL;
+ sigemptyset(&sa.sa_mask);
+ return sigaction((int) getcharm(sigw), &sa, NULL) ? putcharm(errno) : ZeroPoint; }
+static lvm(lvm_posix_signal) {
+ Sp[1] = host_posix_signal(Sp[0], Sp[1]);
+ Sp += 1; return Ip++, Continue(); }
+
 
 // copy an ai string into a NUL-terminated C buffer; false on non-string / too long.
 static bool str_cbuf(ai_word x, char *buf, size_t cap) {
@@ -201,11 +235,23 @@ static lvm(lvm_cwd) {
 // (pipe _)       -> (readfd . writefd) of a fresh pipe (raw fds), or -errno.
 // (openfd path m) -> a raw fd opening `path`: m 0 = read, 1 = write/create/trunc,
 //                   2 = write/create/append. -errno on failure, -1 on a bad path.
-// (spawnio argv in out err closes) -> pid. fork; in the child dup2 `in`/`out`/`err`
-//                   (each >=0) onto fd 0/1/2, close every fd in the list `closes`
-//                   (the pipe ends the child must not leak, so a downstream reader
-//                   sees EOF), then execvp. The parent keeps its fds and closes the
+// (spawnio argv in out err closes pg fg) -> pid. fork; in the child: the JOB-CONTROL
+//                   dance first -- pg < 0 stays in the parent's pgrp (the legacy /
+//                   non-tty lane), pg = 0 LEADS a fresh process group, pg > 0 JOINS
+//                   that group (pipeline members join their stage-0 leader) -- and fg
+//                   nonzero hands the child's group the TERMINAL (tcsetpgrp on fd 0
+//                   BEFORE the dup2s, TTOU ignored for the handoff; the parent
+//                   setpgids too, closing the race). A job in its OWN pgrp is what
+//                   makes ^Z real: a stop signal to an ORPHANED group is discarded
+//                   by POSIX, and the shell's own group is exactly that under a
+//                   nested session. then dup2 `in`/`out`/`err` (each >=0) onto fd
+//                   0/1/2, close every fd in the list `closes` (the pipe ends the
+//                   child must not leak, so a downstream reader sees EOF), reset the
+//                   job signals, execvp. The parent keeps its fds and closes the
 //                   pipe ends itself with shutfd. -errno on a fork/marshal failure.
+// (ttyfg pg)     -> give the terminal (fd 0) to process group pg; pg <= 0 takes it
+//                   BACK to the caller's own group (the shell reclaiming the tty
+//                   after a foreground job ends or stops). () | positive errno.
 // (shutfd fd)    -> close a raw fd (the parent's pipe ends). () ok | -errno.
 ai_noinline static struct ai *host_pipe(struct ai *g) {
  int fds[2];
@@ -231,7 +277,8 @@ static lvm(lvm_openfd) {
  Sp[1] = (fd < 0) ? putcharm(-errno) : putcharm(fd);
  Sp += 1; return Ip++, Continue(); }
 
-ai_noinline static struct ai *host_spawnio(struct ai *g, int in, int out, int err) {
+ai_noinline static struct ai *host_spawnio(struct ai *g, int in, int out, int err,
+                                            intptr_t pg, intptr_t fg) {
  ai_word argv = g->sp[0];
  intptr_t argc = 0; uintptr_t total = 0;
  for (ai_word p = argv; chainp(p); p = B(p)) {
@@ -253,27 +300,40 @@ ai_noinline static struct ai *host_spawnio(struct ai *g, int in, int out, int er
  pid_t pid = fork();
  if (pid < 0) return ai_push(g, 1, putcharm(-errno));
  if (!pid) {
+  if (pg >= 0) {
+   setpgid(0, (pid_t) pg);                     // 0 leads a fresh group, >0 joins it
+   if (fg) { signal(SIGTTOU, SIG_IGN);          // the handoff, from the background
+             tcsetpgrp(0, pg ? (pid_t) pg : getpid()); } }
   if (in  >= 0) dup2(in, 0);
   if (out >= 0) dup2(out, 1);
   if (err >= 0) dup2(err, 2);
   for (ai_word p = closes; chainp(p); p = B(p)) {
    intptr_t fd = getcharm(A(p));
    if (fd > 2) close((int) fd); }
+  sig_dfl_job();                                // undo the shell's ignores (TTOU too)
   execvp(cav[0], cav);
   _exit(127); }
+ if (pg >= 0) setpgid(pid, (pid_t) (pg ? pg : pid));   // parent side too: no race window
  return ai_push(g, 1, putcharm(pid)); }
 
 static lvm(lvm_spawnio) {
  int in  = (Sp[1] & 1) ? (int) getcharm(Sp[1]) : -1;
  int out = (Sp[2] & 1) ? (int) getcharm(Sp[2]) : -1;
  int err = (Sp[3] & 1) ? (int) getcharm(Sp[3]) : -1;
+ intptr_t pg = (Sp[5] & 1) ? getcharm(Sp[5]) : -1;
+ intptr_t fg = (Sp[6] & 1) ? getcharm(Sp[6]) : 0;
  Pack(g);
- g = host_spawnio(g, in, out, err);          // argv at sp[0], closes at sp[4]
+ g = host_spawnio(g, in, out, err, pg, fg);  // argv at sp[0], closes at sp[4]
  if (!ai_ok(g)) return ghelp(g);
  Unpack(g);
- Sp[5] = Sp[0];                              // pid over the 5 args
- Sp += 5; Ip += 1;
+ Sp[7] = Sp[0];                              // pid over the 7 args
+ Sp += 7; Ip += 1;
  return Continue(); }
+
+ai_noinline static ai_word host_posix_ttyfg(ai_word pgw) {
+ pid_t pg = ((pgw & 1) && getcharm(pgw) > 0) ? (pid_t) getcharm(pgw) : getpgrp();
+ return tcsetpgrp(0, pg) ? putcharm(errno) : ZeroPoint; }
+static lvm(lvm_posix_ttyfg) { Sp[0] = host_posix_ttyfg(Sp[0]); return Ip++, Continue(); }
 
 static lvm(lvm_shutfd) {
  intptr_t fd = (Sp[0] & 1) ? getcharm(Sp[0]) : -1;
@@ -412,7 +472,7 @@ static union u const
   nif_cwd[]     = {{lvm_cwd}, {lvm_ret0}},
   nif_pipe[]    = {{lvm_pipe}, {lvm_ret0}},
   nif_openfd[]  = {{lvm_cur}, {.x = putcharm(2)}, {lvm_openfd}, {lvm_ret0}},
-  nif_spawnio[] = {{lvm_cur}, {.x = putcharm(5)}, {lvm_spawnio}, {lvm_ret0}},
+  nif_spawnio[] = {{lvm_cur}, {.x = putcharm(7)}, {lvm_spawnio}, {lvm_ret0}},
   nif_shutfd[]  = {{lvm_shutfd}, {lvm_ret0}},
   nif_mkdir[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_mkdir}, {lvm_ret0}},
   nif_mount[]   = {{lvm_cur}, {.x = putcharm(3)}, {lvm_mount}, {lvm_ret0}},
@@ -420,7 +480,9 @@ static union u const
   nif_posix_stat[]    = {{lvm_posix_stat}, {lvm_ret0}},
   nif_posix_readdir[] = {{lvm_posix_readdir}, {lvm_ret0}},
   nif_posix_unlink[]  = {{lvm_posix_unlink}, {lvm_ret0}},
-  nif_posix_lseek[]   = {{lvm_cur}, {.x = putcharm(3)}, {lvm_posix_lseek}, {lvm_ret0}};
+  nif_posix_lseek[]   = {{lvm_cur}, {.x = putcharm(3)}, {lvm_posix_lseek}, {lvm_ret0}},
+  nif_posix_signal[]  = {{lvm_cur}, {.x = putcharm(2)}, {lvm_posix_signal}, {lvm_ret0}},
+  nif_posix_ttyfg[]   = {{lvm_posix_ttyfg}, {lvm_ret0}};
 AI_NIF("spawn", nif_spawn);
 AI_NIF("reap",  nif_reapany);
 AI_NIF("sigfd", nif_sigfd);
@@ -439,3 +501,5 @@ AI_NIF("stat",    nif_posix_stat);
 AI_NIF("readdir", nif_posix_readdir);
 AI_NIF("unlink",  nif_posix_unlink);
 AI_NIF("lseek",   nif_posix_lseek);
+AI_NIF("signal",  nif_posix_signal);
+AI_NIF("ttyfg",   nif_posix_ttyfg);

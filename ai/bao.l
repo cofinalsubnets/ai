@@ -542,6 +542,7 @@
                             nh (? (nil? ln) hist (take 100 (link ln hist)))
                             (link ln nh))
                 (< 0 c)  (loop (link c l) r i draft)
+                (= c -12) (: _ (puts "^C") _ (putc 10) (link () hist))   ; ^C: abandon the line, hist untouched
                 (= c -1) (edleft  km () l r ())
                 (= c -2) (edright km () l r ())
                 (= c -3) (edbsp   km () l r ())
