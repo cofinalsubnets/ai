@@ -260,8 +260,6 @@ void ai_sleep(uintptr_t ticks) {
     if (ticks && kticks >= deadline) break;
     kwait(); } }
 
-#define show_cursor 1
-
 static const uint8_t
   kb2ascii[] = {
      0,  27, '1',  '2', '3', '4', '5', '6',
@@ -382,22 +380,27 @@ static lvm(ai_kreset) { return k_reset(), g; }
 
 void fbdraw(void) {
   if (!kcb) return;                    // serial-only: no framebuffer console
-  for (uint8_t i = 0, rows = kcb->rows; i < rows; i++)
-    for (uint8_t j = 0, cols = kcb->cols; j < cols; j++) {
+  for (uint16_t i = 0, rows = kcb->rows; i < rows; i++)
+    for (uint16_t j = 0, cols = kcb->cols; j < cols; j++) {
       uint32_t const
-       pos = i * cols + j,
+       pos = (uint32_t) i * cols + j,
        _g = kcb->cb[pos];
       struct font *ff = fonts[cb_font(_g)];
       uint8_t const
+       face = cb_face(_g),
        g = _g,
        *bmp = ff->glyphs + ff->h * (g == '\n' ? 0 : g);
-      bool invert = kcb->flag & show_cursor && kcb->wpos == pos && kticks & 64;
-      uint32_t fg = palette[cb_fg(_g)], bg = palette[cb_bg(_g)];
+      bool invert = kcb->flag & cb_show && kcb->wpos == pos && kticks & 64;
+      uint8_t fgx = cb_fg(_g);
+      if (face & cb_bold && fgx < 8) fgx += 8;      // bold as the bright half
+      uint32_t fg = palette[fgx], bg = palette[cb_bg(_g)];
+      if (face & cb_rev) fg ^= bg, bg ^= fg, fg ^= bg;
       if (invert) fg ^= bg, bg ^= fg, fg ^= bg;
-      uintptr_t y = i * ff->h, x = j * ff->w;
-      for (uint8_t r = 0; r < ff->h; r++)
+      uintptr_t y = (uintptr_t) i * ff->h, x = (uintptr_t) j * ff->w;
+      for (uint8_t r = 0; r < ff->h; r++) {
+        bool ul = face & cb_under && r == ff->h - 1u;  // underline: the last scanline
         for (uint8_t o = bmp[r], c = ff->w; c--; o >>= 1)
-          kfb._[(y + r) * kfb.pitch + x + c] = o & 1 ? fg : bg; } }
+          kfb._[(y + r) * kfb.pitch + x + c] = ul || o & 1 ? fg : bg; } } }
 
 static lvm(draw) {
   fbdraw();
@@ -494,10 +497,8 @@ static bool cbinit(void) {
   const uintptr_t rows = kfb.height / kfont.h,
                   cols = kfb.width / kfont.w;
   if (!(kcb = malloc(sizeof(struct cb) + rows * cols * sizeof(uint32_t)))) return false;
-  kcb->rows = rows;
-  kcb->cols = cols;
-  kcb->rpos = kcb->wpos = kcb->spos = kcb->esc = 0;
-  kcb->flag = show_cursor;
+  cb_open(kcb, rows, cols);
+  kcb->flag |= cb_lnm;  // the kernel console's discipline: a bare \n is a newline
   cb_attr(kcb, 47, 56, 0);
   cb_fill(kcb, 0);
   return true; }

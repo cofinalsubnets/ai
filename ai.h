@@ -94,6 +94,11 @@ struct ai_str {
  lvm_t *ap;
  uintptr_t len;        // byte count
  char bytes[]; };
+// a buf (the surface's cask): mutable bytes behind a 2-word wrapper whose ap is
+// lvm_buf (recognized by ap, like ports). The PUBLIC FACE, here so a host nif
+// file can wrap a C struct's bytes in a cask (host/cb.c does); the buf machinery
+// itself stays in ai.c.
+struct ai_buf { lvm_t *ap; struct ai_str *str; };
 // a mint: a bare nameless point -- just the hot and its serial. Named syms are
 // the (name . mint) chains now, so a mint carries NO name (the old `nom` field
 // is gone; nothing ever set it post-collapse).
@@ -253,7 +258,7 @@ static ai_inline size_t b2w(size_t b) {
  size_t q = b / sizeof(ai_word), r = b % sizeof(ai_word);
  return q + (r ? 1 : 0); }
 
-lvm_t lvm_ret0, lvm_cur, lvm_port_io, lvm_help;
+lvm_t lvm_ret0, lvm_cur, lvm_port_io, lvm_help, lvm_buf;
 
 // Frontend-provided vtable for ports backed by real OS file descriptors.
 // Used whenever fd >= 0. Synthetic ports (fd <= -1) route through the

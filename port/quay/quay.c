@@ -1,105 +1,338 @@
 #include "ai.h"
 #include "quay.h"
 
+// the blank a clear or scroll leaves behind: char 0 in the current pen,
+// so erased ground keeps the program's background (BCE).
+static uint32_t cb_blank(struct cb *c) {
+  return cb_cell(0, c->cur_fg, c->cur_bg, c->cur_font); }
+
 void cb_fill(struct cb *c, uint8_t _) {
   uint32_t cell = cb_cell(_, c->cur_fg, c->cur_bg, c->cur_font);
-  for (uint32_t i = 0, j = c->rows * c->cols; i < j; i++)
+  for (uint32_t i = 0, j = (uint32_t) c->rows * c->cols; i < j; i++)
     c->cb[i] = cell; }
 
 void cb_clear(struct cb *c) { cb_fill(c, 0); }
 
 void cb_cur(struct cb *c, uint32_t row, uint32_t col) {
-  c->wpos = (row * c->cols + col) % (c->rows * c->cols); }
+  c->wpos = (row * c->cols + col) % ((uint32_t) c->rows * c->cols); }
 
 void cb_attr(struct cb *c, uint8_t fg, uint8_t bg, uint8_t font) {
   c->cur_fg = c->def_fg = fg, c->cur_bg = c->def_bg = bg, c->cur_font = font; }
 
-// advance to the start of the next row; if already on the bottom row
-// scroll the buffer up by one row and leave the cursor at the start
-// of the (now blank) bottom row. the l line editor relies on this:
-// when the multi-line buffer reaches the last row, the terminal must
-// scroll so its relative cursor-up moves still find the right rows.
-static void cb_line_feed(struct cb *c) {
-  uintptr_t rs = c->rows, cs = c->cols;
-  if (c->wpos / cs == rs - 1u) {
-    for (uintptr_t i = 0, j = (rs - 1) * cs; i < j; i++) c->cb[i] = c->cb[i + cs];
-    uint32_t cell = cb_cell(0, c->cur_fg, c->cur_bg, c->cur_font);
-    for (uintptr_t i = (rs - 1) * cs, j = rs * cs; i < j; i++) c->cb[i] = cell;
-    c->wpos = (rs - 1) * cs; }
-  else c->wpos = (c->wpos / cs + 1) * cs; }
+// stamp a raw glyph with the current pen and step the cursor, no
+// interpretation -- the escape-free lane for callers (the playdate's
+// progress fill) that mean every byte as a picture.
+void cb_stamp(struct cb *c, uint8_t i) {
+  c->cb[c->wpos] = cb_cell(i, c->cur_fg, c->cur_bg, c->cur_font);
+  if (++c->wpos == (uint32_t) c->rows * c->cols) c->wpos = 0; }
 
-// erase from the cursor to the end of its row -- ANSI EL (CSI K).
-static void cb_erase_eol(struct cb *c) {
-  uint32_t cell = cb_cell(0, c->cur_fg, c->cur_bg, c->cur_font);
-  for (uint16_t p = c->wpos, e = (p / c->cols + 1) * c->cols; p < e; p++)
-    c->cb[p] = cell; }
+void cb_open(struct cb *c, uint16_t rows, uint16_t cols) {
+  c->rpos = c->wpos = c->spos = 0;
+  c->rows = rows, c->cols = cols;
+  c->flag = cb_show | cb_wrap;
+  c->arg = 0, c->esc = 0, c->pn = 0, c->on = 0;
+  c->cur_fg = c->def_fg = c->spen[0] = 7;
+  c->cur_bg = c->def_bg = c->spen[1] = 0;
+  c->cur_font = c->spen[2] = 0;
+  c->top = 0, c->bot = rows - 1u;
+  cb_clear(c); }
 
-// erase from the cursor to the end of the screen -- ANSI ED (CSI J,
-// arg 0). the l line editor calls this each render before redrawing.
-static void cb_erase_eos(struct cb *c) {
-  uint32_t cell = cb_cell(0, c->cur_fg, c->cur_bg, c->cur_font);
-  for (uint32_t p = c->wpos, e = (uint32_t) c->rows * c->cols; p < e; p++)
-    c->cb[p] = cell; }
+// scroll rows [t,b] up/down by n, blanking what opens. the trailing
+// ring reader and the saved cursor RIDE ALONG when their cells move --
+// the old scroll left them pointing at shifted ground.
+static void cb_ride(struct cb *c, uint32_t *p, uint32_t t, uint32_t b, int dn, uint32_t n) {
+  uint32_t r = *p / c->cols, k = n * c->cols;
+  if (r < t || r > b) return;
+  if (dn < 0) { if (r >= t + n) *p -= k; }
+  else        { if (r + n <= b) *p += k; } }
 
-// cb_putc interprets a small ANSI subset, enough for the line editor:
-// \r returns to column 0 of the current row; \b moves left; \n line-
-// feeds (and scrolls if needed). ESC 7 / ESC 8 save and restore the
-// cursor (DECSC/DECRC). within CSI: K erases to end of row, J erases
-// to end of screen, <n>A/<n>C/<n>D move the cursor up/right/left
-// (default 1), and m sets the pen colour -- SGR 0 resets to the pen
-// cb_attr last set, 38;5;N / 48;5;N pick a 256-colour fg/bg, 39/49 the
-// defaults. anything else is stamped as a glyph with the current pen.
-void cb_putc(struct cb *c, char i) {
+static void cb_scup(struct cb *c, uint32_t t, uint32_t b, uint32_t n) {
+  if (!n) return;
+  if (n > b - t + 1u) n = b - t + 1u;
+  uint32_t cs = c->cols, e = cb_blank(c);
+  for (uint32_t i = t * cs, j = (b + 1u - n) * cs; i < j; i++) c->cb[i] = c->cb[i + n * cs];
+  for (uint32_t i = (b + 1u - n) * cs, j = (b + 1u) * cs; i < j; i++) c->cb[i] = e;
+  cb_ride(c, &c->rpos, t, b, -1, n), cb_ride(c, &c->spos, t, b, -1, n); }
+
+static void cb_scdn(struct cb *c, uint32_t t, uint32_t b, uint32_t n) {
+  if (!n) return;
+  if (n > b - t + 1u) n = b - t + 1u;
+  uint32_t cs = c->cols, e = cb_blank(c);
+  for (uint32_t i = (b + 1u) * cs; i-- > (t + n) * cs;) c->cb[i] = c->cb[i - n * cs];
+  for (uint32_t i = t * cs, j = (t + n) * cs; i < j; i++) c->cb[i] = e;
+  cb_ride(c, &c->rpos, t, b, +1, n), cb_ride(c, &c->spos, t, b, +1, n); }
+
+// index: down one row, scrolling at the region's bottom margin. a
+// cursor below the region (possible after DECSTBM) steps to the screen
+// edge and stops.
+static void cb_ind(struct cb *c) {
+  uint32_t r = c->wpos / c->cols;
+  c->flag &= (uint16_t) ~cb_pend;
+  if (r == c->bot) cb_scup(c, c->top, c->bot, 1);
+  else if (r + 1u < c->rows) c->wpos += c->cols; }
+
+static void cb_ri(struct cb *c) {  // reverse index: the mirror
+  uint32_t r = c->wpos / c->cols;
+  c->flag &= (uint16_t) ~cb_pend;
+  if (r == c->top) cb_scdn(c, c->top, c->bot, 1);
+  else if (r) c->wpos -= c->cols; }
+
+// absolute cursor addressing; origin mode reads rows against the
+// scroll region. every deliberate move drops a pending wrap.
+static void cb_goto(struct cb *c, uint32_t r, uint32_t col) {
+  uint32_t lo = 0, hi = c->rows - 1u;
+  if (c->flag & cb_origin) r += c->top, lo = c->top, hi = c->bot;
+  if (r < lo) r = lo;
+  if (r > hi) r = hi;
+  if (col >= c->cols) col = c->cols - 1u;
+  c->wpos = r * c->cols + col, c->flag &= (uint16_t) ~cb_pend; }
+
+// the reply queue: answers (DSR, DA) ride home to whoever feeds the
+// parser; the host drains them to the pty master, the kernel may not
+// bother. a full queue drops the tail -- a late report beats a torn one.
+static void cb_say(struct cb *c, char const *s) {
+  while (*s && c->on < cb_outn) c->out[c->on++] = (uint8_t) *s++; }
+
+static void cb_sayn(struct cb *c, uint32_t n) {
+  char b[8]; int i = 8;
+  do b[--i] = (char) ('0' + n % 10u), n /= 10u; while (n);
+  while (i < 8 && c->on < cb_outn) c->out[c->on++] = (uint8_t) b[i++]; }
+
+int cb_reply(struct cb *c, uint8_t *buf) {
+  int n = c->on;
+  for (int i = 0; i < n; i++) buf[i] = c->out[i];
+  return c->on = 0, n; }
+
+// C0 controls, live in ground state and mid-CSI alike. \n implies \r
+// only under LNM (the kernel console's discipline); a raw feed keeps
+// the column, which is what a pty's ONLCR-translated stream expects.
+static void cb_ctl(struct cb *c, uint8_t i) {
+  uint32_t cs = c->cols, col = c->wpos % cs;
+  switch (i) {
+   case '\r': c->wpos -= col, c->flag &= (uint16_t) ~cb_pend; return;
+   case '\b': if (col && c->wpos != c->rpos) c->wpos--;
+              c->flag &= (uint16_t) ~cb_pend; return;
+   case '\n': case 11: case 12:  // LF VT FF
+    if (c->flag & cb_lnm) c->wpos -= col;
+    c->flag &= (uint16_t) ~cb_pend;
+    return cb_ind(c);
+   case '\t': { uint32_t nx = (col / 8u + 1u) * 8u;
+    if (nx > cs - 1u) nx = cs - 1u;
+    c->wpos += nx - col; return; }
+   default: return; } }  // BEL and the rest of C0: swallowed whole
+
+// a printing glyph. a pending wrap fires FIRST (deferred autowrap: the
+// glyph that landed on the last column left the cursor there; the next
+// one carries it to a fresh line), then the stamp, then the step -- a
+// stamp on the last column pends rather than moving, or overwrites in
+// place with autowrap off.
+static void cb_glyph(struct cb *c, uint8_t i) {
+  uint32_t cs = c->cols;
+  if (c->flag & cb_pend)
+    c->flag &= (uint16_t) ~cb_pend, c->wpos -= c->wpos % cs, cb_ind(c);
+  c->cb[c->wpos] = cb_cell(i, c->cur_fg, c->cur_bg, c->cur_font);
+  if (c->wpos % cs == cs - 1u) { if (c->flag & cb_wrap) c->flag |= cb_pend; }
+  else c->wpos++; }
+
+// RIS: everything back to the floor -- pens, faces, region, modes,
+// cursor, ground. LNM survives: the newline discipline belongs to the
+// console (the kernel set it at boot), not to the program resetting.
+static void cb_ris(struct cb *c) {
+  uint16_t lnm = c->flag & cb_lnm;
+  c->cur_fg = c->def_fg, c->cur_bg = c->def_bg, c->cur_font = 0;
+  c->top = 0, c->bot = c->rows - 1u;
+  c->flag = (uint16_t) (cb_show | cb_wrap | lnm);
+  c->rpos = c->wpos = c->spos = 0;
+  c->esc = 0, c->pn = 0, c->arg = 0, c->on = 0;
+  cb_clear(c); }
+
+static void cb_save(struct cb *c) {  // DECSC: cursor + pen
+  c->spos = c->wpos;
+  c->spen[0] = c->cur_fg, c->spen[1] = c->cur_bg, c->spen[2] = c->cur_font; }
+
+static void cb_restore(struct cb *c) {  // DECRC
+  c->wpos = c->spos, c->flag &= (uint16_t) ~cb_pend;
+  c->cur_fg = c->spen[0], c->cur_bg = c->spen[1], c->cur_font = c->spen[2]; }
+
+// SGR: the pen. colours by index (8 + bright 8 + 256), faces in the
+// font byte's high nibble; 38;2 truecolour quantizes onto the 6x6x6
+// cube rather than lying about a palette cb doesn't carry.
+static void cb_sgr(struct cb *c) {
+  for (uint8_t k = 0; k < c->pn; k++) {
+    uint16_t p = c->pv[k];
+    if (p == 0) c->cur_fg = c->def_fg, c->cur_bg = c->def_bg, c->cur_font &= 15;
+    else if (p == 1) c->cur_font |= cb_bold << 4;
+    else if (p == 4) c->cur_font |= cb_under << 4;
+    else if (p == 7) c->cur_font |= cb_rev << 4;
+    else if (p == 22) c->cur_font &= (uint8_t) ~(cb_bold << 4);
+    else if (p == 24) c->cur_font &= (uint8_t) ~(cb_under << 4);
+    else if (p == 27) c->cur_font &= (uint8_t) ~(cb_rev << 4);
+    else if (p >= 30 && p <= 37) c->cur_fg = (uint8_t) (p - 30);
+    else if (p == 39) c->cur_fg = c->def_fg;
+    else if (p >= 40 && p <= 47) c->cur_bg = (uint8_t) (p - 40);
+    else if (p == 49) c->cur_bg = c->def_bg;
+    else if (p >= 90 && p <= 97) c->cur_fg = (uint8_t) (p - 90 + 8);
+    else if (p >= 100 && p <= 107) c->cur_bg = (uint8_t) (p - 100 + 8);
+    else if ((p == 38 || p == 48) && k + 2 < c->pn && c->pv[k + 1] == 5) {
+      uint8_t v = (uint8_t) c->pv[k + 2];
+      if (p == 38) c->cur_fg = v; else c->cur_bg = v;
+      k += 2; }
+    else if ((p == 38 || p == 48) && k + 4 < c->pn && c->pv[k + 1] == 2) {
+      uint8_t v = (uint8_t) (16 + 36 * (c->pv[k + 2] / 51) + 6 * (c->pv[k + 3] / 51)
+                                + c->pv[k + 4] / 51);
+      if (p == 38) c->cur_fg = v; else c->cur_bg = v;
+      k += 4; } } }
+
+// DEC private / ANSI modes (CSI ? .. h/l and CSI .. h/l). the alternate
+// screen (47/1047/1049) is save-and-clear / clear-and-restore over the
+// ONE grid cb carries -- a full-screen program looks right; the ground
+// it painted over is gone, the honest price of one buffer.
+static void cb_mode(struct cb *c, int priv, int on) {
+  for (uint8_t k = 0; k < c->pn; k++) {
+    uint16_t p = c->pv[k];
+    if (!priv) {
+      if (p == 20) c->flag = on ? c->flag | cb_lnm : c->flag & (uint16_t) ~cb_lnm; }
+    else if (p == 7) c->flag = on ? c->flag | cb_wrap : c->flag & (uint16_t) ~cb_wrap;
+    else if (p == 25) c->flag = on ? c->flag | cb_show : c->flag & (uint16_t) ~cb_show;
+    else if (p == 6) {
+      c->flag = on ? c->flag | cb_origin : c->flag & (uint16_t) ~cb_origin;
+      cb_goto(c, 0, 0); }
+    else if (p == 47 || p == 1047 || p == 1049) {
+      if (on) cb_save(c), cb_clear(c), c->wpos = 0, c->flag &= (uint16_t) ~cb_pend;
+      else cb_clear(c), cb_restore(c); } } }
+
+// the CSI dispatch, one final byte at a time. n/m: the first two
+// parameters with their traditional default of 1.
+static void cb_csi(struct cb *c, uint8_t i) {
+  uint32_t n = c->pv[0] ? c->pv[0] : 1, m = c->pn > 1 && c->pv[1] ? c->pv[1] : 1;
+  uint32_t cs = c->cols, r = c->wpos / cs, col = c->wpos % cs;
+  uint32_t rb = r * cs, re = rb + cs;  // this row's span
+  int priv = c->flag & cb_priv;
+  c->flag &= (uint16_t) ~cb_priv;
+  switch (i) {
+   case 'A': { uint32_t lo = r >= c->top ? c->top : 0;
+    cb_cur(c, r > lo + n ? r - n : lo, col), c->flag &= (uint16_t) ~cb_pend; return; }
+   case 'B': case 'e': { uint32_t hi = r <= c->bot ? c->bot : c->rows - 1u;
+    cb_cur(c, r + n < hi ? r + n : hi, col), c->flag &= (uint16_t) ~cb_pend; return; }
+   case 'C': c->wpos = col + n < cs ? c->wpos + n : re - 1u;
+    c->flag &= (uint16_t) ~cb_pend; return;
+   case 'D': c->wpos = col > n ? c->wpos - n : rb;
+    c->flag &= (uint16_t) ~cb_pend; return;
+   case 'E': { uint32_t hi = r <= c->bot ? c->bot : c->rows - 1u;
+    cb_cur(c, r + n < hi ? r + n : hi, 0), c->flag &= (uint16_t) ~cb_pend; return; }
+   case 'F': { uint32_t lo = r >= c->top ? c->top : 0;
+    cb_cur(c, r > lo + n ? r - n : lo, 0), c->flag &= (uint16_t) ~cb_pend; return; }
+   case 'G': case '`': c->wpos = rb + (n - 1u < cs ? n - 1u : cs - 1u);
+    c->flag &= (uint16_t) ~cb_pend; return;
+   case 'd': return cb_goto(c, n - 1u, col);
+   case 'H': case 'f': return cb_goto(c, n - 1u, m - 1u);
+   case 'J': { uint32_t e = cb_blank(c), all = (uint32_t) c->rows * cs;
+    uint32_t lo = c->pv[0] == 1 ? 0 : c->wpos, hi = c->pv[0] == 1 ? c->wpos + 1u : all;
+    if (c->pv[0] >= 2) lo = 0, hi = all;
+    for (uint32_t p = lo; p < hi; p++) c->cb[p] = e;
+    return; }
+   case 'K': { uint32_t e = cb_blank(c);
+    uint32_t lo = c->pv[0] == 1 ? rb : c->wpos, hi = c->pv[0] == 1 ? c->wpos + 1u : re;
+    if (c->pv[0] >= 2) lo = rb, hi = re;
+    for (uint32_t p = lo; p < hi; p++) c->cb[p] = e;
+    return; }
+   case 'L': if (r >= c->top && r <= c->bot) cb_scdn(c, r, c->bot, n); return;
+   case 'M': if (r >= c->top && r <= c->bot) cb_scup(c, r, c->bot, n); return;
+   case '@': { if (n > cs - col) n = cs - col;
+    uint32_t e = cb_blank(c);
+    for (uint32_t p = re; p-- > c->wpos + n;) c->cb[p] = c->cb[p - n];
+    for (uint32_t p = c->wpos, j = c->wpos + n; p < j; p++) c->cb[p] = e;
+    return; }
+   case 'P': { if (n > cs - col) n = cs - col;
+    uint32_t e = cb_blank(c);
+    for (uint32_t p = c->wpos; p < re - n; p++) c->cb[p] = c->cb[p + n];
+    for (uint32_t p = re - n; p < re; p++) c->cb[p] = e;
+    return; }
+   case 'X': { if (n > cs - col) n = cs - col;
+    uint32_t e = cb_blank(c);
+    for (uint32_t p = c->wpos, j = c->wpos + n; p < j; p++) c->cb[p] = e;
+    return; }
+   case 'S': return cb_scup(c, c->top, c->bot, n);
+   case 'T': return cb_scdn(c, c->top, c->bot, n);
+   case 'r': if (!priv) {
+     uint32_t t = c->pv[0] ? c->pv[0] : 1, b = c->pn > 1 && c->pv[1] ? c->pv[1] : c->rows;
+     if (t < b && b <= c->rows) c->top = (uint16_t) (t - 1u), c->bot = (uint16_t) (b - 1u), cb_goto(c, 0, 0); }
+    return;
+   case 'm': return cb_sgr(c);
+   case 'h': return cb_mode(c, priv, 1);
+   case 'l': return cb_mode(c, priv, 0);
+   case 'n':
+    if (c->pv[0] == 6) cb_say(c, "\033["), cb_sayn(c, r + 1u), cb_say(c, ";"),
+                       cb_sayn(c, col + 1u), cb_say(c, "R");
+    else if (c->pv[0] == 5) cb_say(c, "\033[0n");
+    return;
+   case 'c': return cb_say(c, "\033[?6c");  // DA: a VT102, honestly
+   case 's': return cb_save(c);
+   case 'u': return cb_restore(c);
+   default: return; } }  // anything else: politely nothing
+
+// cb_putc interprets a working VT subset: C0 controls (with LNM ruling
+// \n), ESC 7/8/D/E/M/c/#8, CSI cursor addressing (A-H, f, G, d, E, F),
+// erase (J/K 0-2, X), edit (@ P L M), scroll (S T, DECSTBM r), SGR
+// colours + faces, DEC modes (autowrap, cursor, origin, the one-grid
+// alternate screen), and DSR/DA replies via the reply queue. OSC/DCS
+// bodies are swallowed whole; charset designators too. anything
+// printable is stamped as a glyph with the current pen.
+void cb_putc(struct cb *c, char _i) {
+  uint8_t i = (uint8_t) _i;
   switch (c->esc) {
    case 1:                                  // after ESC
     c->esc = 0;
-    if (i == '[') c->esc = 2, c->arg = 0, c->pn = 0;   // CSI: collect parameters
-    else if (i == '7') c->spos = c->wpos;   // DECSC: save the cursor
-    else if (i == '8') c->wpos = c->spos;   // DECRC: restore the cursor
-    return;
-   case 2: {                                // within CSI ESC [ ...
-    if (i >= '0' && i <= '9') { c->arg = c->arg * 10 + (i - '0'); return; }
-    if (i == ';') {                          // parameter separator: stash, keep going
-      if (c->pn < 4) c->pv[c->pn++] = (uint8_t) c->arg;
+    switch (i) {
+     case '[': c->esc = 2, c->arg = 0, c->pn = 0;
+      c->flag &= (uint16_t) ~(cb_priv | cb_junk); return;
+     case ']': case 'P': case '^': case '_': c->esc = 3; return;  // OSC/DCS/PM/APC: swallow
+     case '(': case ')': case '*': case '+': c->esc = 4; return;  // charset designator
+     case '#': c->esc = 6; return;
+     case '7': return cb_save(c);           // DECSC
+     case '8': return cb_restore(c);        // DECRC
+     case 'D': return cb_ind(c);            // IND
+     case 'E': c->wpos -= c->wpos % c->cols; return cb_ind(c);  // NEL
+     case 'M': return cb_ri(c);             // RI
+     case 'c': return cb_ris(c);            // RIS
+     case 'Z': return cb_say(c, "\033[?6c");
+     default: return; }                     // '=' '>' and friends: nothing to keep
+   case 2:                                  // within CSI ESC [ ...
+    if (i == 27) { c->esc = 1; return; }    // a fresh ESC abandons the sequence
+    if (i < ' ') return cb_ctl(c, i);       // C0 controls run even mid-sequence
+    if (i >= '0' && i <= '9') {
+      if (c->arg < 6553) c->arg = (uint16_t) (c->arg * 10 + (i - '0'));
+      return; }
+    if (i == ';' || i == ':') {              // ':' -- colon-form SGR subparameters
+      if (c->pn < 8) c->pv[c->pn++] = c->arg;
       c->arg = 0;
       return; }
-    if (c->pn < 4) c->pv[c->pn++] = (uint8_t) c->arg;   // the final parameter
+    if (i == '?' || i == '>' || i == '=' || i == '<') { c->flag |= cb_priv; return; }
+    if (i <= '/') { c->flag |= cb_junk; return; }  // intermediates we don't speak
+    if (c->pn < 8) c->pv[c->pn++] = c->arg;        // the final parameter
     c->esc = 0;
-    uint16_t n = c->pv[0] ? c->pv[0] : 1, cs = c->cols;
-    if (i == 'K') cb_erase_eol(c);           // EL: erase to end of row
-    else if (i == 'J') cb_erase_eos(c);      // ED: erase to end of screen
-    else if (i == 'D')                       // CUB: cursor left
-      c->wpos = c->wpos > n ? c->wpos - n : 0;
-    else if (i == 'C') {                     // CUF: cursor right (clamp to row)
-      uint16_t end = (c->wpos / cs + 1) * cs - 1;
-      c->wpos = c->wpos + n > end ? end : c->wpos + n; }
-    else if (i == 'A') {                     // CUU: cursor up (clamp to row 0)
-      uint16_t up = n * cs;
-      c->wpos = c->wpos >= up ? c->wpos - up : c->wpos % cs; }
-    else if (i == 'm')                       // SGR: set the pen colour (256-colour + reset)
-      for (uint8_t k = 0; k < c->pn; k++) {
-        uint8_t p = c->pv[k];
-        if (p == 0) c->cur_fg = c->def_fg, c->cur_bg = c->def_bg;        // reset to the default pen
-        else if (p == 39) c->cur_fg = c->def_fg;                         // default foreground
-        else if (p == 49) c->cur_bg = c->def_bg;                         // default background
-        else if (p == 38 && k + 2 < c->pn && c->pv[k + 1] == 5)          // 38;5;N -- 256-colour fg
-          c->cur_fg = c->pv[k + 2], k += 2;
-        else if (p == 48 && k + 2 < c->pn && c->pv[k + 1] == 5)          // 48;5;N -- 256-colour bg
-          c->cur_bg = c->pv[k + 2], k += 2; }
-    return; }
+    if (c->flag & cb_junk) { c->flag &= (uint16_t) ~(cb_junk | cb_priv); return; }
+    return cb_csi(c, i);
+   case 3:                                  // an OSC/DCS body on its way to ST
+    if (i == 7) c->esc = 0;
+    else if (i == 27) c->esc = 5;
+    return;
+   case 5: c->esc = 0; return;              // the byte after ESC ends it (ST's backslash)
+   case 4: c->esc = 0; return;              // the designated charset: discarded
+   case 6:                                  // ESC # ...
+    if (i == '8') {                         // DECALN: the E screen, region home
+      c->top = 0, c->bot = c->rows - 1u, c->wpos = 0, c->flag &= (uint16_t) ~cb_pend;
+      cb_fill(c, 'E'); }
+    c->esc = 0;
+    return;
    default:
-    if (i == 27) { c->esc = 1; return; }     // ESC: begin a sequence
-    if (i == '\r') { c->wpos -= c->wpos % c->cols; return; }
-    if (i == '\b') {
-      if (c->wpos != c->rpos) c->wpos--;
-      return; }
-    if (i == '\n') return cb_line_feed(c);   // line feed (scrolls at bottom)
-    c->cb[c->wpos] = cb_cell(i, c->cur_fg, c->cur_bg, c->cur_font);
-    if (++c->wpos == c->cols * c->rows) c->wpos = 0; } }
+    if (i == 27) { c->esc = 1; return; }    // ESC: begin a sequence
+    if (i < ' ') return cb_ctl(c, i);
+    return cb_glyph(c, i); } }
 
 int cb_ungetc(struct cb *c, int i) {
-  uint16_t r = c->rpos;
-  r = r > 0 ? r - 1 : c->cols * c->rows - 1;
+  uint32_t r = c->rpos;
+  r = r > 0 ? r - 1 : (uint32_t) c->rows * c->cols - 1;
   if (r == c->wpos) return -1;
   c->rpos = r;
   // rewind one cell and replace its char, keeping the cell's colour/font
@@ -112,5 +345,5 @@ int cb_eof(struct cb *c) {
 int cb_getc(struct cb *c) {
   if (c->rpos == c->wpos) return -1;
   int i = cb_ch(c->cb[c->rpos]);
-  if (++c->rpos == c->cols * c->rows) c->rpos = 0;
+  if (++c->rpos == (uint32_t) c->rows * c->cols) c->rpos = 0;
   return i; }

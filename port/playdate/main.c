@@ -12,7 +12,6 @@
 #define NROWS 30
 #define NCOLS 50
 #define kcb (&K.cb)
-#define show_cursor_flag 1
 #define mode(k) ((void*)k->mode)
 static struct k {
   struct g *g;
@@ -42,7 +41,7 @@ static int k_update(void *_) {
     for (uint8_t j = 0, cols = K.cb.cols; j < cols; j++) {
       uint16_t pos = i * cols + j;
       uint8_t const g = K.cb.cb[pos], *bmp = cga_8x8[g == '\n' ? 0 : g];
-      bool invert = (K.cb.flag & show_cursor_flag) && pos == K.cb.wpos && g_clock() & 512;
+      bool invert = (K.cb.flag & cb_show) && pos == K.cb.wpos && g_clock() & 512;
       for (uint8_t b = 0; b < 8; b++)
         frame[52 * (8 * i + b) + j] = invert ? ~bmp[b] : bmp[b]; }
   K.pd->graphics->markUpdatedRows(0, LCD_ROWS);
@@ -102,7 +101,8 @@ int eventHandler(PlaydateAPI* pd, PDSystemEvent event, uint32_t arg) {
   switch (event) {
     case kEventInit:
       clockfp = pd->system->getCurrentTimeMilliseconds;
-      kcb->rows = NROWS, kcb->cols = NCOLS;
+      cb_open(kcb, NROWS, NCOLS);
+      kcb->flag |= cb_lnm;  // console discipline: a bare \n is a newline
       K.pd = pd;
       K.mode = &_log;
       _synth.synth = pd->sound->synth->newSynth();
@@ -156,7 +156,7 @@ static g_vm(crank_angle) {
  Ip += 1;
  return Continue(); }
 
-static void g_log_ini(void) { kcb->flag |= show_cursor_flag; }
+static void g_log_ini(void) { kcb->flag |= cb_show; }
 static struct g*g_boot(struct g*g);
 
 
@@ -170,7 +170,7 @@ static void random_life(void) {
    kcb->cb[i* cols + j] = rand() & 1 ? live_char : dead_char; }
 
 static void g_life_ini(void) {
- kcb->flag &= ~show_cursor_flag;
+ kcb->flag &= ~cb_show;
  random_life(); }
 
 static const SoundWaveform synth_waveforms[] = {
@@ -207,7 +207,7 @@ static void draw_wave(void) {
 static void g_synth_ini(void) {
   struct synth_mode *m = (void*) K.mode;
   m->submode = 1;
-  kcb->flag &= ~show_cursor_flag;
+  kcb->flag &= ~cb_show;
   cb_cur(kcb, 0, 0);
   cb_fill(kcb, 0); }
 
@@ -259,7 +259,7 @@ static void g_synth_update(void) {
         cb_cur(cb, 0, 0);
         cb_fill(cb, 0);
         for (int i = (int) m->synth_time; i; i--)
-          cb_putc(cb, 0x9); }
+          cb_stamp(cb, 0x9); }  // stamp: 0x9 the glyph, not the tab
       return;
     case 2:
       if (K.b.pushed & (kButtonA | kButtonB)) m->submode = 1;
@@ -271,7 +271,7 @@ static void g_synth_update(void) {
           cb_cur(cb, 0, 0);
           cb_fill(cb, 0);
           for (int i = (int) m->synth_time; i; i--)
-            cb_putc(cb, 0x9); } }
+            cb_stamp(cb, 0x9); } }  // stamp: 0x9 the glyph, not the tab
     default:
       return; } }
 
