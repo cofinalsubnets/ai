@@ -155,7 +155,7 @@
      lc2 (? d (: _ (pin dirty 0 0)
                  (px-paint s win gc depth bx fx (= d 2) lc))
              lc)
-     _ (rest 33)
+     _ (rest 8)                       ; a keystroke's echo shows within ~10ms
      (px-paintloop s win gc depth bx fx dirty lc2)))
 
 
@@ -212,6 +212,7 @@
              _ (x-map s win)
              _ (x-flush s)
              km (px-keysyms s (scr-mink sc) (scr-maxk sc))
+             _ (setenv "TERM" "xterm-256color")   ; the dialect we actually speak
              md (mind argv)
              (? (! (two? md)) (: _ (close s) md)
               (: pid (cap md) m (cup md)

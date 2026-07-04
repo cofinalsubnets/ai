@@ -107,6 +107,7 @@
  (berth argv) (: ws (winsize 0)                  ; a fresh pty says 0x0: fall back
                  r (? (&& (two? ws) (< 5 (cap ws))) (cap ws) 24)
                  c (? (&& (two? ws) (< 19 (cup ws))) (cup ws) 80)
+                 _ (setenv "TERM" "xterm-256color")   ; the dialect we actually speak
                  md (mind argv)
                  (? (! (two? md)) md
                   (: pid (cap md) m (cup md)
