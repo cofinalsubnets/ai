@@ -46,7 +46,7 @@
 ;     transparent (one peep per top-level form). ERASABLE by construction. Engine internals stay private
 ;     inside `ov-eng`; only ov-*/overlay-*/the ev rebind leak. See overlay.l for the domain shape (a map
 ;     #('join J 'tr T 'litdie L 'dice D)) and sigs ((name (param-dies..) result-die)..).
-(: ov-eng
+(: ov-both
     (: subst (kanren 'subst)                          ; through the kanren module book (unify/ufail?/var stay global)
        (ov-nthl l n)     (? (= n 0) (cap l) (ov-nthl (cup l) (- n 1)))   ; nth (nthl is glaze-layer, absent in post.l)
        (ov-sigof sigs nm) (? (atom? sigs) () (id? nm (caap sigs)) (cap sigs) (ov-sigof (cup sigs) nm))
@@ -55,12 +55,17 @@
        (ov2-vars dom d acc) (? (atom? d) (? (&& (ov2-var? dom d) (! (member? d acc))) (link d acc) acc) (foldl (\ a s (ov2-vars dom s a)) acc d))
        (ov2-lk vm d)      (? (atom? vm) d (id? d (cap (cap vm))) (cup (cap vm)) (ov2-lk (cup vm) d))
        (ov2-term vm d)    (? (atom? d) (ov2-lk vm d) (map (\ s (ov2-term vm s)) d))
-       (ov2-uall ps as s) (? (atom? ps) s (: s1 (unify s (cap ps) (cap as)) (? (ufail? s1) ufail (ov2-uall (cup ps) (cup as) s1))))
+       (ov2-uall ps as s) (? (atom? ps) s
+                             (atom? as) s                              ; a PARTIAL application: the given prefix checked, the rest open
+                             (member? (cap as) '(top bot)) (ov2-uall (cup ps) (cup as) s)   ; an UNKNOWN arg is gradual: consistent with any param, binds nothing
+                             (: s1 (unify s (cap ps) (cap as)) (? (ufail? s1) ufail (ov2-uall (cup ps) (cup as) s1))))
        (ov2-inst dom sg args)                                          ; sg = (name (param-dies) result): structured caller instantiation
         (: params (caup sg) result (ov-nthl sg 2)
            vm (map (\ nm (link nm (var nm))) (ov2-vars dom (link params result) ()))            ; one fresh logic var per sig variable
            s  (ov2-uall (map (\ p (ov2-term vm p)) params) args '(()))   ; unify param patterns (fresh vars) vs arg dies AS-IS (a caller's rigid symbol is a constant here -- no capture)
-           (? (ufail? s) 'clash (: r (subst s (ov2-term vm result)) nf (dom 'norm) (? (lit? nf) (nf r) r))))   ; reify + normalize (dependent index)
+           (? (ufail? s) 'clash                                        ; args contradict the params: the one hard verdict
+              (! (= (tally args) (tally params))) 'top                 ; partial/over-application: a closure/re-application, die unknown
+              (: r (subst s (ov2-term vm result)) nf (dom 'norm) (? (lit? nf) (nf r) r))))   ; reify + normalize (dependent index)
        (ov-kindof dom sigs env e)
           (? (nom? e) (ov-look env e)
              (atom? e) ((dom 'litdie) e)
@@ -89,7 +94,9 @@
        (ov-run dom sigs form) (? (&& (two? form) (id? (cap form) ':))
                                  (: r (ov-check1 dom sigs form) (? (two? r) (ov-reps r) 0))
                                  0)
-     ov-run)                                       ; ov-eng IS the run entry (internals private)
+     (L ov-run ov-check1))                         ; the run entry + the PURE checker (internals private)
+   ov-eng      (cap ov-both)
+   ov-check    (caup ov-both)                      ; (ov-check dom sigs form) -> () clean | ((name . detail)..) -- the report as DATA (a gate's leg)
    ov-slot     (tablet 0)                          ; install slot: peep 0 -> (DOM SIGS) or ()
    overlay-set (\ dom sigs (pin ov-slot 0 (L dom sigs)))
    overlay-off (\ _ (pin ov-slot 0 ()))

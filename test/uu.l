@@ -290,6 +290,11 @@
       r))
 
 ; --- UniMath Foundations PartA, the core snip: every name is the original.
+; --- The definitions and theorem statements from here down are ported from
+; --- UniMath (https://github.com/UniMath/UniMath, Foundations/PartA.v et al),
+; --- MIT license, copyright (c) 2015 the UniMath Development Team; this
+; --- acknowledgement rides with the ported portion per that license. The
+; --- kernel above (and everything it bakes into the binary) is our own.
 (assert
  (defn 'idfun '(pi T UU (pi x T T)) '(lam T (lam x x)))
  (defn 'funcomp

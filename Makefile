@@ -69,7 +69,7 @@ test_host: $m
 # test/00-init.l assert harness (which exits 1 on the first failure), so the gate
 # checks BOTH exit 0 AND the sentinel -- a silent reader-stop exits 0 without it.
 # Add a thread's smoke script to hostnif_tests (ain: boot/net.l, &c).
-hostnif_tests = boot/pty.l boot/net.l boot/wm.l boot/baoedit.l boot/baotest.l boot/init.l boot/sh.l boot/cb.l boot/berth.l boot/manifest.l boot/pier.l boot/font.l boot/haven.l
+hostnif_tests = boot/pty.l boot/net.l boot/wm.l boot/baoedit.l boot/baotest.l boot/init.l boot/sh.l boot/cb.l boot/berth.l boot/manifest.l boot/pier.l boot/font.l boot/haven.l boot/overlay.l
 test_hostnif: host
 	@for s in $(hostnif_tests); do echo "HOSTNIF $$s"; \
 	  cat test/00-init.l $$s | $m > out/host/.test_hostnif.out 2>&1; r=$$?; \
@@ -333,6 +333,16 @@ out/lib/arm64.h: apps/asm/arm64.l tools/lcat.l
 	$(lcat_h)
 out/lib/export.h: apps/asm/export.l tools/lcat.l
 	$(lcat_h)
+# uu's NbE kernel bakes post.l-style so an overlay can reach (uu 'vof) in a bare
+# host binary -- EXTRACTED from test/uu.l (the corpus file stays the one source of
+# truth; the span is everything above its UniMath section), a names-mark ahead so
+# ai/uuexport.l (lib_h pattern rule) can sweep the span into the `uu` book.
+out/lib/uukern.l: test/uu.l
+	@mkdir -p out/lib
+	@echo AI	$@
+	@{ echo "(: uu-mark (names ()))"; sed '/^; --- UniMath/q' test/uu.l; } > $@
+out/lib/uu.h: out/lib/uukern.l tools/lcat.l
+	$(lcat_h)
 # ai0's sed-wrapped raw source of the same three (no interpreter -- the l reader
 # strips ; comments at read time), baked into the bootstrap so the corpus can test
 # the assembler under BOTH compilers (c0 + the self-hosted ev), like prel/ev/bao.
@@ -569,7 +579,7 @@ $(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
 # baked shell core now, subsuming the old repl.h). Now that it rides the host/*.c
 # glob (compiled once, not recompiled on every link, as the old inline `$(hcc)
 # main.c` did), recompile it when any baked header changes.
-$(ho)/host/main.o: out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h $(asm_h) $(glaze_h)
+$(ho)/host/main.o: out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h out/lib/uu.h out/lib/uuexport.h $(asm_h) $(glaze_h)
 # host/cb.c rides port/quay/quay.c by unity include -- recompile when the engine moves.
 $(ho)/host/cb.o: port/quay/quay.c port/quay/quay.h
 
@@ -579,7 +589,7 @@ $(ho)/host/cb.o: port/quay/quay.c port/quay/quay.h
 # one link rule, two names: `ai` (canonical) and `ai.cand` (the CANDIDATE -- the next
 # generation built at a side path nothing executes, so the RELINK can never hit
 # ETXTBSY no matter who is running `ai`; see the candidate target below).
-$(ho)/ai $(ho)/ai.cand: $(host_o) $(ho)/libai.a $(ho)/.hostcc out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h $(asm_h) $(glaze_h)
+$(ho)/ai $(ho)/ai.cand: $(host_o) $(ho)/libai.a $(ho)/.hostcc out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h out/lib/uu.h out/lib/uuexport.h $(asm_h) $(glaze_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -o $@ $(host_o) $(ho)/libai.a -lm $(host_ldflags)

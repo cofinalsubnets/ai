@@ -497,6 +497,8 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "ev.h"
     "))"
 #include "post.h"                                       // the post-egg layer (parser combinators, ...), evaled ONCE after the egg
+#include "uu.h"                                          // uu's NbE kernel (test/uu.l's span, extracted at build) -- so an overlay
+#include "uuexport.h"                                    //   can reach (uu 'vof) bare; swept into the `uu` book, one global name
 #include "asm.h"                                         // the neutral assembler core (apps/asm/asm.l) -- a post-egg language SERVICE
 #include "x64.h"                                         // + BOTH backends: they produce machine-code bytes as DATA (never
 #include "arm64.h"                                       //   execute), so every target is arch-neutral. the glaze (x86 client) executes x64
