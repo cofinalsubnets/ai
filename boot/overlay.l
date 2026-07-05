@@ -62,6 +62,8 @@
 ; every defn re-certified right here), then run the MODEL against core.l's
 ; implementation on concrete stacks -- encode, vof, decode, compare
 (reads (open "test/uu.l" "r"))
+(reads (open "test/uuwm.l" "r"))
+(reads (open "test/uuwmlaw.l" "r"))
 (: (encl l) (? (two? l) (L 'ncons (cap l) (encl (cup l))) 'nnil)
    (encz z) (L 'zmk (cap z) (encl (caup z)) (encl (caup (cup z))))
    (decl v) (: (go vv acc) (? (two? vv) (go (nthl vv 2) (link (nthl vv 1) acc)) (rev acc))
@@ -137,7 +139,7 @@
                    ((: (g acc) (: r (sound q e) (? (= e r) (rev acc) (g (link r acc))))) ()))
    cforms (forms "apps/wm/core.l")
    gens (wm2uu cforms wm-sigs)
- _ (assert (= 12 (tally gens)))
+ _ (assert (= 10 (tally gens)))
  _ (map (\ g (defn (cap g) (nthl g 1) (nthl g 2))) (rev gens))   ; the kernel certifies each
  _ (puts "overlay leg 6: translated + certified ")
 
@@ -147,7 +149,7 @@
  ; translator's output is CONVERTIBLE with the hand-proved model. the kernel
  ; itself certifies compiled-from-source == proved, and every theorem about
  ; the model transfers to the generated terms for free.
- amap '((zmk agree-zmk) (zfoc agree-zfoc) (zrow agree-zrow) (zrev agree-zrev)
+ amap '((zrow agree-zrow) (zrev agree-zrev)
         (zfocup agree-zfocup) (zfocdn agree-zfocdn) (zswapup agree-zswapup)
         (zswapdn agree-zswapdn) (zmaster agree-zmaster) (zins agree-zins)
         (znub agree-znub) (zdel agree-zdel))
@@ -160,7 +162,7 @@
                    (w2-pi ps ks (L 'paths res (link (w2-gen nm) ps) (link (mname nm) ps)))
                    (w2-lams ps (L 'idpath (link (mname nm) ps))))))
         w2-want)
- (puts "overlay stage 4: 12 idpath bridges -- the compiled ops ARE the proved model"))
+ (puts "overlay stage 4: 10 idpath bridges -- the compiled ops ARE the proved model"))
 
 ; the same seeded walk, the model side now stepping through the TRANSLATED ops
 (: (rnd s) (% (+ (* s 1103515245) 12345) 2147483648)
@@ -198,6 +200,6 @@
  z0 (zmk 5 (L 2) (L 7 9))
  _ (assert
     (= (zrow z0) (decl (vof 0 (L 'gen-zrow (encz z0)))))
-    (= (cap z0) (vof 0 (L 'gen-zfoc (encz z0))))
+    (= (cap (zrev z0)) (vof 0 (L 'zfoc (L 'gen-zrev (encz z0)))))
     (= (znub 7 (zrow z0)) (decl (vof 0 (L 'gen-znub 7 (L 'gen-zrow (encz z0)))))))
  (puts "overlay: ok"))

@@ -28,13 +28,23 @@
    (w2-pi ps ks res) (? (two? ps) (L 'pi (cap ps) (w2-ty (cap ks)) (w2-pi (cup ps) (cup ks) res)) res)
    (w2-lams ps b) (? (two? ps) (L 'lam (cap ps) (w2-lams (cup ps) b)) b)
 
-   ; --- the wanted ops and their gen names ---
-   w2-want '(zmk zfoc zrow zrev zfocup zfocdn zswapup zswapdn zmaster zins znub zdel)
-   w2-gmap '((zmk gen-zmk) (zfoc gen-zfoc) (zrow gen-zrow) (zrev gen-zrev)
+   ; --- the wanted ops and their emitted names. zmk/zfoc are NOT wanted:
+   ;     they ARE the representation vocabulary the rules target (a generated
+   ;     zfoc would be (lam z (zfoc z)), a self-reference) -- they live in
+   ;     test/uu.l's substrate. the name map is a SLOT so a driver can emit
+   ;     under gen-* names (the gate's bridges) or the model's own names
+   ;     (stage 5's test/uuwm.l) ---
+   w2-want '(zrow zrev zfocup zfocdn zswapup zswapdn zmaster zins znub zdel)
+   w2-gmap '((zrow gen-zrow) (zrev gen-zrev)
              (zfocup gen-zfocup) (zfocdn gen-zfocdn) (zswapup gen-zswapup)
              (zswapdn gen-zswapdn) (zmaster gen-zmaster) (zins gen-zins)
              (znub gen-znub) (zdel gen-zdel))
-   (w2-gen nm) (: p (assoc nm w2-gmap) (? (two? p) (caup p) nm))
+   w2-nm (: t (tablet 1) _ (pin t 0 w2-gmap) t)
+   (w2-gen nm) (: p (assoc nm (peep w2-nm 0 ())) (? (two? p) (caup p) nm))
+   (wm2uu-as forms sigs gmap) (: _ (pin w2-nm 0 gmap)
+                                  r (wm2uu forms sigs)
+                                  _ (pin w2-nm 0 w2-gmap)
+                                  r)
    (w2-rk nm k) (? (id? nm 'zdel) 'mstk k)
 
    ; --- the kind of a source expression (enough to steer the rules) ---

@@ -19,7 +19,9 @@
 ;
 ; Run: out/host/ai tools/uu2lean.l > proof/lean/uugen.lean   then  lean proof/lean/uugen.lean
 
-(: _ (reads (open "test/uu.l" "r"))            ; load + CERTIFY uu's corpus (populates GLOB)
+(: _ (reads (open "test/uu.l" "r"))
+   _ (reads (open "test/uuwm.l" "r"))
+   _ (reads (open "test/uuwmlaw.l" "r"))            ; load + CERTIFY uu's corpus (populates GLOB)
    bs (intern "\\")
    nl (string 10)
    b8 "⟨"  b9 "⟩"   ; Lean's anonymous-constructor angle brackets
@@ -47,7 +49,8 @@
                         (? (&& (two? F) (id? (cap F) 'assert)) (kids (cup F) acc)
                            (| (deq? F) (axq? F)) (link (entry F) acc) acc)))
                       (rev acc))
-   ents (gather (forms "test/uu.l") ())
+   (app2 a b) (? (two? a) (link (cap a) (app2 (cup a) b)) b)   ; NOT `cat` -- the local cat is the STRING fold
+   ents (gather (app2 (forms "test/uu.l") (app2 (forms "test/uuwm.l") (forms "test/uuwmlaw.l"))) ())
 
    ; names that exist (corpus-wide) -- for telling a global reference from a bound var
    nt (tablet 0) _ (map (\ e (pin nt (e2 e) 1)) ents)

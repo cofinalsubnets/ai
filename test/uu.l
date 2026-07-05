@@ -2558,8 +2558,11 @@
  ((vof 0 'true)  = (vof 0 '(memb 9 (ncons 7 (ncons 9 nnil)))))
  ((vof 0 'false) = (vof 0 '(memb 8 (ncons 7 (ncons 9 nnil))))))
 
-; --- the stack: focus x up x down, core.l's zipper with the focus law
-; --- BY CONSTRUCTION (a stk cannot be empty) ---
+; --- the stack SUBSTRATE: focus x up x down, a stk nonempty BY CONSTRUCTION;
+; --- the representation vocabulary the translator targets (zmk/zfoc/zup/zdn,
+; --- hd0/tl0, mstk). the MOVES themselves live in test/uuwm.l -- GENERATED
+; --- from apps/wm/core.l by tools/wm2uu.l -- and their laws + computed
+; --- claims in test/uuwmlaw.l (the two load after this file by sort order) ---
 (assert
  (defn 'stk 'UU '(total2 f nat (total2 u nlist nlist)))
  (defn 'zmk '(pi f nat (pi u nlist (pi d nlist stk)))
@@ -2567,40 +2570,10 @@
  (defn 'zfoc '(pi z stk nat) '(lam z (pr1 z)))
  (defn 'zup  '(pi z stk nlist) '(lam z (pr1 (pr2 z))))
  (defn 'zdn  '(pi z stk nlist) '(lam z (pr2 (pr2 z))))
- (defn 'zins '(pi w nat (pi z stk stk))
-   '(lam w (lam z (zmk w (zup z) (ncons (zfoc z) (zdn z))))))
- (defn 'zrow '(pi z stk nlist)
-   '(lam z (lapp (lrev (zup z)) (ncons (zfoc z) (zdn z)))))
  (defn 'zcount '(pi z stk nat)
-   '(lam z (succ (add (nlen (zup z)) (nlen (zdn z))))))
- (defn 'zsane '(pi z stk bool) '(lam z (nodupb (zrow z))))
- ; the model COMPUTES: a concrete stack rows out in order, counts, and the
- ; sanity bit reads true -- and a planted duplicate reads false
- (4 = (vof 0 '(zcount (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil))))))
- (5 = (vof 0 '(zcount (zins 4 (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))))
- ((vof 0 'true)  = (vof 0 '(zsane (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil))))))
- ((vof 0 'false) = (vof 0 '(zsane (zmk 5 (ncons 2 nnil) (ncons 5 nnil)))))
- ((vof 0 'true)  = (vof 0 '(memb 2 (zrow (zmk 5 (ncons 2 nnil) (ncons 7 nnil)))))))
+   '(lam z (succ (add (nlen (zup z)) (nlen (zdn z)))))))
 
-; --- the theorems: focus-of-insert holds by COMPUTATION (idpath). the size
-; --- law needs real induction -- natplusnsm (proved above) states add n
-; --- (succ m) = add (succ n) m, whose right side unfolds to succ (add n m)
-; --- even on a NEUTRAL n (the scrutinee's head constructor is known), so
-; --- the size law is exactly that lemma riding maponpaths ---
-(assert
- (defn 'zfocins '(pi w nat (pi z stk (paths nat (zfoc (zins w z)) w)))
-   '(lam w (lam z (idpath w))))
- (defq 'zcountins
-   '(pi w nat (pi z stk (paths nat (zcount (zins w z)) (succ (zcount z)))))
-   '(lam w (lam z
-      (maponpaths nat nat (lam q (succ q))
-        (add (nlen (zup z)) (succ (nlen (zdn z))))
-        (succ (add (nlen (zup z)) (nlen (zdn z))))
-        (natplusnsm (nlen (zup z)) (nlen (zdn z))))))))
-
-; --- more of the stack's moves: rev is a pairing (and zrevrev is sigma-eta,
-; --- a theorem by idpath); focus motion cases on the up row's length, with
-; --- hd0/tl0 the defaulting projections (the wrap case rows through lrev) ---
+; --- the defaulting projections, hd0/tl0: how a translated move reads a row ---
 (assert
  (defn 'hd0 '(pi l nlist nat)
    '(lam l ((nat_rect (lam q (pi v (nvec q) nat))
@@ -2613,28 +2586,7 @@
               (lam v nnil)
               (lam k (lam IH (lam v (tpair k (pr2 v)))))
               (pr1 l))
-            (pr2 l))))
- (defn 'zrev '(pi z stk stk) '(lam z (zmk (zfoc z) (zdn z) (zup z))))
- (defn 'zfocup '(pi z stk stk)
-   '(lam z (nat_rect (lam q stk)
-             (let a (lrev (ncons (zfoc z) (zdn z)))
-               (zmk (hd0 a) (tl0 a) nnil))
-             (lam k (lam r (zmk (hd0 (zup z)) (tl0 (zup z)) (ncons (zfoc z) (zdn z)))))
-             (pr1 (zup z)))))
- (defn 'zfocdn '(pi z stk stk) '(lam z (zrev (zfocup (zrev z)))))
- (defn 'zmaster '(pi z stk stk)
-   '(lam z (zmk (zfoc z) nnil (lapp (lrev (zup z)) (zdn z)))))
- (defn 'zrevrev '(pi z stk (paths stk (zrev (zrev z)) z))
-   '(lam z (idpath z)))
- ; focus motion never loses a window: the row is a fixed carousel
- ((vof 0 '(zrow (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))
-  = (vof 0 '(zrow (zfocup (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))))
- (2 = (vof 0 '(zfoc (zfocup (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))))
- (9 = (vof 0 '(zfoc (zfocup (zmk 5 nnil (ncons 7 (ncons 9 nnil)))))))   ; the wrap
- (7 = (vof 0 '(zfoc (zfocdn (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))))
- ; zmaster reorders by design: the focus takes the head of the row
- ((vof 0 '(ncons 5 (ncons 2 (ncons 7 nnil))))
-  = (vof 0 '(zrow (zmaster (zmk 5 (ncons 2 nnil) (ncons 7 nnil)))))))
+            (pr2 l)))))
 
 ; --- the boolean observation lemmas: what an orb/andb/negb verdict tells
 ; --- you about its operands (each by bool_rect on the scrutinee; the true
@@ -2740,28 +2692,10 @@
                        (nodupb (lapp (tpair k (pr2 v)) b)) hs))))))))
       (pr1 a)) (pr2 a)))))))
 
-; --- THE PRIZE (Swierstra's insert invariant): a fresh window into a sane
-; --- stack leaves it sane. zrow (zins w z) IS lapp (lrev up) (ncons w
-; --- (ncons f dn)) by computation, so the whole theorem is nodupmid
-; --- instantiated at the row's split ---
+; --- nfilt (znub's mirror, the every-copy filter) and the Maybe Stack
+; --- (coprod unit stk: ii1 the empty harbor, ii2 the survivor) -- the
+; --- substrate zdel's translation answers into ---
 (assert
- (defq 'zinsane
-   '(pi w nat (pi z stk (pi hm (paths bool (memb w (zrow z)) false)
-      (pi hs (paths bool (zsane z) true)
-       (paths bool (zsane (zins w z)) true)))))
-   '(lam w (lam z (nodupmid w (ncons (zfoc z) (zdn z)) (lrev (zup z)))))))
-
-; --- the rest of the moves: swap (its wrap rotates the row's tail through
-; --- lrev), and delete -- which may empty the stack, so it answers
-; --- Swierstra's Maybe Stack (coprod unit stk): ii1 the empty harbor,
-; --- ii2 the survivor. nfilt is znub, the every-copy filter ---
-(assert
- (defn 'zswapup '(pi z stk stk)
-   '(lam z (nat_rect (lam q stk)
-             (zmk (zfoc z) (lrev (zdn z)) nnil)
-             (lam k (lam r (zmk (zfoc z) (tl0 (zup z)) (ncons (hd0 (zup z)) (zdn z)))))
-             (pr1 (zup z)))))
- (defn 'zswapdn '(pi z stk stk) '(lam z (zrev (zswapup (zrev z)))))
  (defn 'nfilt '(pi w nat (pi l nlist nlist))
    '(lam w (lam l ((nat_rect (lam q (pi v (nvec q) nlist))
              (lam v nnil)
@@ -2770,35 +2704,7 @@
                       (ncons (pr1 v) (IH (pr2 v)))
                       (nateqb w (pr1 v))))))
              (pr1 l)) (pr2 l)))))
- (defn 'mstk 'UU '(coprod unit stk))
- (defn 'zdel '(pi w nat (pi z stk mstk))
-   '(lam w (lam z
-      (let u (nfilt w (zup z))
-       (let d (nfilt w (zdn z))
-        (bool_rect (lam x mstk)
-          (nat_rect (lam q mstk)
-            (nat_rect (lam q2 mstk)
-              (ii1 tt)
-              (lam k2 (lam r2 (ii2 (zmk (hd0 u) (tl0 u) nnil))))
-              (pr1 u))
-            (lam k (lam r (ii2 (zmk (hd0 d) u (tl0 d)))))
-            (pr1 d))
-          (ii2 (zmk (zfoc z) u d))
-          (nateqb (zfoc z) w)))))))
- ; the delete faces: a bystander, the focus (dn heir, then up heir), the last one out
- ((vof 0 '(zdel 7 (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))
-  = (vof 0 '(ii2 (zmk 5 (ncons 2 nnil) (ncons 9 nnil)))))
- ((vof 0 '(zdel 5 (zmk 5 (ncons 2 nnil) (ncons 7 (ncons 9 nnil)))))
-  = (vof 0 '(ii2 (zmk 7 (ncons 2 nnil) (ncons 9 nnil)))))
- ((vof 0 '(zdel 5 (zmk 5 (ncons 2 nnil) nnil)))
-  = (vof 0 '(ii2 (zmk 2 nnil nnil))))
- ((vof 0 '(zdel 5 (zmk 5 nnil nnil))) = (vof 0 '(ii1 tt)))
- ; the swaps: the focused window trades places, or rotates to the bottom
- ((vof 0 '(zrow (zswapup (zmk 5 (ncons 2 nnil) (ncons 7 nnil)))))
-  = (vof 0 '(ncons 5 (ncons 2 (ncons 7 nnil)))))
- ((vof 0 '(zrow (zswapup (zmk 5 nnil (ncons 7 nnil)))))
-  = (vof 0 '(ncons 7 (ncons 5 nnil))))
- ((vof 0 '(zfoc (zswapdn (zmk 5 (ncons 2 nnil) (ncons 7 nnil))))) = 5))
+ (defn 'mstk 'UU '(coprod unit stk)))
 
 ; --- the kernel refuses: ill-typed terms scare; the help cell catches them.
 ; --- (install per the help law -- more/eof keep the read protocol.)
