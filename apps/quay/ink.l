@@ -50,12 +50,10 @@
                 (slurp j))
 
    ; the swim: paint, rest a beat, listen for a cue from shore. the frame
-   ; goes out the bulk lane (say pays a per-byte toll a big window notices)
+   ; goes out say's bulk lane -- one write(2) per frame
    (swim tick) (? (cue? 0) ()
                   (: f (frame (* tick 0.06))
-                     _ (flush out)
-                     w (gush out f)
-                     _ (? (charm? w) (: _ (say out f) (flush out)) 0)
+                     _ (say out f)
                      _ (rest 33)
                      (swim (+ tick 1))))
 

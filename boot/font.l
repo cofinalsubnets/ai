@@ -41,8 +41,8 @@
  p "/tmp/quay-font-boot.psf"
  f (open p "w")
  _ (assert (lit? f))
- _ (gush f b)
- _ (flush f) _ (close f)
+ _ (say f b)
+ _ (close f)
  at (psf p)
  _ (assert
     (! (! at))

@@ -104,11 +104,7 @@
  (swim bx m dirty tick) (: _ (? (dirty -> 0 0)
                               (: _ (pin dirty 0 0)
                                  f2 (frame (bx -> 0 0))
-                                 _ (flush out)
-                                 w2 (gush out f2)          ; the bulk lane; a
-                                 _ (? (charm? w2)          ; portless out says
-                                      (: _ (say out f2) (flush out))
-                                      0)
+                                 _ (say out f2)            ; say IS the bulk lane (and flushes)
                                  0)
                               0)
                            _ (? (= 0 (% tick 16)) (tide bx m dirty) 0)

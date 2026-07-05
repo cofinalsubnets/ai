@@ -141,7 +141,7 @@ The gaps, ranked; the first group is one sitting, all gate-able in boot/cb.l:
   and blank-flashes.
 - **the anti-flood write dance** — `ttywriteraw` (st.c:871) writes ≤256 bytes
   per iteration and *services reads while writing* so the pty can't deadlock
-  both directions; `gush` is one blocking full write today.
+  both directions; `say`'s writen stroke is one blocking full write today.
 - **real alternate screen** — st pointer-swaps two line arrays
   (`tswapscreen`, st.c:1047) with per-screen saved cursors; cb's `?47/1047/1049`
   all alias one save-clear grid and `?1049` skips the cursor save.

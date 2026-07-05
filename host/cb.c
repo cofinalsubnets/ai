@@ -20,7 +20,7 @@
 //   (reply scr)          -> (b ..) drain the reply queue (DSR/DA answers ride
 //                                home to the pty master) as byte charms; () quiet
 #include "ai.h"
-#include <unistd.h>   // write (gush), read (swig)
+#include <unistd.h>   // read (swig)
 #include <fcntl.h>    // O_NONBLOCK (swig)
 #include <errno.h>
 #include <string.h>   // memcpy (swig's rbuf drain)
@@ -265,31 +265,11 @@ static lvm(lvm_damage) {
   Sp[1] = out;
   Sp += 1; Ip += 1; return Continue(); }
 
-// (gush port bytes): the bulk lane `say` never had -- write(2) a whole
-// string/cask straight at an fd port. say's zputc loop costs a SECOND per
-// megabyte; a frame must not. the CALLER flushes the port first (gush goes
-// past the buffer). () ok | errno charm | -1 for a portless port (a jug) --
-// the caller falls back to say, so memory ports keep working.
-static lvm(lvm_gush) {
-  ai_word p = Sp[0], x = Sp[1], out = putcharm(-1);
-  if (!(p & 1) && ((union u*) p)->ap == lvm_port_io
-      && (ai_strp(x) || (!(x & 1) && ((union u*) x)->ap == lvm_buf))) {
-    intptr_t fd = getcharm(((struct ai_io*) p)->fd);
-    struct ai_str *s = ai_strp(x) ? (struct ai_str*) x : ((struct ai_buf*) x)->str;
-    if (fd >= 0) {
-      uintptr_t i = 0;
-      out = ZeroPoint;
-      while (i < s->len) {
-        ssize_t k = write((int) fd, s->bytes + i, s->len - i);
-        if (k < 0) {
-          if (errno == EINTR) continue;
-          out = putcharm(errno);
-          break; }
-        i += (uintptr_t) k; } } }
-  Sp[1] = out;
-  Sp += 1; Ip += 1; return Continue(); }
+// gush is GONE: say rides the port vt's writen lane now (ai.c lvm_fputs), one
+// write(2) stroke for any string/cask at any port -- the fallback dance died
+// with it. swig stays: the CHUNK lane a per-byte see can't be.
 
-// (swig port b): gush's read twin -- drink whatever the fd has waiting into
+// (swig port b): drink whatever the fd has waiting into
 // cask b, WITHOUT blocking (the caller parks on `see` for the first byte;
 // swig drains the rest of the gulp). n bytes read; 0 = nothing waiting or
 // eof (the next see tells those apart); a negative charm = -errno / misuse.
@@ -364,7 +344,6 @@ static union u const
   nif_blitrow[] = {{lvm_cur}, {.x = putcharm(6)}, {lvm_blitrow}, {lvm_ret0}},
   nif_font[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_font}, {lvm_ret0}},
   nif_damage[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_damage}, {lvm_ret0}},
-  nif_gush[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_gush}, {lvm_ret0}},
   nif_swig[]   = {{lvm_cur}, {.x = putcharm(2)}, {lvm_swig}, {lvm_ret0}};
 AI_NIF("screen", nif_screen);
 AI_NIF("scribe", nif_scribe);
@@ -376,5 +355,4 @@ AI_NIF("blit", nif_blit);
 AI_NIF("blitrow", nif_blitrow);
 AI_NIF("font", nif_font);
 AI_NIF("damage", nif_damage);
-AI_NIF("gush", nif_gush);
 AI_NIF("swig", nif_swig);
