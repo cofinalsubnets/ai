@@ -1,6 +1,6 @@
-; test/uuwm.l -- GENERATED from apps/wm/core.l by tools/uuwmgen.l. Do not
+; test/uuwm.l -- GENERATED from crew/phos/core.l by tools/uuwmgen.l. Do not
 ; edit; refresh with `make uuwm`. The window-manager moves, compiled from
-; the SOURCE the wm runs (kind-directed by apps/wm/sigs.l) -- so the laws
+; the SOURCE the phos runs (kind-directed by crew/phos/sigs.l) -- so the laws
 ; in test/uuwmlaw.l are proved of the implementation itself; an invariant-
 ; breaking core.l edit fails a PROOF at `make test`. Substrate: test/uu.l.
 (assert

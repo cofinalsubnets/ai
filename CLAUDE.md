@@ -16,7 +16,7 @@
 ; * `make test` is the gate: host + self-hosted bootstrap ai0, BOTH required to print the zz-fin
 ;   "tests pass" summary (ai0 EXACTLY twice -- a silent reader stop exits 0 without reaching zz-fin,
 ;   so the exit code alone proves nothing). `make test_all` is the full gate -- the rocq/lean proofs,
-;   gc/glaze/sat/asm/wm, tool diffs, arm64 + the qemu kernel + wasm; `make valg` for memory. one file: `out/host/ai test/x.l` -- but the corpus runs CONCATENATED in one
+;   gc/glaze/sat/holo/phos, tool diffs, arm64 + the qemu kernel + wasm; `make valg` for memory. one file: `out/host/ai test/x.l` -- but the corpus runs CONCATENATED in one
 ;   global scope, so keep helpers local (give `:` a body), and a single-file run lacks the asserts.
 ; * SPEED IS A SIGNAL: every test runs in a second or two, the glaze self-tests included (the whole
 ;   test/glaze-x86.l is ~1.5s). a test that HANGS or crawls is a bug announcing itself, never "slow
@@ -52,22 +52,22 @@
 ;   point, so the session survives every raise and a missing nom or apcap is VISIBLE; the more bits
 ;   keep the read protocol (port back when incomplete, sentinel at eof). file mode stays helpless.
 ; * python \b-sweeps treat - as a boundary: kebab names with capital segments mangle.
-; * the APPS ride over the core, each owning NON-OVERLAPPING files so a session can take one in
+; * the CREW (crew/, the apps) rides over the core, each owning NON-OVERLAPPING files so a session can take one in
 ;   parallel: ain (netcat, tools/ain.l + host/net.c), bao (shell/rlwrap/debugger, ai/bao.l +
-;   host/pty.c), cook (make-in-ai, apps/cook/cook.l), wm (the X11 window manager, apps/wm/), sat (the CDCL
-;   solver, apps/sat/), inle (freestanding agent-kernel, port/inle/), quay (the terminal
-;   driver, port/quay/ + apps/quay/ink.l the screensaver -- host-only, probe under a pty). apps
+;   host/pty.c), cook (make-in-ai, crew/cook/cook.l), phos (the X11 window manager, crew/phos/), sat (the CDCL
+;   solver, crew/sat/), inle (freestanding agent-kernel, port/inle/), quay (the terminal
+;   driver, port/quay/ + crew/quay/ink.l the screensaver -- host-only, probe under a pty). apps
 ;   add nifs through the host/*.c glob + AI_NIF (no core edit); ai.c/ai.h/host/main.c are CORE -- an
 ;   app session needing a core change stops and asks the core thread, never reaches in. the runnable
 ;   ones install on PATH via `make install`.
-; * MODULE BOOKS: a baked service sweeps its leaked names into ONE public book -- apps/asm/export.l and
+; * MODULE BOOKS: a baked service sweeps its leaked names into ONE public book -- crew/holo/export.l and
 ;   ai/glaze/export.l diff (names ()) across the load span (<name>-mark opens, <name>-load closes:
 ;   MEASURED, never a keep-up-to-date list) and pull the span off the global book. a book is a
-;   lookup function, so the surface is (asm 'assemble) and every internal stays a probe away
+;   lookup function, so the surface is (holo 'assemble) and every internal stays a probe away
 ;   ((glaze 'loopinfo)); baked consumers FOLDED their direct refs before the sweep (the capture
 ;   law links them), while post-boot STREAMS (a cat'd test/app file) fold nothing -- they bind
 ;   what they call through the books at their head, bare-global reads ((names ()) fell 820 -> 322
-;   when asm + glaze swept; an app never leans on another module's leaks -- wm learned this).
+;   when holo (then `asm`) + glaze swept; an app never leans on another module's leaks -- phos learned this).
 
 ; --- vocabulary & house style --- the words here are a VOCABULARY -- never "terminology" or
 ; "nomenclature"; a vocabulary is living and chosen, warm not clinical. the style is COZY:

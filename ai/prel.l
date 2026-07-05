@@ -731,7 +731,7 @@
 (:: '\\ (\ a (link (link '\ a) (map (\ a `(var `('\ a))) (init a)))))                             ; lambda w/ fresh logic vars
 (: === (\ u v (rel (est u v))))                       ; the relation's infix unify
 (pin operators '=== 2)
-; the kanren MODULE BOUNDARY (the asm/glaze pattern, in-prel so it holds on every
+; the kanren MODULE BOUNDARY (the holo/glaze pattern, in-prel so it holds on every
 ; target): the span since kanren-mark sweeps into the `kanren` book -- (kanren 'query),
 ; (kanren 'walk) .. -- except the PUBLIC keepers: `unify` (the compiler-grade core)
 ; with its ufail/ufail? contract, and the names the goal macros + the === operator

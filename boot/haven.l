@@ -11,8 +11,8 @@
 ;
 ; no Xvfb on the box -> a polite skip (the sentinel still prints).
 
-(reads (open "apps/wm/core.l" "r"))
-(reads (open "apps/wm/wire.l" "r"))
+(reads (open "crew/phos/core.l" "r"))
+(reads (open "crew/phos/wire.l" "r"))
 
 (: dpy "/tmp/.X11-unix/X78"
    sock "/tmp/haven-boot.sock"
@@ -43,9 +43,9 @@
                       (go px 0))
 
  ; haven on its own X window + shore
- hv (mind `("out/host/ai" "-l" "apps/wm/core.l" "-l" "apps/wm/wire.l"
-            "-l" "apps/wm/layout.l" "-l" "apps/quay/pier.l"
-            "-l" "apps/haven/wire.l" "-l" "apps/haven/haven.l"
+ hv (mind `("out/host/ai" "-l" "crew/phos/core.l" "-l" "crew/phos/wire.l"
+            "-l" "crew/phos/layout.l" "-l" "crew/quay/pier.l"
+            "-l" "crew/haven/wire.l" "-l" "crew/haven/haven.l"
             "-e" "(haven \"/tmp/haven-boot.sock\" \"/tmp/.X11-unix/X78\" () 320 240)"))
  _ (assert (two? hv))
  _ (assert (waitsock sock 100))
@@ -70,14 +70,14 @@
                              (? (< 30 n) n (: _ (rest 100) (waithue x y b g r (- t 1))))))
 
  ; the red skiff, alone: one toplevel takes the whole 320x240 glass
- skr (mind `("out/host/ai" "-l" "apps/haven/wire.l" "-l" "apps/haven/skiff.l"
+ skr (mind `("out/host/ai" "-l" "crew/haven/wire.l" "-l" "crew/haven/skiff.l"
              "-e" "(skiff \"/tmp/haven-boot.sock\" 320 240 12582912)"))
  _ (assert (two? skr))
  _ (assert (waithue 240 120 0 0 192 100))    ; red deep in the right half
 
  ; the blue skiff arrives: the layout retiles -- blue masters the left
  ; column, red hears its new size and re-dresses into the right
- skb (mind `("out/host/ai" "-l" "apps/haven/wire.l" "-l" "apps/haven/skiff.l"
+ skb (mind `("out/host/ai" "-l" "crew/haven/wire.l" "-l" "crew/haven/skiff.l"
              "-e" "(skiff \"/tmp/haven-boot.sock\" 320 240 192)"))
  _ (assert (two? skb))
  _ (assert (waithue 76 120 192 0 0 100))     ; blue in the master column

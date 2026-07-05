@@ -7,7 +7,7 @@
 ;
 ;   cat test/00-init.l boot/manifest.l | out/host/ai
 
-(reads (open "apps/manifest/manifest.l" "r"))
+(reads (open "crew/manifest/manifest.l" "r"))
 
 ; --- formulas, the unit, labels, functions as cargo ---
 (: sh (sheet 0)
@@ -87,7 +87,7 @@
    (rowtx s r) (: c (gaze s 2)
                 (foldl (\ a i (+ a (: ch (& 255 (glass s (+ (* r c) i))) (? (= 0 ch) 32 ch))))
                        "" (jot c)))
- md (mind `("out/host/ai" "-l" "apps/manifest/manifest.l" "-e" "(manifest ())"))
+ md (mind `("out/host/ai" "-l" "crew/manifest/manifest.l" "-e" "(manifest ())"))
  m (cup md)
  ; a reader task gathers every painted byte into a box, so the test can
  ; HANDSHAKE: keys sent before the child's raw-mode first frame would land

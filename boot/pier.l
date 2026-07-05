@@ -8,10 +8,10 @@
 ;
 ; no Xvfb on the box -> a polite skip (the sentinel still prints).
 
-(reads (open "apps/wm/core.l" "r"))
-(reads (open "apps/wm/wire.l" "r"))
-(reads (open "apps/quay/berth.l" "r"))
-(reads (open "apps/quay/pier.l" "r"))
+(reads (open "crew/phos/core.l" "r"))
+(reads (open "crew/phos/wire.l" "r"))
+(reads (open "crew/quay/berth.l" "r"))
+(reads (open "crew/quay/pier.l" "r"))
 
 (: dpy "/tmp/.X11-unix/X77"
    xv (mind `("Xvfb" ":77" "-screen" "0" "2560x1200x24" "-nolisten" "tcp"))
@@ -36,8 +36,8 @@
 
  ; the pier under test, on its own pty with a real child
  ; the child prints steadily, so a resize's FRESH grid refills on its own
- md (mind `("out/host/ai" "-l" "apps/wm/core.l" "-l" "apps/wm/wire.l" "-l" "apps/quay/berth.l"
-            "-l" "apps/quay/pier.l"
+ md (mind `("out/host/ai" "-l" "crew/phos/core.l" "-l" "crew/phos/wire.l" "-l" "crew/quay/berth.l"
+            "-l" "crew/quay/pier.l"
             "-e" "(pier (L \"sh\" \"-c\" \"while true; do printf H; sleep 0.3; done\") \"/tmp/.X11-unix/X77\" () ())"))
  _ (assert (two? md))
 

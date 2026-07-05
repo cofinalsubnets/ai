@@ -5,7 +5,7 @@
 //
 // TWO builds, one file:
 //  * DEFAULT (no -DAI_CUDA): the probe reports 0 and the kernels are inert stubs.
-//    apps/tele/cuda.l reads the probe and makes `cuda-dev` fall back to the NATIVE
+//    crew/tele/cuda.l reads the probe and makes `cuda-dev` fall back to the NATIVE
 //    backend, so (tl-use cuda-dev) is end-to-end runnable TODAY (it just runs on
 //    the CPU, exactly like tl-cpu). Nothing here needs a GPU to compile or link.
 //  * -DAI_CUDA against a real device: the kernels dispatch to cuBLAS / hand
@@ -31,7 +31,7 @@ static lvm(lvm_cuda_avail) { Sp[0] = putcharm(cuda_present()); return Ip++, Cont
 
 #ifndef AI_CUDA
 // Inert stubs. Never reached in the default build -- cuda-dev routes to native when
-// the probe is 0 -- but present so apps/tele/cuda.l's references resolve with no warning.
+// the probe is 0 -- but present so crew/tele/cuda.l's references resolve with no warning.
 // Stack effect mirrors the real ops: gemm/ew fold their operands to one result slot.
 static lvm(lvm_cuda_gemm)   { *(Sp += 1) = ai_nil; return Ip++, Continue(); }   // (a b)    -> 1
 static lvm(lvm_cuda_ew)     { *(Sp += 2) = ai_nil; return Ip++, Continue(); }   // (op a b) -> 1

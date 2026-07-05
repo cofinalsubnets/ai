@@ -15,11 +15,11 @@
 ; run STANDALONE, base-ev/jitgroupir/.. are unbound -> ()=zero point -> (base-ev '(..))=const-1=1 SILENTLY
 ; skips every block, yet the final top-level "ok" still prints (a false pass -- the const-1 trap). assert
 ; the harness names are bound so a wrong invocation SCARES `;; assert (lit? base-ev)` instead.
-; the assembler and the glaze live in MODULE books now (apps/asm/export.l, ai/glaze/export.l):
+; the assembler and the glaze live in MODULE books now (crew/holo/export.l, ai/glaze/export.l):
 ; this stream cat-loads post-boot, so nothing folded for it -- bind every internal it
 ; drives through the books, bare-global reads both (bcat stands in for the glaze's
-; byte-concat helper, whose leaked name the asm module pin shadowed).
-(: assemble (asm 'assemble)
+; byte-concat helper, whose leaked name the holo module pin shadowed).
+(: assemble (holo 'assemble)
    bcat (\ ps (foldl (\ a b (+ a b)) () ps))
    G glaze
    anat-defs (G 'anat-defs)  autogroup (G 'autogroup)  autonat (G 'autonat)  autospec (G 'autospec)

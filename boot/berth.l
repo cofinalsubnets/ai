@@ -8,7 +8,7 @@
 ; interactive berthing (raw tty, keys, repaint) stays a live probe -- this
 ; verifies the moor: pty -> parser -> grid, replies riding home, exit status.
 
-(reads (open "apps/quay/berth.l" "r"))
+(reads (open "crew/quay/berth.l" "r"))
 
 (: (mkscr r c) (screen (cask (screen () r c)) r c)
    (chat s i) (& 255 (glass s i))
@@ -73,7 +73,7 @@
                   (? (= n (snip h i (+ i (tally n)))) 1 (find h n (+ i 1)))
                   0)
  ; (the octal escapes ride through TWO ai readers before sh: hence \\\\)
- md (mind `("out/host/ai" "-l" "apps/quay/berth.l"
+ md (mind `("out/host/ai" "-l" "crew/quay/berth.l"
             "-e" "(berth (L \"sh\" \"-c\" \"printf 'x\\\\342\\\\224\\\\200y\\\\303\\\\251z'; sleep 1\"))"))
  outb (slurp (cup md))
  st (: (wf p) (: g2 (gather p) (? (two? g2) g2 (: _ (rest 2) (wf p)))) (wf (cap md)))

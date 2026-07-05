@@ -27,7 +27,7 @@
 (: (le8 n) (: u (? (< n 0) (+ n 18446744073709551616) n)                            ; two's-complement; & is broken on
               ((: (go i) (? (< i 8) (link (% (// u (i 256)) 256) (go (+ i 1))) ())) 0))   ; a bignum >= 2^63, so use //% (n -> 8 LE bytes)
    (le4 n) ((: (go i) (? (< i 4) (link (& (>> n (* 8 i)) 255) (go (+ i 1))) ())) 0)  ; n -> 4 LE bytes (offsets < 2^31, & ok)
-   ; the raw-byte x86 lane is fully RETIRED: every codegen helper now emits neutral apps/asm/ IR (cgir/cgvir for
+   ; the raw-byte x86 lane is fully RETIRED: every codegen helper now emits neutral crew/holo/ IR (cgir/cgvir for
    ; arith, the float lanes cgf/jitfr, the grid kernels gridn/grid2), assembled per target. The old byte
    ; blobs (deopt/guard/guardz/fetch/untag/fxv/epilogue) are gone -- their IR twins are deoptbody/ldeopt/
    ; zdeopt/fxvir/loopepi, which serve BOTH x86 and arm64.
@@ -45,11 +45,11 @@
    chainkind (apof (link 0 0))                                                      ; lvm_chain's ap sentinel, for the inline two?/cap/cup kind test (cf. (apof "") for the string lane)
    mapkind (apof (tablet 0))                                                        ; lvm_map_lookup's sentinel, for the map-param entry guard + the (mpeep ..) probe
    mapmix 11400714819323198485                                                      ; the hash multiplier 0x9e3779b97f4a7c15 (= ai.c's map hash mult), for the inline probe
-   ; -- the map probe, via the apps/asm/ assembler SERVICE (baked into the post-egg layer; the glaze is its
-   ;    client). apps/asm/ resolves the hit/miss/loop labels to rel32 -- no hand-counted je/jmp offsets, the
-   ;    fragile bit. reg map: asm r0=rax, r7=x86-r8, r8=x86-r9, r9=x86-r10, r10=x86-r11. The probe wants
-   ;    the MAP in rax and the TAGGED key in r11 (asm r10); it ends branched to `hit` (match) / `miss` (gap).
-   (asmx ir) (peep (assemble 'x64 ir) 'bytes 0)                                     ; assemble neutral IR -> flat bytes, X86 (the post-egg `assemble` service; emit.l's own `asm` is byte-concat, untouched)
+   ; -- the map probe, via the crew/holo/ assembler SERVICE (baked into the post-egg layer; the glaze is its
+   ;    client). crew/holo/ resolves the hit/miss/loop labels to rel32 -- no hand-counted je/jmp offsets, the
+   ;    fragile bit. reg map: holo r0=rax, r7=x86-r8, r8=x86-r9, r9=x86-r10, r10=x86-r11. The probe wants
+   ;    the MAP in rax and the TAGGED key in r11 (holo r10); it ends branched to `hit` (match) / `miss` (gap).
+   (asmx ir) (peep (assemble 'x64 ir) 'bytes 0)                                     ; assemble neutral IR -> flat bytes, X86 (the post-egg `assemble` service; emit.l's own `holo` is byte-concat, untouched)
    (asmt tgt ir) (peep (assemble tgt ir) 'bytes 0)                                  ; ... target-aware (the loop/float lanes that run on both arches)
    mprobe-ir (L '(ld r7 r0 8) '(ld r8 r7 16) '(shr r8 1) '(dec r8) '(add r7 r7 24)    ; r8=backing; r9=cap; >>1; --(=mask); r8=&slots
       (L 'li 'r0 mapmix) '(imul r0 r0 r10) '(rol r0 32) '(and r0 r0 r8) '(mov r9 r0)    ; rax=rot(mix*tagkey)&mask=I -> r10
@@ -177,7 +177,7 @@
                   (= op '/) '((divsd f1 f0) (movsd f0 f1))           ; f1 = f1 / f0 ; f0 = f1
                   ())                                                ; reg-reg double IR (two-address: x86 SSE / arm64 scalar-double), both targets
    ; cgf: a FLOAT subexpr over {x (the fixnum param -> cvtsi2sd) ; numeric consts} -> xmm0/d0, as neutral
-   ; apps/asm/ IR (both targets). the param load is fxvir (fixnum-guarded, inline deopt) then int->double.
+   ; crew/holo/ IR (both targets). the param load is fxvir (fixnum-guarded, inline deopt) then int->double.
    (cgf tgt v e d) (? (= e v)   ((fxvir tgt 0 d) + `(`('cvtsi2sd 'f0 (greg tgt 'acc))))   ; param: fixnum-guarded untag in acc, cvtsi2sd
                   (gem? e)  (fconst tgt e)                           ; a float constant
                   (whole? e)(fconst tgt (+ e 0.0))                   ; an int constant -> promote to double
@@ -209,7 +209,7 @@
    (jitfr lam tgt)
     (: v (caup lam)  kind (apof 1.5)                                 ; lvm_flo's address, captured now (code never moves)
        A (greg tgt 'acc) S (greg tgt 'sp) HP (greg tgt 'hp) IP (greg tgt 'ip) T (greg tgt 'tmp) ok (mint 0)
-       ; neutral apps/asm/ IR (both targets): the room-guard skips the deopt by LABEL; the box store is `stsd`;
+       ; neutral crew/holo/ IR (both targets): the room-guard skips the deopt by LABEL; the box store is `stsd`;
        ; the deopt is deoptbody (no pending spills here -- cgf balances its own); nanc is arch-aware.
        (nif (emit (asmt tgt ((cgf tgt v (caup (cup lam)) 0)
           + `(`('lea A HP 80) `('cmp S A) `('br 'ae ok))                  ; cmp Sp,Hp+10w ; room? skip deopt
@@ -253,7 +253,7 @@
        (go (+ i 1) (cup ds) (? (&& (binop? dag i) (|| (= v (caup (cap ds))) (= v (caup (cup (cap ds)))))) i best)))) 0 dag -1)
    (dies? v i dag rv n) (&& (binop? dag v) (&& (= (luse v dag rv n) i) (! (member? v rv))))
    (rgof leaf env) (: e (clook leaf env) (? (two? e) (caup e) (scare 'glaze-leaf leaf)))   ; leaf -> its fixed reg
-   (asm ps) (foldl (\ a b (+ a b)) () ps)                                                  ; concat a LIST of byte pieces (+ is associative)
+   (holo ps) (foldl (\ a b (+ a b)) () ps)                                                  ; concat a LIST of byte pieces (+ is associative)
    (efold names i) (? (two? names) (link (L (cap names) i) (efold (cup names) (+ i 1))) ())   ; names -> (name reg) from reg i
    ; --- NESTED GRID OWNER (general, D-dimensional): own a WHOLE counted-loop NEST as ONE native
    ;     kernel -- D nested integer loops over fixnum coords -> M derived-float invariants -> a float
@@ -276,7 +276,7 @@
                                    (? (member? op '(+ - * /)) ((cgFd tgt ht ce a) + (xpushir tgt) + (cgFd tgt ht ce b) + (xpop1ir tgt) + (fbinop op)) ()))
                      ())
    (loopcode-gridn dims cnames invs invd fvars updates testexpr cmpop bound lim tgt)
-    ; the scalar D-dim grid kernel as a neutral apps/asm/ IR PROGRAM, BOTH targets: control flow is LABELS (no
+    ; the scalar D-dim grid kernel as a neutral crew/holo/ IR PROGRAM, BOTH targets: control flow is LABELS (no
     ; hand offsets), the recurrence is allocp's CSE'd named-SSE forms, the cold derives (cgFd) are IR too.
     ; k=r7(iter), acc=r8, counters=r9..(gr); SCR=scratch (greg acc), the deopt tail uses greg ip. xmm: consts
     ; f2.., invariants f8.., fvars next, the rest the DAG pool. On x86 D>=3 spills the callee-saved counters
@@ -311,7 +311,7 @@
        (pushsv + preload + '((li r8 0)) + (loop-nest 0 cell) + popsv2 + `(`('mov SCR 'r8))))   ; IR program: push saved; consts; acc=0; NEST; pop; result -> SCR(=acc)
    ; --- 2-WIDE PACKED-SSE2 grid kernel (loopcode-grid2): the SAME D-dim float-recurrence grid, but the
    ;     INNERMOST dim is processed TWO cells at a time -- lanes [c, c+1] packed [low,high] in each xmm.
-   ;     The recurrence runs PACKED (addpd/mulpd/subpd via the apps/asm/ SSE2 lane) so both pixels advance per op; the
+   ;     The recurrence runs PACKED (addpd/mulpd/subpd via the crew/holo/ SSE2 lane) so both pixels advance per op; the
    ;     two independent chains hide the mul latency the SCALAR kernel (one z, serial dependency) is bound
    ;     by -- ~2.4x on mandelbrot. The escape test -> a per-lane mask (cmplepd) ANDed into a sticky `alive`;
    ;     the per-lane iteration count is a packed-int vector bumped by `psubq count,alive` (alive lane =
@@ -320,12 +320,12 @@
    ;     Gated (grid2-ok?) to the mandelbrot/float shape: D<=2, M+N<=4 (invs/fvars at xmm8..11), <=2 inner
    ;     consts (xmm2,3 -> xmm4,5,6 free for count/alive/scratch), cmpop in {< <=}, even innermost dim. The
    ;     acc adds keep the lane-law overflow guard (deopt to the faithful interp nest). ⚠ x86-64 (SSE2).
-   (fr n)   (intern ("f" + (show n)))                                                    ; an xmm NUMBER -> its apps/asm/ IR symbol f0..f15
+   (fr n)   (intern ("f" + (show n)))                                                    ; an xmm NUMBER -> its crew/holo/ IR symbol f0..f15
    (gr p)   (intern ("r" + (show (- p 1))))                                              ; a physical GPR encoding (>=8) -> its abstract-file IR name (r10->r9 ..)
    (sseop op) (? (= op '+) 'addpd (= op '*) 'mulpd (= op '-) 'subpd (= op '/) 'divpd 'movupd)   ; DAG op -> PACKED-double mnemonic (grid2)
    (sseops op) (? (= op '+) 'addsd (= op '*) 'mulsd (= op '-) 'subsd (= op '/) 'divsd 'movsd)   ; DAG op -> SCALAR-double mnemonic (gridn)
    (ucmpx op) (? (= op '<=) 'above (= op '<) 'ae (= op '>=) 'be (= op '>) 'below ())     ; EXIT cc after ucomisd = inverse of the continue cmp
-   (allocp dag rv env n pool mv opmap)                                                   ; the float-body allocator (CSE + linear-scan); emits apps/asm/ IR FORMS via mv (move) + opmap (op->mnemonic): scalar OR packed
+   (allocp dag rv env n pool mv opmap)                                                   ; the float-body allocator (CSE + linear-scan); emits crew/holo/ IR FORMS via mv (move) + opmap (op->mnemonic): scalar OR packed
     (: rg (tablet 0) pl (tablet 0) _ (pin pl 'p pool)
        (pop u) (: p (peep pl 'p ()) _ (pin pl 'p (cup p)) (cap p))
        (push r) (pin pl 'p (link r (peep pl 'p ())))
@@ -344,7 +344,7 @@
     (&& (member? cmpop '(< <=)) (< (tally dims) 3) (< 1 (last dims)) (= 0 (% (last dims) 2))
         (< (+ (tally invs) (tally fvars)) 5)
         (< (tally (htbl (fcc bound (fccl updates (fcc testexpr ()))) 2)) 3))
-   ; the kernel as a neutral apps/asm/ IR PROGRAM (asmx): control flow is LABELS (no hand-counted offsets),
+   ; the kernel as a neutral crew/holo/ IR PROGRAM (asmx): control flow is LABELS (no hand-counted offsets),
    ; the SSE ops are NAMED (no raw opcode bytes). GP IR regs: r0=rax(scratch), r5=rsi(Ip, the deopt
    ; tail), r7=k(iter), r8=acc, r9../r10..=the grid counters. XMM: f2,f3=consts, f4=count, f5=alive,
    ; f6=scratch, f8,f9=invariants, f10,f11=fvars, f0,f1,f12..15=the DAG pool. The cold per-cell DERIVES
@@ -419,10 +419,10 @@
        (? (&& (= 2 (tally invs)) (= 2 (tally fvars)))
           (jitfgrid glam pxn pyn cxd cyd fvars updates testexpr cmpop bound lim tgt) ()))
    ; --- the NEUTRAL-IR retarget (leaf + n-ary lanes) ---------------------------------------------
-   ; the byte-emitting lanes above are x86-64-only (raw byte lists). this lane emits the apps/asm/ neutral
-   ; IR instead and assembles for a TARGET ('x64 or 'arm64), so aarch64 falls out of apps/asm/arm64.l. it is
+   ; the byte-emitting lanes above are x86-64-only (raw byte lists). this lane emits the crew/holo/ neutral
+   ; IR instead and assembles for a TARGET ('x64 or 'arm64), so aarch64 falls out of crew/holo/arm64.l. it is
    ; ADDITIVE -- the live byte path is untouched; auto.l still drives `jit`/`njit`. spec in doc/glaze-arm64.md.
-   ; greg: a logical role -> the abstract asm register, PER TARGET. x86 lands g/Ip/Hp/Sp in rdi/rsi/rdx/rcx
+   ; greg: a logical role -> the abstract holo register, PER TARGET. x86 lands g/Ip/Hp/Sp in rdi/rsi/rdx/rcx
    ; (= abstract r6/r5/r2/r1, SysV's first 4 args -- the convention IS the calling convention); aarch64's
    ; AAPCS lands them in x0/x1/x2/x3 (= r0/r1/r2/r3), so the accumulator moves off r0. (anchor = the machine
    ; stack pointer snapshot for the deopt unwind; scratch = mulo/rem's extra reg, unused on x86.)
@@ -433,7 +433,7 @@
           (id? role 'acc)     (? x 'r0 'r4)   (id? role 'tmp)     (? x 'r7 'r5)
           (id? role 'anchor)  (? x 'r8 'r9)   (id? role 'scratch) (? x 'r4 'r10) ()))
    (ccof op) (? (id? op '<) 'lt (id? op '<=) 'le (id? op '>) 'gt (id? op '>=) 'ge (id? op '=) 'eq ())
-   (bitop op) (? (id? op '&) 'and (id? op '|) 'or (id? op '^) 'xor ())   ; source bitwise symbol -> the apps/asm/ IR ALU op
+   (bitop op) (? (id? op '&) 'and (id? op '|) 'or (id? op '^) 'xor ())   ; source bitwise symbol -> the crew/holo/ IR ALU op
 
    ; fxir: fetch param i from Sp[i], fixnum-guard (low bit), untag -> acc. a non-fixnum jumps to deopt.
    (fxir tgt i) (: A (greg tgt 'acc) S (greg tgt 'sp) (L (L 'ld A S (* 8 i)) (L 'test A 1) '(br eq deopt) (L 'sar A 1)))
@@ -529,8 +529,8 @@
                 ()))
           ())))
    ; --- the NEUTRAL-IR group lane (jitgroupir) -- a GROUP of mutually-recursive first-order integer fns
-   ;     to native, both targets. `call H_g` is `(call <name>)`, each H opens `(label <name>)`, and apps/asm/
-   ;     resolves the rel offsets. IR chunks concatenate FLAT via `asm` (foldl-(+); on lists of IR forms,
+   ;     to native, both targets. `call H_g` is `(call <name>)`, each H opens `(label <name>)`, and crew/holo/
+   ;     resolves the rel offsets. IR chunks concatenate FLAT via `holo` (foldl-(+); on lists of IR forms,
    ;     + appends). Covers the full op grammar: int arith, TCO, value-mode cons, string/map/cask lanes.
    ; arg-register ABI: args in the CALLEE-SAVED bank (x86 rbx/r13/r14/r15 = r3/r12/r13/r14; arm64 x19..x22),
    ; the OVF anchor in another callee-saved reg (govf). a call passes args on the MACHINE STACK; each H
@@ -542,9 +542,9 @@
    (argregir tgt i) (nthl (? (id? tgt 'x64) '(r3 r12 r13 r14) '(r19 r20 r21 r22)) i)
    (hsave tgt)  (? (id? tgt 'x64) () (L '(push lr)))                            ; arm64 H spills lr; x86 uses CALL/RET's stack
    (hrest tgt)  (? (id? tgt 'x64) () (L '(pop lr)))
-   (saveargsir tgt k) (foldl (\ a i (asm (L a (L (L 'push (argregir tgt i)))))) () (rangeL 0 k))
-   (restargsir tgt k) (foldl (\ a i (asm (L a (L (L 'pop (argregir tgt (- (- k 1) i))))))) () (rangeL 0 k))
-   (loadargsir tgt k) (foldl (\ a i (asm (L a (L (L 'ld (argregir tgt i) 'sp (* (slotsz tgt) (- (* 2 k) i))))))) () (rangeL 0 k))   ; argreg_i <- the passed arg at [sp + slotsz*(2k-i)]
+   (saveargsir tgt k) (foldl (\ a i (holo (L a (L (L 'push (argregir tgt i)))))) () (rangeL 0 k))
+   (restargsir tgt k) (foldl (\ a i (holo (L a (L (L 'pop (argregir tgt (- (- k 1) i))))))) () (rangeL 0 k))
+   (loadargsir tgt k) (foldl (\ a i (holo (L a (L (L 'ld (argregir tgt i) 'sp (* (slotsz tgt) (- (* 2 k) i))))))) () (rangeL 0 k))   ; argreg_i <- the passed arg at [sp + slotsz*(2k-i)]
    (garith tgt op) (: A (greg tgt 'acc) T (greg tgt 'tmp) SC (greg tgt 'scratch)   ; acc = (popped a) OP acc, overflow -> OVF
       (? (id? op '+) (L (L 'adds A A T) '(br vs OVF))
          (id? op '-) (L (L 'subs T T A) '(br vs OVF) (L 'mov A T))
@@ -552,7 +552,7 @@
    ; --- register/immediate-operand peephole (the cgg lane's, ported into the neutral IR) ---
    ; the generic binary lane is push-acc..pop-tmp per op -- the gap vs a register machine. when one operand
    ; is already a PARAM (in an arg reg) or a small immediate, combine it DIRECTLY: acc OP= reg|imm, no stack
-   ; traffic. e.g. primes' (* d d), (< n (* d d)), (+ d 1), (= 0 ..) all run flat. both targets: the apps/asm/ ALU
+   ; traffic. e.g. primes' (* d d), (< n (* d d)), (+ d 1), (= 0 ..) all run flat. both targets: the crew/holo/ ALU
    ; takes a reg or an imm for adds/subs/cmp (arm64 imm is 12-bit -> pimm?); mulo is register-only on arm64,
    ; so the imm lane skips `*` (the param-`*` case -- d*d -- is the one that matters and IS a register).
    (pimm? x) (&& (whole? x) (<= (? (< x 0) (- 0 x) x) 4095))                     ; a small immediate both arches add/sub/cmp directly
@@ -575,47 +575,47 @@
          (whole? e) (L (L 'li A e))
          (two? e) (: op (cap e) a (caup e) b (caup (cup e))
             (? (member? op syms)
-                 (asm (L (gargsir tgt syms ps (cup e)) (L (L 'call op)) (L (L 'add 'sp 'sp (* (slotsz tgt) (tally (cup e)))))))
+                 (holo (L (gargsir tgt syms ps (cup e)) (L (L 'call op)) (L (L 'add 'sp 'sp (* (slotsz tgt) (tally (cup e)))))))
                (member? op '(+ - *))
                  (: pa (preg tgt ps a) pb (preg tgt ps b)
-                    (? pb                                (asm `((cggir tgt syms ps a) (garith-r tgt op pb)))   ; (E op p): E->acc; acc OP= p_reg
-                       (&& (pimm? b) !(id? op '*))       (asm `((cggir tgt syms ps a) (garith-i tgt op b)))    ; (E op C)
-                       (&& pa (member? op '(+ *)))       (asm `((cggir tgt syms ps b) (garith-r tgt op pa)))   ; (p op E): commute
-                       (&& (pimm? a) (id? op '+))         (asm `((cggir tgt syms ps b) (garith-i tgt op a)))    ; (C + E): commute (imm '*' has no arm64 form -> generic)
-                       (asm `((cggir tgt syms ps a) `(`('push A)) (cggir tgt syms ps b) `(`('pop T)) (garith tgt op)))))   ; generic
+                    (? pb                                (holo `((cggir tgt syms ps a) (garith-r tgt op pb)))   ; (E op p): E->acc; acc OP= p_reg
+                       (&& (pimm? b) !(id? op '*))       (holo `((cggir tgt syms ps a) (garith-i tgt op b)))    ; (E op C)
+                       (&& pa (member? op '(+ *)))       (holo `((cggir tgt syms ps b) (garith-r tgt op pa)))   ; (p op E): commute
+                       (&& (pimm? a) (id? op '+))         (holo `((cggir tgt syms ps b) (garith-i tgt op a)))    ; (C + E): commute (imm '*' has no arm64 form -> generic)
+                       (holo `((cggir tgt syms ps a) `(`('push A)) (cggir tgt syms ps b) `(`('pop T)) (garith tgt op)))))   ; generic
                (member? op '(// %))
-                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'test A A) '(br eq OVF) (L 'pop T)) (divir tgt op)))
+                 (holo (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'test A A) '(br eq OVF) (L 'pop T)) (divir tgt op)))
                (member? op '(& | ^))
-                 (asm (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T) (L (bitop op) A A T))))
+                 (holo (L (cggir tgt syms ps a) (L (L 'push A)) (cggir tgt syms ps b) (L (L 'pop T) (L (bitop op) A A T))))
                (member? op '(< <= > >= =))
                  (: pa (preg tgt ps a) pb (preg tgt ps b)
-                    (? pb         (asm `((cggir tgt syms ps a) `(`('cmp A pb) `('set (ccof op) A))))             ; (E op p): cmp acc,p_reg
-                       (pimm? b)  (asm `((cggir tgt syms ps a) `(`('cmp A b)  `('set (ccof op) A))))             ; (E op C)
-                       pa         (asm `((cggir tgt syms ps b) `(`('cmp pa A) `('set (ccof op) A))))             ; (p op E): flags p-acc = a-b, cc kept
-                       (pimm? a)  (asm `((cggir tgt syms ps b) `(`('cmp A a)  `('set (ccof (flipc op)) A))))     ; (C op E): cmp acc,C = b-a, flip cc
-                       (asm `((cggir tgt syms ps a) `(`('push A)) (cggir tgt syms ps b) `(`('pop T) `('cmp T A) `('set (ccof op) A))))))   ; generic
+                    (? pb         (holo `((cggir tgt syms ps a) `(`('cmp A pb) `('set (ccof op) A))))             ; (E op p): cmp acc,p_reg
+                       (pimm? b)  (holo `((cggir tgt syms ps a) `(`('cmp A b)  `('set (ccof op) A))))             ; (E op C)
+                       pa         (holo `((cggir tgt syms ps b) `(`('cmp pa A) `('set (ccof op) A))))             ; (p op E): flags p-acc = a-b, cc kept
+                       (pimm? a)  (holo `((cggir tgt syms ps b) `(`('cmp A a)  `('set (ccof (flipc op)) A))))     ; (C op E): cmp acc,C = b-a, flip cc
+                       (holo `((cggir tgt syms ps a) `(`('push A)) (cggir tgt syms ps b) `(`('pop T) `('cmp T A) `('set (ccof op) A))))))   ; generic
                (id? op '?)
                  (: el (mint 0) en (mint 0)
-                    (asm (L (cggir tgt syms ps a) (L (L 'cmp A 0) (L 'br 'le el)) (cggir tgt syms ps b)
+                    (holo (L (cggir tgt syms ps a) (L (L 'cmp A 0) (L 'br 'le el)) (cggir tgt syms ps b)
                             (L (L 'jmp en) (L 'label el)) (cggir tgt syms ps (caup (cup (cup e)))) (L (L 'label en)))))
                (id? op 'tally) (: R (argregir tgt (argix a ps 0)) `(`('ld A R 8)))                        ; (tally STR): acc = the len at [STR+8] (raw)
                (id? op 'peep) (: R (argregir tgt (argix a ps 0)) d (caup (cup (cup e))) inl (mint 0) endl (mint 0)   ; (peep STR i d): i unsigned-vs-len, OOB -> d, else byte [STR+i+16]
-                  (asm `((cggir tgt syms ps b)
+                  (holo `((cggir tgt syms ps b)
                          `(`('ld T R 8) `('cmp A T) `('br 'below inl) `('li A (? (whole? d) d 0)) `('jmp endl) `('label inl) `('ldxb A R A 1 16) `('label endl)))))
                (id? op 'pin) (: R (argregir tgt (argix a ps 0)) val (caup (cup (cup e)))     ; (pin C i V): store V's low byte at C's backing[i] (r8=[C+8]=backing str), return C
-                  (asm `((cggir tgt syms ps b) `(`('push A)) (cggir tgt syms ps val)         ; i -> acc, push; V -> acc
+                  (holo `((cggir tgt syms ps b) `(`('push A)) (cggir tgt syms ps val)         ; i -> acc, push; V -> acc
                          `(`('pop T) `('ld 'r8 R 8) `('stxb 'r8 T 1 16 A) `('mov A R)))))      ; pop T(=i); r8=backing; [backing+i+16]=V.lo; acc=C
                (id? op 'mpeep) (: R (argregir tgt (argix a ps 0)) d (caup (cup (cup e))) lp (mint 0) ht (mint 0) ms (mint 0) en (mint 0)   ; (mpeep MAP k d): open-addressed probe -> the value (raw) in acc, gap-miss -> d
-                  (asm `((cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel (mpeep-ir (? (whole? d) d 0)) lp ht ms en 'deopt))))   ; k -> acc; r10 = tagged key (2k+1); acc = MAP; the probe (labels gensym'd)
+                  (holo `((cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel (mpeep-ir (? (whole? d) d 0)) lp ht ms en 'deopt))))   ; k -> acc; r10 = tagged key (2k+1); acc = MAP; the probe (labels gensym'd)
                (id? op 'mpin) (: R (argregir tgt (argix a ps 0)) val (caup (cup (cup e))) lp (mint 0) ht (mint 0) ms (mint 0) en (mint 0)   ; (mpin MAP k v): probe + UPDATE-in-place; a grow-due MISS -> OVF (full unwind+deopt); returns MAP
-                  (asm `((cggir tgt syms ps val) `(`('push A)) (cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel mpin-ir lp ht ms en 'OVF) `(`('mov A R)))))   ; v -> acc, push (spill); k -> acc; r10=tag(k); acc=MAP; probe+store (the `(pop r8)` tail pops v); acc=MAP (threaded)
+                  (holo `((cggir tgt syms ps val) `(`('push A)) (cggir tgt syms ps b) `(`('leax 'r10 A A 1 1) `('mov A R)) (relabel mpin-ir lp ht ms en 'OVF) `(`('mov A R)))))   ; v -> acc, push (spill); k -> acc; r10=tag(k); acc=MAP; probe+store (the `(pop r8)` tail pops v); acc=MAP (threaded)
                (id? op 'two?) (: z (mint 0) en (mint 0)                                       ; (two? E): is E a chain? -> 1/0, TOTAL (no deopt -- a non-chain reads 0)
-                  (asm `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne z) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne z) `('li A 1) `('jmp en) `('label z) `('li A 0) `('label en)))))
-               (id? op 'cap) (asm `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne 'OVF) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne 'OVF) `('ld A A 8))))    ; (cap E): chain-guard -> OVF (non-chain deopts; always under two?), then acc=[E+8]
-               (id? op 'cup) (asm `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne 'OVF) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne 'OVF) `('ld A A 16))))   ; (cup E): chain-guard, then acc=[E+16]
+                  (holo `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne z) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne z) `('li A 1) `('jmp en) `('label z) `('li A 0) `('label en)))))
+               (id? op 'cap) (holo `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne 'OVF) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne 'OVF) `('ld A A 8))))    ; (cap E): chain-guard -> OVF (non-chain deopts; always under two?), then acc=[E+8]
+               (id? op 'cup) (holo `((cggir tgt syms ps a) `(`('test A 1) `('br 'ne 'OVF) `('ld T A 0) `('li 'r8 chainkind) `('cmp T 'r8) `('br 'ne 'OVF) `('ld A A 16))))   ; (cup E): chain-guard, then acc=[E+16]
                ()))
          ()))
-   (gargsir tgt syms ps as) (? (atom? as) () (asm (L (cggir tgt syms ps (cap as)) (L (L 'push (greg tgt 'acc))) (gargsir tgt syms ps (cup as)))))
+   (gargsir tgt syms ps as) (? (atom? as) () (holo (L (cggir tgt syms ps (cap as)) (L (L 'push (greg tgt 'acc))) (gargsir tgt syms ps (cup as)))))
    ; relabel: gensym the map probe's FIXED labels (loop/hit/miss/end) per call site, and point deopt at the
    ; given group label -- so the same mprobe-ir/mpeep-ir/mpin-ir IR can be spliced N times in ONE group
    ; assemble without label collisions.
@@ -638,9 +638,9 @@
          (member? e ps) (: R (argregir tgt (argix e ps 0)) `(`('leax A R R 1 1)))    ; param: acc = 2*reg + 1 (re-tag)
          (two? e) (: op (cap e)
             (? (member? op syms) (cggir tgt syms ps e)                              ; a value-group call -> cggir's call (result is the value)
-               (id? op 'link) (asm `((cggvir tgt syms ps (caup e)) `(`('push A)) (cggvir tgt syms ps (caup (cup e))) `(`('pop T)) (consir tgt)))   ; A;push;B;pop T(=A); cons(T,A)
+               (id? op 'link) (holo `((cggvir tgt syms ps (caup e)) `(`('push A)) (cggvir tgt syms ps (caup (cup e))) `(`('pop T)) (consir tgt)))   ; A;push;B;pop T(=A); cons(T,A)
                (id? op '?) (: el (mint 0) en (mint 0)
-                  (asm `((cggir tgt syms ps (caup e)) `(`('cmp A 0) `('br 'le el)) (cggvir tgt syms ps (caup (cup e)))
+                  (holo `((cggir tgt syms ps (caup e)) `(`('cmp A 0) `('br 'le el)) (cggvir tgt syms ps (caup (cup e)))
                          `(`('jmp en) `('label el)) (cggvir tgt syms ps (caup (cup (cup e)))) `(`('label en)))))
                ()))
          ()))
@@ -652,18 +652,18 @@
    (cggtir tgt syms ps e selfnm Lbody)
     (: A (greg tgt 'acc) k (tally ps)
        (? (&& (two? e) (id? (cap e) selfnm) (= (tally (cup e)) k))                    ; TAIL SELF-CALL -> loop in place
-            (asm `((gargsir tgt syms ps (cup e))                                      ; push the new args (all from the OLD regs)
-                   (foldl (\ a i (asm `(a `(`('pop (argregir tgt (- (- k 1) i))))))) () (rangeL 0 k))   ; pop into the arg regs, reverse
+            (holo `((gargsir tgt syms ps (cup e))                                      ; push the new args (all from the OLD regs)
+                   (foldl (\ a i (holo `(a `(`('pop (argregir tgt (- (- k 1) i))))))) () (rangeL 0 k))   ; pop into the arg regs, reverse
                    `(`('jmp Lbody))))
           (&& (two? e) (id? (cap e) '?))                                              ; TAIL ? -> test non-tail, both branches tail
             (: el (mint 0) en (mint 0)
-               (asm `((cggir tgt syms ps (caup e)) `(`('cmp A 0) `('br 'le el)) (cggtir tgt syms ps (caup (cup e)) selfnm Lbody)
+               (holo `((cggir tgt syms ps (caup e)) `(`('cmp A 0) `('br 'le el)) (cggtir tgt syms ps (caup (cup e)) selfnm Lbody)
                       `(`('jmp en) `('label el)) (cggtir tgt syms ps (caup (cup (cup e))) selfnm Lbody) `(`('label en)))))
           (cggir tgt syms ps e)))                                                     ; any other tail expr -> value in acc
    ; mkhir: one function. label; [push lr]; save arg regs; load the passed args; Lbody:; body; restore; [pop lr]; ret.
    (mkhir tgt syms nm ps body)
     (: k (tally ps) Lbody (mint 0)
-       (asm (L (L (L 'label nm)) (hsave tgt) (saveargsir tgt k) (loadargsir tgt k) (L (L 'label Lbody))
+       (holo (L (L (L 'label nm)) (hsave tgt) (saveargsir tgt k) (loadargsir tgt k) (L (L 'label Lbody))
                (? (hasl body) (cggvir tgt syms ps body) (cggtir tgt syms ps body nm Lbody))   ; VALUE body (conses) -> cggvir (no TCO); int body -> cggtir (TCO)
                (restargsir tgt k) (hrest tgt) (L '(ret)))))
    ; mkouterir: the entry's OUTER -- save anchor+arg regs; anchor=sp; fixnum-guard+push the args; call
@@ -677,10 +677,10 @@
                (: kind (? (member? i mmask) mapk (member? i bufmask) bufk strk)
                   `(`('ld A S o) `('test A 1) '(br ne OVF) `('ld T A 0) `('li 'r8 kind) `('cmp T 'r8) '(br ne OVF) `('push A)))   ; a FIXNUM (odd, br ne) deopts; then the kind word must match (br ne)
              `(`('ld A S o) `('test A 1) '(br eq OVF) `('sar A 1) `('push A))))    ; int: fixnum-guard (non-fixnum -> OVF), untag (sar), push
-       pushargs (foldl (\ a i (asm `(a (pusharg1 i)))) () (rangeL 0 k))
+       pushargs (foldl (\ a i (holo `(a (pusharg1 i)))) () (rangeL 0 k))
        epi (? valt `(`('st S 0 A) `('add IP IP 16) `('ld T IP 0) `('jmpr T))                                  ; VALUE: store acc as-is; Continue (no putfix)
                  `(`('adds A A A) '(br vs DEOPT) `('or A A 1) `('st S 0 A) `('add IP IP 16) `('ld T IP 0) `('jmpr T)))   ; INT: putfix (overflow -> deopt); Continue
-       (asm `((hsave tgt) `(`('push OVFR)) (saveargsir tgt k) `(`('lea OVFR 'sp 0)) pushargs
+       (holo `((hsave tgt) `(`('push OVFR)) (saveargsir tgt k) `(`('lea OVFR 'sp 0)) pushargs
               `(`('call entry) `('add 'sp 'sp (* ss k))) (restargsir tgt k) `(`('pop OVFR)) (hrest tgt)   ; save/restore lr around the `call entry`: on arm64 `bl` clobbers x30, but x30 is the live return addr the threaded tail-call chain eventually `ret`s through -- the OUTER tail-jumps onward (br), so it must hand x30 back intact (no-op on x86: CALL/RET ride the stack)
               epi
               `(`('label 'OVF) `('lea 'sp OVFR 0)) (restargsir tgt k) `(`('pop OVFR)) (hrest tgt)
@@ -711,9 +711,9 @@
        bufmask (filter (\ j (buse? eb (nthl eps j))) (rangeL 0 k))                       ; entry CASK params (pin)
        cmask (filter (\ j (cuse? eb (nthl eps j))) (rangeL 0 k))                         ; entry CHAIN params (cap/cup/two?) -> raw, no guard
        outer (mkouterir tgt k entry k valt smask mmask bufmask cmask)
-       Hs (foldl (\ a f (asm (L a (mkhir tgt syms (cap f) (nthl f 1) (nthl f 2))))) () ord)
+       Hs (foldl (\ a f (holo (L a (mkhir tgt syms (cap f) (nthl f 1) (nthl f 2))))) () ord)
        lrf (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lrf (cup ds)))))))
        fb (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (link '(mpin mc mk mv) (link '(pin mc mk mv) (lrf defs)))))))   ; the WHOLE group re-evaluated as the deopt fallback. Post-rebind `ev` is the glaze, so this RE-GLAZES the group (harmless: a never-deopting native re-build) -- which is why the mpeep/mpin->peep/pin byte-lane aliases (ldxb/stxb) MUST assemble on EVERY target (arm64 included). mpeep/mpin are GLAZE-internal (not real fns), aliased to the core peep/pin (the body reads the PREVIOUS=global binding by the sequence law -- not recursion); harmless for non-map lanes (peep/pin stay the core accessors)
        elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                              ; the entry's source lambda (=/show)
-       (nif (emit (peep (assemble tgt (asm (L outer Hs))) 'bytes 0)) fb elam k))
+       (nif (emit (peep (assemble tgt (holo (L outer Hs))) 'bytes 0)) fb elam k))
 )

@@ -9,9 +9,9 @@
 ; First tenant: gw.js-style PARSER COMBINATORS. A parser is (\ s y n) over a string s, with a SUCCESS
 ; continuation y = (\ rest payload) and a FAILURE continuation n = (\ rest); payloads are lists that
 ; `seq` concatenates. The leaves are `lit` (a literal prefix), `one` (one char by predicate) and `span`
-; (a maximal run) -- ai has no regex. apps/cook/cook.l grew this set (kept private to dodge the old "leak
+; (a maximal run) -- ai has no regex. crew/cook/cook.l grew this set (kept private to dodge the old "leak
 ; collides with egg globals" worry -- now only `sat`/$ actually collide, and none of these do); it and
-; apps/sat/dimacs.l now share THIS copy. `parse` requires the whole input consumed; `runp` is the lenient
+; crew/sat/dimacs.l now share THIS copy. `parse` requires the whole input consumed; `runp` is the lenient
 ; twin (keeps the payload, ignores trailing slack).
 ; the module span opens here: the trailer at the bottom sweeps the combinators into
 ; the `parse` book and the overlay internals into `overlay` (measured, never listed).
@@ -107,7 +107,7 @@
    ev (: e0 ev                                     ; the sequence law: reads the PREVIOUS ev (the baked glaze chain)
          (\ e (: v (peep ov-slot 0 ()) (? (two? v) (: _ (ov-eng (cap v) (caup v) e) (e0 e)) (e0 e))))))
 
-; the MODULE BOUNDARY (the asm/glaze pattern): the span since post-mark sweeps into two
+; the MODULE BOUNDARY (the holo/glaze pattern): the span since post-mark sweeps into two
 ; books -- the ov-* internals under `overlay`, the combinators under `parse` -- while
 ; overlay-set/overlay-off stay the public entry points (and `ev` is a REBIND of a
 ; pre-mark name: rebinding is not a new name, so it stays global).

@@ -1,4 +1,4 @@
-; ai/uuexport.l -- the uu module boundary (the asm/glaze pattern): every name
+; ai/uuexport.l -- the uu module boundary (the holo/glaze pattern): every name
 ; the kernel span leaked since `uu-mark` sweeps off the global book into ONE
 ; book pinned under `uu` -- the surface is (uu 'vof), (uu 'defn), (uu 'chk),
 ; and every internal stays a probe away. Baked right after out/lib/uukern.l

@@ -56,7 +56,7 @@ treating as a bug.
 | C | read-then-output hang verify + string→form idiom (read-back) | core/prel: read/port | independent — concurrent |
 | D | closure-show edge audit (maps/casks/recursion knots, free-var policy doc) | read-only probe | independent — concurrent (done-ish above) |
 | E | freeze/thaw API + a `test/serialize.l` corpus | prel + test | **after A** (needs the mint form) |
-| F | apps-as-programs: ship bao/ain/apps/cook/inle as program values | per-app crew territory | **after A–E**; then fans out per-app (non-overlapping → concurrent) |
+| F | apps-as-programs: ship bao/ain/crew/cook/inle as program values | per-app crew territory | **after A–E**; then fans out per-app (non-overlapping → concurrent) |
 | G | doc remark: `theory.html` function-equivalence (closure = source+captures, comparable AND serializable) | theory.html | draftable now, finalize after A |
 
 Concurrency: **A is the blocker**; B, C, D, G-draft run concurrently now (distinct code paths /

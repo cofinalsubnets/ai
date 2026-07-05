@@ -79,7 +79,7 @@ fullwidth — a wide glyph is *exactly two cells* of the existing geometry, so t
 blit math barely changes. Unifont ships `.hex`, a text format whose loader is a
 toy: `codepoint:rowbits` per line.
 
-- `apps/quay/hex.l` beside psf.l — parse `.hex` into a sparse atlas: sorted
+- `crew/quay/hex.l` beside psf.l — parse `.hex` into a sparse atlas: sorted
   rune table + glyph blob, bsearch at paint (the current atlas cask grows a
   variant with a rune index; the 256-glyph PSF page stays the fast lane 0).
 - `blitrow`: a `wide` cell paints 16px across its own cell and the dummy's;

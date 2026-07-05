@@ -1,7 +1,7 @@
-; --- boot/overlay.l: the wm type overlay + the baked uu book, end to end ---
+; --- boot/overlay.l: the phos type overlay + the baked uu book, end to end ---
 ; NOT in the test/*.l corpus (the overlay + uu ride the HOST binary's post-egg
 ; layer; ai0/kernel/wasm have no post.l). Three legs:
-;   1. apps/wm/sigs.l checks CLEAN over the real core.l + layout.l sources
+;   1. crew/phos/sigs.l checks CLEAN over the real core.l + layout.l sources
 ;      (read as DATA, checked pure with (overlay 'ov-check1) -- no install,
 ;      no eval, observe-only squared), and a deliberately wounded def is
 ;      flagged by name.
@@ -10,7 +10,7 @@
 ;   3. the uu book is baked and COMPUTES: (uu 'defn) type-checks a nat_rect
 ;      adder, (uu 'vof) normalizes 2+1=3 -- no concat, a bare binary.
 ;   4. the MODEL vs the IMPLEMENTATION: test/uu.l's verified StackSet mirror
-;      (its zins/zrow/zcount) computes the SAME answers as apps/wm/core.l's,
+;      (its zins/zrow/zcount) computes the SAME answers as crew/phos/core.l's,
 ;      on the same stacks, through an encode -> vof -> decode round trip.
 ;   5. the seeded fuzz: the whole op vocabulary walked at random through both
 ;      worlds, compared after every step, the proved invariant watched live.
@@ -22,28 +22,28 @@
 ;
 ;   cat test/00-init.l boot/overlay.l | out/host/ai
 
-(reads (open "apps/wm/sigs.l" "r"))
-(reads (open "apps/wm/core.l" "r"))
+(reads (open "crew/phos/sigs.l" "r"))
+(reads (open "crew/phos/core.l" "r"))
 
 (: (forms path) (: q (open path "r") e (mint 0)
                    ((: (g acc) (: r (sound q e) (? (= e r) (rev acc) (g (link r acc))))) ()))
    chk1 (overlay 'ov-check)
-   (sweep path) (foldl (\ a f (cat a (chk1 wm-dom wm-sigs f))) () (forms path))
+   (sweep path) (foldl (\ a f (cat a (chk1 phos-dom phos-sigs f))) () (forms path))
 
  ; leg 1: the shipped sources check clean...
- _ (assert (! (sweep "apps/wm/core.l"))
-           (! (sweep "apps/wm/layout.l")))
+ _ (assert (! (sweep "crew/phos/core.l"))
+           (! (sweep "crew/phos/layout.l")))
  ; ...and a KNOWN kind in the wrong seat is caught: zins wants (window zipper),
  ; the wound hands it a tag and a sheaf
- hurt (chk1 wm-dom (link '(oops (sheaf tag) top) wm-sigs)
+ hurt (chk1 phos-dom (link '(oops (sheaf tag) top) phos-sigs)
             '(: (oops s t) (zins (wstagof s t) s)))
  _ (assert (two? hurt) (id? 'oops (cap (cap hurt))))
 
  ; leg 2: the gradual laws
- sg2 (link '(g1 (rect) window) (link '(g2 (window) top) wm-sigs))
- _ (assert (! (chk1 wm-dom sg2 '(: (g1 r) (zfoc (cap r)))))       ; unknown arg: consistent
-           (! (chk1 wm-dom sg2 '(: (g2 w) (zins w))))             ; partial app: open, not a clash
-           (two? (chk1 wm-dom sg2 '(: (g1 r) (zfoc r)))))         ; a RECT in the zipper seat: flagged
+ sg2 (link '(g1 (rect) window) (link '(g2 (window) top) phos-sigs))
+ _ (assert (! (chk1 phos-dom sg2 '(: (g1 r) (zfoc (cap r)))))       ; unknown arg: consistent
+           (! (chk1 phos-dom sg2 '(: (g2 w) (zins w))))             ; partial app: open, not a clash
+           (two? (chk1 phos-dom sg2 '(: (g1 r) (zfoc r)))))         ; a RECT in the zipper seat: flagged
 
  ; leg 3: uu, baked -- define, certify, compute
  _ ((uu 'defn) 'boot-add '(pi m nat (pi n nat nat))
@@ -137,8 +137,8 @@
 (reads (open "tools/wm2uu.l" "r"))
 (: (forms path) (: q (open path "r") e (mint 0)
                    ((: (g acc) (: r (sound q e) (? (= e r) (rev acc) (g (link r acc))))) ()))
-   cforms (forms "apps/wm/core.l")
-   gens (wm2uu cforms wm-sigs)
+   cforms (forms "crew/phos/core.l")
+   gens (wm2uu cforms phos-sigs)
  _ (assert (= 10 (tally gens)))
  _ (map (\ g (defn (cap g) (nthl g 1) (nthl g 2))) (rev gens))   ; the kernel certifies each
  _ (puts "overlay leg 6: translated + certified ")
@@ -154,7 +154,7 @@
         (zswapdn agree-zswapdn) (zmaster agree-zmaster) (zins agree-zins)
         (znub agree-znub) (zdel agree-zdel))
  (mname nm) (? (id? nm 'znub) 'nfilt nm)                 ; znub's proved twin is nfilt
- _ (map (\ nm (: sg (w2-sigof wm-sigs nm)
+ _ (map (\ nm (: sg (w2-sigof phos-sigs nm)
                  ps (cup (cap (w2-find nm cforms)))
                  ks (cap (cup sg))
                  res (w2-mty (w2-rk nm (w2-nthl sg 2)))

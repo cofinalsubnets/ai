@@ -57,7 +57,7 @@
  (= 2 $(hash 1 10 2 20))                        ; #map-expr -> key count
  (= 12 $@(3 4 5)))                               ; #array -> the elements' net sum
 
-; apps/sat/$ is ONE SATURATING CLAMP over the NET, max(0, ceil(net)): a number nets its own
+; crew/sat/$ is ONE SATURATING CLAMP over the NET, max(0, ceil(net)): a number nets its own
 ; signed value (complex: |z| signed by the total order), text its length, a map its key
 ; count, a list or array the SUM of its elements' nets -- so negatives push an aggregate
 ; toward nothing, per the law: positive to positive, zero-or-negative to zero, at every

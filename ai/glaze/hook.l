@@ -17,7 +17,7 @@
 ; Loops are NOT caught here (their body isn't leaf-grammar) -- they stay bytecode, or use
 ; ai/glaze/auto.l's counted-loop path. Rides the BAKED glaze through the module books
 ; (the binds just below). x86-64 only.
-(: assemble (asm 'assemble)                                                 ; through the module books (apps/asm/export.l,
+(: assemble (holo 'assemble)                                                 ; through the module books (crew/holo/export.l,
    emit (glaze 'emit)  coreir (glaze 'coreir)  deoptir (glaze 'deoptir)     ;   ai/glaze/export.l) -- this stream cat-loads
                                                                             ;   post-boot, so nothing folded for it
    (exprn ps e) (? (member? e ps) 1  (whole? e) 1                          ; var in frame | int literal

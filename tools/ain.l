@@ -15,7 +15,7 @@
 ; book/tray/etc after it hatches, so re-feeding prel.l raises `missing book`):
 ;   out/host/ai tools/ain.l HOST PORT
 ;   out/host/ai tools/ain.l -l PORT
-; or as the `nc` applet of the multi-call `au` (apps/utils/au.l -- the header's old
+; or as the `nc` applet of the multi-call `au` (crew/utils/au.l -- the header's old
 ; "until the egg bakes ain into a multi-call binary" note, landed). The socket nifs
 ; (connect/listen/accept/seal) live in host/net.c; prel stays socket-free so the
 ; kernel/wasm frontends are unaffected.

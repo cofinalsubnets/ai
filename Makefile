@@ -24,7 +24,7 @@ export AI_NO_IMAGE := 1
 
 .PHONY: all install uninstall clean distclean
 .PHONY: host kernel wasm ai0
-.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_uuwm uuwm test_gc test_hostnif test_glaze test_sat test_asm test_wm test_extract test_arm64
+.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_uuwm uuwm test_gc test_hostnif test_glaze test_sat test_holo test_phos test_extract test_arm64
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench nettest
 # `make test` is the FAST gate: just the two egg self-tests (the host binary `ai`
 # from-source under AI_NO_IMAGE, and ai0 -- c0 + the self-hosted ev, twice). It does
@@ -41,7 +41,7 @@ test:
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_gc test_extract test_tools test_hostnif test_glaze test_sat test_asm test_wm test_utils nettest test_arm64 test_kernel test_wasm
+test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_gc test_extract test_tools test_hostnif test_glaze test_sat test_holo test_phos test_utils nettest test_arm64 test_kernel test_wasm
 # ai0 bakes prel+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prel (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
@@ -69,7 +69,7 @@ test_host: $m
 # test/00-init.l assert harness (which exits 1 on the first failure), so the gate
 # checks BOTH exit 0 AND the sentinel -- a silent reader-stop exits 0 without it.
 # Add a thread's smoke script to hostnif_tests (ain: boot/net.l, &c).
-hostnif_tests = boot/pty.l boot/net.l boot/wm.l boot/baoedit.l boot/baotest.l boot/init.l boot/sh.l boot/cb.l boot/berth.l boot/manifest.l boot/pier.l boot/font.l boot/haven.l boot/overlay.l
+hostnif_tests = boot/pty.l boot/net.l boot/phos.l boot/baoedit.l boot/baotest.l boot/init.l boot/sh.l boot/cb.l boot/berth.l boot/manifest.l boot/pier.l boot/font.l boot/haven.l boot/overlay.l
 test_hostnif: host
 	@for s in $(hostnif_tests); do echo "HOSTNIF $$s"; \
 	  cat test/00-init.l $$s | $m > out/host/.test_hostnif.out 2>&1; r=$$?; \
@@ -104,14 +104,14 @@ else
 test_glaze:
 	@echo "test_glaze: skipped (host arch $a is not x86_64)"
 endif
-# apps/sat/ -- the CDCL SAT solver app. Portable ai (no glaze), so it runs on every arch.
+# crew/sat/ -- the CDCL SAT solver app. Portable ai (no glaze), so it runs on every arch.
 # Gate = exit 0 AND the sentinel (a reader-stop or a strict-assert scare both miss it).
 .PHONY: test_sat
 test_sat: host
-	@echo "SAT apps/sat/sat.l + apps/sat/dimacs.l + apps/sat/flat.l"; \
-	  cat apps/sat/sat.l apps/sat/dimacs.l apps/sat/flat.l | $m > out/host/.test_sat.out 2>&1; r=$$?; \
+	@echo "SAT crew/sat/sat.l + crew/sat/dimacs.l + crew/sat/flat.l"; \
+	  cat crew/sat/sat.l crew/sat/dimacs.l crew/sat/flat.l | $m > out/host/.test_sat.out 2>&1; r=$$?; \
 	  cat out/host/.test_sat.out; \
-	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out && grep -q "apps/sat/dimacs: ok" out/host/.test_sat.out && grep -q "apps/sat/flat: ok" out/host/.test_sat.out; } \
+	  { [ $$r -eq 0 ] && grep -q "sat: Stages 1-3 ok" out/host/.test_sat.out && grep -q "crew/sat/dimacs: ok" out/host/.test_sat.out && grep -q "crew/sat/flat: ok" out/host/.test_sat.out; } \
 	    || { echo "FAIL sat (exit $$r)"; exit 1; }
 # The DRAT lane's EXTERNAL check: flat.l's emitted refutations (fdrat0) verified by
 # drat-trim, the SAT competition's independent checker (fetched + built into out/drat
@@ -120,28 +120,28 @@ test_sat: host
 # raw-RUP row. Not in test_all (network on first run); run after touching the emitter.
 .PHONY: test_drat
 test_drat: host
-	@cd apps/sat && ./dratcheck.sh || { echo "FAIL drat"; exit 1; }
-# The wm app's pure core (apps/wm/core.l): xmonad's StackSet -- the focus zipper, the
+	@cd crew/sat && ./dratcheck.sh || { echo "FAIL drat"; exit 1; }
+# The phos app's pure core (crew/phos/core.l): xmonad's StackSet -- the focus zipper, the
 # workspace sheaf, the floating half -- with xmonad's QuickCheck laws + a seeded
-# fuzz (apps/wm/law.l). Pure ai (no nif), so it self-tests portably; the X layers
-# (wire.l/wm.l) need connectu and are proven against Xephyr, not here. Gate = the
+# fuzz (crew/phos/law.l). Pure ai (no nif), so it self-tests portably; the X layers
+# (wire.l/phos.l) need connectu and are proven against Xephyr, not here. Gate = the
 # sentinel AND exit 0 (a reader-stop or strict-assert scare both miss it).
-.PHONY: test_wm
-test_wm: host
-	@echo "WM apps/wm/core.l ... apps/wm/config.l + apps/wm/law.l (the whole app, host)"; \
-	  cat test/00-init.l apps/wm/core.l apps/wm/layout.l apps/wm/wire.l apps/wm/ewmh.l apps/wm/manage.l apps/wm/keys.l apps/wm/config.l apps/wm/law.l | $m > out/host/.test_wm.out 2>&1; r=$$?; \
-	  cat out/host/.test_wm.out; \
-	  { [ $$r -eq 0 ] && grep -q "apps/wm/law: StackSet" out/host/.test_wm.out; } \
-	    || { echo "FAIL wm (exit $$r)"; exit 1; }
-# aiutils (apps/utils/): the myers + patience diff engines, the text/tool surface,
+.PHONY: test_phos
+test_phos: host
+	@echo "PHOS crew/phos/core.l ... crew/phos/config.l + crew/phos/law.l (the whole app, host)"; \
+	  cat test/00-init.l crew/phos/core.l crew/phos/layout.l crew/phos/wire.l crew/phos/ewmh.l crew/phos/manage.l crew/phos/keys.l crew/phos/config.l crew/phos/law.l | $m > out/host/.test_phos.out 2>&1; r=$$?; \
+	  cat out/host/.test_phos.out; \
+	  { [ $$r -eq 0 ] && grep -q "crew/phos/law: StackSet" out/host/.test_phos.out; } \
+	    || { echo "FAIL phos (exit $$r)"; exit 1; }
+# aiutils (crew/utils/): the myers + patience diff engines, the text/tool surface,
 # and `au`, the multi-call toolbox (busybox's trick -- one binary, the util picked
-# off the command line or an argv[0] symlink; apps/utils/au.l is the dispatcher).
+# off the command line or an argv[0] symlink; crew/utils/au.l is the dispatcher).
 # The law file holds the engines to their projections, to an O(nm) LCS oracle
 # (minimality), and to seeded fuzzes; the au smokes then drive the BUILT artifact:
 # diff byte-identical to GNU diff -u (headers off), the exit triple, argv[0]
 # dispatch through a `diff` symlink, usage at 2, and (x86_64) `au as` assembling
 # an exit(7) ELF that RUNS. Gate = the law sentinel AND exit 0 AND the smokes.
-aufiles = apps/utils/text.l apps/utils/diff.l tools/ain.l apps/cook/cook.l apps/utils/asbook.l apps/asm/elf.l apps/utils/au.l
+aufiles = crew/utils/text.l crew/utils/diff.l tools/ain.l crew/cook/cook.l crew/utils/asbook.l crew/holo/elf.l crew/utils/au.l
 # (`ho` is defined further down, after this rule is READ -- target/prereq names
 # expand at parse time, so these two lines spell out/host$(hsuf) themselves.)
 out/host$(hsuf)/au: $(aufiles)
@@ -150,10 +150,10 @@ out/host$(hsuf)/au: $(aufiles)
 	@chmod 755 $@
 .PHONY: test_utils
 test_utils: host out/host$(hsuf)/au
-	@echo "UTILS apps/utils/text.l + apps/utils/diff.l + apps/utils/law.l"; \
-	  cat test/00-init.l apps/utils/text.l apps/utils/diff.l apps/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
+	@echo "UTILS crew/utils/text.l + crew/utils/diff.l + crew/utils/law.l"; \
+	  cat test/00-init.l crew/utils/text.l crew/utils/diff.l crew/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
 	  cat out/host/.test_utils.out; \
-	  { [ $$r -eq 0 ] && grep -q "apps/utils/law: myers" out/host/.test_utils.out; } \
+	  { [ $$r -eq 0 ] && grep -q "crew/utils/law: myers" out/host/.test_utils.out; } \
 	    || { echo "FAIL utils (exit $$r)"; exit 1; }
 	@printf 'a\nb\nc\n' > $(ho)/.au1; printf 'a\nX\nc\n' > $(ho)/.au2; \
 	  $m $(ho)/au diff $(ho)/.au1 $(ho)/.au1 > $(ho)/.au-same.out 2>&1; r=$$?; \
@@ -174,17 +174,17 @@ test_utils: host out/host$(hsuf)/au
 	    [ $$r -eq 7 ] || { echo "FAIL au as run (exit $$r)"; exit 1; }; \
 	  fi; \
 	  echo "au: diff (GNU-identical) + argv0 symlink + usage + as ok"
-# The neutral assembler (apps/asm/) + its x86-64 backend: every encoder golden is
-# objdump-checked (apps/asm/asmtest.l). A host-only app (like sat) -- it rides the
+# The neutral assembler (crew/holo/) + its x86-64 backend: every encoder golden is
+# objdump-checked (crew/holo/holotest.l). A host-only app (like sat) -- it rides the
 # core's lists/tablets, adds no nif, and is NOT baked into ai0. The gate greps
 # the "N passed, 0 failed" sentinel AND exit 0 (a silent reader-stop exits 0).
-.PHONY: test_asm
-test_asm: host
-	@echo "ASM apps/asm/asmtest.l"; \
-	  cat apps/asm/asm.l apps/asm/x64.l apps/asm/arm64.l apps/asm/text.l apps/asm/elf.l apps/asm/asmtest.l | $m > out/host/.test_asm.out 2>&1; r=$$?; \
-	  cat out/host/.test_asm.out; \
-	  { [ $$r -eq 0 ] && grep -q ", 0 failed" out/host/.test_asm.out; } \
-	    || { echo "FAIL asm (exit $$r)"; exit 1; }
+.PHONY: test_holo
+test_holo: host
+	@echo "HOLO crew/holo/holotest.l"; \
+	  cat crew/holo/holo.l crew/holo/x64.l crew/holo/arm64.l crew/holo/text.l crew/holo/elf.l crew/holo/holotest.l | $m > out/host/.test_holo.out 2>&1; r=$$?; \
+	  cat out/host/.test_holo.out; \
+	  { [ $$r -eq 0 ] && grep -q ", 0 failed" out/host/.test_holo.out; } \
+	    || { echo "FAIL holo (exit $$r)"; exit 1; }
 # ain's two-process loopback gate: a server and a client over real TCP on
 # 127.0.0.1, full-duplex, asserting each side received what the other sent (the
 # socket nifs in host/net.c + the pump loops in tools/ain.l). In `test_all`
@@ -329,14 +329,14 @@ all: host kernel wasm
 # #include these and assemble the bootstrap with G_EGG_PRE/POST (ai.h).
 # Drop a .l into ai/ and it is picked up automatically -- no rule to edit.
 lib_h = $(patsubst ai/%.l,out/lib/%.h,$(wildcard ai/*.l))
-# the apps/asm/ assembler baked into BOTH runtimes as a core language service: the
+# the crew/holo/ assembler baked into BOTH runtimes as a core language service: the
 # neutral core + BOTH backends. They are pure ai (produce machine-code bytes as
 # DATA, never execute them), so every backend is arch-neutral and rides along on
 # every host -- only the glaze, which EXECUTES the bytes, is arch-bound (and it is
 # cat-loaded + x86-gated separately, never baked). asm_h = lcat headers (host ai);
 # asm0_h = sed-wrapped raw source (ai0, the bootstrap -- can't lcat its own sources).
-asm_h  = out/lib/asm.h  out/lib/x64.h  out/lib/arm64.h  out/lib/export.h
-asm0_h = out/lib/asm0.h out/lib/x640.h out/lib/arm640.h out/lib/export0.h
+holo_h = out/lib/holo.h  out/lib/x64.h  out/lib/arm64.h  out/lib/export.h
+asm0_h = out/lib/holo0.h out/lib/x640.h out/lib/arm640.h out/lib/export0.h
 # the glaze (native JIT, ai/glaze/{emit,auto}.l): baked to raw-text headers (sed_lit,
 # like asm0 -- no lcat reader round-trip). Evaled ONLY before a --bake (x86-gated
 # in main.c), so a normal boot never pays the ~810 ms; the baked snapshot then carries
@@ -356,23 +356,23 @@ lib: $(lib_h) $(gl0_h)
 # lcat a .l source into its C-string header, ATOMICALLY: generate to a temp, require it
 # non-empty, then mv into place. A bare `> $@` truncates first, so a broken ai0 (or any
 # lcat failure) would leave a 0-byte header that make then treats as up-to-date -- which
-# SILENTLY drops a baked service (e.g. an empty asm.h => `assemble` unbound => the glaze's
+# SILENTLY drops a baked service (e.g. an empty holo.h => `assemble` unbound => the glaze's
 # map lane emits nothing => a corrupt native => crash/hang). Fail loudly instead.
 lcat_h = @mkdir -p out/lib; echo AI	$@; \
   $(ai0) -l ai/prel.l tools/lcat.l $< > $@.tmp && test -s $@.tmp && mv -f $@.tmp $@ \
     || { rm -f $@.tmp; echo "FAIL: $@ empty (ai0 lcat failed -- broken bootstrap?)"; exit 1; }
 $(lib_h): out/lib/%.h: ai/%.l tools/lcat.l   # + $(ai0), stated below where it is in scope
 	$(lcat_h)
-# the apps/asm/ assembler (apps/asm/asm.l + apps/asm/x64.l) rides the SAME lcat pipeline into the
+# the crew/holo/ assembler (crew/holo/holo.l + crew/holo/x64.l) rides the SAME lcat pipeline into the
 # post-egg layer -- a core language service (the glaze is its client). Explicit rules
-# (their sources live in apps/asm/, not ai/, so the pattern rule above misses them).
-out/lib/asm.h: apps/asm/asm.l tools/lcat.l
+# (their sources live in crew/holo/, not ai/, so the pattern rule above misses them).
+out/lib/holo.h: crew/holo/holo.l tools/lcat.l
 	$(lcat_h)
-out/lib/x64.h: apps/asm/x64.l tools/lcat.l
+out/lib/x64.h: crew/holo/x64.l tools/lcat.l
 	$(lcat_h)
-out/lib/arm64.h: apps/asm/arm64.l tools/lcat.l
+out/lib/arm64.h: crew/holo/arm64.l tools/lcat.l
 	$(lcat_h)
-out/lib/export.h: apps/asm/export.l tools/lcat.l
+out/lib/export.h: crew/holo/export.l tools/lcat.l
 	$(lcat_h)
 # uu's NbE kernel bakes post.l-style so an overlay can reach (uu 'vof) in a bare
 # host binary -- EXTRACTED from test/uu.l (the corpus file stays the one source of
@@ -384,9 +384,9 @@ out/lib/uukern.l: test/uu.l
 	@{ echo "(: uu-mark (names ()))"; sed '/^; --- UniMath/q' test/uu.l; } > $@
 out/lib/uu.h: out/lib/uukern.l tools/lcat.l
 	$(lcat_h)
-# test/uuwm.l is a COMMITTED GENERATED artifact: the wm's zipper ops compiled
-# from apps/wm/core.l into uu terms (tools/uuwmgen.l over tools/wm2uu.l, kind-
-# directed by apps/wm/sigs.l), so test/uuwmlaw.l proves its theorems OF THE
+# test/uuwm.l is a COMMITTED GENERATED artifact: phos's zipper ops compiled
+# from crew/phos/core.l into uu terms (tools/uuwmgen.l over tools/wm2uu.l, kind-
+# directed by crew/phos/sigs.l), so test/uuwmlaw.l proves its theorems OF THE
 # IMPLEMENTATION at corpus time. `make uuwm` refreshes it after a core.l edit;
 # test_uuwm (in test_all) regenerates and diffs, failing loudly on drift.
 uuwm: host
@@ -396,24 +396,24 @@ test_uuwm: host
 	@echo TEST test/uuwm.l "(regenerate + diff)"
 	@$m tools/uuwmgen.l > out/host/.uuwm.l.tmp
 	@cmp -s out/host/.uuwm.l.tmp test/uuwm.l \
-	  || { echo "FAIL: test/uuwm.l is stale (apps/wm/core.l moved?) -- run: make uuwm"; exit 1; }
+	  || { echo "FAIL: test/uuwm.l is stale (crew/phos/core.l moved?) -- run: make uuwm"; exit 1; }
 	@rm -f out/host/.uuwm.l.tmp
 # ai0's sed-wrapped raw source of the same three (no interpreter -- the l reader
 # strips ; comments at read time), baked into the bootstrap so the corpus can test
 # the assembler under BOTH compilers (c0 + the self-hosted ev), like prel/ev/bao.
-out/lib/asm0.h: apps/asm/asm.l
+out/lib/holo0.h: crew/holo/holo.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/x640.h: apps/asm/x64.l
+out/lib/x640.h: crew/holo/x64.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/arm640.h: apps/asm/arm64.l
+out/lib/arm640.h: crew/holo/arm64.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/export0.h: apps/asm/export.l
+out/lib/export0.h: crew/holo/export.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
@@ -570,15 +570,15 @@ $(ho)/ai.baked $(ho)/ai.cand.baked: %.baked: %
 .PHONY: candidate
 candidate: $(ho)/ai.cand.baked
 
-# apps/cook/Cookfile: this Makefile transpiled into a resolved cook recipe by
-# `cook --emit` (apps/cook/cook.l). cook reads this Makefile directly too, but the
+# crew/cook/Cookfile: this Makefile transpiled into a resolved cook recipe by
+# `cook --emit` (crew/cook/cook.l). cook reads this Makefile directly too, but the
 # emitted Cookfile is the build with every $(shell)/$(wildcard)/var/pattern
 # RESOLVED -- a flat, self-documenting snapshot. Regenerate it whenever the
-# Makefile changes. (A baked snapshot: re-run `make apps/cook/Cookfile` after adding
+# Makefile changes. (A baked snapshot: re-run `make crew/cook/Cookfile` after adding
 # a source/test file, since the wildcard lists are frozen at emit time.)
-apps/cook/Cookfile: Makefile apps/cook/cook.l $(ho)/ai
+crew/cook/Cookfile: Makefile crew/cook/cook.l $(ho)/ai
 	@echo AI	$@
-	@$(ho)/ai -l apps/cook/cook.l --emit Makefile > $@
+	@$(ho)/ai -l crew/cook/cook.l --emit Makefile > $@
 
 # The lcat'd lib headers (egg.h et al) are PRODUCED BY running ai0, so re-lay
 # them whenever ai0 changes. This dep belongs in the rule above, but $(ai0) is
@@ -634,7 +634,7 @@ $(ho)/ai.o $(ho)/0/ai.o: out/lib/ai_version.h
 # baked shell core now, subsuming the old repl.h). Now that it rides the host/*.c
 # glob (compiled once, not recompiled on every link, as the old inline `$(hcc)
 # main.c` did), recompile it when any baked header changes.
-$(ho)/host/main.o: out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h out/lib/uu.h out/lib/uuexport.h $(asm_h) $(glaze_h)
+$(ho)/host/main.o: out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h out/lib/uu.h out/lib/uuexport.h $(holo_h) $(glaze_h)
 # host/cb.c rides port/quay/quay.c by unity include -- recompile when the engine moves.
 $(ho)/host/cb.o: port/quay/quay.c port/quay/quay.h
 
@@ -644,7 +644,7 @@ $(ho)/host/cb.o: port/quay/quay.c port/quay/quay.h
 # one link rule, two names: `ai` (canonical) and `ai.cand` (the CANDIDATE -- the next
 # generation built at a side path nothing executes, so the RELINK can never hit
 # ETXTBSY no matter who is running `ai`; see the candidate target below).
-$(ho)/ai $(ho)/ai.cand: $(host_o) $(ho)/libai.a $(ho)/.hostcc out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h out/lib/uu.h out/lib/uuexport.h $(asm_h) $(glaze_h)
+$(ho)/ai $(ho)/ai.cand: $(host_o) $(ho)/libai.a $(ho)/.hostcc out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/cli.h out/lib/bao.h out/lib/post.h out/lib/uu.h out/lib/uuexport.h $(holo_h) $(glaze_h)
 	@echo CC	$@
 	@mkdir -p $(dir $@)
 	@$(hcc) -o $@ $(host_o) $(ho)/libai.a -lm $(host_ldflags)
@@ -946,7 +946,7 @@ out/lib/inle.h: port/inle/inle.l $(ai0) tools/lcatv.l ai/prel.l
 	@echo AI	$@
 	@$(ai0) -l ai/prel.l tools/lcatv.l port/inle/inle.l > $@
 # arm64 EXECUTION validator: cross-build `ai` for aarch64 + run the corpus under
-# qemu-aarch64 (the trustworthy check for the glaze's second target -- asmtest
+# qemu-aarch64 (the trustworthy check for the glaze's second target -- holotest
 # proves byte encodings, this proves they run). No-ops without qemu + a cross-gcc.
 .PHONY: test_arm64
 test_arm64: host
@@ -1047,7 +1047,7 @@ installs = \
   $d/bin/au \
   $d/bin/cook \
   $d/bin/ain \
-  $d/bin/wm \
+  $d/bin/phos \
   $d/bin/bao \
   $d/share/man/man1/ai.1 \
   $d/lib/ai/prel.l \
@@ -1099,11 +1099,11 @@ $d/bin/ai: $(ho)/ai $(ho)/ai.baked
 # unchanged, so the image's lvm-table indices and base-delta still resolve, and a bad match
 # just falls back to a normal egg boot).
 
-# cook: the build tool (apps/cook/cook.l) installed as an executable `cook` on PATH.
+# cook: the build tool (crew/cook/cook.l) installed as an executable `cook` on PATH.
 # Its `#!/usr/bin/env -S ai -l` shebang re-execs the installed `ai` to load it,
 # then it discovers a Makefile/Cookfile/Cards.l in the cwd. Installed as a SYMLINK
-# to the source so edits to apps/cook/cook.l are picked up without a reinstall.
-$d/bin/cook: apps/cook/cook.l
+# to the source so edits to crew/cook/cook.l are picked up without a reinstall.
+$d/bin/cook: crew/cook/cook.l
 	@echo LN	$(abspath $@)
 	@mkdir -p $(@D)
 	@ln -sf $(abspath $<) $@
@@ -1120,24 +1120,24 @@ $d/bin/ain: tools/ain.l
 # or off argv[0] through a tool-named symlink. Shadows nothing on the host: only
 # `au` lands on PATH; the distro symlinks the tool names when shadowing is the
 # point. The tool files' SEATs stay quiet inside the cat (no file of theirs sits
-# in the program seat), so apps/utils/au.l's dispatcher is the one thing firing.
+# in the program seat), so crew/utils/au.l's dispatcher is the one thing firing.
 $d/bin/au: $(aufiles)
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
 	@{ echo '#!/usr/bin/env -S ai'; cat $(aufiles); } > $@
 	@chmod 755 $@
 
-# wm: the window manager (apps/wm/*.l), the seven modules catted into one shebang
-# script. DISPLAY picks the socket, ~/.Xauthority the cookie (apps/wm/config.l);
+# phos: the window manager (crew/phos/*.l), the seven modules catted into one shebang
+# script. DISPLAY picks the socket, ~/.Xauthority the cookie (crew/phos/config.l);
 # mod+q restarts in place by exec'ing this same script.
-wmfiles = apps/wm/core.l apps/wm/layout.l apps/wm/wire.l apps/wm/ewmh.l apps/wm/manage.l apps/wm/keys.l apps/wm/config.l apps/wm/wm.l
-$d/bin/wm: $(wmfiles)
+phosfiles = crew/phos/core.l crew/phos/layout.l crew/phos/wire.l crew/phos/ewmh.l crew/phos/manage.l crew/phos/keys.l crew/phos/config.l crew/phos/phos.l
+$d/bin/phos: $(phosfiles)
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
-	@{ echo '#!/usr/bin/env -S ai -l'; cat $(wmfiles); } > $@
+	@{ echo '#!/usr/bin/env -S ai -l'; cat $(phosfiles); } > $@
 	@chmod 755 $@
 
-# bao: the interactive shell. Unlike apps/cook/ain, ai/bao.l is DEFINE-ONLY (the
+# bao: the interactive shell. Unlike crew/cook/ain, ai/bao.l is DEFINE-ONLY (the
 # launch `(bao 0)` is normally fired by main.c on a tty), so the bin is a tiny
 # relocatable launcher: it loads the installed bao.l next door and fires it.
 $d/bin/bao: Makefile

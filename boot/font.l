@@ -5,7 +5,7 @@
 ;
 ;   cat test/00-init.l boot/font.l | out/host/ai
 
-(reads (open "apps/quay/psf.l" "r"))
+(reads (open "crew/quay/psf.l" "r"))
 
 ; --- the builtins bake into atlases ---
 (: ft (font (cask (font () 0)) 0)
