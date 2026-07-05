@@ -14,10 +14,26 @@
 (reads (open "crew/phos/core.l" "r"))
 (reads (open "crew/phos/wire.l" "r"))
 
-(: dpy "/tmp/.X11-unix/X78"
-   sock "/tmp/haven-boot.sock"
-   xv (mind `("Xvfb" ":78" "-screen" "0" "640x480x24" "-nolisten" "tcp"))
+; -displayfd: Xvfb PICKS a free display and prints the number when it is ready
+; to accept -- so no fixed :78 a stray server can poison (a stale server would
+; silently BECOME the test target: waitsock connects to it, QueryTree finds the
+; old run's frozen window, and the hue checks read last week's pixels), and the
+; number arriving IS the readiness signal. the wayland socket rides the same
+; number, one namespace per live server; a crashed run's stale socket FILE is
+; unlinked before haven binds. the CAMP: every child pid enlists as it spawns,
+; and a failed claim STRIKES the camp before exiting -- an assert naps straight
+; out of file mode, so cleanup must ride in front of it (Xvfb catches SIGHUP,
+; it survives our death; the ai children die with their pty).
+(: xv (mind `("Xvfb" "-displayfd" "1" "-screen" "0" "640x480x24" "-nolisten" "tcp"))
    (wfx p) (: g2 (gather p) (? (two? g2) g2 (: _ (rest 2) (wfx p))))
+   camp #()
+   (enlist k pid) (pin camp k pid)
+   (strike _) (map (\ k (: p (camp k)
+                           _ (? (charm? p) (: _ (still p 15) (wfx p)) 0) 0))
+                   (keys camp))
+   (must tag v) (? v v (: _ (strike ())
+                           _ (puts "haven: FAIL ") _ (putx tag) _ (putc 10)
+                           (nap 1)))
    (waitsock pth t) (? (< t 1) ()
                       (: p (connectu pth)
                          (? (lit? p) (: _ (close p) 1)
@@ -25,7 +41,25 @@
  _ (? (! (two? xv))
       (: _ (puts "haven: ok (no Xvfb, skipped)") (nap 0))
       0)
- _ (assert (waitsock dpy 100))
+ _ (enlist 'xv (cap xv))
+ ; the display number off Xvfb's stdout: -displayfd writes it on ITS OWN line,
+ ; so take the first line that is ENTIRELY digits -- server chatter shares the
+ ; pty (this box's amdgpu warning says "(-13)", which a naive digit-skimmer
+ ; happily reads as display 13; haven then aims at a ghost and bows out).
+ ; st: 0 at line start, 1 digits-so-far, 2 line poisoned. see parks until ready.
+ (rdnum p) ((: (go n st) (: c (see p)
+                            (? (= c -1) ()
+                               (= c 13) (go n st)
+                               (= c 10) (? (= st 1) n (go 0 0))
+                               (&& (<= 48 c) (< c 58))
+                                (? (= st 2) (go 0 2) (go (+ (* 10 n) (- c 48)) 1))
+                               (go 0 2))))
+            0 0)
+ dn (rdnum (cup xv))
+ _ (must 'display (&& (charm? dn) (! (two? (gather (cap xv))))))
+ dpy (+ "/tmp/.X11-unix/X" (show dn))
+ sock (+ "/tmp/haven-boot-" (+ (show dn) ".sock"))
+ _ (unlink sock)
 
  ; GetImage (opcode 73, ZPixmap): w*h pixels back as a byte list (BGRX)
  (px-getimg s d x y w h)
@@ -46,23 +80,24 @@
  hv (mind `("out/host/ai" "-l" "crew/phos/core.l" "-l" "crew/phos/wire.l"
             "-l" "crew/phos/layout.l" "-l" "crew/quay/pier.l"
             "-l" "crew/haven/wire.l" "-l" "crew/haven/haven.l"
-            "-e" "(haven \"/tmp/haven-boot.sock\" \"/tmp/.X11-unix/X78\" () 320 240)"))
- _ (assert (two? hv))
- _ (assert (waitsock sock 100))
+            "-e" (+ "(haven \"" (+ sock (+ "\" \"" (+ dpy "\" () 320 240)"))))))
+ _ (must 'haven-up (two? hv))
+ _ (enlist 'hv (cap hv))
+ _ (must 'haven-sock (waitsock sock 100))
 
  ; our own eyes: find the window, wait till it's viewable
  s (connectu dpy)
  sc (x-setup s ())
- _ (assert (two? sc) (= 24 (scr-depth sc)))
+ _ (must 'x-eyes (&& (two? sc) (= 24 (scr-depth sc))))
  (waitwin t) (? (< t 1) ()
                 (: ws (x-querytree s (scr-root sc))
                    (? (two? ws) (cap ws) (: _ (rest 100) (waitwin (- t 1))))))
  win (waitwin 100)
- _ (assert (charm? win))
+ _ (must 'haven-window (charm? win))
  (waitmap t) (? (< t 1) 0
                 (? (= 2 (cap (x-attrs s win))) 1
                    (: _ (rest 50) (waitmap (- t 1)))))
- _ (assert (waitmap 100))
+ _ (must 'haven-mapped (waitmap 100))
 
  ; a hue-waiter: an 8x8 patch at (x y) holds >= 30 (b g r) pixels
  (waithue x y b g r t) (? (< t 1) 0
@@ -71,26 +106,28 @@
 
  ; the red skiff, alone: one toplevel takes the whole 320x240 glass
  skr (mind `("out/host/ai" "-l" "crew/haven/wire.l" "-l" "crew/haven/skiff.l"
-             "-e" "(skiff \"/tmp/haven-boot.sock\" 320 240 12582912)"))
- _ (assert (two? skr))
- _ (assert (waithue 240 120 0 0 192 100))    ; red deep in the right half
+             "-e" (+ "(skiff \"" (+ sock "\" 320 240 12582912)"))))
+ _ (must 'red-up (two? skr))
+ _ (enlist 'skr (cap skr))
+ _ (must 'red-fills (waithue 240 120 0 0 192 100))    ; red deep in the right half
 
  ; the blue skiff arrives: the layout retiles -- blue masters the left
  ; column, red hears its new size and re-dresses into the right
  skb (mind `("out/host/ai" "-l" "crew/haven/wire.l" "-l" "crew/haven/skiff.l"
-             "-e" "(skiff \"/tmp/haven-boot.sock\" 320 240 192)"))
- _ (assert (two? skb))
- _ (assert (waithue 76 120 192 0 0 100))     ; blue in the master column
- _ (assert (waithue 240 120 0 0 192 100))    ; red re-dressed in the slave
+             "-e" (+ "(skiff \"" (+ sock "\" 320 240 192)"))))
+ _ (must 'blue-up (two? skb))
+ _ (enlist 'skb (cap skb))
+ _ (must 'blue-masters (waithue 76 120 192 0 0 100))     ; blue in the master column
+ _ (must 'red-slave (waithue 240 120 0 0 192 100))    ; red re-dressed in the slave
 
  ; blue steps away: red should spread back over the whole glass
  _ (still (cap skb) 15) _ (wfx (cap skb)) _ (close (cup skb))
- _ (assert (waithue 76 120 0 0 192 100))     ; red owns the left again
+ _ (pull camp 'skb 0)                        ; reaped: a second wfx would spin on the dead pid
+ _ (must 'red-spreads (waithue 76 120 0 0 192 100))     ; red owns the left again
 
- ; strike the camp
- _ (still (cap skr) 15) _ (wfx (cap skr)) _ (close (cup skr))
- _ (still (cap hv) 15) _ (wfx (cap hv)) _ (close (cup hv))
+ ; strike the camp (the same teardown the failure path takes)
  _ (close s)
- _ (still (cap xv) 15)
- _ (wfx (cap xv))
+ _ (strike ())
+ _ (close (cup skr)) _ (close (cup hv)) _ (close (cup xv))
+ _ (unlink sock)
  (puts "haven: ok"))
