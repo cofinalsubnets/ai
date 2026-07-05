@@ -55,6 +55,8 @@
                         _ (x-map s w) (x-raise s w))) (wsfloat sh))
        (x-flush s))
    (refocus sh) (? (wsfoc sh) (: _ (x-focus s (wsfoc sh)) (x-flush s)) 0)        ; focus the current top -- only when it is mapped/viewable
+   (watch w) (: _ (x-cwa-events s w 16) (x-grabbtn s w))                         ; the mouse wires: EnterWindow selected (focus follows the
+                                                                                 ; pointer in) + buttons 1-3 sync-grabbed (click-to-focus)
    (switch sh lay t)                                                             ; view: hide the leaving row, show the arriving
     (? (|| (= t (wscur sh)) (! (wsknown? sh t))) sh
        (: old (wsrow sh) sh2 (wsview sh t)
@@ -142,6 +144,7 @@
                    ffoc2 (? (wsfloating? sh2 win) win ffoc)                      ; a hook-floated window takes the float focus
                    (? (wsknownw? sh2 win)                                        ; managed (tiled or floated) -> place it
                       (: _ (x-chprop32 s win (x-intern s "WM_STATE") (x-intern s "WM_STATE") (L 1 0))   ; the ICCCM stamp: a restart finds us even hidden
+                         _ (watch win)
                          _ (render sh2 lay) _ (x-map s win) _ (x-flush s)
                          _ (line (+ "phos: + " (+ (show win) (+ " " (show (wsrow sh2)))))) (loop sh2 lay hist ffoc2))
                       (: _ (x-map s win)                                         ; ignored: map raw -- a desktop UNDER everything, a dock/notification on top
@@ -157,6 +160,28 @@
                          ffoc2 (? (= win ffoc) () ffoc)
                          _ (line (+ "phos: - " (+ (show win) (+ " " (show (wsrow sh2))))))
                          (loop sh2 lay hist ffoc2))))
+                (= code 18)                                                     ; UnmapNotify: only a SYNTHETIC one (the send-event bit on the
+                (? (|| (< (cap (ev-raw e)) 128) (! (wsknownw? sh win)))          ; raw byte -- x-decode strips it) is a client WITHDRAWING
+                   (loop sh lay hist ffoc)                                       ; (ICCCM 4.1.4); a real one is our own workspace unmap
+                   (: _ (ewmh-untrack win)
+                      _ (x-delprop s win (x-intern s "WM_STATE"))                ; unstamp: a restart must NOT re-adopt the withdrawn (the
+                      sh2 (evict sh win) _ (render sh2 lay) _ (x-flush s)        ; tray ghost); a re-map arrives as a fresh MapRequest
+                      _ (line (+ "phos: withdraw " (show win)))
+                      (loop sh2 lay hist (? (= win ffoc) () ffoc))))
+                (= code 7)                                                      ; EnterNotify: focus follows the pointer (normal crossings
+                (: pkt (ev-raw e) w (u32 pkt 12)                                 ; only -- the window is the EVENT field, byte 12)
+                   (? (|| (! (= (nthl pkt 30) 0)) (= (ev-detail e) 2))           ; mode Grab/Ungrab or detail Inferior: not a real entry
+                      (loop sh lay hist ffoc)
+                      (|| (! (wsknownw? sh w)) (= w (? ffoc ffoc (wsfoc sh))))
+                      (loop sh lay hist ffoc)                                    ; unmanaged, or already the EFFECTIVE focus: still
+                      (wsfloating? sh w) (: _ (x-focus s w) _ (x-flush s) (loop sh lay hist w))
+                      (: sh2 (wsmap sh (zfocto w)) _ (render sh2 lay) _ (refocus sh2) (loop sh2 lay hist ()))))
+                (= code 4)                                                      ; ButtonPress (the sync grab): REPLAY the frozen click into
+                (: pkt (ev-raw e) w (u32 pkt 12)                                 ; the app first -- ALWAYS -- then focus what was clicked
+                   _ (x-replay s) _ (x-flush s)
+                   (? (|| (! (wsknownw? sh w)) (= w (? ffoc ffoc (wsfoc sh)))) (loop sh lay hist ffoc)
+                      (wsfloating? sh w) (: _ (x-focus s w) _ (x-raise s w) _ (x-flush s) (loop sh lay hist w))
+                      (: sh2 (wsmap sh (zfocto w)) _ (render sh2 lay) _ (refocus sh2) (loop sh2 lay hist ()))))
                 (= code 2)                                                       ; KeyPress: the table answers
                 (: kc (ev-detail e) stm (& (ev-state e) kmodmask)
                    hit (afind (\ r (&& (= (cap r) stm) (= (caup r) kc))) ktab)
@@ -216,6 +241,7 @@
                     (? (&& (< 0 t) (! (< (tally phos-tags) t))) t 1))            ; out of range (a float's sticky marker) -> tag 1
    sh0 (foldl (\ ss w (wsview (admit (wsview ss (adopt-tag w)) w) (cap phos-tags))) (sheaf phos-tags) kids)
    _ (map (\ w (x-chprop32 s w (x-intern s "WM_STATE") (x-intern s "WM_STATE") (L 1 0))) kids)
+   _ (map (\ w (watch w)) kids)                                                 ; survivors get the mouse wires too
    _ (? (two? kids) (: _ (render sh0 phos-layout)
                        _ (map (\ w (? (any (\ x (= x w)) (wsrow sh0)) 0 (x-unmap s w))) (wstiled sh0))   ; adopted onto a HIDDEN tag: hide it
                        _ (x-flush s)                                             ; now, or it lingers painted over workspace 1 (the WM_STATE

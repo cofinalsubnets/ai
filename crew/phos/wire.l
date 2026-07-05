@@ -138,6 +138,13 @@
              _ (x-w8 s 22) _ (x-w8 s 0) _ (x-w16 s 0) _ (x-w32 s win) _ (x-w32 s win)       ; ConfigureNotify: event, window,
              _ (x-w32 s 0) _ (x-w16 s gx) _ (x-w16 s gy) _ (x-w16 s gw) _ (x-w16 s gh)      ; above-sibling None, the geometry,
              _ (x-w16 s bw) _ (x-w16 s 0) (x-w32 s 0))))                                    ; border, override-redirect 0, pad
+   (x-delprop s win prop) (: _ (x-w8 s 19) _ (x-w8 s 0) _ (x-w16 s 3) _ (x-w32 s win) (x-w32 s prop))   ; DeleteProperty
+   (x-grabbtn s win)                                                             ; GrabButton 1/2/3, AnyModifier, pointer SYNC: a click on a
+    (: (one b) (: _ (x-w8 s 28) _ (x-w8 s 0) _ (x-w16 s 6) _ (x-w32 s win)       ; managed window FREEZES until x-replay hands it back to the
+                  _ (x-w16 s 4) _ (x-w8 s 0) _ (x-w8 s 1) _ (x-w32 s 0)          ; app unstolen (click-to-focus). buttons 4/5 (the wheel) stay
+                  _ (x-w32 s 0) _ (x-w8 s b) _ (x-w8 s 0) (x-w16 s 32768))       ; UNGRABBED -- scroll never rides through the WM
+       _ (one 1) _ (one 2) (one 3))
+   (x-replay s) (: _ (x-w8 s 35) _ (x-w8 s 2) _ (x-w16 s 2) (x-w32 s 0))         ; AllowEvents ReplayPointer, CurrentTime
 
    ; --- QueryTree (opcode 15) + GetWindowAttributes (opcode 3): at startup we
    ;     ADOPT the windows that mapped before the redirect took hold (closing the
