@@ -6,6 +6,8 @@
 ;   au nc HOST PORT    the netcat (tools/ain.l); nc -l PORT listens
 ;   au make [F] [T..]  the build tool (crew/cook/cook.l)
 ;   au as TGT IN OUT   assemble IR forms from IN (x64|arm64) into an ELF at OUT
+;   au cat|head|tail|wc|sort|uniq|tee|echo|seq|yes|true|false|basename|dirname
+;                      the line tools + trivia (crew/utils/core.l)
 ;
 ; loads LAST in the au cat, when every tool main is already defined; the tool files'
 ; own SEATs stay quiet here (no file of theirs sits in the program seat), so this
@@ -52,6 +54,13 @@
               _ (pin t 'nc ain-main) _ (pin t 'ain ain-main)
               _ (pin t 'make cook-main) _ (pin t 'cook cook-main)
               _ (pin t 'as as-main)
+              _ (pin t 'cat cat-main) _ (pin t 'echo echo-main)
+              _ (pin t 'head head-main) _ (pin t 'tail tail-main)
+              _ (pin t 'wc wc-main) _ (pin t 'sort sort-main)
+              _ (pin t 'uniq uniq-main) _ (pin t 'tee tee-main)
+              _ (pin t 'seq seq-main) _ (pin t 'yes yes-main)
+              _ (pin t 'true true-main) _ (pin t 'false false-main)
+              _ (pin t 'basename basename-main) _ (pin t 'dirname dirname-main)
               t)
    (usage _) (: _ (say err "au -- the ai multi-call toolbox
 usage: au TOOL ARGS..     (or symlink a tool's name to au)
@@ -59,6 +68,8 @@ usage: au TOOL ARGS..     (or symlink a tool's name to au)
   nc HOST PORT       netcat; nc -l PORT listens
   make [FILE] [T..]  the build tool (Cards.l / Cookfile / Makefile)
   as TGT IN OUT      assemble IR forms from IN (x64|arm64) into ELF OUT
+  cat head tail wc sort uniq tee          the line tools (crew/utils/core.l)
+  echo seq yes true false basename dirname     ... and the trivia
 ")
                 (nap 2))
    (bn p) (: n (tally p)

@@ -111,5 +111,22 @@
       (= (udiff "a" "b" "" "x\n") "--- a\n+++ b\n@@ -0,0 +1 @@\n+x\n")
       (= (udiff "a" "b" "x\n" "") "--- a\n+++ b\n@@ -1 +0,0 @@\n-x\n")))
 
-(say err "crew/utils/law: myers + patience + lines/unlines + unified hunks -- projections + minimality (lcs oracle) + anchors + seeded fuzz ok
+; --- the u-floor (crew/utils/core.l): the pure helpers under the line tools, each
+; held to its GNU face -- the clips, the counter, the two path clips ---
+(: (assert
+      (= (uatoi "42") 42) (= (uatoi "-7") -7) (= (uatoi "0") 0)
+      (= (upad 7 "2") "      2") (= (upad 1 "34") "34")            ; a wider count never shrinks
+      (= (ujoin '("a" "b" "c")) "a b c") (= (ujoin ()) "")
+      (= (uhead 2 "a\nb\nc\n") "a\nb\n") (= (uhead 9 "a\nb\n") "a\nb\n")
+      (! (uhead 0 "a\n"))
+      (= (utail 2 "a\nb\nc\n") "b\nc\n") (= (utail 9 "a\nb\n") "a\nb\n")
+      (= (ucount "a b\nc\n") '(2 3 6)) (= (ucount "") '(0 0 0))    ; (lines words bytes)
+      (= (ucount "  a  b  ") '(0 2 8))                             ; a word is a maximal ink run
+      (= (ubase "/a/b.txt" "") "b.txt") (= (ubase "/a/b.txt" ".txt") "b")
+      (= (ubase "/a/b/" "") "b") (= (ubase "///" "") "/")
+      (= (ubase "b" "b") "b")                                      ; the suffix never eats the whole name
+      (= (udir "/a/b") "/a") (= (udir "a") ".") (= (udir "/") "/")
+      (= (udir "a/") ".") (= (udir "/a/b/") "/a")))
+
+(say err "crew/utils/law: myers + patience + lines/unlines + unified hunks + the u-floor -- projections + minimality (lcs oracle) + anchors + seeded fuzz ok
 ")

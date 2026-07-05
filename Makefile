@@ -134,14 +134,16 @@ test_phos: host
 	  { [ $$r -eq 0 ] && grep -q "crew/phos/law: StackSet" out/host/.test_phos.out; } \
 	    || { echo "FAIL phos (exit $$r)"; exit 1; }
 # aiutils (crew/utils/): the myers + patience diff engines, the text/tool surface,
+# the line tools (crew/utils/core.l: cat head tail wc sort uniq tee + the trivia),
 # and `au`, the multi-call toolbox (busybox's trick -- one binary, the util picked
 # off the command line or an argv[0] symlink; crew/utils/au.l is the dispatcher).
 # The law file holds the engines to their projections, to an O(nm) LCS oracle
-# (minimality), and to seeded fuzzes; the au smokes then drive the BUILT artifact:
-# diff byte-identical to GNU diff -u (headers off), the exit triple, argv[0]
-# dispatch through a `diff` symlink, usage at 2, and (x86_64) `au as` assembling
-# an exit(7) ELF that RUNS. Gate = the law sentinel AND exit 0 AND the smokes.
-aufiles = crew/utils/text.l crew/utils/diff.l tools/ain.l crew/cook/cook.l crew/utils/asbook.l crew/holo/elf.l crew/utils/au.l
+# (minimality), the u-floor to its GNU faces, and seeded fuzzes; the au smokes then
+# drive the BUILT artifact: diff + the line tools byte-identical to GNU (LC_ALL=C
+# for sort), the exit triple, argv[0] dispatch through a `diff` symlink, usage at 2,
+# and (x86_64) `au as` assembling an exit(7) ELF that RUNS. Gate = the law sentinel
+# AND exit 0 AND the smokes.
+aufiles = crew/utils/text.l crew/utils/core.l crew/utils/diff.l tools/ain.l crew/cook/cook.l crew/utils/asbook.l crew/holo/elf.l crew/utils/au.l
 # (`ho` is defined further down, after this rule is READ -- target/prereq names
 # expand at parse time, so these two lines spell out/host$(hsuf) themselves.)
 out/host$(hsuf)/au: $(aufiles)
@@ -150,8 +152,8 @@ out/host$(hsuf)/au: $(aufiles)
 	@chmod 755 $@
 .PHONY: test_utils
 test_utils: host out/host$(hsuf)/au
-	@echo "UTILS crew/utils/text.l + crew/utils/diff.l + crew/utils/law.l"; \
-	  cat test/00-init.l crew/utils/text.l crew/utils/diff.l crew/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
+	@echo "UTILS crew/utils/text.l + crew/utils/core.l + crew/utils/diff.l + crew/utils/law.l"; \
+	  cat test/00-init.l crew/utils/text.l crew/utils/core.l crew/utils/diff.l crew/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
 	  cat out/host/.test_utils.out; \
 	  { [ $$r -eq 0 ] && grep -q "crew/utils/law: myers" out/host/.test_utils.out; } \
 	    || { echo "FAIL utils (exit $$r)"; exit 1; }
@@ -174,6 +176,32 @@ test_utils: host out/host$(hsuf)/au
 	    [ $$r -eq 7 ] || { echo "FAIL au as run (exit $$r)"; exit 1; }; \
 	  fi; \
 	  echo "au: diff (GNU-identical) + argv0 symlink + usage + as ok"
+	@printf 'b\na\nc\nb\n' > $(ho)/.cu1; printf 'x y\nz\n' > $(ho)/.cu2; \
+	  LC_ALL=C sort $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/au sort $(ho)/.cu1 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au sort vs GNU"; exit 1; }; \
+	  LC_ALL=C sort -u $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/au sort -u $(ho)/.cu1 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au sort -u vs GNU"; exit 1; }; \
+	  LC_ALL=C sort $(ho)/.cu1 | uniq -c > $(ho)/.cu-g; $m $(ho)/au sort $(ho)/.cu1 | $m $(ho)/au uniq -c > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au uniq -c vs GNU"; exit 1; }; \
+	  head -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au head -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au head vs GNU"; exit 1; }; \
+	  tail -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au tail -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au tail vs GNU"; exit 1; }; \
+	  wc $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au wc $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au wc vs GNU"; exit 1; }; \
+	  wc -l < $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/au wc -l < $(ho)/.cu1 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au wc -l stdin vs GNU"; exit 1; }; \
+	  cat $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au cat $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au cat vs GNU"; exit 1; }; \
+	  seq 5 > $(ho)/.cu-g; $m $(ho)/au seq 5 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au seq vs GNU"; exit 1; }; \
+	  echo hi there > $(ho)/.cu-g; $m $(ho)/au echo hi there > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au echo vs GNU"; exit 1; }; \
+	  basename /a/b.txt .txt > $(ho)/.cu-g; $m $(ho)/au basename /a/b.txt .txt > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au basename vs GNU"; exit 1; }; \
+	  printf 'q\nq\nr\n' | tee $(ho)/.cu-g2 > $(ho)/.cu-g; printf 'q\nq\nr\n' | $m $(ho)/au tee $(ho)/.cu-o2 > $(ho)/.cu-o; \
+	  { cmp -s $(ho)/.cu-g $(ho)/.cu-o && cmp -s $(ho)/.cu-g2 $(ho)/.cu-o2; } || { echo "FAIL au tee vs GNU"; exit 1; }; \
+	  echo "au: line tools (sort/uniq/head/tail/wc/cat/seq/echo/basename/tee GNU-identical) ok"
 # The neutral assembler (crew/holo/) + its x86-64 backend: every encoder golden is
 # objdump-checked (crew/holo/holotest.l). A host-only app (like sat) -- it rides the
 # core's lists/tablets, adds no nif, and is NOT baked into ai0. The gate greps
