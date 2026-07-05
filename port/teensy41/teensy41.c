@@ -22,18 +22,23 @@ void cstartup(void);
 // 1. FlexSPI Configuration Block at 0x60000000: tells the ROM how to talk to
 //    the QSPI NOR (pad type, clock, and the LUT for the quad read at 0xEB).
 //    448 meaningful bytes inside a 512-byte block (RT1060 RM 9.6.3.1).
+// Field offsets are the RM's (9.6.3.1) and every value below is byte-for-byte
+// PJRC's bootdata.c (except sflashA1Size, which is the 4.1's 8 MB) -- the block
+// that boots this exact hardware. First silicon contact (2026-07-04, red LED
+// 9-blink = ARM DAP init error) was caused by these fields sitting at WRONG
+// offsets (deviceType at 0x18 instead of 0x44, size at 0x20 instead of 0x50,
+// LUT at 0xA0 instead of 0x80): the ROM read deviceType=0 and refused the boot.
 __attribute__((section(".flashconfig"), used))
 const uint32_t flexspi_nor_config[128] = {
-  [0]  = 0x42464346u,   // "FCFB" tag
-  [1]  = 0x56010000u,   // version V1.0
-  [3]  = 0x00030301u,   // readSampleClkSrc, csHold=3, csSetup=3, colAddrWidth=0
-  [4]  = 0x00000000u,   // deviceModeCfgEnable=0
-  [0x18 / 4] = 0x00080401u, // deviceType=1(NOR), padType=4(quad), serialClkFreq=8
-  [0x1C / 4] = 0x00000000u,
-  [0x1C / 4 + 1] = 0x00800000u, // sflashA1Size = 8 MB (Teensy 4.1)
-  // lookupTable[0..]: read sequence (CMD 0xEB, RADDR 24b, DUMMY, READ x4).
-  [0xA0 / 4]     = 0x0A1804EBu,
-  [0xA0 / 4 + 1] = 0x26043206u,
+  [0x00 / 4] = 0x42464346u,   // "FCFB" tag
+  [0x04 / 4] = 0x56010000u,   // version V1.0
+  [0x0C / 4] = 0x00020101u,   // readSampleClkSrc=1, csHold=1, csSetup=2, colAddrWidth=0
+  [0x44 / 4] = 0x00030401u,   // deviceType=1 (NOR), sflashPadType=4 (quad), serialClkFreq=3 (60 MHz)
+  [0x50 / 4] = 0x00800000u,   // sflashA1Size = 8 MB (Teensy 4.1)
+  // lookupTable[0..1]: the quad-IO read the ROM XIPs through --
+  // CMD 0xEB (1 pad), RADDR 24 bits (4 pads), DUMMY 6 cycles, READ (4 pads).
+  [0x80 / 4] = 0x0A1804EBu,
+  [0x84 / 4] = 0x26043206u,
 };
 
 // 2. Image Vector Table at 0x60001000 -- the ROM finds it at the fixed serial
@@ -51,7 +56,7 @@ const struct boot_data boot_data = {
 
 __attribute__((section(".ivt"), used))
 const struct ivt image_vector_table = {
-  .hdr   = 0x402000D1u,                  // tag 0xD1, len 0x0020, ver 0x40
+  .hdr   = 0x432000D1u,                  // tag 0xD1, len 0x0020, ver 0x43 (= PJRC's)
   .entry = (uintptr_t) cstartup,         // ROM jumps here
   .dcd   = 0,
   .boot  = (uintptr_t) &boot_data,
@@ -94,10 +99,43 @@ void cstartup(void) {
     "ldr sp, =__stack_top__ \n"
     "b   cmain              \n"); }
 
+// --- caches ----------------------------------------------------------------
+// XIP with the caches off fetches EVERY instruction over the 60 MHz QSPI: the
+// egg bake crawls from seconds into hours (first silicon 2026-07-04: solid LED,
+// no change -- not hung, CRAWLING; the slowness was the bug). The ARMv7-M
+// default memory map already types both the flash window (0x60000000) and
+// OCRAM (0x20200000) as Normal/cacheable, so enabling I+D at the SCB is the
+// whole job -- no MPU regions needed. Sequence per the ARMv7-M ARM: invalidate,
+// then enable. The D-cache invalidate walks sets x ways from CCSIDR (RT1062:
+// 32 KB, 4-way, 32 B lines -> way field at bit 30, set field at bit 5).
+#define SCB_CCR     0xE000ED14u
+#define SCB_CCSIDR  0xE000ED80u
+#define SCB_CSSELR  0xE000ED84u
+#define SCB_ICIALLU 0xE000EF50u
+#define SCB_DCISW   0xE000EF60u
+
+static void caches_init(void) {
+  __asm volatile("dsb; isb");
+  REG(SCB_ICIALLU) = 0;
+  __asm volatile("dsb; isb");
+  REG(SCB_CCR) |= 1u << 17;                      // I-cache on
+  __asm volatile("dsb; isb");
+  REG(SCB_CSSELR) = 0;                           // select the L1 D-cache
+  __asm volatile("dsb");
+  uint32_t ccsidr = REG(SCB_CCSIDR);
+  uint32_t sets = (ccsidr >> 13) & 0x7FFFu, ways = (ccsidr >> 3) & 0x3FFu;
+  for (uint32_t s = 0; s <= sets; s++)
+    for (uint32_t w = 0; w <= ways; w++)
+      REG(SCB_DCISW) = (w << 30) | (s << 5);
+  __asm volatile("dsb");
+  REG(SCB_CCR) |= 1u << 16;                      // D-cache on
+  __asm volatile("dsb; isb"); }
+
 __attribute__((used, noreturn)) void cmain(void) {
   // FPU on (CP10/CP11 full access) before any float-typed code runs.
   REG(SCB_CPACR) |= (0xFu << 20);
   __asm volatile("dsb; isb");
+  caches_init();
   // .data from its flash load address into OCRAM2; zero .bss.
   for (uint32_t *s = __data_load__, *d = __data_start__; d < __data_end__; ) *d++ = *s++;
   for (uint32_t *b = __bss_start__; b < __bss_end__; b++) *b = 0;

@@ -5,7 +5,7 @@
 # Per-frontend build output lives under $R/out/<frontend>/.
 R ?= .
 
-m = $R/out/host/ai
+m = $R/out/host$(hsuf)/ai
 a ?= $(shell uname -m)
 
 # clang is the default host/ai0 compiler (every dev machine here has it; mac's
@@ -13,10 +13,26 @@ a ?= $(shell uname -m)
 # plain `CC ?= clang` is a no-op -- make ships a built-in default `CC = cc` (origin
 # `default`, not `undefined`), so `?=` never fires. Override the built-in default
 # explicitly while still honoring an env/CLI `CC=` (origin command line/environment):
-# `make CC=gcc`, or a static-musl build `make STATIC=1 CC=musl-clang` (see hsuf).
+# `make CC=gcc`. cc_user marks an explicit choice -- it opts out of the musl
+# default below and the host block's musl-clang pick.
 ifeq ($(origin CC),default)
 CC = clang
+else
+cc_user := 1
 endif
+
+# The host binary's FLAVOR. STATIC=1 links `ai` fully static against musl (the
+# STATIC block in the root Makefile has the whole story) -- and that IS the
+# default on Linux when musl-clang is present and CC is untouched: the everyday
+# binary is the portable one (+1% size, same speed, DNS intact). STATIC=0 forces
+# the dynamic glibc build. The default flavor always owns the canonical out/host
+# tree; the OTHER flavor gets its own suffixed tree (out/host-glibc here,
+# out/host-musl on a machine without the musl default) so the two libcs never
+# share objects -- and $m below follows, so tests run the flavor you asked for.
+static_default := $(if $(cc_user),,$(if $(filter Linux,$(shell uname -s)),$(shell command -v musl-clang 2>/dev/null)))
+STATIC ?= $(if $(static_default),1)
+override STATIC := $(filter-out 0,$(STATIC))
+hsuf := $(if $(STATIC),$(if $(static_default),,-musl),$(if $(static_default),-glibc,))
 
 # ai_tco for the builds that can take it: 1 = the tail-threaded VM (aps tail-jump,
 # never return -- `make vmret` verifies it per binary), 0 = the trampoline loop.

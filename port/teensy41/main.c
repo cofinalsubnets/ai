@@ -7,8 +7,8 @@
 // port's UART0 console (USB CDC is a TODO, see README). The arch backend
 // (teensy41.c) owns the FlexSPI boot image, startup, clocks, LPUART, GPT
 // timer, and GPIO; this file is just the love glue plus a few GPIO nifs. The
-// REPL line editor in repl.l drives the console exactly as it drives the
-// kernel's.
+// shell line editor (ai/bao.l, the baked shell core) drives the console
+// exactly as it drives the kernel's.
 #include "../../ai.h"
 #include "teensy41.h"
 
@@ -125,28 +125,103 @@ static struct ai_def defs[] = {
   {"gpio_put",  (intptr_t) nif_gpio_put},
   {"gpio_get",  (intptr_t) nif_gpio_get}, };
 
+// --- the arena ------------------------------------------------------------
+// The generational collector is the ONLY collector, and it draws its pools
+// through g->alloc, whose default rides malloc/free (ai_ini). So the frontend
+// supplies them: a first-fit free list over a static arena in OCRAM2 (the inle
+// kernel's kmallocw/kfree, shrunk to one region), with the C stack above it
+// under __stack_top__. Lengths are in words, header included.
+static struct mem {
+  struct mem *next;
+  uintptr_t len;
+  uintptr_t _[];
+} *freelist;
+
+static ai_inline struct mem *after(struct mem *r) {
+  return (struct mem*) ((uintptr_t*) r + r->len); }
+
+static void *mallocw(uintptr_t n) {
+  if (!n) return NULL;
+  void *p = NULL;
+  struct mem *r = NULL, *t;
+  while (freelist && freelist->len < n + 2 * Width(struct mem))
+    t = freelist,
+    freelist = t->next,
+    t->next = r,
+    r = t;
+  if (freelist)
+    freelist->len -= n + Width(struct mem),
+    t = after(freelist),
+    t->len = Width(struct mem) + n,
+    p = t->_;
+  while (r)
+    t = r,
+    r = t->next,
+    t->next = freelist,
+    freelist = t;
+  return p; }
+
+void *malloc(size_t n) { return mallocw(b2w(n)); }
+
+void free(void *p) {
+  if (!p) return;
+  struct mem *m = (struct mem*)p - 1, *r = NULL, *t;
+  while (freelist && freelist < m)
+    t = freelist,
+    freelist = t->next,
+    t->next = r,
+    r = t;
+  for (;; m = r, r = r->next) {
+    if (freelist != after(m)) m->next = freelist;
+    else m->len += freelist->len,
+         m->next = freelist->next;
+    freelist = m;
+    if (!r) return; } }
+
 // --- entry ----------------------------------------------------------------
 // cstartup (teensy41.c) has set up the FPU, .data/.bss, VTOR, clocks, and the
-// console before calling us. The static pool is the whole love heap (we run
-// RAM out of the 512 KB OCRAM2; no malloc); the rest of OCRAM2 above it is the
-// C stack. The bootstrap egg compiles the love compiler with the C evaluator,
-// recompiles it with itself, installs it, then we run the REPL -- identical to
-// host/free, just smaller. The pool is sized to leave headroom for the stack
-// under __stack_top__; if the self-hosting double-bake OOMs on real silicon,
-// shrink it, move RAM to PSRAM (0x70000000), or trim the egg.
-static uint8_t pool[384 * (1 << 10)];
+// console before calling us. The bootstrap egg compiles the love compiler with
+// the C evaluator, recompiles it with itself, installs it, then we run the
+// shell -- identical to host/free, just smaller. The arena is sized to leave
+// headroom for the stack under __stack_top__; if the self-hosting double-bake
+// OOMs on real silicon, shrink the budget, move the arena to PSRAM
+// (0x70000000), or trim the egg.
+static uint8_t pool[384 * (1 << 10)] __attribute__((aligned(8)));
 
 int main(void) {
-  struct ai *g = ai_defn(ai_ini_s(pool, sizeof pool), defs, countof(defs));
-  g = ai_evals_(g, "("
+  // first light: the LED comes on before any love runs, so a board with no
+  // serial adapter still shows the boot image + crt0 + clocks worked. The
+  // gpio_* layer indexes GPIO2 BITS: the pin-13 LED is GPIO2_IO03 = LED_BIT.
+  gpio_init(LED_BIT); gpio_set_dir(LED_BIT, 1); gpio_put(LED_BIT, 1);
+  // a raw banner straight to the LPUART: proves the console path (mux, baud,
+  // adapter wiring) the moment the board resets, before any love runs.
+  for (char const *s = "\r\n; love/teensy41 -- baking the egg\r\n"; *s; s++)
+    serial_putc(*s);
+  freelist = (struct mem*) pool;
+  freelist->next = NULL;
+  freelist->len = sizeof pool / sizeof(uintptr_t);
+  struct ai *g = ai_defn(ai_ini(), defs, countof(defs));
+  // BOUND the collector to the arena (the Appel knob -- gen_please, ai.c):
+  // 2*minor + 2*major carve out of the free list, and a major resize holds old
+  // and new at once, so an unbounded budget OOMs inside the collector. A
+  // quarter of the arena leaves the double-buffered resize and free-list
+  // fragmentation their room.
+  if (ai_ok(g)) ai_core_of(g)->budget = sizeof pool / sizeof(ai_word) / 4;
+  struct ai *r = ai_evals_(g, "("
 #include "egg.h"
     ai_egg_pre
 #include "prel.h"
     " "
 #include "ev.h"
     ai_egg_post
-#include "repl.h"
-    "(shell 0)");
-  // The REPL only returns on a fatal error. Idle low-power afterward.
-  (void) g;
-  for (;;) __asm volatile("wfi"); }
+#include "bao.h"
+    // The LED is the status channel while the console has no adapter: solid on
+    // = still baking the egg, OFF = the egg hatched and the shell is at its
+    // prompt, fast blink (below) = fatal. 3 is LED_BIT (GPIO2_IO03 = pin 13).
+    "(: _ (gpio_init 3) _ (gpio_dir 3 1) _ (gpio_put 3 0) (shell 0))");
+  // The shell only returns on a fatal error: honest face, then blink it out.
+  if (ai_code_of(r) == ai_status_scare) ai_scare_face_(r);
+  ai_fin(r);
+  for (;;) {
+    gpio_put(LED_BIT, 1); ai_sleep(120);
+    gpio_put(LED_BIT, 0); ai_sleep(120); } }

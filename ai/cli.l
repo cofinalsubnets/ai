@@ -1,6 +1,7 @@
 ; host CLI driver -- parse argv (after the program-name head) left to right:
 ;   -l/--load <file>    preload a file (read-eval it) before the program
-;   -e/--eval <string>  read-eval the forms in a string (a program)
+;   -e/--eval <string>  eval the string as ONE expression (the repl's line law: many
+;                       datums fold to one application, so infix works; one datum as-is)
 ;   -v/--version        print the version and exit
 ;   -h/--help           print usage and exit
 ;   --                  end of options: the next arg is the program, the rest are its args
@@ -27,12 +28,23 @@
  (: (rdev q) ((: (go e q) (: r (sound q e) (? (= e r) 0 (: _ (ev 'ev r) (go e q))))) (mint 0) q)
     (load1 p) (: q (open p "r")
        (? q (rdev q) (: _ (say err (+ "ai: cannot open " p)) (nap 1))))
-    (eval1 s) (rdev (tap (map s (jot (tally s)))))   ; a string is a fn over its bytes -> a charlist port
+    (eval1 s) (: q (tap (map s (jot (tally s))))     ; a string is a fn over its bytes -> a charlist port
+       e (nom 0) m (nom 0)                           ; fresh noms: eof / unfinished-shape, id?-safe
+       (rdl _) (: r (sound q e)                      ; every top-level datum off the string, in order
+          (? (id? r q) m                             ; the port back: an unfinished shape
+             (id? r e) ()
+             (: t (rdl ()) (? (id? t m) m (link r t)))))
+       ds (rdl ())
+       (? (id? ds m)       (: _ (say err "ai: -e: unfinished form") (nap 2))
+          (two? ds)
+          (? (two? (cup ds)) (ev 'ev ds)             ; MANY datums: the ONE application -- infix factors, like a repl line
+             (ev 'ev (cap ds)))                      ; ONE datum: as-is (a leading monadic stays fused)
+          ()))                                       ; no datums: nothing to run
     (bye s) (: _ (puts s) _ (putc 10) _ (flush out) (nap 0))   ; print a line to out, flush, exit 0
     (version _) (bye (+ "ai " ai-version))                       ; _ arg: ai has no nullary calls
     (usage _) (bye (+ "usage: ai [-l FILE] [-e EXPR] [-v] [-h] [--] [FILE ...]\n"
                (+ "  -l, --load FILE   preload FILE (read-eval) before the program\n"
-               (+ "  -e, --eval EXPR   read-eval the forms in EXPR\n"
+               (+ "  -e, --eval EXPR   eval EXPR as one expression (infix works)\n"
                (+ "  -v, --version     print the version and exit\n"
                (+ "  -h, --help        print this help and exit\n"
                (+ "  --                end of options; the rest are files\n"
