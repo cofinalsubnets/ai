@@ -61,7 +61,7 @@ the only real design choice.
 ## The decision: a park-based scheduler (preferred), or Asyncify (standalone)
 
 > **The better path is the scheduler redesign — see [`doc/sched.md`](sched.md).**
-> bao already parks correctly via `get`/`lvm_fgetc`; the blocking is really in the
+> bao already parks correctly via `see`/`lvm_fgetc`; the blocking is really in the
 > *core scheduler's* host-wait (`ai_wait_fds`), which on wasm is a no-op spin. If
 > that wait is made **declinable** — native blocks, wasm returns the yield status
 > up the existing trampoline (`ai.c:1823-1827`) and an `ai_resume(g)` re-enters —

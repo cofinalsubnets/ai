@@ -15,7 +15,7 @@
 
 ; read a \n-terminated line off port p; the byte law ("" + byte appends one char)
 ; rebuilds the text. EOF (get -> -1) also ends the line.
-(: (rdline p) (: (go acc) (: ch (get p) (? (= ch 10) acc (= ch -1) acc (go (acc + ch))))
+(: (rdline p) (: (go acc) (: ch (see p) (? (= ch 10) acc (= ch -1) acc (go (acc + ch))))
                  (go "")))
 
 ; --- listen / accept / connect / get / say / seal over 127.0.0.1 ---

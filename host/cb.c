@@ -289,9 +289,9 @@ static lvm(lvm_gush) {
   Sp += 1; Ip += 1; return Continue(); }
 
 // (swig port b): gush's read twin -- drink whatever the fd has waiting into
-// cask b, WITHOUT blocking (the caller parks on `get` for the first byte;
+// cask b, WITHOUT blocking (the caller parks on `see` for the first byte;
 // swig drains the rest of the gulp). n bytes read; 0 = nothing waiting or
-// eof (the next get tells those apart); a negative charm = -errno / misuse.
+// eof (the next see tells those apart); a negative charm = -errno / misuse.
 static lvm(lvm_swig) {
   ai_word p = Sp[0], x = Sp[1];
   ai_word out = putcharm(-1);

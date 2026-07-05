@@ -603,7 +603,7 @@
    (dsleaf n) (% (- 4 (% n 4)) 4)                                                                  ; the pure leaf that triggers the walk
    _ (dsw 513)                                                                                     ; bytes 1 then 2
    t (tap (L 1 2 3 4))
-   (dsr2 u) (: a (get t) b (get t) (| a (<< b 8)))
+   (dsr2 u) (: a (see t) b (see t) (| a (<< b 8)))
    (dsr4 u) (: a (dsr2 ()) b (dsr2 ()) (| a (<< b 16)))                                            ; the x11 spike's r32
    v (dsr4 ())
    _ (assert

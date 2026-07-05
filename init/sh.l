@@ -138,8 +138,8 @@
    (sh-drop-amp ws) (? (two? (cup ws)) (link (cap ws) (sh-drop-amp (cup ws))) ())
 
    ; --- read one line (cooked tty): bytes until \n; 'eof at immediate EOF.
-   (sh-getline port) (: c (get port) (? (< c 0) 'eof (= c 10) "" (+ (+ "" c) (sh-rest port))))
-   (sh-rest port)    (: c (get port) (? (< c 0) ""   (= c 10) "" (+ (+ "" c) (sh-rest port))))
+   (sh-getline port) (: c (see port) (? (< c 0) 'eof (= c 10) "" (+ (+ "" c) (sh-rest port))))
+   (sh-rest port)    (: c (see port) (? (< c 0) ""   (= c 10) "" (+ (+ "" c) (sh-rest port))))
 
    ; --- tokenize: whitespace split, with '...' / "..." quoting (literal contents).
    ; operators (| < > >>) are ordinary space-separated word tokens, parsed below.

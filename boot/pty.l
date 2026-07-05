@@ -69,7 +69,7 @@
  m (cup r)
  _ (put m 110) _ (put m 101) _ (put m 107) _ (put m 111) _ (put m 10)  ; "neko\n"
  _ (flush m)
- a (get m) b (get m) c (get m) d (get m)    ; the first 4 bytes back off the master
+ a (see m) b (see m) c (see m) d (see m)    ; the first 4 bytes back off the master
  _ (assert (= a 110) (= b 101) (= c 107) (= d 111)) ; n e k o -- the round trip over the pty
  _ (still (cap r) 9)
  _ (waitfor (cap r)))
@@ -84,7 +84,7 @@
  _ (assert (nil? (ptyecho m 0)))                  ; echo OFF -> () ok
  _ (put m 104) _ (put m 105) _ (put m 10)  ; "hi\n"
  _ (flush m)
- a (get m) b (get m)                          ; first bytes back are tr's OUTPUT
+ a (see m) b (see m)                          ; first bytes back are tr's OUTPUT
  _ (assert (= a 72) (= b 73))                     ; "HI" -- the "hi" echo is suppressed
  _ (still (cap r) 9)
  _ (waitfor (cap r)))

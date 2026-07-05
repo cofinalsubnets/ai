@@ -18,11 +18,11 @@
    (w32 v)  (: _ (w16 (& 65535 v)) (w16 (& 65535 (>> v 16))))
    (wstr t) (: (go i) (? (< i (tally t)) (: _ (put s (t i)) (go (+ i 1))) 0) (go 0))
    (wzero k) (: (go i) (? (< i k) (: _ (put s 0) (go (+ i 1))) 0) (go 0))
-   (r8 u)   (get s)
-   (r16 u)  (: a (get s) b (get s) (| a (<< b 8)))
+   (r8 u)   (see s)
+   (r16 u)  (: a (see s) b (see s) (| a (<< b 8)))
    (r32 u)  (: a (r16 ()) b (r16 ()) (| a (<< b 16)))
-   (skip n) (: (go i) (? (< i n) (: _ (get s) (go (+ i 1))) 0) (go 0))
-   (rstr n) (: (go i acc) (? (< i n) (go (+ i 1) (+ acc (get s))) acc) (go 0 ""))
+   (skip n) (: (go i) (? (< i n) (: _ (see s) (go (+ i 1))) 0) (go 0))
+   (rstr n) (: (go i acc) (? (< i n) (go (+ i 1) (+ acc (see s))) acc) (go 0 ""))
    (pad4 n) (% (- 4 (% n 4)) 4)          ; X rounds strings up to 4 bytes
 
    ; --- the setup handshake: 12 bytes, 'l' = little-endian, empty auth ---

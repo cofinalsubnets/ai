@@ -406,7 +406,7 @@
 (: help 0)
 
 ; --- i/o & ports --- in/out/err are the default ports; getc + putc/puts/putn/putx, per-port
-; get/put/... , open/close/pad. the vessels: (tap cl) an input SOURCE over a colist, (jug 0) an
+; see/put/... , open/close/pad. the vessels: (tap cl) an input SOURCE over a colist, (jug 0) an
 ; output PORT with a growable buffer that pours both ways (a PORT, not a cask -- a cask is the
 ; mutable byte ARRAY); (sip o) draws ONE unit, (slurp o) drains ALL to a value. the datum reader
 ; is `sound`, and the whole read protocol IS its return value: the datum, the PORT back on an

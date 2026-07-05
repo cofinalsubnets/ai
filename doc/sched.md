@@ -20,7 +20,7 @@ and the [browser terminal](webterm.md) both turn out to need.
 ai already has a cooperative scheduler with fd-parking and timers — but only *two* of its waits
 are real event-parks:
 
-- `get`/`lvm_fgetc` (ai.c:3710-3712): not ready → set `next_wait_fd`, `Ap(lvm_yield_sw)`. A genuine **fd-park**.
+- `see`/`lvm_fgetc` (ai.c:3710-3712): not ready → set `next_wait_fd`, `Ap(lvm_yield_sw)`. A genuine **fd-park**.
 - `rest`/`lvm_sleep` (ai.c:2766): set `next_wake_at`, yield. A **timer-park**.
 
 The task waits are **polls**:

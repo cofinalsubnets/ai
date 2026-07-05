@@ -56,7 +56,7 @@
    puts (say out) ;; FIXME rm f prefix
    (putn n) (putbn out n 10) ;; FIXME rm f prefix and make preferred base user configurable
    putx (print out) ;; FIXME rm f prefix
-   (getc _) (get in)) ;; FIXME rm f prefix
+   (getc _) (see in)) ;; FIXME rm f prefix
 ; the accessor aliases are plain globals too, so escaping works like (+)/'+ --
 ; ((->) t k d) peeps.
 (: <- pin -> peep)
@@ -231,10 +231,10 @@
  (poke -1 (peek 0 in) (poke -1 -4 (poke -1 -1 (poke -1 0 (poke 4 cl (twirl 5))))))
  (jug _)                                          ; the output dual of `tap`: a memory-backed output PORT -- say INTO it, slurp it back OUT (you pour both ways, like a jug). NOT a cask (a cask is a byte ARRAY)
   (poke -1 (peek 0 in) (poke -1 -2 (poke -1 -1 (poke -1 0 (poke -1 "  " (poke 5 0 (twirl 6)))))))
- (sip o) (get o)                                  ; draw ONE unit (pairs with slurp = all)
- ; slurp drains a vessel to a value: an output jug reads its backing buffer; a tap drains via get.
+ (sip o) (see o)                                  ; draw ONE unit (pairs with slurp = all)
+ ; slurp drains a vessel to a value: an output jug reads its backing buffer; a tap drains via see.
  (slurp o) (? (string? (peek 4 o)) (snip (peek 4 o) 0 (peek 5 o))
-              (: (rl i) (: c (get i) (? (= c -1) () (link c (rl i)))) (string (rl o))))  ; (pre-opfix: no ! here)
+              (: (rl i) (: c (see i) (? (= c -1) () (link c (rl i)))) (string (rl o))))  ; (pre-opfix: no ! here)
  (show x) (: o (jug 0) _ (print o x) (slurp o)))
 ; help status readers. a global `help` function is called as (help s a b):
 ; s = the status word, two bits -- scare (1: something went wrong) and more

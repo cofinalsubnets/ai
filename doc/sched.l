@@ -5,7 +5,7 @@
 ; can reach a real quiescent point -- which is what lets a native host block efficiently AND lets the
 ; wasm host unwind out of ai_eval and resume on an event (no Asyncify).
 ;
-; THE PROBLEM THIS MODELS. today only `get`/lvm_fgetc (fd-park, ai.c:3710) and `rest`/lvm_sleep
+; THE PROBLEM THIS MODELS. today only `see`/lvm_fgetc (fd-park, ai.c:3710) and `rest`/lvm_sleep
 ; (timer) are real event-parks; `catch`/lvm_wait (ai.c:2732) re-scans the ring and CLEARS its fd/wake
 ; (2737), so a waiter is perpetually runnable -- a busy spinner. `back?`/`cue?` poll likewise. So
 ; lvm_yield_sw can never see "everyone parked on a real event": there is always something runnable, so

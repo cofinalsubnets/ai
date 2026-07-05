@@ -14,24 +14,24 @@
 
   ; unget + get roundtrip on stdin (within a single top-level form,
   ; otherwise the REPL parser would consume the pushed-back byte itself).
-  (: (rt c) (: _ (unget in c) (get in))
+  (: (rt c) (: _ (unsee in c) (see in))
    (do (= 65  (rt 65))
       (= 32  (rt 32))
       (= 255 (rt 255))))
 
   ; unget returns the byte it pushed.
-  (: _ (get in)   ; pull and discard whatever's at the head
-   (= 99 (unget in 99)))
+  (: _ (see in)   ; pull and discard whatever's at the head
+   (= 99 (unsee in 99)))
   ; ...and the pushed byte is then the next read.
-  (= 99 (get in))
+  (= 99 (see in))
 
   ; A non-port reads as an already-empty stream: (get x) is -1 (EOF), not the
   ; echoed x, so a read-until-(-1) loop over an absent or misused port terminates
   ; instead of spinning on a value that never equals -1. This is what keeps the
   ; file roundtrip below bounded on a host with no filesystem, where `open` is a
   ; missing name that resolves to a non-port.
-  (= -1 (get 42))
-  (= -1 (get "notaport"))
+  (= -1 (see 42))
+  (= -1 (see "notaport"))
 
   ; File-I/O roundtrip: write a string to /tmp via say, read it back
   ; byte-by-byte via get, rebuild as a string with str, and compare.
@@ -46,7 +46,7 @@
      _ (say wp txt)
      _ (close wp)
      rp (open "/tmp/l-io-test" "r")
-     (slurp acc) (: c (get rp) (? (= c -1) (rev acc) (slurp (link c acc))))
+     (slurp acc) (: c (see rp) (? (= c -1) (rev acc) (slurp (link c acc))))
      rd (string (slurp 0))
      _ (close rp)
      (= txt rd)) 1)

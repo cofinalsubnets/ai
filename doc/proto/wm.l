@@ -19,11 +19,11 @@
    (w8 v)   (put s v)
    (w16 v)  (: _ (put s (& 255 v)) (put s (& 255 (>> v 8))))
    (w32 v)  (: _ (w16 (& 65535 v)) (w16 (& 65535 (>> v 16))))
-   (r8 u)   (get s)
-   (r16 u)  (: a (get s) b (get s) (| a (<< b 8)))
+   (r8 u)   (see s)
+   (r16 u)  (: a (see s) b (see s) (| a (<< b 8)))
    (r32 u)  (: a (r16 ()) b (r16 ()) (| a (<< b 16)))
-   (skip n) (: (go i) (? (< i n) (: _ (get s) (go (+ i 1))) 0) (go 0))
-   (rstr n) (: (go i acc) (? (< i n) (go (+ i 1) (+ acc (get s))) acc) (go 0 ""))
+   (skip n) (: (go i) (? (< i n) (: _ (see s) (go (+ i 1))) 0) (go 0))
+   (rstr n) (: (go i acc) (? (< i n) (go (+ i 1) (+ acc (see s))) acc) (go 0 ""))
    (pad4 n) (% (- 4 (% n 4)) 4)
 
    ; --- handshake + setup parse (only what the wm needs) ---

@@ -29,14 +29,14 @@ Run `feedlines` (reads `in`, writes `out`) in one task and `pump m out` (reads
 `m`, writes `out`) in the other and it **hangs after one keystroke.** The *only*
 difference from the working transparent pump is that the editor task now writes to
 `out` (the render) instead of feeding the master. Single-task `edraw` on `in`
-works; a lone `get`-in-a-spawned-task works; the concurrent two-task park is what
+works; a lone `see`-in-a-spawned-task works; the concurrent two-task park is what
 breaks. The exact proximate trigger could not be pinned statically (it wants a
 debug-build instrument) — but it does not need to be, because the substrate it
 rides on is structurally wrong, and path B removes that substrate entirely.
 
 ## 1. The diagnosis — four structural defects in the port surface
 
-The `get`/`unget`/`end?`/`key?` surface is **POSIX wrongly embedded in the
+The `see`/`unsee`/`end?`/`key?` surface is **POSIX wrongly embedded in the
 generic core.** Four leaks, each a place where the cooperative model and the
 read model disagree:
 
@@ -49,7 +49,7 @@ read model disagree:
    spin (`lvm_yield_sw_mono`, ai.c:2128) is bailed out by the user's next
    keystroke; under two tasks, `yield_sw` hands control away and the byte is never
    reconsidered. (`key?` already gets this right — ai.c:3663 tests
-   `ungetc_buf != EOF || ai_ready(fd)`; `get` does not. The asymmetry is the bug.)
+   `ungetc_buf != EOF || ai_ready(fd)`; `see` does not. The asymmetry is the bug.)
 
 2. **The `-1` EOF sentinel is un-ai.** Absence in ai is the zero point `()`, not a
    magic integer; and `-1` collides with byte `0xFF`-as-`putcharm` reasoning and
@@ -192,14 +192,14 @@ Today three places know fds: `lvm_fgetc` (sets `next_wait_fd`), `lvm_key` (reads
   already multiplex N parked fds correctly. The bug was never the scheduler; it was
   the readiness *model* feeding it (defect 1). With lookahead in the source and EOF
   as `()`, a task never parks holding a byte, and `select` lets a task wait on
-  several streams deliberately rather than committing to one `get`.
+  several streams deliberately rather than committing to one `see`.
 
 ## 9. Migration — staged, each stage gated
 
 Strictly additive first; delete only after parity.
 
 - **Stage 0 — add the surface alongside the old.** `source`/`sip`(re-pointed)/
-  `sink`/`ready?`/`select` as new nifs; `get`/`key?`/`in`/`out` untouched. Gate:
+  `sink`/`ready?`/`select` as new nifs; `see`/`key?`/`in`/`out` untouched. Gate:
   full `make test` green; a `boot/stream.l` smoke (the pure half over a charlist
   producer — see §11) under `make test_hostnif`.
 - **Stage 1 — `read` as the pure fold** over a `source`, behind a flag or a new
@@ -214,7 +214,7 @@ Strictly additive first; delete only after parity.
   core, formerly `repl.l`) and the cli onto streams. Heaviest stage (the egg-baked
   editor; coordinate with the core thread — `bao.l` is shared, kernel- and
   corpus-pinned).
-- **Stage 4 — delete.** Remove `get`/`unget`/`end?`/`key?`/`ungetc_buf`/
+- **Stage 4 — delete.** Remove `see`/`unsee`/`end?`/`key?`/`ungetc_buf`/
   `eof_seen` and the more-bit/port-back protocol (§7). Gate: every tier green +
   valg 0/0 + vmret.
 
@@ -229,7 +229,7 @@ Map each defect to its removal:
 3. **scattered fd logic** → one force site sets `next_wait_fd`; the editor task and
    the pump task each block on their own `source`, or on `(select (L kbd master))`
    when they genuinely need to wait on both — a deliberate multiplex, not two blind
-   `get`s racing.
+   `see`s racing.
 4. **blocking writes** → the render and the pump write through `dot`/`sink`; the
    reader-side fix removes the park-with-byte-in-hand stall that was the actual
    hang, and `select` makes the wait explicit so neither task spins or sleeps on

@@ -31,7 +31,7 @@
 ;
 ; CONCURRENT: the accept loop `await`s the listener fd (cooperative park) and
 ; spins each client's session as its own task, so many agents moor at once.
-; Sessions interleave through the scheduler -- parked in `sound`/`get` on their
+; Sessions interleave through the scheduler -- parked in `sound`/`see` on their
 ; own fds, and a long pure-ai computation yields periodically too. The ONE thing
 ; that freezes the dock is a blocking C nif: `run` (fork/wait), so the heavy
 ; verbs `probe`/`gate`/`build`/`adopt` hold the whole dock while they run. That
@@ -125,7 +125,7 @@
 
    ; --- the session: read one form off the socket, eval it in the book (so
    ; every global is a verb), `show` the value back, flush. Loop to disconnect.
-   ; `sound` parks on `get` cooperatively, so it waits for a full form and ends
+   ; `sound` parks on `see` cooperatively, so it waits for a full form and ends
    ; only at EOF (client gone) or an unfinished shape at close. A scare during
    ; eval is caught by the installed dock-help (below): the client sees the
    ; condition as a value and the session lives on -- the shell law, over TCP. --
@@ -144,7 +144,7 @@
    ; (yielding to running sessions) until a client is pending, so the following
    ; `accept` returns without blocking; each client's session is SPUN as its own
    ; task and the loop immediately re-parks. Sessions interleave through the
-   ; cooperative scheduler -- each is parked in `sound`/`get` on its own fd
+   ; cooperative scheduler -- each is parked in `sound`/`see` on its own fd
    ; (lvm_fgetc yields on a not-ready fd), exactly like ain's two pumps. The
    ; session tasks are deliberate ORPHANS (never caught) -- the dock runs
    ; forever, so an uncaught task is the point, not the corpus-runner stall.

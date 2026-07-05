@@ -14,14 +14,14 @@
    (x-w16 s v) (: _ (put s (& 255 v)) (put s (& 255 (>> v 8))))
    (x-w32 s v) (: _ (x-w16 s (& 65535 v)) (x-w16 s (& 65535 (>> v 16))))
    (x-flush s) (flush s)
-   (x-r8 s)  (get s)
-   (x-r16 s) (: a (get s) b (get s) (| a (<< b 8)))
+   (x-r8 s)  (see s)
+   (x-r16 s) (: a (see s) b (see s) (| a (<< b 8)))
    (x-r32 s) (: a (x-r16 s) b (x-r16 s) (| a (<< b 16)))
-   (x-skip s n) (: (go i) (? (< i n) (: _ (get s) (go (+ i 1))) 0) (go 0))
-   (x-rstr s n) (: (go i acc) (? (< i n) (go (+ i 1) (+ acc (get s))) acc) (go 0 ""))
+   (x-skip s n) (: (go i) (? (< i n) (: _ (see s) (go (+ i 1))) 0) (go 0))
+   (x-rstr s n) (: (go i acc) (? (< i n) (go (+ i 1) (+ acc (see s))) acc) (go 0 ""))
    (x-pad4 n) (% (- 4 (% n 4)) 4)
    (x-wname s t) (: (go i) (? (< i (tally t)) (: _ (put s (t i)) (go (+ i 1))) 0) (go 0))
-   (x-rbytes s n) (: (go i acc) (? (< i n) (go (+ i 1) (link (get s) acc)) (rev acc)) (go 0 ()))   ; n raw bytes -> a list
+   (x-rbytes s n) (: (go i acc) (? (< i n) (go (+ i 1) (link (see s) acc)) (rev acc)) (go 0 ()))   ; n raw bytes -> a list
    (u16 l off) (| (nthl l off) (<< (nthl l (+ off 1)) 8))                        ; little-endian reads out of a byte list
    (u32 l off) (| (u16 l off) (<< (u16 l (+ off 2)) 16))
 
@@ -200,6 +200,6 @@
    (x-next s)                                                                    ; a stashed event first, else the socket
     (: q (peep evq 0 ())
        (? (two? q) (: _ (pin evq 0 (cup q)) (x-decode (cap q)))
-          (: b0 (get s) (? (= b0 -1) () (x-decode (link b0 (x-rbytes s 31)))))))
+          (: b0 (see s) (? (= b0 -1) () (x-decode (link b0 (x-rbytes s 31)))))))
    (ev-code e) (cap e)  (ev-detail e) (caup e)  (ev-window e) (nthl e 2)  (ev-state e) (nthl e 3)
    (ev-raw e) (nthl e 4))                                                        ; the 32 raw bytes (ConfigureRequest reads its geometry here)

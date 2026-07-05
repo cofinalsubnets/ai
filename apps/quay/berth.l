@@ -66,9 +66,9 @@
  ; --- the moor: pump the master through the screen until the child hangs up.
  ; the screen lives in box bx (a resize swaps it); replies pour straight back;
  ; a dirty box (when given) cues the painter
- ; park on the first byte, then SWIG the rest of the gulp -- per-byte gets
+ ; park on the first byte, then SWIG the rest of the gulp -- per-byte sees
  ; cap out near a megabyte a second, and a full-screen guest pours six
- (moor bx m dirty) (: ch (get m)
+ (moor bx m dirty) (: ch (see m)
                     (? (= ch -1) ()
                      (: s (bx -> 0 0)
                         _ (scribe s ch)
@@ -85,7 +85,7 @@
                         (moor bx m dirty))))
 
  ; --- keys: raw stdin pours onto the master; VEOF follows the user's own eof ---
- (oars m) (: ch (get in)
+ (oars m) (: ch (see in)
             (? (= ch -1) (: _ (put m 4) (flush m))
              (: _ (put m ch) _ (flush m) (oars m))))
 

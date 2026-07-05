@@ -62,7 +62,7 @@
    _ (raw 1)
    _ (say out (+ esc (+ "[?1049h" (+ esc (+ "[?25l" (+ esc "[2J"))))))   ; alt screen, no cursor
    _ (swim 0)
-   _ (get in)                                                            ; drink the cue
+   _ (see in)                                                            ; drink the cue
    _ (say out (+ esc (+ "[0m" (+ esc (+ "[?25h" (+ esc "[?1049l"))))))   ; shore
    _ (flush out)
    (raw 0))

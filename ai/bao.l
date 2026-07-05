@@ -54,7 +54,7 @@
                      (? (two? t) (link (cap s) (\ u (char t)))   ; chars: lift, lazy tail
                         (nil? t) (link (cap s) (\ u ()))         ; the last chars cell
                         s))                                      ; a top tail: char already
-         (hot? s) (: c (get s)                                   ; a port is the hot char
+         (hot? s) (: c (see s)                                   ; a port is the hot char
                         (? (= c -1) () (link c (\ u (char s)))))
          ())
       (char->chars s)
@@ -422,9 +422,9 @@
    ; boot/pty.l).
 
    ; pump bytes from port `src` to port `dst`, one at a time, until src hits EOF
-   ; (get -> -1); flush after each byte keeps the far side prompt. (Same shape as
+   ; (see -> -1); flush after each byte keeps the far side prompt. (Same shape as
    ; ain's pump -- prel stays socket/pty-free, so each app carries its own.)
-   (pump src dst) (: ch (get src) (? (= ch -1) 0 (: _ (put dst ch) _ (flush dst) (pump src dst))))
+   (pump src dst) (: ch (see src) (? (= ch -1) 0 (: _ (put dst ch) _ (flush dst) (pump src dst))))
 
    ; poll a non-blocking (gather pid) to its exited PAIR. the pair is told from
    ; still-running (0) STRUCTURALLY (two?), never by net: the status pair (0)
@@ -465,22 +465,22 @@
    ; the logic), but with PORT-PARAMETERIZED event decode so the input is any
    ; port: `in` for the tty, a (tap ..) for tests.
    ;
-   ; bev/besc/besc1 are edev/edesc/edesc1, reading (get ip) instead of the
+   ; bev/besc/besc1 are edev/edesc/edesc1, reading (see ip) instead of the
    ; global getc -- event codes are identical (printable >0; -1 left, -2 right,
    ; -3 bsp, -4 del, -5 home, -6 end, -7 quit/EOF; 10 = enter; up/down/^C ignored
    ; by a single-line reader).
    (besc1 ip c) (? (= c 126) -5
-                   (= c 59) (: _ (get ip) d (get ip)
+                   (= c 59) (: _ (see ip) d (see ip)
                               (? (= d 72) -5 (= d 70) -6 (= d 65) -8 (= d 66) -9
                                  (= d 67) -2 (= d 68) -1 0)))
-   (besc ip) (? !(= 91 (get ip)) 0
-     (: c (get ip)
+   (besc ip) (? !(= 91 (see ip)) 0
+     (: c (see ip)
         (? (= c 68) -1 (= c 67) -2 (= c 65) -8 (= c 66) -9 (= c 72) -5 (= c 70) -6
-           (= c 49) (besc1 ip (get ip))
-           (= c 55) (: _ (get ip) -5)
-           (|| (= c 52) (= c 56)) (: _ (get ip) -6)
-           (= c 51) (: _ (get ip) -4) 0)))
-   (bev ip) (: c (get ip)
+           (= c 49) (besc1 ip (see ip))
+           (= c 55) (: _ (see ip) -5)
+           (|| (= c 52) (= c 56)) (: _ (see ip) -6)
+           (= c 51) (: _ (see ip) -4) 0)))
+   (bev ip) (: c (see ip)
      (? (|| (= c -1) (= c 4)) -7
         (= c 3) -12
         (|| (= c 13) (= c 10)) 10

@@ -134,11 +134,11 @@
  (max2 a b) (? (< a b) b a)
 
  ; one key, arrows folded to 1000+final ("\e[A".."\e[D"); a lone ESC is 27
- (key _) (: b (get in)
+ (key _) (: b (see in)
             (? (= b 27)
                (? (cue? 0)
-                  (: b2 (get in)
-                     (? (= b2 91) (+ 1000 (get in)) 27))
+                  (: b2 (see in)
+                     (? (= b2 91) (+ 1000 (see in)) 27))
                   27)
                b))
 
