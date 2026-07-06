@@ -62,6 +62,7 @@
 ; every defn re-certified right here), then run the MODEL against core.l's
 ; implementation on concrete stacks -- encode, vof, decode, compare
 (reads (open "test/uu.l" "r"))
+(reads (open "test/uulay.l" "r"))
 (reads (open "test/uuwm.l" "r"))
 (reads (open "test/uuwmlaw.l" "r"))
 (: (encl l) (? (two? l) (L 'ncons (cap l) (encl (cup l))) 'nnil)
@@ -203,3 +204,27 @@
     (= (cap (zrev z0)) (vof 0 (L 'zfoc (L 'gen-zrev (encz z0)))))
     (= (znub 7 (zrow z0)) (decl (vof 0 (L 'gen-znub 7 (L 'gen-zrow (encz z0)))))))
  (puts "overlay: ok"))
+
+; leg 7 (the layout rung): test/uulay.l's tiling-ledger model vs the REAL
+; crew/phos/layout.l rt-tile -- for seeded random rows and master counts, the
+; window column of the actual placements, the model's rtwins, and the row
+; itself must be ONE list (rtwinsrow, watched live against the implementation
+; the model mirrors). geometry stays law.l's business; this leg pins the ledger.
+(reads (open "crew/phos/layout.l" "r"))
+(: (rnd s) (% (+ (* s 1103515245) 12345) 2147483648)
+   (encl l) (? (two? l) (L 'ncons (cap l) (encl (cup l))) 'nnil)
+   (decl v) (: (go vv acc) (? (two? vv) (go (nthl vv 2) (link (nthl vv 1) acc)) (rev acc))
+              (go (nthl v 2) ()))
+   (wincol ps) (? (two? ps) (link (cap (cap ps)) (wincol (cup ps))) ())
+   (iota n b) (? (< n 1) () (link b (iota (- n 1) (+ b 1))))
+   (walk i s)
+    (? (< i 1) 1
+       (: n (% s 7) nm (% (rnd s) 5) s2 (rnd (rnd s))
+          ws (iota n (+ 10 i))
+          z (zfrom ws)
+          core (wincol (cap (lay-tile (resizable-tall nm 0.03 0.5) '(0 0 800 600) z)))
+          model (decl (vof 0 (L 'rtwins nm 'nnil 0 (encl ws))))
+          (? (! (&& (= core ws) (= model ws))) (: _ (. (L (\ ledger-diverged) i nm ws core model)) 0)
+             (walk (- i 1) s2))))
+ _ (assert (walk 40 20260706))
+ (puts "overlay leg 7: the tiling ledger holds, model and metal"))

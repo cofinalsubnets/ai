@@ -488,6 +488,36 @@ def uu_nfilt : (forall w : Nat, (forall l : uu_nlist, uu_nlist)) :=
   (fun w => (fun l => ((@Nat.rec (fun q => (forall v : (uu_nvec q), uu_nlist)) (fun v => uu_nnil) (fun k => (fun IH => (fun v => (@Bool.rec (fun x => uu_nlist) (uu_ncons (total2.pr1 v) (IH (total2.pr2 v))) (IH (total2.pr2 v)) (uu_nateqb w (total2.pr1 v)))))) (total2.pr1 l)) (total2.pr2 l))))
 def uu_mstk : Type :=
   (Sum PUnit uu_stk)
+def uu_ltake : (forall k : Nat, (forall l : uu_nlist, uu_nlist)) :=
+  (fun k => ((@Nat.rec (fun q => (forall l : uu_nlist, uu_nlist)) (fun l => uu_nnil) (fun j => (fun IH => (fun l => (@Bool.rec (fun x => uu_nlist) (uu_ncons (uu_hd0 l) (IH (uu_tl0 l))) uu_nnil (uu_niszero (uu_nlen l)))))) k)))
+def uu_ldrop : (forall k : Nat, (forall l : uu_nlist, uu_nlist)) :=
+  (fun k => ((@Nat.rec (fun q => (forall l : uu_nlist, uu_nlist)) (fun l => l) (fun j => (fun IH => (fun l => (@Bool.rec (fun x => uu_nlist) (IH (uu_tl0 l)) uu_nnil (uu_niszero (uu_nlen l)))))) k)))
+def uu_lzipl : (forall a : uu_nlist, (forall b : uu_nlist, uu_nlist)) :=
+  (fun a => (fun b => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (forall b2 : uu_nlist, uu_nlist))) (fun v => (fun b2 => uu_nnil)) (fun k => (fun IH => (fun v => (fun b2 => (@Bool.rec (fun x => uu_nlist) (uu_ncons (total2.pr1 v) (IH (total2.pr2 v) (uu_tl0 b2))) uu_nnil (uu_niszero (uu_nlen b2))))))) (total2.pr1 a)) (total2.pr2 a) b)))
+def uu_msplitveq : (forall n : Nat, (forall r : Nat, uu_nlist)) :=
+  (fun n => (fun r => (@Nat.rec (fun q => uu_nlist) uu_nnil (fun j => (fun IH => (uu_ncons r IH))) n)))
+def uu_msplitvw : (forall fr : uu_nlist, (forall r : Nat, uu_nlist)) :=
+  (fun fr => (fun r => (@Nat.rec (fun q => uu_nlist) uu_nnil (fun j => (fun IH => (uu_ncons r IH))) (total2.pr1 fr))))
+def uu_mpadfr : (forall fr : uu_nlist, (forall ns : Nat, uu_nlist)) :=
+  (fun fr => (fun ns => ((@Nat.rec (fun q => (forall f : uu_nlist, uu_nlist)) (fun f => uu_nnil) (fun j => (fun IH => (fun f => (uu_ncons (@Bool.rec (fun x => Nat) (uu_hd0 f) 1 (uu_niszero (uu_nlen f))) (IH (uu_tl0 f)))))) ns) fr)))
+def uu_rtwins : (forall nm : Nat, (forall fr : uu_nlist, (forall r : Nat, (forall row : uu_nlist, uu_nlist)))) :=
+  (fun nm => (fun fr => (fun r => (fun row => (let n := (uu_nlen row); (@Bool.rec (fun x => uu_nlist) (@Bool.rec (fun x => uu_nlist) (uu_lzipl row (uu_msplitveq n r)) (uu_lapp (uu_lzipl (uu_ltake nm row) (uu_msplitveq nm r)) (uu_lzipl (uu_ldrop nm row) (uu_msplitvw (uu_mpadfr fr (uu_natminus n nm)) r))) (uu_natgtb n nm)) uu_nnil (uu_niszero n)))))))
+def uu_lnil0 : (forall v : (uu_nvec 0), (@paths uu_nlist (total2.tpair 0 v) uu_nnil)) :=
+  (fun v => (uu_maponpaths PUnit uu_nlist (fun u => (total2.tpair 0 u)) v PUnit.unit (uu_uu_unitpath v)))
+def uu_ldroplen : (forall k : Nat, (forall l : uu_nlist, (@paths Nat (uu_nlen (uu_ldrop k l)) (uu_natminus (uu_nlen l) k)))) :=
+  (fun k => ((@Nat.rec (fun kq => (forall l : uu_nlist, (@paths Nat (uu_nlen (uu_ldrop kq l)) (uu_natminus (uu_nlen l) kq)))) (fun l => (uu_pathsinv0 Nat (uu_natminus (uu_nlen l) 0) (uu_nlen l) (uu_natminusn0 (uu_nlen l)))) (fun j => (fun IH => (fun l => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (@paths Nat (uu_nlen (uu_ldrop (Nat.succ j) (total2.tpair q v))) (uu_natminus (uu_nlen (total2.tpair q v)) (Nat.succ j))))) (fun v => (@paths.idpath _ 0)) (fun m => (fun u => (fun v => (IH (total2.tpair m (total2.pr2 v)))))) (total2.pr1 l)) (total2.pr2 l))))) k)))
+def uu_lzipltake : (forall k : Nat, (forall l : uu_nlist, (forall r : Nat, (@paths uu_nlist (uu_lzipl (uu_ltake k l) (uu_msplitveq k r)) (uu_ltake k l))))) :=
+  (fun k => ((@Nat.rec (fun kq => (forall l : uu_nlist, (forall r : Nat, (@paths uu_nlist (uu_lzipl (uu_ltake kq l) (uu_msplitveq kq r)) (uu_ltake kq l))))) (fun l => (fun r => (@paths.idpath _ uu_nnil))) (fun j => (fun IH => (fun l => (fun r => (@Bool.rec (fun b => (@paths uu_nlist (uu_lzipl (@Bool.rec (fun x => uu_nlist) (uu_ncons (uu_hd0 l) (uu_ltake j (uu_tl0 l))) uu_nnil b) (uu_msplitveq (Nat.succ j) r)) (@Bool.rec (fun x => uu_nlist) (uu_ncons (uu_hd0 l) (uu_ltake j (uu_tl0 l))) uu_nnil b))) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (uu_hd0 l) t)) (uu_lzipl (uu_ltake j (uu_tl0 l)) (uu_msplitveq j r)) (uu_ltake j (uu_tl0 l)) (IH (uu_tl0 l) r)) (@paths.idpath _ uu_nnil) (uu_niszero (uu_nlen l))))))) k)))
+def uu_lziplveq : (forall a : uu_nlist, (forall r : Nat, (@paths uu_nlist (uu_lzipl a (uu_msplitveq (uu_nlen a) r)) a))) :=
+  (fun a => (fun r => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_lzipl (total2.tpair q v) (uu_msplitveq q r)) (total2.tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (total2.tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun IH => (fun v => (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (total2.pr1 v) t)) (uu_lzipl (total2.tpair m (total2.pr2 v)) (uu_msplitveq m r)) (total2.tpair m (total2.pr2 v)) (IH (total2.pr2 v)))))) (total2.pr1 a)) (total2.pr2 a))))
+def uu_lziplpadvw : (forall a : uu_nlist, (forall fr : uu_nlist, (forall r : Nat, (@paths uu_nlist (uu_lzipl a (uu_msplitvw (uu_mpadfr fr (uu_nlen a)) r)) a)))) :=
+  (fun a => (fun fr => (fun r => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (forall f : uu_nlist, (@paths uu_nlist (uu_lzipl (total2.tpair q v) (uu_msplitvw (uu_mpadfr f q) r)) (total2.tpair q v))))) (fun v => (fun f => (uu_pathsinv0 uu_nlist (total2.tpair 0 v) uu_nnil (uu_lnil0 v)))) (fun m => (fun IH => (fun v => (fun f => (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (total2.pr1 v) t)) (uu_lzipl (total2.tpair m (total2.pr2 v)) (uu_msplitvw (uu_mpadfr (uu_tl0 f) m) r)) (total2.tpair m (total2.pr2 v)) (IH (total2.pr2 v) (uu_tl0 f))))))) (total2.pr1 a)) (total2.pr2 a) fr))))
+def uu_lapptakedrop : (forall k : Nat, (forall l : uu_nlist, (@paths uu_nlist (uu_lapp (uu_ltake k l) (uu_ldrop k l)) l))) :=
+  (fun k => ((@Nat.rec (fun kq => (forall l : uu_nlist, (@paths uu_nlist (uu_lapp (uu_ltake kq l) (uu_ldrop kq l)) l))) (fun l => (@paths.idpath _ l)) (fun j => (fun IH => (fun l => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_lapp (uu_ltake (Nat.succ j) (total2.tpair q v)) (uu_ldrop (Nat.succ j) (total2.tpair q v))) (total2.tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (total2.tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun u => (fun v => (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (total2.pr1 v) t)) (uu_lapp (uu_ltake j (total2.tpair m (total2.pr2 v))) (uu_ldrop j (total2.tpair m (total2.pr2 v)))) (total2.tpair m (total2.pr2 v)) (IH (total2.tpair m (total2.pr2 v))))))) (total2.pr1 l)) (total2.pr2 l))))) k)))
+def uu_rtwinsrow : (forall nm : Nat, (forall fr : uu_nlist, (forall r : Nat, (forall row : uu_nlist, (@paths uu_nlist (uu_rtwins nm fr r row) row))))) :=
+  (fun nm => (fun fr => (fun r => (fun row => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_rtwins nm fr r (total2.tpair q v)) (total2.tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (total2.tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun u => (fun v => (@Bool.rec (fun b => (@paths uu_nlist (@Bool.rec (fun x => uu_nlist) (uu_lzipl (total2.tpair (Nat.succ m) v) (uu_msplitveq (Nat.succ m) r)) (uu_lapp (uu_lzipl (uu_ltake nm (total2.tpair (Nat.succ m) v)) (uu_msplitveq nm r)) (uu_lzipl (uu_ldrop nm (total2.tpair (Nat.succ m) v)) (uu_msplitvw (uu_mpadfr fr (uu_natminus (Nat.succ m) nm)) r))) b) (total2.tpair (Nat.succ m) v))) (uu_lziplveq (total2.tpair (Nat.succ m) v) r) (let D := (uu_ldrop nm (total2.tpair (Nat.succ m) v)); (let M := (uu_lzipl (uu_ltake nm (total2.tpair (Nat.succ m) v)) (uu_msplitveq nm r)); (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_natminus (Nat.succ m) nm)) r))) (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (total2.tpair (Nat.succ m) v) (uu_maponpaths Nat uu_nlist (fun t => (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr t) r)))) (uu_natminus (Nat.succ m) nm) (uu_nlen D) (uu_pathsinv0 Nat (uu_nlen D) (uu_natminus (Nat.succ m) nm) (uu_ldroplen nm (total2.tpair (Nat.succ m) v)))) (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (uu_lapp M D) (total2.tpair (Nat.succ m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp M t)) (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r)) D (uu_lziplpadvw D fr r)) (uu_pathscomp0 uu_nlist (uu_lapp M D) (uu_lapp (uu_ltake nm (total2.tpair (Nat.succ m) v)) D) (total2.tpair (Nat.succ m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp t D)) M (uu_ltake nm (total2.tpair (Nat.succ m) v)) (uu_lzipltake nm (total2.tpair (Nat.succ m) v) r)) (uu_lapptakedrop nm (total2.tpair (Nat.succ m) v))))))) (uu_natgtb (Nat.succ m) nm))))) (total2.pr1 row)) (total2.pr2 row))))))
+def uu_rtwinsane : (forall nm : Nat, (forall fr : uu_nlist, (forall r : Nat, (forall row : uu_nlist, (forall hs : (@paths Bool (uu_nodupb row) true), (@paths Bool (uu_nodupb (uu_rtwins nm fr r row)) true)))))) :=
+  (fun nm => (fun fr => (fun r => (fun row => (fun hs => (uu_pathscomp0 Bool (uu_nodupb (uu_rtwins nm fr r row)) (uu_nodupb row) true (uu_maponpaths uu_nlist Bool (fun t => (uu_nodupb t)) (uu_rtwins nm fr r row) row (uu_rtwinsrow nm fr r row)) hs))))))
 def uu_zrow : (forall z : uu_stk, uu_nlist) :=
   (fun z => (uu_lapp (uu_lrev (uu_zup z)) (uu_ncons (uu_zfoc z) (uu_zdn z))))
 def uu_zrev : (forall z : uu_stk, uu_stk) :=
@@ -525,11 +555,12 @@ end
 #print axioms uu_natpluscomm
 #print axioms uu_zcountins
 #print axioms uu_zinsane
+#print axioms uu_rtwinsrow
 #print axioms uu_natplusassoc
 #print axioms uu_natmultcomm
 #print axioms uu_total2_paths_f
 #print axioms uu_idisweq
 #print axioms uu_iscontrcoconustot
 
-/- 247 exported / 297 corpus entries swept;
+/- 262 exported / 312 corpus entries swept;
    re-certified by Lean 4 -- a second kernel beside Rocq's uugen.v -/

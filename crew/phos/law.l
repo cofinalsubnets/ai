@@ -104,6 +104,18 @@
       ; a message ||| doesn't know (shrink) delegates to the active sublayout
       (= (nthl (ch-cur (lay-msg (choice (L L1 full)) 'shrink z3)) 2) 0.48)))
 
+; --- the tiling LEDGER (rtwinsrow, test/uulay.l: proved of the model in uu,
+; --- certified by Rocq + Lean; here the same law watched on the metal):
+; --- rt-tile's placements name the row EXACTLY -- every window placed once,
+; --- none invented, row order kept -- whatever the master count ---
+(: (wincol ps) (? (two? ps) (link (cap (cap ps)) (wincol (cup ps))) ())
+   r (rct 0 0 800 600) ws '(10 20 30 40 50) z (zfrom ws)
+   (assert
+      (= (wincol (cap (lay-tile (resizable-tall 1 0.02 0.5) r z))) ws)
+      (= (wincol (cap (lay-tile (resizable-tall 3 0.02 0.5) r z))) ws)
+      (= (wincol (cap (lay-tile (tall 9) r z))) ws)
+      (! (wincol (cap (lay-tile (tall 2) r (zfrom ())))))))
+
 ; --- the layout modifiers (crew/phos/layout.l rung 4): each wraps a layout ---
 (: (area p) (* (nthl p 3) (nthl p 4))
    (sumarea ps) (foldl (\ a p (+ a (area p))) 0 ps)

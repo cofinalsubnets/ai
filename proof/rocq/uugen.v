@@ -490,6 +490,36 @@ Definition uu_nfilt : (forall w : nat, (forall l : uu_nlist, uu_nlist)) :=
   (fun w => (fun l => ((nat_rect (fun q => (forall v : (uu_nvec q), uu_nlist)) (fun v => uu_nnil) (fun k => (fun IH => (fun v => (bool_rect (fun x => uu_nlist) (IH (pr2 v)) (uu_ncons (pr1 v) (IH (pr2 v))) (uu_nateqb w (pr1 v)))))) (pr1 l)) (pr2 l)))).
 Definition uu_mstk : Type :=
   (sum unit uu_stk).
+Definition uu_ltake : (forall k : nat, (forall l : uu_nlist, uu_nlist)) :=
+  (fun k => ((nat_rect (fun q => (forall l : uu_nlist, uu_nlist)) (fun l => uu_nnil) (fun j => (fun IH => (fun l => (bool_rect (fun x => uu_nlist) uu_nnil (uu_ncons (uu_hd0 l) (IH (uu_tl0 l))) (uu_niszero (uu_nlen l)))))) k))).
+Definition uu_ldrop : (forall k : nat, (forall l : uu_nlist, uu_nlist)) :=
+  (fun k => ((nat_rect (fun q => (forall l : uu_nlist, uu_nlist)) (fun l => l) (fun j => (fun IH => (fun l => (bool_rect (fun x => uu_nlist) uu_nnil (IH (uu_tl0 l)) (uu_niszero (uu_nlen l)))))) k))).
+Definition uu_lzipl : (forall a : uu_nlist, (forall b : uu_nlist, uu_nlist)) :=
+  (fun a => (fun b => ((nat_rect (fun q => (forall v : (uu_nvec q), (forall b2 : uu_nlist, uu_nlist))) (fun v => (fun b2 => uu_nnil)) (fun k => (fun IH => (fun v => (fun b2 => (bool_rect (fun x => uu_nlist) uu_nnil (uu_ncons (pr1 v) (IH (pr2 v) (uu_tl0 b2))) (uu_niszero (uu_nlen b2))))))) (pr1 a)) (pr2 a) b))).
+Definition uu_msplitveq : (forall n : nat, (forall r : nat, uu_nlist)) :=
+  (fun n => (fun r => (nat_rect (fun q => uu_nlist) uu_nnil (fun j => (fun IH => (uu_ncons r IH))) n))).
+Definition uu_msplitvw : (forall fr : uu_nlist, (forall r : nat, uu_nlist)) :=
+  (fun fr => (fun r => (nat_rect (fun q => uu_nlist) uu_nnil (fun j => (fun IH => (uu_ncons r IH))) (pr1 fr)))).
+Definition uu_mpadfr : (forall fr : uu_nlist, (forall ns : nat, uu_nlist)) :=
+  (fun fr => (fun ns => ((nat_rect (fun q => (forall f : uu_nlist, uu_nlist)) (fun f => uu_nnil) (fun j => (fun IH => (fun f => (uu_ncons (bool_rect (fun x => nat) 1 (uu_hd0 f) (uu_niszero (uu_nlen f))) (IH (uu_tl0 f)))))) ns) fr))).
+Definition uu_rtwins : (forall nm : nat, (forall fr : uu_nlist, (forall r : nat, (forall row : uu_nlist, uu_nlist)))) :=
+  (fun nm => (fun fr => (fun r => (fun row => (let n := (uu_nlen row) in (bool_rect (fun x => uu_nlist) uu_nnil (bool_rect (fun x => uu_nlist) (uu_lapp (uu_lzipl (uu_ltake nm row) (uu_msplitveq nm r)) (uu_lzipl (uu_ldrop nm row) (uu_msplitvw (uu_mpadfr fr (uu_natminus n nm)) r))) (uu_lzipl row (uu_msplitveq n r)) (uu_natgtb n nm)) (uu_niszero n))))))).
+Definition uu_lnil0 : (forall v : (uu_nvec 0), (@paths uu_nlist (tpair 0 v) uu_nnil)) :=
+  (fun v => (uu_maponpaths unit uu_nlist (fun u => (tpair 0 u)) v tt (uu_uu_unitpath v))).
+Definition uu_ldroplen : (forall k : nat, (forall l : uu_nlist, (@paths nat (uu_nlen (uu_ldrop k l)) (uu_natminus (uu_nlen l) k)))) :=
+  (fun k => ((nat_rect (fun kq => (forall l : uu_nlist, (@paths nat (uu_nlen (uu_ldrop kq l)) (uu_natminus (uu_nlen l) kq)))) (fun l => (uu_pathsinv0 nat (uu_natminus (uu_nlen l) 0) (uu_nlen l) (uu_natminusn0 (uu_nlen l)))) (fun j => (fun IH => (fun l => ((nat_rect (fun q => (forall v : (uu_nvec q), (@paths nat (uu_nlen (uu_ldrop (S j) (tpair q v))) (uu_natminus (uu_nlen (tpair q v)) (S j))))) (fun v => (idpath 0)) (fun m => (fun u => (fun v => (IH (tpair m (pr2 v)))))) (pr1 l)) (pr2 l))))) k))).
+Definition uu_lzipltake : (forall k : nat, (forall l : uu_nlist, (forall r : nat, (@paths uu_nlist (uu_lzipl (uu_ltake k l) (uu_msplitveq k r)) (uu_ltake k l))))) :=
+  (fun k => ((nat_rect (fun kq => (forall l : uu_nlist, (forall r : nat, (@paths uu_nlist (uu_lzipl (uu_ltake kq l) (uu_msplitveq kq r)) (uu_ltake kq l))))) (fun l => (fun r => (idpath uu_nnil))) (fun j => (fun IH => (fun l => (fun r => (bool_rect (fun b => (@paths uu_nlist (uu_lzipl (bool_rect (fun x => uu_nlist) uu_nnil (uu_ncons (uu_hd0 l) (uu_ltake j (uu_tl0 l))) b) (uu_msplitveq (S j) r)) (bool_rect (fun x => uu_nlist) uu_nnil (uu_ncons (uu_hd0 l) (uu_ltake j (uu_tl0 l))) b))) (idpath uu_nnil) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (uu_hd0 l) t)) (uu_lzipl (uu_ltake j (uu_tl0 l)) (uu_msplitveq j r)) (uu_ltake j (uu_tl0 l)) (IH (uu_tl0 l) r)) (uu_niszero (uu_nlen l))))))) k))).
+Definition uu_lziplveq : (forall a : uu_nlist, (forall r : nat, (@paths uu_nlist (uu_lzipl a (uu_msplitveq (uu_nlen a) r)) a))) :=
+  (fun a => (fun r => ((nat_rect (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_lzipl (tpair q v) (uu_msplitveq q r)) (tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun IH => (fun v => (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (pr1 v) t)) (uu_lzipl (tpair m (pr2 v)) (uu_msplitveq m r)) (tpair m (pr2 v)) (IH (pr2 v)))))) (pr1 a)) (pr2 a)))).
+Definition uu_lziplpadvw : (forall a : uu_nlist, (forall fr : uu_nlist, (forall r : nat, (@paths uu_nlist (uu_lzipl a (uu_msplitvw (uu_mpadfr fr (uu_nlen a)) r)) a)))) :=
+  (fun a => (fun fr => (fun r => ((nat_rect (fun q => (forall v : (uu_nvec q), (forall f : uu_nlist, (@paths uu_nlist (uu_lzipl (tpair q v) (uu_msplitvw (uu_mpadfr f q) r)) (tpair q v))))) (fun v => (fun f => (uu_pathsinv0 uu_nlist (tpair 0 v) uu_nnil (uu_lnil0 v)))) (fun m => (fun IH => (fun v => (fun f => (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (pr1 v) t)) (uu_lzipl (tpair m (pr2 v)) (uu_msplitvw (uu_mpadfr (uu_tl0 f) m) r)) (tpair m (pr2 v)) (IH (pr2 v) (uu_tl0 f))))))) (pr1 a)) (pr2 a) fr)))).
+Definition uu_lapptakedrop : (forall k : nat, (forall l : uu_nlist, (@paths uu_nlist (uu_lapp (uu_ltake k l) (uu_ldrop k l)) l))) :=
+  (fun k => ((nat_rect (fun kq => (forall l : uu_nlist, (@paths uu_nlist (uu_lapp (uu_ltake kq l) (uu_ldrop kq l)) l))) (fun l => (idpath l)) (fun j => (fun IH => (fun l => ((nat_rect (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_lapp (uu_ltake (S j) (tpair q v)) (uu_ldrop (S j) (tpair q v))) (tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun u => (fun v => (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_ncons (pr1 v) t)) (uu_lapp (uu_ltake j (tpair m (pr2 v))) (uu_ldrop j (tpair m (pr2 v)))) (tpair m (pr2 v)) (IH (tpair m (pr2 v))))))) (pr1 l)) (pr2 l))))) k))).
+Definition uu_rtwinsrow : (forall nm : nat, (forall fr : uu_nlist, (forall r : nat, (forall row : uu_nlist, (@paths uu_nlist (uu_rtwins nm fr r row) row))))) :=
+  (fun nm => (fun fr => (fun r => (fun row => ((nat_rect (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_rtwins nm fr r (tpair q v)) (tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun u => (fun v => (bool_rect (fun b => (@paths uu_nlist (bool_rect (fun x => uu_nlist) (uu_lapp (uu_lzipl (uu_ltake nm (tpair (S m) v)) (uu_msplitveq nm r)) (uu_lzipl (uu_ldrop nm (tpair (S m) v)) (uu_msplitvw (uu_mpadfr fr (uu_natminus (S m) nm)) r))) (uu_lzipl (tpair (S m) v) (uu_msplitveq (S m) r)) b) (tpair (S m) v))) (let D := (uu_ldrop nm (tpair (S m) v)) in (let M := (uu_lzipl (uu_ltake nm (tpair (S m) v)) (uu_msplitveq nm r)) in (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_natminus (S m) nm)) r))) (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (tpair (S m) v) (uu_maponpaths nat uu_nlist (fun t => (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr t) r)))) (uu_natminus (S m) nm) (uu_nlen D) (uu_pathsinv0 nat (uu_nlen D) (uu_natminus (S m) nm) (uu_ldroplen nm (tpair (S m) v)))) (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (uu_lapp M D) (tpair (S m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp M t)) (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r)) D (uu_lziplpadvw D fr r)) (uu_pathscomp0 uu_nlist (uu_lapp M D) (uu_lapp (uu_ltake nm (tpair (S m) v)) D) (tpair (S m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp t D)) M (uu_ltake nm (tpair (S m) v)) (uu_lzipltake nm (tpair (S m) v) r)) (uu_lapptakedrop nm (tpair (S m) v))))))) (uu_lziplveq (tpair (S m) v) r) (uu_natgtb (S m) nm))))) (pr1 row)) (pr2 row)))))).
+Definition uu_rtwinsane : (forall nm : nat, (forall fr : uu_nlist, (forall r : nat, (forall row : uu_nlist, (forall hs : (@paths bool (uu_nodupb row) true), (@paths bool (uu_nodupb (uu_rtwins nm fr r row)) true)))))) :=
+  (fun nm => (fun fr => (fun r => (fun row => (fun hs => (uu_pathscomp0 bool (uu_nodupb (uu_rtwins nm fr r row)) (uu_nodupb row) true (uu_maponpaths uu_nlist bool (fun t => (uu_nodupb t)) (uu_rtwins nm fr r row) row (uu_rtwinsrow nm fr r row)) hs)))))).
 Definition uu_zrow : (forall z : uu_stk, uu_nlist) :=
   (fun z => (uu_lapp (uu_lrev (uu_zup z)) (uu_ncons (uu_zfoc z) (uu_zdn z)))).
 Definition uu_zrev : (forall z : uu_stk, uu_stk) :=
@@ -544,9 +574,10 @@ Proof. intros n m; rewrite <- (uu_mul_std n m), <- (uu_mul_std m n); apply paths
 Print Assumptions uu_natplusr0.
 Print Assumptions uu_zcountins.
 Print Assumptions uu_zinsane.
+Print Assumptions uu_rtwinsrow.
 Print Assumptions add_comm_std.
 Print Assumptions add_assoc_std.
 Print Assumptions mul_comm_std.
 
-(* 247 exported / 297 corpus entries swept;
+(* 262 exported / 312 corpus entries swept;
    3 headline laws (add_comm, add_assoc, mul_comm) landed on Coq's Nat.* via the bridge *)
