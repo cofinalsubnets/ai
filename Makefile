@@ -41,7 +41,7 @@ test:
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_gc test_extract test_tools test_hostnif test_glaze test_sat test_holo test_phos test_utils nettest test_arm64 test_kernel test_wasm
+test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_gc test_extract test_tools test_hostnif test_glaze test_sat test_holo test_phos test_utils test_vi nettest test_arm64 test_kernel test_wasm
 # ai0 bakes prel+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prel (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
@@ -158,7 +158,7 @@ test_phos: host
 # for sort), the exit triple, argv[0] dispatch through a `diff` symlink, usage at 2,
 # and (x86_64) `au as` assembling an exit(7) ELF that RUNS. Gate = the law sentinel
 # AND exit 0 AND the smokes.
-aufiles = crew/utils/text.l crew/utils/core.l crew/utils/fs.l crew/utils/re.l crew/utils/sed.l crew/utils/proc.l crew/utils/diff.l tools/ain.l crew/cook/cook.l crew/utils/asbook.l crew/holo/elf.l crew/utils/au.l
+aufiles = crew/utils/text.l crew/utils/core.l crew/utils/fs.l crew/utils/re.l crew/utils/sed.l crew/utils/proc.l crew/vi/core.l crew/vi/vi.l crew/utils/diff.l tools/ain.l crew/cook/cook.l crew/utils/asbook.l crew/holo/elf.l crew/utils/au.l
 # (`ho` is defined further down, after this rule is READ -- target/prereq names
 # expand at parse time, so these two lines spell out/host$(hsuf) themselves.)
 out/host$(hsuf)/au: $(aufiles)
@@ -168,7 +168,7 @@ out/host$(hsuf)/au: $(aufiles)
 .PHONY: test_utils
 test_utils: host out/host$(hsuf)/au
 	@echo "UTILS crew/utils/{text,core,fs,re,sed,diff,law}.l"; \
-	  cat test/00-init.l crew/utils/text.l crew/utils/core.l crew/utils/fs.l crew/utils/re.l crew/utils/sed.l crew/utils/proc.l crew/utils/diff.l crew/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
+	  cat test/00-init.l crew/utils/text.l crew/utils/core.l crew/utils/fs.l crew/utils/re.l crew/utils/sed.l crew/utils/proc.l crew/vi/core.l crew/vi/vi.l crew/utils/diff.l crew/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
 	  cat out/host/.test_utils.out; \
 	  { [ $$r -eq 0 ] && grep -q "crew/utils/law: myers" out/host/.test_utils.out; } \
 	    || { echo "FAIL utils (exit $$r)"; exit 1; }
@@ -328,6 +328,30 @@ test_utils: host out/host$(hsuf)/au
 	  wait $$sp; r=$$?; [ $$r -eq 137 ] || { echo "FAIL au kill effect (rc $$r)"; exit 1; }; \
 	  $m $(ho)/au kill -0 999999 2>/dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL au kill dead pid (rc $$r)"; exit 1; }; \
 	  echo "au: process tools (env/sleep/kill/xargs -- GNU-identical output, the exit faces) ok"
+# The editor (crew/vi/): the pure modal engine's laws (no tty -- vstep driven
+# byte by byte), then one scripted end-to-end pass through the real `au vi`
+# face over a pipe (keys off stdin, frames onto a captured stdout, :wq writes).
+.PHONY: test_vi
+test_vi: host out/host$(hsuf)/au
+	@echo "VI crew/vi/{core,law}.l"; \
+	  cat test/00-init.l crew/utils/text.l crew/utils/core.l crew/utils/re.l crew/vi/core.l crew/vi/law.l | $m > out/host/.test_vi.out 2>&1; r=$$?; \
+	  cat out/host/.test_vi.out; \
+	  { [ $$r -eq 0 ] && grep -q "crew/vi/law:" out/host/.test_vi.out; } \
+	    || { echo "FAIL vi laws (exit $$r)"; exit 1; }
+	@rm -f $(ho)/.vi1; \
+	  printf 'ihello world\033:wq\n' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "hello world" ]; } \
+	    || { echo "FAIL au vi create+write (exit $$r)"; exit 1; }; \
+	  printf 'ddZZ' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "" ]; } \
+	    || { echo "FAIL au vi dd+ZZ (exit $$r)"; exit 1; }; \
+	  printf 'ix\033:q!\n' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "" ]; } \
+	    || { echo "FAIL au vi q! holds fire (exit $$r)"; exit 1; }; \
+	  printf 'AX\033u:wq\n' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "" ]; } \
+	    || { echo "FAIL au vi undo (exit $$r)"; exit 1; }; \
+	  echo "au: vi (laws + piped create/dd/q!/undo end-to-end) ok"
 # The neutral assembler (crew/holo/) + its x86-64 backend: every encoder golden is
 # objdump-checked (crew/holo/holotest.l). A host-only app (like sat) -- it rides the
 # core's lists/tablets, adds no nif, and is NOT baked into ai0. The gate greps
