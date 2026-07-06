@@ -103,3 +103,24 @@
      (= fa ga)                                           ; alpha-equal across the major pool
      (= 9 (peep #(fa 9) ga 0))                           ; map keyed on fa, found by alpha-equal ga (eq/hash consistent)
      (< 8 (tally (show fa)))))                           ; show finds the tenured source
+
+; --- a nested loop nom shadows an enclosing letrec sibling --- a lambda (zap)
+; whose body opens a nested `:` binding a loop named like a LATER sibling of the
+; enclosing let (go/go), beside a sibling that carries an import (rq, a computed
+; pin it reads): the walk for the inner self-reference must not escape to the
+; outer sibling. it once did -- during the closures phase the inner 'lam is not
+; yet pinned -- and applied the sibling's import row MID-weave, past the fixcaps
+; fixpoint, so every recursive (zap x) inside zap's own body under-applied: a
+; truthy PARTIAL, the body never ran, silently (rm -r walked a tree and deleted
+; nothing). avb's shadow guard ('far keys every binding name) now stops the
+; escape, and weave scares 'imports-grew if a frozen import row ever grows again.
+(: rq (cap (L 1))
+   (zap q)
+    (? (two? q)
+       (: (go m ok) (? (! (two? m)) ok
+                       (: k (zap (cap m))              ; the self-site that under-applied
+                          (go (cup m) (&& ok (! k))))) ; every leaf must have ANSWERED ()
+          (go q 1))
+       ())                                             ; the leaf: nothing (falsy) -- a partial is truthy
+   (go a) (? rq (zap a) 0)
+   (assert (= 1 (go (L 5 6 7)))))                      ; ran to every leaf, no partial anywhere

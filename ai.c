@@ -807,7 +807,7 @@ lvm_t lvm_fault;
  _(nif_asum, "asum", s1(lvm_asum)) _(nif_aprod, "aprod", s1(lvm_aprod))\
  _(nif_max, "max", s1(lvm_max)) _(nif_min, "min", s1(lvm_min))\
  _(nif_aall, "aall", s1(lvm_aall)) _(nif_inner, "inner", s2(lvm_inner)) _(nif_outer, "outer", s2(lvm_outer))\
- _(nif_packp, "packp", s1(lvm_packp)) _(nif_bigp, "big?", s1(lvm_bigp)) _(nif_widep, "full?", s1(lvm_widep))\
+ _(nif_packp, "packp", s1(lvm_packp)) _(nif_bigp, "big?", s1(lvm_bigp)) _(nif_widep, "sun?", s1(lvm_widep))\
  _(nif_setp, "tray?", s1(lvm_setp)) _(nif_intf, "int", s1(lvm_intf))\
  _(nif_nomp, "nom?", s1(lvm_nomp)) _(nif_namep, "name?", s1(lvm_namep)) _(nif_tabp, "book?", s1(lvm_tabp)) _(nif_charmp, "charm?", s1(lvm_charmp))\
  _(nif_litp, "lit?", s1(lvm_litp)) _(nif_hotp, "hot?", s1(lvm_hotp))\
@@ -1523,6 +1523,7 @@ struct env {
   exits,
   sites, // recursive-fn ref backpatch: list of (lams-entry . operand-cell)
   src,  // a lambda's source \-expr, stashed at the thread head for printing (nil = none)
+  fars, // a let's binding NAMES, pinned before its lambdas compile: the shadow set
   end[]; }; // stach for conditional exit addresses
 
 typedef Ana(ana);
@@ -1544,7 +1545,7 @@ static struct ai *enscope(struct ai *g, struct env *par, word args, word imps) {
  g = ai_push(g, 3, args, imps, par);
  if (ai_ok(g = ai_have(g, n))) {
   struct env *c = bump(g, n);
-  c->stack = c->branches = c->exits = c->lams = c->len = c->sites = c->src = nil;
+  c->stack = c->branches = c->exits = c->lams = c->len = c->sites = c->src = c->fars = nil;
   c->args = g->sp[0], c->imps = g->sp[1], c->par = (struct env*) g->sp[2];
   *(g->sp += 2) = (word) tagthread((union u*)c, Width(struct env)); }
  return g; }
@@ -1823,6 +1824,17 @@ static Ana(ana_v) {
   // let binding in the *current* scope -> a direct stack slot.
   if (d == *c && memq(g, d->stack, x)) return
     c0_ix(g, c, lvm_arg, putcharm(lidx(g, x, d->stack)));
+  // the shadow guard: d's let BINDS x (fars) but x is neither a lams entry yet
+  // (a later/self lambda sibling, pre-rebuild) nor one of the let's slots
+  // (those sit on the PARENT's stack) -- the nom is this let's, so the walk
+  // must not escape to an enclosing binding of the same spelling. import it,
+  // as the book-miss below would; the rebuild resolves it through lams.
+  if (!nilp(d->fars) && memq(g, d->fars, x) &&
+      !(!nilp(d->par) && memq(g, d->par->stack, x))) {
+   if (!nilp((*c)->par))
+    g = gxl(ai_push(g, 2, x, (*c)->imps)),
+    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil;
+   return c0_ix(g, c, lvm_index, x); }
   // a let binding, closure var, or lambda arg -- possibly from an enclosing
   // scope. If enclosing, import it into this scope's free-variable (imps) list
   // so the offset c1_var emits is valid in *this* frame, not the defining one;
@@ -2035,6 +2047,18 @@ static ai_inline struct ai *ana_d(struct ai *g, struct env **b, word exp) {
  mm(g, &nom), mm(g, &def), mm(g, &lam);
  mm(g, &d); mm(g, &e); mm(g, &v); mm(g, &q); mm(g, &os);
 
+ // pin the let's binding names on q BEFORE any lambda compiles (the shadow
+ // set): the variable walk must see an inner-bound nom as bound HERE even
+ // while lams is still nil, or a nested loop named like a later sibling of
+ // an enclosing let resolves to that sibling and applies its import row
+ // mid-rebuild -- past the closure fixpoint, so the recursion's self-sites
+ // under-apply (a truthy partial, the silent no-op). cf. ev.l avb's 'far guard.
+ for (d = exp; chainp(d) && chainp(B(d)); d = BB(d)) {
+  for (e = A(d); chainp(e) && !nomp(e); e = A(e)); // unroll (f x..) define-sugar to the name
+  g = gxl(ai_push(g, 2, e, q->fars));
+  if (!ai_ok(g)) return forget();
+  q->fars = pop1(g); }
+
  // collect vars and defs into two lists.
  // While finding each bound lambda's closure (the c0_lambda below) we expose
  // the preceding bindings on the enclosing scope's stack, so a let-bound
@@ -2107,9 +2131,11 @@ static ai_inline struct ai *ana_d(struct ai *g, struct env **b, word exp) {
  for (e = nom, v = def; chainp(e); e = B(e), v = B(v))
   if (lambp(g, A(v))) {
    d = assq(g, lam, A(e));
+   size_t nb = llen(BB(d)); // the import row is FROZEN here: sites already applied it
    g = c0_lambda(g, c, BB(d), BA(v));
    if (!ai_ok(g)) return forget();
-   A(v) = B(d) = pop1(g); }
+   A(v) = B(d) = pop1(g);
+   if (llen(BB(d)) != nb) __builtin_trap(); } // growth = those sites under-apply (cf. ev.l weave's 'imports-grew scare)
 
  // closures final -> backpatch each recorded recursive-fn ref with its thread.
  for (d = (*c)->sites; chainp(d); d = B(d)) cell(B(A(d)))->x = AB(A(A(d)));

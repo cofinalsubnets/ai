@@ -427,14 +427,27 @@
           (em2 lvm_index x))))
     (: lfd (assoc x (d 'lam))
      (? (two? lfd) (lz c lfd d)
-        (: s (d 'stk)
-           (stki d) (lidx x (cat (d 'imp) (d 'arg)))
-           (q i j m) (karg (+ i (stki c)) j m)
-         (?- (avb c (d 'par) x)
-          (member? x s) (: _ (? (c 'par) (push c 'imp x))
-                         (q (tally (c 'stk))))
-          (>= (stki d) 0) (: _ (? (c 'par) (push c 'imp x))
-                           (q (tally (c 'stk)))))))))
+        ; the shadow guard: d's let BINDS x ('far keys every binding name and is
+        ; pinned before the closures phase) but x is neither in 'lam yet (a
+        ; later/self lambda sibling, pre-weave) nor a slot on the let's own
+        ; stack (they live on (d 'par)) -- the nom is THIS let's, so the walk
+        ; must not escape to an enclosing binding of the same spelling. import
+        ; it, as the book-miss would; the weave re-analysis resolves it through
+        ; 'lam. escaping here applied a same-named outer sibling's imports
+        ; MID-weave, past the fixcaps fixpoint, so every self-site of the
+        ; enclosing lambda under-applied -- the recursion answered a truthy
+        ; partial, silently.
+        (: far (d 'far)
+         (? (&& (book? far) (<= 0 (peep far x -1)) (nil? (member? x ((d 'par) 'stk))))
+            (: _ (? (c 'par) (push c 'imp x)) (em2 lvm_index x))
+            (: s (d 'stk)
+               (stki d) (lidx x (cat (d 'imp) (d 'arg)))
+               (q i j m) (karg (+ i (stki c)) j m)
+             (?- (avb c (d 'par) x)
+              (member? x s) (: _ (? (c 'par) (push c 'imp x))
+                             (q (tally (c 'stk))))
+              (>= (stki d) 0) (: _ (? (c 'par) (push c 'imp x))
+                               (q (tally (c 'stk)))))))))))
   ; lambda analyzer
   (ala c imp exp) (:
    d (sco c (init exp) imp)
@@ -533,6 +546,13 @@
      (: nd (cap nds) n (cap nd) d (cup nd)
         d (?- d (lambp d) (: cls (assoc (cap nd) lams)
                              x (ala q (cup (cof cls)) (cup d))
+                             ; the import row is FROZEN here: every ref site that
+                             ; already compiled (self-sites inside x, sites in
+                             ; earlier-woven siblings) applied (cup (cof cls)).
+                             ; growth means those sites under-apply -- scare,
+                             ; never miscompile.
+                             _ (? (= (tally (cup x)) (tally (cup (cof cls)))) ()
+                                  (scare 'imports-grew n))
                            (cput cls x)))
         f (ana c d)
         g (?- id (&& even (nil? (c 'par)) !(id? n '_)) (em2 lvm_defglob n))  ; `_` binds locally, never to the book

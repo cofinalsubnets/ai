@@ -69,17 +69,12 @@
                      (L r f a))
        p (fl as 0 0)
        r? (cap p) f? (caup p) fs (caup (cup p))
-       ; ⚠ the entry loop is `ent`, NOT `go`: this `:` also pins a `go` (the file
-       ; loop below), and the sibling-nom collision plus the unfolded flag pins
-       ; miscompiles zap's recursion (doc/bug-nested-go-shadow.md, the repro) --
-       ; the entries walk silently no-ops and rmdir answers ENOTEMPTY. distinct
-       ; noms sidestep it until the core thread lands the fix.
        (zap q)
         (? (udirp q)
-           (: (ent m ok) (? (! (two? m)) ok
-                            (: k (zap (+ q (+ "/" (cap m))))
-                               (ent (cup m) (? k ok 0))))
-              ok (ent (readdir q) 1)
+           (: (go m ok) (? (! (two? m)) ok
+                           (: k (zap (+ q (+ "/" (cap m))))
+                              (go (cup m) (? k ok 0))))
+              ok (go (readdir q) 1)
               e (rmdir q)
               (&& ok (! e)))
            (! (unlink q)))
