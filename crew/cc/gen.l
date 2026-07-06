@@ -21,12 +21,21 @@
    argregs '(r6 r5 r2 r1 r7 r8)
    (nthr l i) (? (< i 1) (cap l) (nthr (cup l) (- i 1)))
    (bad? x) (id? x 'bad)
-   ; -- the type floor --
+   ; -- the type floor (struct sizes come off the stag table riding in g) --
    (ptr? ty) (&& (two? ty) (= (cap ty) 'ptr))
    (arr? ty) (&& (two? ty) (= (cap ty) 'arr))
-   (tsz ty) (? (ptr? ty) 8
-               (arr? ty) (* (cauup ty) (tsz (caup ty)))
-               (= ty 'char) 1 (= ty 'short) 2 (= ty 'int) 4 8)
+   (stru? ty) (&& (two? ty) (= (cap ty) 'struct))
+   (tsz g ty) (? (ptr? ty) 8
+                 (arr? ty) (* (cauup ty) (tsz g (caup ty)))
+                 (stru? ty) (caup (peep (g 'stag) (caup ty) 0))
+                 (= ty 'char) 1 (= ty 'short) 2 (= ty 'int) 4 8)
+   ; a member's (offset ty) off a struct type, | 'bad
+   (fmem g ty name)
+    (? (! (stru? ty)) 'bad
+       (: e (peep (g 'stag) (caup ty) 0)
+          (? (! (two? e)) 'bad
+             (: f (assoc name (cap e))
+                (? (two? f) (L (caup f) (cauup f)) 'bad)))))
    (lg2 n) (? (= n 1) 0 (= n 2) 1 (= n 4) 2 3)
    (ldop ty) (? (= ty 'char) 'ld1 (= ty 'short) 'ld2 (= ty 'int) 'ld4 'ld)
    (stop ty) (? (= ty 'char) 'st1 (= ty 'short) 'st2 (= ty 'int) 'st4 'st)
@@ -58,6 +67,14 @@
               (? (bad? r) 'bad
                  (! (ptr? (cap r))) 'bad
                  (L (caup (cap r)) (caup r))))
+          (= k 'dot)
+           (: r (clval g env (caup e))
+              (? (bad? r) 'bad
+                 (: fm (fmem g (cap r) (cauup e))
+                    (? (bad? fm) 'bad
+                       (L (caup fm)
+                          (cat (caup r)
+                               (? (= (cap fm) 0) () (L (L 'add 'r0 'r0 (cap fm))))))))))
           'bad))
 
    ; -- expressions: answers (type forms) | 'bad, the value in r0 --
@@ -68,14 +85,22 @@
            (: lbl (nlab g ".S")
               _ (pin g 'strs (link (L lbl (caup e)) (g 'strs)))
               (L (L 'ptr 'char) (L (L 'la 'r0 lbl))))
+          (= k 'dot)
+           (: r (clval g env e)
+              (? (bad? r) 'bad
+                 (: ty (cap r)
+                    (? (arr? ty) (L (L 'ptr (caup ty)) (caup r))
+                       (stru? ty) 'bad               ; no struct VALUES in registers
+                       (L ty (cat (caup r) (L (L (ldop ty) 'r0 'r0 0))))))))
           (= k 'var)
            (: en (vent g env (caup e))
               (? (bad? en) 'bad
                  (: ty (cauup en)
-                    (? (arr? ty)                     ; arrays decay to their address
-                       (? (= (cap en) 'loc)
-                          (L (L 'ptr (caup ty)) (L (L 'lea 'r0 'r4 (caup en))))
-                          (L (L 'ptr (caup ty)) (L (L 'la 'r0 (caup en)))))
+                    (? (stru? ty) 'bad               ; a struct name is only an lvalue base
+                       (arr? ty)                     ; arrays decay to their address
+                        (? (= (cap en) 'loc)
+                           (L (L 'ptr (caup ty)) (L (L 'lea 'r0 'r4 (caup en))))
+                           (L (L 'ptr (caup ty)) (L (L 'la 'r0 (caup en)))))
                        (? (= (cap en) 'loc)
                           (L ty (L (L (ldop ty) 'r0 'r4 (caup en))))
                           (L ty (L (L 'la 'r1 (caup en)) (L (ldop ty) 'r0 'r1 0))))))))
@@ -87,11 +112,13 @@
               (? (bad? r) 'bad
                  (: ty (cap r)
                     (? (arr? ty) (L (L 'ptr (caup ty)) (caup r))   ; pointee array: decay again
+                       (stru? ty) 'bad                             ; no struct values
                        (L ty (cat (caup r) (L (L (ldop ty) 'r0 'r0 0))))))))
           (= k 'asn)
            (: lv (clval g env (caup e))
               (? (bad? lv) 'bad
                  (arr? (cap lv)) 'bad                ; an array is not assignable
+                 (stru? (cap lv)) 'bad               ; nor a whole struct (stage 4b+)
                  (: r (cgexpr g env (cauup e))
                     (? (bad? r) 'bad
                        (: ty (cap lv)
@@ -105,7 +132,7 @@
            (: lv (clval g env (caup e))
               (? (bad? lv) 'bad
                  (: ty (cap lv)
-                    stp (? (ptr? ty) (tsz (caup ty)) 1)
+                    stp (? (ptr? ty) (tsz g (caup ty)) 1)
                     (? (arr? ty) 'bad
                        (L ty (cat (caup lv)
                               (L (L 'mov 'r2 'r0)
@@ -196,23 +223,23 @@
              back (L (L 'mov 'r0 'r1))
              (? (= op '+)
                  (? (&& pa pb) 'bad
-                    pa (L ta (cat mid (cat (? (< 1 (tsz (caup ta)))
-                                             (L (L 'imul 'r0 'r0 (tsz (caup ta)))) ())
+                    pa (L ta (cat mid (cat (? (< 1 (tsz g (caup ta)))
+                                             (L (L 'imul 'r0 'r0 (tsz g (caup ta)))) ())
                                       (cat (L (L 'add 'r1 'r1 'r0)) back))))
-                    pb (L tb (cat mid (cat (? (< 1 (tsz (caup tb)))
-                                             (L (L 'imul 'r1 'r1 (tsz (caup tb)))) ())
+                    pb (L tb (cat mid (cat (? (< 1 (tsz g (caup tb)))
+                                             (L (L 'imul 'r1 'r1 (tsz g (caup tb)))) ())
                                       (cat (L (L 'add 'r1 'r1 'r0)) back))))
                     (L 'long (cat mid (cat (L (L 'add 'r1 'r1 'r0)) back))))
                 (= op '-)
                  (? (&& pa pb)
-                     (? (= (tsz (caup ta)) (tsz (caup tb)))
+                     (? (= (tsz g (caup ta)) (tsz g (caup tb)))
                         (L 'long (cat mid (cat (L (L 'sub 'r1 'r1 'r0))
-                                          (cat back (? (< 1 (tsz (caup ta)))
-                                                       (L (L 'sar 'r0 (lg2 (tsz (caup ta)))))
+                                          (cat back (? (< 1 (tsz g (caup ta)))
+                                                       (L (L 'sar 'r0 (lg2 (tsz g (caup ta)))))
                                                        ())))))
                         'bad)
-                    pa (L ta (cat mid (cat (? (< 1 (tsz (caup ta)))
-                                             (L (L 'imul 'r0 'r0 (tsz (caup ta)))) ())
+                    pa (L ta (cat mid (cat (? (< 1 (tsz g (caup ta)))
+                                             (L (L 'imul 'r0 'r0 (tsz g (caup ta)))) ())
                                       (cat (L (L 'sub 'r1 'r1 'r0)) back))))
                     pb 'bad
                     (L 'long (cat mid (cat (L (L 'sub 'r1 'r1 'r0)) back))))
@@ -239,7 +266,7 @@
         (? (! (two? ps)) (L acc env2)
            (: p (cap ps)
               ty (caup p)
-              span (& (+ (tsz ty) 7) -8)
+              span (& (+ (tsz g ty) 7) -8)
               off (- 0 (+ (peep g 'off 0) span))
               _ (pin g 'off (+ (peep g 'off 0) span))
               env3 (link (L (cap p) off ty) env2)
@@ -313,6 +340,68 @@
                                  (L (L 'jmp lc) (L 'label ld))))))))))))
           (= k 'brk) (? (two? (g 'brk)) (L (L 'jmp (cap (g 'brk)))) 'bad)
           (= k 'cont) (? (two? (g 'cnt)) (L (L 'jmp (cap (g 'cnt)))) 'bad)
+          (= k 'do)
+           (: lt (nlab g ".t") lc (nlab g ".c") ld (nlab g ".d")
+              _ (pin g 'brk (link ld (g 'brk)))
+              _ (pin g 'cnt (link lc (g 'cnt)))
+              b (cgstmt g env (caup s))
+              _ (pin g 'brk (cup (g 'brk)))
+              _ (pin g 'cnt (cup (g 'cnt)))
+              c (cgexpr g env (cauup s))
+              (? (|| (bad? b) (bad? c)) 'bad
+                 (cat (L (L 'label lt))
+                  (cat b
+                   (cat (L (L 'label lc))
+                    (cat (caup c) (L (L 'cmp 'r0 0) (L 'br 'ne lt) (L 'label ld))))))))
+          (= k 'goto) (L (L 'jmp (intern (+ (g 'fn) (+ "." (caup s))))))
+          (= k 'lbl) (L (L 'label (intern (+ (g 'fn) (+ "." (caup s))))))
+          (= k 'switch)
+           (: c (cgexpr g env (caup s))
+              (? (bad? c) 'bad
+                 (: items (cauup s)
+                    lend (nlab g ".d")
+                    labs (: (mk is acc)
+                             (? (! (two? is)) (rev acc)
+                                (: it (cap is)
+                                   (? (= (cap it) 'case)
+                                      (mk (cup is) (link (L 'case (caup it) (nlab g ".k")) acc))
+                                      (= (cap it) 'dflt)
+                                      (mk (cup is) (link (L 'dflt 0 (nlab g ".k")) acc))
+                                      (mk (cup is) acc))))
+                            (mk items ()))
+                    dflt (: (fd l) (? (! (two? l)) lend
+                                      (= (cap (cap l)) 'dflt) (cauup (cap l))
+                                      (fd (cup l)))
+                            (fd labs))
+                    disp (: (go l acc)
+                             (? (! (two? l)) acc
+                                (: e2 (cap l)
+                                   (? (= (cap e2) 'case)
+                                      (go (cup l) (cat acc (L (L 'cmp 'r0 (caup e2))
+                                                              (L 'br 'eq (cauup e2)))))
+                                      (go (cup l) acc))))
+                            (go labs ()))
+                    _ (pin g 'brk (link lend (g 'brk)))
+                    body (: (go is ls env2 acc)
+                             (? (! (two? is)) acc
+                                (: it (cap is)
+                                   (? (member? (cap it) '(case dflt))
+                                      (go (cup is) (cup ls) env2
+                                          (cat acc (L (L 'label (cauup (cap ls))))))
+                                      (= (cap it) 'decl)
+                                       (: r (cgdecl g env2 (caup it))
+                                          (? (bad? r) 'bad
+                                             (go (cup is) ls (caup r) (cat acc (cap r)))))
+                                      (: r (cgstmt g env2 it)
+                                         (? (bad? r) 'bad
+                                            (go (cup is) ls env2 (cat acc r)))))))
+                            (go items labs env ()))
+                    _ (pin g 'brk (cup (g 'brk)))
+                    (? (bad? body) 'bad
+                       (cat (caup c)
+                        (cat disp
+                         (cat (L (L 'jmp dflt))
+                          (cat body (L (L 'label lend))))))))))
           'bad))
    (cgitems g env items acc)
     (? (! (two? items)) acc
@@ -329,6 +418,7 @@
     (: params (cauup f)
        (? (< 6 (tally params)) 'bad
           (: _ (pin g 'off 0)
+             _ (pin g 'fn (caup f))
              (spill ps i env acc)
               (? (! (two? ps)) (L acc env)
                  (: off (- 0 (+ (peep g 'off 0) 8))
@@ -351,7 +441,7 @@
         (? (! (two? gs)) acc
            (: ge (peep (g 'glob) (cap gs) 0)
               lbl (cap ge) ty (caup ge) init (cauup ge)
-              span (& (+ (tsz ty) 7) -8)
+              span (& (+ (tsz g ty) 7) -8)
               bytes (? (two? init) (le8s (caup init)) (zeros span))
               (globs (cup gs) (cat acc (L (L 'label lbl) (L 'raw bytes))))))
        (strs ss acc)
@@ -363,9 +453,10 @@
                                          (L 'raw (cat (bts t (- (tally t) 1) ()) (L 0))))))))
        (cat (globs (rev (g 'globs)) ()) (strs (g 'strs) ())))
 
-   (cgen ast)                                       ; ('prog items) -> (1 forms) | ()
+   (cgen ast stbl)                                  ; ('prog items) + the stag -> (1 forms) | ()
     (: g (: t (tablet 0) _ (pin t 'n 0) _ (pin t 'brk ()) _ (pin t 'cnt ())
-            _ (pin t 'glob (tablet 0)) _ (pin t 'globs ()) _ (pin t 'strs ()) t)
+            _ (pin t 'glob (tablet 0)) _ (pin t 'globs ()) _ (pin t 'strs ())
+            _ (pin t 'stag stbl) t)
        crt0 (L (L 'call 'main) (L 'mov 'r6 'r0) (L 'li 'r0 60) (L 'sys))
        ; pass 1: record the globals (constant or absent initializers only)
        (rec fs)
@@ -386,7 +477,7 @@
         (? (! (two? fs))
            (? saw (L 1 (cat crt0 (cat acc (cgdata g)))) ())
            (: f (cap fs)
-              (? (member? (cap f) '(proto gdecl)) (gfns (cup fs) acc saw)
+              (? (member? (cap f) '(proto gdecl tdef)) (gfns (cup fs) acc saw)
                  (: r (cgfn g f)
                     (? (bad? r) ()
                        (gfns (cup fs) (cat acc r)

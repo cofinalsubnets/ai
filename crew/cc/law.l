@@ -112,28 +112,59 @@
 
 ; --- the generator: one full golden, and the refusals that guard the seams ---
 (: (cast src) (caup (cparse (caup (clex src))))
-   ir (caup (cgen (cast "int main() { return 42; }")))
+   (cgn src) (: r (cparse (caup (clex src)))
+                (? (two? r) (cgen (caup r) (cauup r)) ()))
+   ir (caup (cgn "int main() { return 42; }"))
    (assert
       (= ir '((call main) (mov r6 r0) (li r0 60) (sys)
               (label main) (push r4) (mov r4 sp) (sub sp sp 0)
               (li r0 42) (mov sp r4) (pop r4) (ret)
               (li r0 0) (mov sp r4) (pop r4) (ret)))
-      (two? (cgen (cast "int main() { int x=1; while (x<5) x++; return x; }")))
-      (! (cgen (cast "int f() { return 1; }")))                      ; no main, no program
-      (! (cgen (cast "int main() { return y; }")))                   ; undeclared name
-      (! (cgen (cast "int main() { return 5=3; }")))                 ; not an lvalue
-      (! (cgen (cast "int main() { break; }")))                      ; no loop to leave
-      (two? (cgen (cast "int main() { int a=1; int b=2; return a<<b; }")))  ; variable shifts ride shlv now
-      (two? (cgen (cast "int f(int a) { return a; } int main() { return f(1); }")))
-      (! (cgen (cast "int main() { return f(1,2,3,4,5,6,7); }")))          ; the six-register fence ...
-      (! (cgen (cast "int f(int a,int b,int c,int d,int e,int x,int y) { return 1; } int main() { return 1; }")))   ; ... both sides of it
-      (two? (cgen (cast "int g; int main() { int *p = &g; *p = 3; return g; }")))
-      (! (cgen (cast "int main() { int *p; int *q; return (long)(p+q); }")))   ; ptr+ptr refused
-      (! (cgen (cast "int main() { int x; return *x; }")))                     ; deref wants a pointer
-      (! (cgen (cast "int main() { int a[3]; int b[3]; a = b; return 0; }")))  ; arrays are not assignable
-      (! (cgen (cast "int g = 1+2; int main() { return g; }")))                ; global inits are constants
-      (! (cgen (cast "char *s = \"hi\"; int main() { return 0; }")))          ; ... and never strings (yet)
-      (! (cgen (cast "int main() { int a[2] = 5; return 0; }")))))             ; array locals take no initializer
+      (two? (cgn "int main() { int x=1; while (x<5) x++; return x; }"))
+      (! (cgn "int f() { return 1; }"))                      ; no main, no program
+      (! (cgn "int main() { return y; }"))                   ; undeclared name
+      (! (cgn "int main() { return 5=3; }"))                 ; not an lvalue
+      (! (cgn "int main() { break; }"))                      ; no loop to leave
+      (two? (cgn "int main() { int a=1; int b=2; return a<<b; }"))  ; variable shifts ride shlv now
+      (two? (cgn "int f(int a) { return a; } int main() { return f(1); }"))
+      (! (cgn "int main() { return f(1,2,3,4,5,6,7); }"))          ; the six-register fence ...
+      (! (cgn "int f(int a,int b,int c,int d,int e,int x,int y) { return 1; } int main() { return 1; }"))   ; ... both sides of it
+      (two? (cgn "int g; int main() { int *p = &g; *p = 3; return g; }"))
+      (! (cgn "int main() { int *p; int *q; return (long)(p+q); }"))   ; ptr+ptr refused
+      (! (cgn "int main() { int x; return *x; }"))                     ; deref wants a pointer
+      (! (cgn "int main() { int a[3]; int b[3]; a = b; return 0; }"))  ; arrays are not assignable
+      (! (cgn "int g = 1+2; int main() { return g; }"))                ; global inits are constants
+      (! (cgn "char *s = \"hi\"; int main() { return 0; }"))          ; ... and never strings (yet)
+      (! (cgn "int main() { int a[2] = 5; return 0; }"))))          ; array locals take no initializer
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + the guarded seams) ok")
+; --- stage 4a: aggregates -- layout to the C rules, members, the new statements ---
+(: (cast src) (caup (cparse (caup (clex src))))
+   (cgn src) (: r (cparse (caup (clex src)))
+                (? (two? r) (cgen (caup r) (cauup r)) ()))
+   (cexpp pre e) (: ast (cast (+ pre (+ " int main() { return " (+ e "; }"))))
+                    (last l) (? (two? (cup l)) (last (cup l)) (cap l))
+                    fn (last (caup ast))
+                    items (caup (caup (cuup fn)))
+                    (caup (cap items)))
+   (assert
+      (= (cexpp "struct S { char c; int i; char d; };" "sizeof(struct S)") '(num 12))
+      (= (cexpp "struct T { char c; long l; };" "sizeof(struct T)") '(num 16))
+      (= (cexpp "struct P { int a; }; struct Q { struct P p; char c; };" "sizeof(struct Q)") '(num 8))
+      (= (cexpp "union U { char c; long l; int i; };" "sizeof(union U)") '(num 8))
+      (= (cexpp "enum { X=3, Y };" "Y") '(num 4))
+      (= (cexpp "enum { X=3, Y };" "X") '(num 3))
+      (= (cexpp "typedef long word;" "sizeof(word)") '(num 8))
+      (= (cexpp "typedef long word;" "sizeof(word*)") '(num 8))
+      (= (cexpp "" "s.v") '(dot (var "s") "v"))
+      (= (cexpp "" "p->v") '(dot (deref (var "p")) "v"))
+      (= (cexpp "" "p->a.b") '(dot (dot (deref (var "p")) "a") "b"))
+      (two? (cgn "struct N { long v; struct N *n; }; int main() { struct N a; a.v = 7; a.n = &a; return a.n->v; }"))
+      (two? (cgn "int main() { int x = 2; switch (x) { case 1: return 9; default: return 7; } }"))
+      (two? (cgn "int main() { int i = 0; do i++; while (i < 3); return i; }"))
+      (two? (cgn "int main() { int i = 0; top: i++; if (i < 3) goto top; return i; }"))
+      (! (cgn "struct S { int x; }; int main() { struct S a; struct S b; a = b; return 0; }"))   ; whole-struct assignment: 4b+
+      (! (cgn "struct S { int x; }; int main() { struct S s; return s; }"))                       ; no struct values
+      (! (cgn "struct S { int x; }; int main() { struct S s; return s.y; }"))))                   ; no such member
+
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) ok")
 (put err 10)

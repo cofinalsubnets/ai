@@ -13,7 +13,7 @@
           _ (? (two? lx) () (udie 1 (+ "cc: lex error in " src)))
           ps (cparse (caup lx))
           _ (? (two? ps) () (udie 1 (+ "cc: parse error in " src)))
-          ir (cgen (caup ps))
+          ir (cgen (caup ps) (cauup ps))
           _ (? (two? ir) () (udie 1 (+ "cc: codegen error in " src)))
           res (elf64 'x64 (\ _ (caup ir)) ())
           _ (write-bytes dst (peep res 'bytes 0))

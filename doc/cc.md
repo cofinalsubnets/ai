@@ -185,10 +185,26 @@ two ideas to keep warm as the stages climb, neither committed yet:
    double indirection, *(a+i) loops, string char reads, global mutation
    across calls, swap through pointers, pointer difference and compare,
    a strcpy-shaped buffer walk.
-4. **aggregates**: struct/union/enum/typedef, member access, nested layout
-   + alignment, the full declarator grammar (function pointers!),
-   designated initializers, flexible arrays, switch/goto/do. by here the
-   torture set (a c-testsuite slice, vendored) joins the differential gate.
+4. **aggregates** -- the semantic half (4a) LANDED 2026-07-06: struct and
+   union with the real C layout rules (members aligned to their own
+   alignment, the whole rounded to the widest; unions flatten offsets to
+   zero), nested aggregates, arrays of structs and struct members that are
+   arrays, ANONYMOUS struct/union members splicing their fields into the
+   parent (ai.h's habit), self-referential struct pointers (linked lists
+   walk), enum with values (constants FOLD AT PARSE), typedef (top-level),
+   `.` and `->` (arrow desugars to (dot (deref ..)) and one lvalue door
+   handles both), sizeof over every aggregate, switch with fallthrough as
+   a flat marker list + compare-chain dispatch, do-while, goto/labels
+   (function-scoped name mangling). the deep change: the PARSER CARRIES
+   STATE now -- typedef names, enum constants, and the struct tag table,
+   which rides out with the AST for gen's sizing (C cannot be parsed
+   stateless; the lexer-hack wrinkle, met on schedule). fenced for 4b:
+   the recursive declarator core (function pointers + holo's callr),
+   whole-struct assignment/params/returns by value, designated
+   initializers, flexible arrays, local typedefs, case-label expressions.
+   the trap that cost the debugging hour: (two? x) tests PAIRHOOD -- both
+   () and a text fail it; presence wants truthiness (texts net positive).
+   battery at 41; the torture-set vendoring moves to 4b/5.
 5. **the preprocessor**: cpp.l complete (##, variadics, #if trees,
    includes). gate: gcc -E vs cc -E token streams on the torture set AND on
    ai.c itself (the real headers, our include/).

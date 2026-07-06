@@ -85,7 +85,16 @@ $(smoke): crew/haven/smoke.c
 	  wayland-scanner private-code "$(xdgxml)" out/host/xdg-shell-protocol.c; \
 	  $(CC) -O1 -Wall -Wextra -o $@ crew/haven/smoke.c out/host/xdg-shell-protocol.c -Iout/host `pkg-config --cflags --libs wayland-client`; \
 	else echo "SKIP $@ (no libwayland here)"; fi
-test_hostnif: host $(smoke)
+# haven's keyboard map: the REAL compiled xkb text (what every wayland
+# compositor ships its clients), emitted by libxkbcommon's own tool where it
+# lives. absent -> an empty file, and haven ships keymap format 0 instead.
+havenkm = out/lib/haven-keymap.xkb
+$(havenkm):
+	@mkdir -p out/lib
+	@if command -v xkbcli >/dev/null 2>&1; then \
+	  echo "KM $@"; xkbcli compile-keymap > $@; \
+	else echo "SKIP $@ (no xkbcli here)"; : > $@; fi
+test_hostnif: host $(smoke) $(havenkm)
 	@for s in $(hostnif_tests); do echo "HOSTNIF $$s"; \
 	  cat test/00-init.l $$s | $m > out/host/.test_hostnif.out 2>&1; r=$$?; \
 	  cat out/host/.test_hostnif.out; \
