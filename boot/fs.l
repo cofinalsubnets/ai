@@ -1,0 +1,54 @@
+; --- boot/fs.l: smoke test for the fs nifs (host/fs.c) ---
+; rename/symlink/readlink/chmod/chown/utime/umask link into `ai` but NOT ai0
+; (which bakes the corpus), so this runs standalone against the built binary,
+; like boot/init.l -- not in test/*.l. Run (assert comes from test/00-init.l):
+;   cat test/00-init.l boot/fs.l | out/host/ai
+; the conventions under test are init.c's posix_ lane: an effect op answers ()
+; ok | a POSITIVE errno | EINVAL misuse; a value op answers the value | ().
+
+(: d "out/.fs-nif-smoke"
+   a (+ d "/a") b (+ d "/b") l (+ d "/l")
+   _ (mkdir d 493)                                  ; EEXIST from a prior run is fine
+   _ (unlink a) _ (unlink b) _ (unlink l)           ; a clean slate, tolerated if absent
+   _ (: p (open a "w") _ (say p "five!") (close p))
+
+   ; rename: the file moves whole -- old gone, new wears the same size
+   _ (assert
+       (id? (rename a b) ())                        ; ok is the REAL (), not charm 0
+       (id? (stat a) ()) (= 5 (cap (stat b)))
+       (< 0 (rename a (+ d "/x")))                  ; a missing source is a live errno
+       (= 22 (rename 7 b)))                         ; EINVAL misuse: a non-string path
+
+   ; symlink + readlink: path becomes a link TO target -- and the target string
+   ; resolves relative to the LINK's directory, so a link beside its file names
+   ; it bare. readlink answers that string verbatim; on a NON-link (or a miss)
+   ; it is nothing. stat FOLLOWS the link, so through l it sees the file whole.
+   _ (assert
+       (id? (symlink "b" l) ())
+       (= (readlink l) "b")
+       (= 5 (cap (stat l))) (= 32768 (& 61440 (cauup (stat l))))
+       (id? (readlink b) ()) (id? (readlink (+ d "/nope")) ()))
+
+   ; chmod: the permission bits land exactly (0600 = 384); utime: the mtime
+   ; lands on the stat scale (MILLISECONDS), and a non-charm ms reads "now"
+   _ (assert
+       (id? (chmod b 384) ())
+       (= 384 (- (cauup (stat b)) 32768))
+       (id? (utime b 1600000000000) ())
+       (= 1600000000000 (caup (stat b)))
+       (id? (utime b ()) ())
+       (< 1600000000000 (caup (stat b)))            ; "now" is later than the pinned past
+       (< 0 (chmod (+ d "/nope") 384))              ; a miss is a live errno
+       (= 22 (chmod b "rw")))                       ; EINVAL misuse: a non-charm mode
+
+   ; chown: a no-op self-chown succeeds (-1 -1 leaves both ids alone); misuse EINVALs
+   _ (assert
+       (id? (chown b -1 -1) ())
+       (= 22 (chown b "x" 0)))
+
+   ; umask: always answers the PREVIOUS mask, so set-read-restore round-trips
+   _ (: m0 (umask 18)
+        (assert (charm? m0) (= 18 (umask m0)) (= m0 (umask m0))))
+
+   _ (unlink l) _ (unlink b)
+   _ (say out "fs: ok") (put out 10))
