@@ -22,30 +22,43 @@
    (nlab g pfx) (: k (peep g 'n 0) _ (pin g 'n (+ k 1)) (intern (+ pfx (show k))))
    argregs '(r6 r5 r2 r1 r7 r8)
    (nthr l i) (? (< i 1) (cap l) (nthr (cup l) (- i 1)))
-   (voff env name) (: e (assoc name env) (? (two? e) (caup e) 'bad))
+   ; the sized faces of a type: its load, its store, and the in-register
+   ; conversion an assignment or cast applies (long converts by doing nothing)
+   (ldop ty) (? (= ty 'char) 'ld1 (= ty 'short) 'ld2 (= ty 'int) 'ld4 'ld)
+   (stop ty) (? (= ty 'char) 'st1 (= ty 'short) 'st2 (= ty 'int) 'st4 'st)
+   (cvt ty r) (? (= ty 'char) (L (L 'sx1 r)) (= ty 'short) (L (L 'sx2 r))
+                 (= ty 'int) (L (L 'sx4 r)) ())
+   (vent env name) (: e (assoc name env) (? (two? e) e 'bad))   ; (name off type) | 'bad
    (bad? x) (id? x 'bad)
 
    ; expr -> forms leaving the value in r0, | 'bad
    (cgexpr g env e)
     (: k (cap e)
        (? (= k 'num) (L (L 'li 'r0 (caup e)))
-          (= k 'var) (: o (voff env (caup e))
-                        (? (bad? o) 'bad (L (L 'ld 'r0 'r4 o))))
+          (= k 'var) (: en (vent env (caup e))
+                        (? (bad? en) 'bad
+                           (L (L (ldop (cauup en)) 'r0 'r4 (caup en)))))
           (= k 'asn)
            (: lv (caup e)
               (? (! (= (cap lv) 'var)) 'bad
-                 (: o (voff env (caup lv))
+                 (: en (vent env (caup lv))
                     r (cgexpr g env (cauup e))
-                    (? (|| (bad? o) (bad? r)) 'bad
-                       (cat r (L (L 'st 'r4 o 'r0)))))))
+                    (? (|| (bad? en) (bad? r)) 'bad
+                       (: ty (cauup en)
+                          (cat r (cat (cvt ty 'r0)
+                                      (L (L (stop ty) 'r4 (caup en) 'r0)))))))))
           (= k 'post)
            (: lv (caup e)
               (? (! (= (cap lv) 'var)) 'bad
-                 (: o (voff env (caup lv))
-                    (? (bad? o) 'bad
-                       (L (L 'ld 'r0 'r4 o)
-                          (L 'add 'r1 'r0 (cauup e))
-                          (L 'st 'r4 o 'r1))))))
+                 (: en (vent env (caup lv))
+                    (? (bad? en) 'bad
+                       (: o (caup en) ty (cauup en)
+                          (L (L (ldop ty) 'r0 'r4 o)
+                             (L 'add 'r1 'r0 (cauup e))
+                             (L (stop ty) 'r4 o 'r1)))))))
+          (= k 'cast)
+           (: r (cgexpr g env (cauup e))
+              (? (bad? r) 'bad (cat r (cvt (caup e) 'r0))))
           (= k 'un)
            (: r (cgexpr g env (cauup e))
               (? (bad? r) 'bad
@@ -104,11 +117,13 @@
        b (cgexpr g env (cap (cuuup e)))
        rhs (cap (cuuup e))
        (? (|| (bad? a) (bad? b)) 'bad
-          ; constant shift counts ride the immediate shift ops
+          ; a constant count rides the immediate shift; a variable count
+          ; rides shlv/sarv with the count PINNED to r1 (holo's contract)
           (member? op '(shl shr))
            (? (= (cap rhs) 'num)
               (cat a (L (L (? (= op 'shl) 'shl 'sar) 'r0 (caup rhs))))
-              'bad)
+              (cat a (cat (L (L 'push 'r0)) (cat b (L (L 'mov 'r1 'r0) (L 'pop 'r0)
+                                                      (L (? (= op 'shl) 'shlv 'sarv) 'r0 'r1))))))
           ; holo's two-address lowering allows d = a, never d = b (unless
           ; commutative): compute into r1 (= the popped left), mov to r0
           (: mid (cat a (cat (L (L 'push 'r0)) (cat b (L (L 'pop 'r1)))))
@@ -128,18 +143,22 @@
 
    epi (L (L 'mov 'sp 'r4) (L 'pop 'r4) (L 'ret))
 
-   ; a declaration list: allocates offsets, extends env -> (forms env) | 'bad
+   ; a declaration list ((name type init)..): allocates 8-byte slots (the
+   ; WIDTH only matters at load/store), extends env -> (forms env) | 'bad
    (cgdecl g env pairs)
     (: (one ps env2 acc)
         (? (! (two? ps)) (L acc env2)
            (: p (cap ps)
+              ty (caup p)
               off (- 0 (+ (peep g 'off 0) 8))
               _ (pin g 'off (+ (peep g 'off 0) 8))
-              env3 (link (L (cap p) off) env2)
-              (? (two? (caup p))
-                 (: r (cgexpr g env3 (caup p))
+              env3 (link (L (cap p) off ty) env2)
+              (? (two? (cauup p))
+                 (: r (cgexpr g env3 (cauup p))
                     (? (bad? r) 'bad
-                       (one (cup ps) env3 (cat acc (cat r (L (L 'st 'r4 off 'r0)))))))
+                       (one (cup ps) env3
+                            (cat acc (cat r (cat (cvt ty 'r0)
+                                                 (L (L (stop ty) 'r4 off 'r0))))))))
                  (one (cup ps) env3 acc))))
        (one pairs env ()))
 
@@ -223,7 +242,7 @@
                  (: off (- 0 (+ (peep g 'off 0) 8))
                     _ (pin g 'off (+ (peep g 'off 0) 8))
                     (spill (cup ps) (+ i 1)
-                           (link (L (cap ps) off) env)
+                           (link (L (cap (cap ps)) off (caup (cap ps))) env)
                            (cat acc (L (L 'st 'r4 off (nthr argregs i)))))))
              sp0 (spill params 0 () ())
              body (cgitems g (caup sp0) (caup (caup (cuup f))) ())

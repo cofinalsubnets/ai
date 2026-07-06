@@ -108,6 +108,30 @@
    (arm64-mem lbase ubase d base off) (arm64-mem-r lbase ubase (rn d) (rn base) off)
    (arm64-ld d base off)   (arm64-mem 0xF8400000 0xF9400000 d base off)
    (arm64-st base off s)   (arm64-mem 0xF8000000 0xF9000000 s base off)
+   ;; the sized family: scaled-imm12 units follow the access width, not 8
+   (arm64-mem-sz lbase ubase sc d base off)
+      (: dt (rn d) bn (rn base)
+         (? (&& (= 0 (% off sc)) (&& (>= off 0) (<= (// off sc) 4095)))
+            (le32 (| ubase (| (<< (// off sc) 10) (| (<< bn 5) dt))))
+            (? (&& (>= off -256) (<= off 255))
+               (le32 (| lbase (| (<< (& off 511) 12) (| (<< bn 5) dt))))
+               (scare 'mem-range off))))
+   (arm64-ld1 d base off) (arm64-mem-sz 0x38800000 0x39800000 1 d base off)   ; ldrsb/ldursb Xt
+   (arm64-ld2 d base off) (arm64-mem-sz 0x78800000 0x79800000 2 d base off)   ; ldrsh/ldursh Xt
+   (arm64-ld4 d base off) (arm64-mem-sz 0xB8800000 0xB9800000 4 d base off)   ; ldrsw/ldursw Xt
+   (arm64-st1 base off s) (arm64-mem-sz 0x38000000 0x39000000 1 s base off)   ; strb/sturb Wt
+   (arm64-st2 base off s) (arm64-mem-sz 0x78000000 0x79000000 2 s base off)   ; strh/sturh Wt
+   (arm64-st4 base off s) (arm64-mem-sz 0xB8000000 0xB9000000 4 s base off)   ; str/stur Wt
+   (arm64-sx w d)                                             ; sbfm: sxtb/sxth/sxtw Xd, Wd
+      (: dn (rn d)
+         base (? (= w 1) 0x93401C00 (= w 2) 0x93403C00 0x93407C00)
+         (le32 (| base (| (<< dn 5) dn))))
+   (arm64-shiftv op d c)                                      ; lslv/lsrv/asrv Xd, Xd, Xc -- count pinned to r1 (the IR contract)
+      (: _ (? (reg-eq c 'r1) 0 (scare 'shiftv-count-not-r1 (L op d c)))
+         _ (? (reg-eq d 'r1) (scare 'shiftv-dst-is-r1 (L op d c)) 0)
+         dn (rn d) cn (rn c)
+         base (? (= op 'shlv) 0x9AC02000 (= op 'shrv) 0x9AC02400 0x9AC02800)
+         (le32 (| base (| (<< cn 16) (| (<< dn 5) dn)))))
    (arm64-lea d base off)  (arm64-addsub-imm 'add d base off)
 
    (arm64-push s) (: st (rn s) (le32 (| 0xF81F0FE0 st)))      ; str s, [sp, #-16]!
@@ -214,6 +238,16 @@
             (= op 'imul) (arm64-imul (at ins 1) (at ins 2) (at ins 3))
             (= op 'ld)   (arm64-ld   (at ins 1) (at ins 2) (at ins 3))
             (= op 'st)   (arm64-st   (at ins 1) (at ins 2) (at ins 3))
+            (= op 'ld1)  (arm64-ld1  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'ld2)  (arm64-ld2  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'ld4)  (arm64-ld4  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'st1)  (arm64-st1  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'st2)  (arm64-st2  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'st4)  (arm64-st4  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'sx1)  (arm64-sx 1 (at ins 1))
+            (= op 'sx2)  (arm64-sx 2 (at ins 1))
+            (= op 'sx4)  (arm64-sx 4 (at ins 1))
+            (member? op '(shlv shrv sarv)) (arm64-shiftv op (at ins 1) (at ins 2))
             (= op 'lea)  (arm64-lea  (at ins 1) (at ins 2) (at ins 3))
             (= op 'push) (arm64-push (at ins 1))
             (= op 'pop)  (arm64-pop  (at ins 1))

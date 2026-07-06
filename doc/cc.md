@@ -89,6 +89,29 @@ gate per stage. the pipeline, each its own file:
   mman, unistd, signal, setjmp, stdio slice). dodges parsing glibc entirely;
   stage 7 decides header-by-header what the host files still miss.
 
+## the basement, and the go borrowings (gwen's direction, 2026-07-06)
+
+two ideas to keep warm as the stages climb, neither committed yet:
+
+* **a basement language under C, in the spirit of historical B.** the
+  observation that seeds it: this compiler's core IS B-shaped already --
+  one word type, typeless 64-bit registers, C's types a checking-and-
+  conversion layer the stage-2b work laid ON TOP of the word core (sized
+  memory ops at the edges, words in the middle). ai itself is B-kin the
+  same way (the word is the one basic type). so the basement may want to
+  become a real, nameable layer: the typeless word language cc's gen
+  already speaks internally, possibly with its own thin surface syntax --
+  useful for runtime shims, the crt0, compiler self-tests, and as the
+  honest semantic floor the C dialect desugars onto.
+* **aicc-specific syntactic refinements borrowed from go.** C is almost
+  perfect; a few go conveniences might make the dialect nicer to live in
+  without leaving C's semantics. candidates to weigh when the grammar is
+  fuller (gwen picks): unparenthesized conditions with mandatory braces,
+  := style short declarations, cleaner declarator spellings for the
+  gnarly cases (function-pointer types especially). the fence stands:
+  extensions, opt-in, never needed to compile plain C -- ai.c stays the
+  gate and it is written in C.
+
 ## the ladder (each stage lands green and useful on its own)
 
 0. **the spike** -- LANDED 2026-07-06: `int main(){return 42;}` -> tokens ->
@@ -127,8 +150,20 @@ gate per stage. the pipeline, each its own file:
    fibonacci runs -- fib(10) through real recursion, in the battery. the
    battery lesson worth keeping: differential programs must be UB-FREE --
    pick(++i,++i,++i) is unsequenced, and gcc legitimately disagrees.
-   still open in stage 2: char/short/long + casts + sign extension, which
-   want holo's sized loads/stores first (the seam list below).
+   the types half LANDED the same day: char/short/long/int with real
+   memory widths -- holo grew the whole sized family first (ld1/ld2/ld4
+   sign-extending, st1/st2/st4 truncating, sx1/sx2/sx4 in-register, and
+   shlv/shrv/sarv register-count shifts with the count PINNED to r1, x86's
+   CL making the contract for every backend), all 24 encodings verified
+   against objdump/llvm-objdump on BOTH arches and frozen as holotest
+   goldens (172 pass). in cc: types ride declarations and params, casts
+   and sizeof(TYPE) fold through parse, char literals lex with escapes,
+   variable shifts unfenced. the ALU stays 64-bit -- sound because signed
+   overflow is UB and the battery is UB-free; the OBSERVABLE width effects
+   (stores truncate, loads extend, casts convert, and an assignment's
+   VALUE is the converted one) all ride the sized ops. sizeof(expr) stays
+   out until expressions carry types. locals still take 8-byte slots --
+   width matters at the memory op, not the offset.
 3. **pointers, arrays, strings, globals**: &/* /[], pointer arithmetic,
    string literals in .rodata, initializers, sizeof. relocations get real.
 4. **aggregates**: struct/union/enum/typedef, member access, nested layout

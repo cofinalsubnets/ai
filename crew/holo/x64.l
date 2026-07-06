@@ -142,6 +142,32 @@
       (: sn (rn s) bn (rn base) (cat (L (rex 1 (hi sn) 0 (hi bn)) 137) (mem sn base off)))
    (emit-lea d base off)                                            ; 0x8D lea r64, [base+off]
       (: dn (rn d) bn (rn base) (cat (L (rex 1 (hi dn) 0 (hi bn)) 141) (mem dn base off)))
+   ;; the sized loads (SIGN-extending -- C's char/short/int) and stores (truncating).
+   (emit-ld1 d base off)                                            ; 0F BE movsx r64, BYTE [base+off]
+      (: dn (rn d) bn (rn base) (cat (L (rex 1 (hi dn) 0 (hi bn)) 15 190) (mem dn base off)))
+   (emit-ld2 d base off)                                            ; 0F BF movsx r64, WORD [base+off]
+      (: dn (rn d) bn (rn base) (cat (L (rex 1 (hi dn) 0 (hi bn)) 15 191) (mem dn base off)))
+   (emit-ld4 d base off)                                            ; 63 movsxd r64, DWORD [base+off]
+      (: dn (rn d) bn (rn base) (cat (L (rex 1 (hi dn) 0 (hi bn)) 99) (mem dn base off)))
+   (emit-st1 base off s)                                            ; 88 mov BYTE [base+off], s8 (REX present: spl/sil, never ah/ch)
+      (: sn (rn s) bn (rn base) (cat (L (rex 0 (hi sn) 0 (hi bn)) 136) (mem sn base off)))
+   (emit-st2 base off s)                                            ; 66 89 mov WORD [base+off], s16
+      (: sn (rn s) bn (rn base) (cat (L 102 (rex 0 (hi sn) 0 (hi bn)) 137) (mem sn base off)))
+   (emit-st4 base off s)                                            ; 89 mov DWORD [base+off], s32
+      (: sn (rn s) bn (rn base) (cat (L (rex 0 (hi sn) 0 (hi bn)) 137) (mem sn base off)))
+   ;; in-register sign extension (the C casts): movsx/movsxd reg64 <- reg's low w bytes
+   (emit-sx w d)
+      (: dn (rn d)
+         opc (? (= w 1) (L 15 190) (= w 2) (L 15 191) (L 99))
+         (cat (L (rex 1 (hi dn) 0 (hi dn))) (cat opc (L (modrm 3 (lo dn) (lo dn))))))
+   ;; shifts by a REGISTER count: D3 /ext, the count in CL -- so the IR contract
+   ;; pins the count register to r1 (rcx) on every backend; d must differ.
+   (emit-shiftv op d c)
+      (: _ (? (reg-eq c 'r1) 0 (scare 'shiftv-count-not-r1 (L op d c)))
+         _ (? (reg-eq d 'r1) (scare 'shiftv-dst-is-r1 (L op d c)) 0)
+         dn (rn d)
+         ext (? (= op 'shlv) 4 (= op 'shrv) 5 7)
+         (cat (L (rex 1 0 0 (hi dn)) 211) (L (modrm 3 ext (lo dn)))))
 
    ;; push/pop: 0x50+rd / 0x58+rd, a bare REX.B (0x41) for the extended registers, no REX.W.
    (emit-push s) (: sn (rn s) (? (>= sn 8) (L 65 (| 80 (lo sn))) (L (| 80 sn))))
@@ -234,6 +260,16 @@
             (= op 'ldx)  (emit-ldx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (ldx d base index scale disp)
             (= op 'stx)  (emit-stx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (stx base index scale disp s)
             (= op 'leax) (emit-leax (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (leax d base index scale disp)
+            (= op 'ld1)  (emit-ld1  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'ld2)  (emit-ld2  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'ld4)  (emit-ld4  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'st1)  (emit-st1  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'st2)  (emit-st2  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'st4)  (emit-st4  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'sx1)  (emit-sx 1 (at ins 1))
+            (= op 'sx2)  (emit-sx 2 (at ins 1))
+            (= op 'sx4)  (emit-sx 4 (at ins 1))
+            (member? op '(shlv shrv sarv)) (emit-shiftv op (at ins 1) (at ins 2))
             (= op 'ldxb) (emit-ldxb (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (ldxb d base index scale disp) -- zero-extend byte load
             (= op 'stxb) (emit-stxb (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (stxb base index scale disp s) -- low-byte store
             (= op 'test) (emit-test (at ins 1) (at ins 2))

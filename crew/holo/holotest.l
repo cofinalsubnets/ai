@@ -46,6 +46,21 @@
       (L "ld.disp8"    "488b4708"              '((ld r0 r6 8)))
       (L "ld.rbp0"     "488b4500"              '((ld r0 r4 0)))     ; rbp base forces a 0 disp byte
       (L "ld.rbp.d8"   "488b4564"              '((ld r0 r4 100)))
+      ;; the sized family (movsx/movsxd loads, truncating stores, in-register
+      ;; extends, CL shifts) -- each checked vs objdump -M intel (mnemonics in
+      ;; the trailing comments)
+      (L "ld1.rbp"     "480fbe45f8"            '((ld1 r0 r4 -8)))     ; movsx  rax, BYTE [rbp-8]
+      (L "ld2.sp"      "480fbf5c2410"          '((ld2 r3 sp 16)))     ; movsx  rbx, WORD [rsp+16]
+      (L "ld4.rbp"     "4c63459c"              '((ld4 r7 r4 -100)))   ; movsxd r8, DWORD [rbp-100]
+      (L "st1.rbp"     "408845f8"              '((st1 r4 -8 r0)))     ; mov BYTE [rbp-8], al
+      (L "st2.sp"      "6640895c2410"          '((st2 sp 16 r3)))     ; mov WORD [rsp+16], bx
+      (L "st4.rbp"     "4489459c"              '((st4 r4 -100 r7)))   ; mov DWORD [rbp-100], r8d
+      (L "sx1"         "480fbec0"              '((sx1 r0)))           ; movsx rax, al
+      (L "sx2.hi"      "4d0fbfc0"              '((sx2 r7)))           ; movsx r8, r8w
+      (L "sx4"         "4863db"                '((sx4 r3)))           ; movsxd rbx, ebx
+      (L "shlv"        "48d3e0"                '((shlv r0 r1)))       ; shl rax, cl
+      (L "shrv.hi"     "49d3e8"                '((shrv r7 r1)))       ; shr r8, cl
+      (L "sarv"        "48d3fb"                '((sarv r3 r1)))       ; sar rbx, cl
       (L "st.sib"      "4889442410"            '((st sp 16 r0)))    ; rsp base needs a SIB byte
       (L "st.disp32"   "48899c2400010000"      '((st sp 256 r3)))
       (L "lea.disp8"   "488d4710"              '((lea r0 r6 16)))
@@ -236,7 +251,20 @@
       (L "a64.ucomisd"  "0020611e"          '((ucomisd f0 f1)))           ; fcmp  d0, d1
       (L "a64.stsd"     "400400fd"          '((stsd r2 8 f0)))            ; str   d0, [x2, #8]
       (L "a64.ldsd"     "610040fd"          '((ldsd f1 r3 0)))            ; ldr   d1, [x3]
-      (L "a64.xorpd"    "841c242e"          '((xorpd f4 f4))))            ; eor   v4.8b, v4.8b, v4.8b  (zero a double)
+      (L "a64.xorpd"    "841c242e"          '((xorpd f4 f4)))             ; eor   v4.8b, v4.8b, v4.8b  (zero a double)
+      ;; the sized family, checked vs llvm-objdump
+      (L "a64.ld1"      "80809f38"          '((ld1 r0 r4 -8)))            ; ldursb x0, [x4, #-8]
+      (L "a64.ld2"      "e3238079"          '((ld2 r3 sp 16)))            ; ldrsh  x3, [sp, #16]
+      (L "a64.ld4"      "87c099b8"          '((ld4 r7 r4 -100)))          ; ldursw x7, [x4, #-100]
+      (L "a64.st1"      "80801f38"          '((st1 r4 -8 r0)))            ; sturb  w0, [x4, #-8]
+      (L "a64.st2"      "e3230079"          '((st2 sp 16 r3)))            ; strh   w3, [sp, #16]
+      (L "a64.st4"      "87c019b8"          '((st4 r4 -100 r7)))          ; stur   w7, [x4, #-100]
+      (L "a64.sx1"      "001c4093"          '((sx1 r0)))                  ; sxtb x0, w0
+      (L "a64.sx2"      "e73c4093"          '((sx2 r7)))                  ; sxth x7, w7
+      (L "a64.sx4"      "637c4093"          '((sx4 r3)))                  ; sxtw x3, w3
+      (L "a64.shlv"     "0020c19a"          '((shlv r0 r1)))              ; lsl x0, x0, x1
+      (L "a64.shrv"     "e724c19a"          '((shrv r7 r1)))              ; lsr x7, x7, x1
+      (L "a64.sarv"     "6328c19a"          '((sarv r3 r1))))             ; asr x3, x3, x1
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'arm64 (at t 2))) 0 a64tests)
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --

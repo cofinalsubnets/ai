@@ -16,6 +16,10 @@
 ;   (cmp a b)              ; set flags from a - b
 ;   (ld d base off)        ; d <- [base+off]   (64-bit load)
 ;   (st base off s)        ; [base+off] <- s   (64-bit store)
+;   (ld1/ld2/ld4 d base off)                   ; SIGN-extending sized loads (C's char/short/int)
+;   (st1/st2/st4 base off s)                   ; truncating sized stores
+;   (sx1/sx2/sx4 d)                            ; sign-extend d's low 1/2/4 bytes in place (the C casts)
+;   (shlv/shrv/sarv d c)   ; shift d by the count in c -- c PINNED to r1 (x86's CL), d must differ
 ;   (lea d base off)       ; d <- base+off     (address arithmetic)
 ;   (ldx d base ix sc dp)  ; d <- [base + ix*sc + dp]   (sc in 1/2/4/8)
 ;   (stx base ix sc dp s)  ; [base + ix*sc + dp] <- s

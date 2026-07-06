@@ -1,8 +1,9 @@
 ; crew/cc/lex.l -- the C lexer (rung 3 stage 0; doc/cc.md is the plan). text ->
 ; (1 tokens) | () on a lex error. a token is (kind val line): ('kw nom), ('id
 ; text), ('num charm), ('p text) -- the punctuator by maximal munch. comments
-; both kinds; line numbers carried for diagnostics. not yet (staged): string
-; and char literals, hex/octal/float literals, the preprocessor's # lines.
+; both kinds; line numbers carried for diagnostics. char literals 'a' (with
+; \n \t \r \0 \\ \') read as ('num code). not yet (staged): string
+; literals, hex/octal/float literals, the preprocessor's # lines.
 (:
    (clex src)
     (: n (tally src)
@@ -42,6 +43,16 @@
                                               (eat (+ j 1) (? (= (src j) 10) (+ l2 1) l2)))
                                 r (eat (+ i 2) line)
                                 (? (charm? (cap r)) (go (cap r) (caup r) acc) ()))
+                 (= c 39) (: esc (&& (< (+ i 2) n) (= (src (+ i 1)) 92))
+                             v (? esc (: d (src (+ i 2))
+                                         (? (= d 110) 10 (= d 116) 9 (= d 114) 13
+                                            (= d 48) 0 (= d 92) 92 (= d 39) 39 ()))
+                                  (< (+ i 1) n) (src (+ i 1))
+                                  ())
+                             j (+ i (? esc 4 3))
+                             (? (&& (charm? v) (&& (<= j n) (= (src (- j 1)) 39)))
+                                (go j line (link (L 'num v line) acc))
+                                ()))
                  (dig? c) (: (num j v) (? (&& (< j n) (dig? (src j)))
                                           (num (+ j 1) (+ (* 10 v) (- (src j) 48)))
                                           (L j v))

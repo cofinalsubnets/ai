@@ -34,6 +34,10 @@
       (= (tally c3) 4)                                       ; maximal munch: a ++ + b
       (= (tn c3 1) (L 'p "++" 1)) (= (tn c3 2) (L 'p "+" 1))
       (= (tn c4 1) (L 'p "<<=" 1)) (= (tn c4 5) (L 'p ">>=" 1))
+      (= (tn (caup (clex "'a' '\\n' '\\''")) 0) (L 'num 97 1))   ; char literals are numbers
+      (= (tn (caup (clex "'a' '\\n' '\\''")) 1) (L 'num 10 1))
+      (= (tn (caup (clex "'a' '\\n' '\\''")) 2) (L 'num 39 1))
+      (! (clex "'ab'")) (! (clex "'"))                       ; malformed literals refuse
       (! (clex "int @"))                                     ; not C: the lex error rides up
       (! (clex "a /* open"))                                 ; unterminated comment refused
       (= (caup (clex "")) ())))                              ; empty text, empty tokens
@@ -48,7 +52,9 @@
       (= (cast "int main() { return 42; }")
          '(prog ((fn "main" () (blk ((ret (num 42))))))))
       (= (cast "int add(int a, int b) { return a+b; }")
-         '(prog ((fn "add" ("a" "b") (blk ((ret (bin + (var "a") (var "b")))))))))
+         '(prog ((fn "add" (("a" int) ("b" int)) (blk ((ret (bin + (var "a") (var "b")))))))))
+      (= (cast "long f(char c, short s) { return c; }")
+         '(prog ((fn "f" (("c" char) ("s" short)) (blk ((ret (var "c"))))))))
       (= (cast "int f(void); int main() { return 0; }")
          '(prog ((proto "f") (fn "main" () (blk ((ret (num 0))))))))
       (= (cexp "f(1, 2+3)") '(call "f" ((num 1) (bin + (num 2) (num 3)))))
@@ -69,9 +75,17 @@
       (= (cexp "1,2") '(comma (num 1) (num 2)))
       (= (cexp "a&&b||c") '(lor (land (var "a") (var "b")) (var "c")))
       (= (cast "int main() { int x=1; if (x) return 2; return 3; }")
-         '(prog ((fn "main" () (blk ((decl (("x" (num 1))))
+         '(prog ((fn "main" () (blk ((decl (("x" int (num 1))))
                                      (if (var "x") (ret (num 2)) ())
                                      (ret (num 3))))))))
+      (= (cast "int main() { char c; long a=1, b; return 0; }")
+         '(prog ((fn "main" () (blk ((decl (("c" char ())))
+                                     (decl (("a" long (num 1)) ("b" long ())))
+                                     (ret (num 0))))))))
+      (= (cexp "(char)300") '(cast char (num 300)))
+      (= (cexp "(long)(int)x") '(cast long (cast int (var "x"))))
+      (= (cexp "sizeof(int)") '(num 4))
+      (= (cexp "sizeof(char)+sizeof(short)+sizeof(long)") '(bin + (bin + (num 1) (num 2)) (num 8)))
       (= (cast "int main() { while (1) break; return 0; }")
          '(prog ((fn "main" () (blk ((while (num 1) (brk)) (ret (num 0))))))))
       (! (cparse (caup (clex "int main() { return (1+2; }"))))       ; the lost )
@@ -92,7 +106,7 @@
       (! (cgen (cast "int main() { return y; }")))                   ; undeclared name
       (! (cgen (cast "int main() { return 5=3; }")))                 ; not an lvalue
       (! (cgen (cast "int main() { break; }")))                      ; no loop to leave
-      (! (cgen (cast "int main() { int a=1; int b=2; return a<<b; }")))   ; variable shift: the holo seam
+      (two? (cgen (cast "int main() { int a=1; int b=2; return a<<b; }")))  ; variable shifts ride shlv now
       (two? (cgen (cast "int f(int a) { return a; } int main() { return f(1); }")))
       (! (cgen (cast "int main() { return f(1,2,3,4,5,6,7); }")))          ; the six-register fence ...
       (! (cgen (cast "int f(int a,int b,int c,int d,int e,int x,int y) { return 1; } int main() { return 1; }")))))  ; ... both sides of it
