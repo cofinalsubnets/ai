@@ -99,10 +99,22 @@ gate per stage. the pipeline, each its own file:
    moves wholly into stage 3 where globals make it real. the lexer landed
    fuller than the stage needs (all keywords, maximal-munch punctuators,
    both comments, line numbers): stage 1 eats it as-is.
-1. **integer expressions + statements**: all arithmetic/logic/compare ops,
-   locals, if/while/for/blocks, int only. differential gate vs gcc -O0 is
-   born here: same .c, both compilers, same stdout+exit, a battery that
-   only ever grows.
+1. **integer expressions + statements** -- LANDED 2026-07-06: the whole C
+   int expression ladder (precedence climbing; && || short-circuit
+   normalizing to 0/1; ternary, comma; compound assigns and ++/-- desugared
+   at parse, only ('post ..) surviving), decls with initializers and block
+   scoping, if/else, while, for (all clauses optional, C99 decl-init),
+   break/continue. codegen chibicc-plain: r0 the value, binaries push-left/
+   pop-r1/compute-into-r1/mov (holo's two-address lowering allows d = a,
+   never d = b uncommuted -- the alias-dst scare taught this), locals off
+   the r5 frame, the frame sized after the body and rounded to 16. ints are
+   8 BYTES until stage 2's types; shifts take CONSTANT counts (holo's
+   register-count shift is stage-2 seam work) -- both guarded by gen
+   refusals in the laws. the battery lives in test/cc/*.c -- 15 programs,
+   compile-run-compare vs gcc -O0 in test_cc, growing every stage. one core
+   wrinkle found and dodged: a value binding woven after a lambda that
+   transitively forward-references its consumer draws a load-time book read
+   (a benign ;; missing scare) -- op tables sit above the lambdas now.
 2. **functions**: calls/prototypes/recursion, the SysV ABI (6 int regs +
    stack), then char/short/long + casts + sign extension. fibonacci runs.
 3. **pointers, arrays, strings, globals**: &/* /[], pointer arithmetic,

@@ -38,25 +38,53 @@
       (! (clex "a /* open"))                                 ; unterminated comment refused
       (= (caup (clex "")) ())))                              ; empty text, empty tokens
 
-; --- the parser: the stage-0 grammar's AST, and its refusals ---
-(: ast (caup (cparse (caup (clex "int main() { return 42; }"))))
-   two (caup (cparse (caup (clex "int f() { return 1; } int main() { return 7; }"))))
+; --- the parser: precedence, associativity, desugarings, statement shapes ---
+(: (cast src) (caup (cparse (caup (clex src))))
+   (cexp src) (: ast (cast (+ "int main() { return " (+ src "; }")))
+                 items (caup (cauup (cap (caup ast))))
+                 (caup (cap items)))
    (assert
-      (= ast (L 'prog (L (L 'fn "main" (L (L 'ret (L 'num 42)))))))
-      (= (tally (caup two)) 2)
-      (= (cap (caup two)) (L 'fn "f" (L (L 'ret (L 'num 1)))))
-      (! (cparse (caup (clex "int main() { return 42 }"))))  ; the ; is not optional
-      (! (cparse (caup (clex "int main() { return; }"))))    ; stage 0 wants a value
-      (! (cparse (caup (clex "main() { return 1; }"))))      ; ... and the int
-      (! (cparse ()))))                                      ; nothing is not a program
+      (= (cast "int main() { return 42; }")
+         '(prog ((fn "main" (blk ((ret (num 42))))))))
+      (= (cexp "2+3*4") '(bin + (num 2) (bin * (num 3) (num 4))))
+      (= (cexp "10-3-2") '(bin - (bin - (num 10) (num 3)) (num 2)))
+      (= (cexp "(2+3)*4") '(bin * (bin + (num 2) (num 3)) (num 4)))
+      (= (cexp "1<<3") '(bin shl (num 1) (num 3)))
+      (= (cexp "a<b==c") '(bin eq (bin lt (var "a") (var "b")) (var "c")))
+      (= (cexp "-x") '(un neg (var "x")))
+      (= (cexp "!~x") '(un not (un bnot (var "x"))))
+      (= (cexp "x=y=1") '(asn (var "x") (asn (var "y") (num 1))))    ; right assoc
+      (= (cexp "x+=2") '(asn (var "x") (bin + (var "x") (num 2))))   ; the desugar
+      (= (cexp "++x") '(asn (var "x") (bin + (var "x") (num 1))))
+      (= (cexp "x--") '(post (var "x") -1))
+      (= (cexp "a?1:2") '(cond (var "a") (num 1) (num 2)))
+      (= (cexp "1,2") '(comma (num 1) (num 2)))
+      (= (cexp "a&&b||c") '(lor (land (var "a") (var "b")) (var "c")))
+      (= (cast "int main() { int x=1; if (x) return 2; return 3; }")
+         '(prog ((fn "main" (blk ((decl (("x" (num 1))))
+                                  (if (var "x") (ret (num 2)) ())
+                                  (ret (num 3))))))))
+      (= (cast "int main() { while (1) break; return 0; }")
+         '(prog ((fn "main" (blk ((while (num 1) (brk)) (ret (num 0))))))))
+      (! (cparse (caup (clex "int main() { return (1+2; }"))))       ; the lost )
+      (! (cparse (caup (clex "int main() { if 1 return 2; }"))))     ; if wants parens
+      (! (cparse (caup (clex "int main() { return 42 }"))))
+      (! (cparse ()))))
 
-; --- the generator: the whole IR, golden ---
-(: ir (caup (cgen (caup (cparse (caup (clex "int main() { return 42; }"))))))
+; --- the generator: one full golden, and the refusals that guard the seams ---
+(: (cast src) (caup (cparse (caup (clex src))))
+   ir (caup (cgen (cast "int main() { return 42; }")))
    (assert
       (= ir '((call main) (mov r6 r0) (li r0 60) (sys)
-              (label main) (li r0 42) (ret)))
-      ; no main, no program
-      (! (cgen (caup (cparse (caup (clex "int f() { return 1; }"))))))))
+              (label main) (push r5) (mov r5 sp) (sub sp sp 0)
+              (li r0 42) (mov sp r5) (pop r5) (ret)
+              (li r0 0) (mov sp r5) (pop r5) (ret)))
+      (two? (cgen (cast "int main() { int x=1; while (x<5) x++; return x; }")))
+      (! (cgen (cast "int f() { return 1; }")))                      ; no main, no program
+      (! (cgen (cast "int main() { return y; }")))                   ; undeclared name
+      (! (cgen (cast "int main() { return 5=3; }")))                 ; not an lvalue
+      (! (cgen (cast "int main() { break; }")))                      ; no loop to leave
+      (! (cgen (cast "int main() { int a=1; int b=2; return a<<b; }")))))  ; variable shift: the stage-2 holo seam
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (AST + refusals) + gen (the whole IR, golden) ok")
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + the guarded seams) ok")
 (put err 10)
