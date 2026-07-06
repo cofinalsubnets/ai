@@ -90,7 +90,7 @@ usage: au TOOL ARGS..     (or symlink a tool's name to au)
   sed [-n] SCRIPT [F..]                   the stream editor (s///gp, d, p, q, addresses)
   env sleep kill xargs                    the process tools (crew/utils/proc.l)
   vi [FILE]                               the editor (crew/vi/)
-  cc IN OUT                               the C compiler (ints+types, functions, recursion)
+  cc IN OUT                               the C compiler (ints+types+pointers, functions)
   ls cp mv rm mkdir rmdir ln touch pwd chmod   the fs tools (crew/utils/fs.l)
   echo seq yes true false basename dirname     ... and the trivia
 ")

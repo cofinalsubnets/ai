@@ -61,6 +61,9 @@
       (L "shlv"        "48d3e0"                '((shlv r0 r1)))       ; shl rax, cl
       (L "shrv.hi"     "49d3e8"                '((shrv r7 r1)))       ; shr r8, cl
       (L "sarv"        "48d3fb"                '((sarv r3 r1)))       ; sar rbx, cl
+      ;; la: rip-relative lea onto a data label laid with (label)+(raw ..)
+      (L "la.data"     "488d05070000004c8d050000000041424300"
+                       '((la r0 x) (la r7 x) (label x) (raw (65 66 67 0))))  ; lea rax/r8, [rip -> x]
       (L "st.sib"      "4889442410"            '((st sp 16 r0)))    ; rsp base needs a SIB byte
       (L "st.disp32"   "48899c2400010000"      '((st sp 256 r3)))
       (L "lea.disp8"   "488d4710"              '((lea r0 r6 16)))
@@ -264,7 +267,9 @@
       (L "a64.sx4"      "637c4093"          '((sx4 r3)))                  ; sxtw x3, w3
       (L "a64.shlv"     "0020c19a"          '((shlv r0 r1)))              ; lsl x0, x0, x1
       (L "a64.shrv"     "e724c19a"          '((shrv r7 r1)))              ; lsr x7, x7, x1
-      (L "a64.sarv"     "6328c19a"          '((sarv r3 r1))))             ; asr x3, x3, x1
+      (L "a64.sarv"     "6328c19a"          '((sarv r3 r1)))              ; asr x3, x3, x1
+      (L "a64.la"       "400000102700001041424300"
+                        '((la r0 x) (la r7 x) (label x) (raw (65 66 67 0)))))  ; adr x0/x7, x
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'arm64 (at t 2))) 0 a64tests)
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --

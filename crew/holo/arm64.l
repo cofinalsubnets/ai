@@ -146,6 +146,7 @@
    ;; is pc-relative to the instruction's OWN address, in units of 4. the fix is the whole word.
    (arm64-jmp  label)    (L (fix 4 'b26 label 0x14000000))
    (arm64-call label)    (L (fix 4 'b26 label 0x94000000))
+   (arm64-la d label)    (L (fix 4 'adr21 label (| 0x10000000 (rn d))))   ; adr Xd, label (byte-granular, +-1MB)
    (arm64-br cond label) (: cc (peep arm64-cc cond -1) _ (? (< cc 0) (scare 'badcc cond) 0)
                             (L (fix 4 'b19 label (| 0x54000000 cc))))
    ;; jmpr: BR Xn -- branch to the address held in a register (the glaze's Continue / deopt tail).
@@ -270,6 +271,8 @@
             (= op 'stxb) (arm64-stxb (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (stxb base index scale disp s) -- low-byte store
             (= op 'leax) (arm64-leax (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))
             (= op 'call) (arm64-call (at ins 1))
+            (= op 'la)   (arm64-la   (at ins 1) (at ins 2))
+            (= op 'raw)  (at ins 1)                                   ; splice pre-encoded bytes verbatim (no fixups)
             (= op 'movsd)    (arm64-fmov   (at ins 1) (at ins 2))                 ; -- scalar-double FP --
             (member? op '(addsd subsd mulsd divsd)) (arm64-fp3op op (at ins 1) (at ins 2))
             (= op 'ucomisd)  (arm64-fcmp   (at ins 1) (at ins 2))
@@ -288,9 +291,12 @@
 
    ;; a relocation: the offset is (target - site)/4, ORed into the base word `aux`.
    (arm64-patch kind target site width aux)
-      (: rel (// (- target site) 4)
+      (: rb (- target site)
+         rel (// rb 4)
          (? (= kind 'b26) (le32 (| aux (& rel 67108863)))             ; 26-bit field, bits[25:0]
             (= kind 'b19) (le32 (| aux (<< (& rel 524287) 5)))        ; 19-bit field, bits[23:5]
+            (= kind 'adr21) (le32 (| aux (| (<< (& rb 3) 29)          ; adr: BYTE offset, immlo[30:29]
+                                            (<< (& (>> rb 2) 524287) 5))))   ; immhi[23:5]
             (scare 'badfix kind)))
 
    arm64 (tablet 0)

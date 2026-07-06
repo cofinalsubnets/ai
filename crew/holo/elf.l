@@ -25,7 +25,7 @@
          (le64 entry) (le64 64) (le64 0)                       ; e_entry, e_phoff=64, e_shoff=0
          (le32 0) (le16 64) (le16 56)                          ; e_flags, e_ehsize=64, e_phentsize=56
          (le16 1) (le16 0) (le16 0) (le16 0)                   ; e_phnum=1, no section headers
-         (le32 1) (le32 5) (le64 0)                            ; PT_LOAD, flags R+X, p_offset=0
+         (le32 1) (le32 7) (le64 0)                            ; PT_LOAD, flags RWX -- globals ride the one segment as labeled raw data (cc stage 3); split segments arrive with the .o seam
          (le64 base) (le64 base)                               ; p_vaddr, p_paddr
          (le64 filesz) (le64 filesz) (le64 4096)))             ; p_filesz, p_memsz, p_align
 

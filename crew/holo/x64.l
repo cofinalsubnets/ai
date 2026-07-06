@@ -180,6 +180,11 @@
    ;; the driver fills once the target label's address is known.
    (jcc-op c) (: o (peep x64-cc c -1) (? (< o 0) (scare 'badcc c) o))
    (emit-call label)     (L 232 (fix 4 'rel32 label 0))
+   ;; the address of a label: RIP-relative lea -- the rel32 measures from the
+   ;; end of its own field, exactly x64-patch's convention, so data placed by
+   ;; (label)+(raw ..) is addressable with no new fixup kind.
+   (emit-la d label)
+      (: dn (rn d) (L (rex 1 (hi dn) 0 0) 141 (modrm 0 (lo dn) 5) (fix 4 'rel32 label 0)))
    (emit-jmp  label)     (L 233 (fix 4 'rel32 label 0))
    (emit-br cond label)  (L 15 (jcc-op cond) (fix 4 'rel32 label 0))
    ;; jmpr: FF /4 -- an indirect jump through a register (the glaze's Continue / deopt tail). REX.B
@@ -288,6 +293,7 @@
             (= op 'div)  (emit-div 0 (at ins 1) (at ins 2) (at ins 3))
             (= op 'rem)  (emit-div 1 (at ins 1) (at ins 2) (at ins 3))                        ; (rem d a b t) -- t ignored on x86 (rdx)
             (= op 'call) (emit-call (at ins 1))
+            (= op 'la)   (emit-la   (at ins 1) (at ins 2))
             (= op 'ret)  (L 195)
             (= op 'sys)  (L 15 5)
             (= op 'nop)  (L 144)

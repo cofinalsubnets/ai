@@ -164,8 +164,27 @@ two ideas to keep warm as the stages climb, neither committed yet:
    VALUE is the converted one) all ride the sized ops. sizeof(expr) stays
    out until expressions carry types. locals still take 8-byte slots --
    width matters at the memory op, not the offset.
-3. **pointers, arrays, strings, globals**: &/* /[], pointer arithmetic,
-   string literals in .rodata, initializers, sizeof. relocations get real.
+3. **pointers, arrays, strings, globals** -- LANDED 2026-07-06, and with a
+   smaller footprint than the draft planned: instead of opening the .o/ld
+   seam, holo grew ONE op -- (la d label), pc-relative address-of-label
+   riding the EXISTING rel32 fixup on x64 (lea rip-relative) and a new
+   byte-granular adr21 kind on arm64 (adr), objdump-verified both arches
+   (holotest 174) -- and elf64's one load segment went RWX, so globals and
+   string literals live as LABELED RAW DATA after the code, no binutils
+   touched. the relocatable-.o seam moves to where libc forces it (stage
+   6/7). in cc: cgexpr got TYPED -- every expression answers (type forms),
+   so pointer arithmetic scales by pointee size (ptr-ptr differences
+   divide back), dereferences load by pointee width, arrays decay to
+   addresses, and lvalues have one door (clval: address in r0 + pointee
+   type) through which x, *p, and a[i] all assign. string literals lex
+   with escapes and land NUL-terminated in the data tail; globals are
+   collected in a first pass so use may precede declaration order within
+   the file. fenced and refused with laws: ptr+ptr, deref of a non-
+   pointer, assigning arrays, star-array mixed declarators, array-local
+   and non-constant/string global initializers. the battery reaches 33:
+   double indirection, *(a+i) loops, string char reads, global mutation
+   across calls, swap through pointers, pointer difference and compare,
+   a strcpy-shaped buffer walk.
 4. **aggregates**: struct/union/enum/typedef, member access, nested layout
    + alignment, the full declarator grammar (function pointers!),
    designated initializers, flexible arrays, switch/goto/do. by here the

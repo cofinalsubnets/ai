@@ -34,6 +34,7 @@
 ;   (mulo d a b t lbl)                         ; d <- a*b (low 64); branch to lbl on signed overflow; t a scratch (clobbered)
 ;   (set cond d)                               ; d <- (cond holds) ? 1 : 0, from the last cmp's flags
 ;   (call label) (ret) (sys)                   ; sys = syscall/svc
+;   (la d label)           ; d <- the label's ADDRESS (pc-relative; data via (label)+(raw ..))
 ;   (nop) (trap)
 ;   -- SSE2 double lane (x86-64 only; the float glaze): xmm registers f0..f15 --
 ;   (addsd/mulsd/subsd/divsd d s) etc.         ; reg-reg packed/scalar double ops (see x64-sse)

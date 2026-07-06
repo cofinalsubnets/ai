@@ -38,6 +38,9 @@
       (= (tn (caup (clex "'a' '\\n' '\\''")) 1) (L 'num 10 1))
       (= (tn (caup (clex "'a' '\\n' '\\''")) 2) (L 'num 39 1))
       (! (clex "'ab'")) (! (clex "'"))                       ; malformed literals refuse
+      (= (tn (caup (clex "\"hi\"")) 0) (L 'str "hi" 1))
+      (= (tn (caup (clex "\"a\\nb\"")) 0) (L 'str "a\nb" 1))
+      (! (clex "\"open"))                                    ; unterminated string refuses
       (! (clex "int @"))                                     ; not C: the lex error rides up
       (! (clex "a /* open"))                                 ; unterminated comment refused
       (= (caup (clex "")) ())))                              ; empty text, empty tokens
@@ -74,6 +77,20 @@
       (= (cexp "a?1:2") '(cond (var "a") (num 1) (num 2)))
       (= (cexp "1,2") '(comma (num 1) (num 2)))
       (= (cexp "a&&b||c") '(lor (land (var "a") (var "b")) (var "c")))
+      (= (cexp "*p") '(deref (var "p")))
+      (= (cexp "&x") '(addr (var "x")))
+      (= (cexp "a[2]") '(deref (bin + (var "a") (num 2))))
+      (= (cexp "*p++") '(deref (post (var "p") 1)))
+      (= (cexp "sizeof(int*)") '(num 8))
+      (= (cexp "(char*)x") '(cast (ptr char) (var "x")))
+      (= (cast "int main() { int *p; int a[4]; return 0; }")
+         '(prog ((fn "main" () (blk ((decl (("p" (ptr int) ())))
+                                     (decl (("a" (arr int 4) ())))
+                                     (ret (num 0))))))))
+      (= (cast "long g = 5; int main() { return 0; }")
+         '(prog ((gdecl (("g" long (num 5))))
+                 (fn "main" () (blk ((ret (num 0))))))))
+      (! (cparse (caup (clex "int main() { int *a[3]; return 0; }"))))   ; star-array mix: this stage refuses
       (= (cast "int main() { int x=1; if (x) return 2; return 3; }")
          '(prog ((fn "main" () (blk ((decl (("x" int (num 1))))
                                      (if (var "x") (ret (num 2)) ())
@@ -109,7 +126,14 @@
       (two? (cgen (cast "int main() { int a=1; int b=2; return a<<b; }")))  ; variable shifts ride shlv now
       (two? (cgen (cast "int f(int a) { return a; } int main() { return f(1); }")))
       (! (cgen (cast "int main() { return f(1,2,3,4,5,6,7); }")))          ; the six-register fence ...
-      (! (cgen (cast "int f(int a,int b,int c,int d,int e,int x,int y) { return 1; } int main() { return 1; }")))))  ; ... both sides of it
+      (! (cgen (cast "int f(int a,int b,int c,int d,int e,int x,int y) { return 1; } int main() { return 1; }")))   ; ... both sides of it
+      (two? (cgen (cast "int g; int main() { int *p = &g; *p = 3; return g; }")))
+      (! (cgen (cast "int main() { int *p; int *q; return (long)(p+q); }")))   ; ptr+ptr refused
+      (! (cgen (cast "int main() { int x; return *x; }")))                     ; deref wants a pointer
+      (! (cgen (cast "int main() { int a[3]; int b[3]; a = b; return 0; }")))  ; arrays are not assignable
+      (! (cgen (cast "int g = 1+2; int main() { return g; }")))                ; global inits are constants
+      (! (cgen (cast "char *s = \"hi\"; int main() { return 0; }")))          ; ... and never strings (yet)
+      (! (cgen (cast "int main() { int a[2] = 5; return 0; }")))))             ; array locals take no initializer
 
 (say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + the guarded seams) ok")
 (put err 10)

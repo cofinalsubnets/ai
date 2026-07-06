@@ -2,8 +2,9 @@
 ; (1 tokens) | () on a lex error. a token is (kind val line): ('kw nom), ('id
 ; text), ('num charm), ('p text) -- the punctuator by maximal munch. comments
 ; both kinds; line numbers carried for diagnostics. char literals 'a' (with
-; \n \t \r \0 \\ \') read as ('num code). not yet (staged): string
-; literals, hex/octal/float literals, the preprocessor's # lines.
+; \n \t \r \0 \\ \') read as ('num code); string literals (same escapes,
+; plus \") as ('str text). not yet (staged): hex/octal/float literals,
+; adjacent-string pasting, the preprocessor's # lines.
 (:
    (clex src)
     (: n (tally src)
@@ -43,6 +44,19 @@
                                               (eat (+ j 1) (? (= (src j) 10) (+ l2 1) l2)))
                                 r (eat (+ i 2) line)
                                 (? (charm? (cap r)) (go (cap r) (caup r) acc) ()))
+                 (= c 34) (: (eat j acc2)                     ; a string literal
+                              (? (<= n j) ()
+                                 (: c2 (src j)
+                                    (? (= c2 34) (L acc2 (+ j 1))
+                                       (= c2 10) ()
+                                       (&& (= c2 92) (< (+ j 1) n))
+                                        (: d (src (+ j 1))
+                                           v (? (= d 110) 10 (= d 116) 9 (= d 114) 13
+                                                (= d 48) 0 (= d 92) 92 (= d 34) 34 (= d 39) 39 ())
+                                           (? (charm? v) (eat (+ j 2) (+ acc2 (string v))) ()))
+                                       (eat (+ j 1) (+ acc2 (string c2))))))
+                             r (eat (+ i 1) "")
+                             (? (two? r) (go (caup r) line (link (L 'str (cap r) line) acc)) ()))
                  (= c 39) (: esc (&& (< (+ i 2) n) (= (src (+ i 1)) 92))
                              v (? esc (: d (src (+ i 2))
                                          (? (= d 110) 10 (= d 116) 9 (= d 114) 13
