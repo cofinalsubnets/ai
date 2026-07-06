@@ -33,7 +33,7 @@
 ;   (adds d a b) (subs d a b)                  ; like add/sub but SET FLAGS -- pair with (br vs/vc ..)
 ;   (mulo d a b t lbl)                         ; d <- a*b (low 64); branch to lbl on signed overflow; t a scratch (clobbered)
 ;   (set cond d)                               ; d <- (cond holds) ? 1 : 0, from the last cmp's flags
-;   (call label) (ret) (sys)                   ; sys = syscall/svc
+;   (call label) (callr d) (ret) (sys)         ; callr: indirect call through register d; sys = syscall/svc
 ;   (la d label)           ; d <- the label's ADDRESS (pc-relative; data via (label)+(raw ..))
 ;   (nop) (trap)
 ;   -- SSE2 double lane (x86-64 only; the float glaze): xmm registers f0..f15 --

@@ -12,10 +12,12 @@
 ; into the parent (ai.h's habit). the AST as before, plus: ('dot e name)
 ; (e->x desugars to (dot (deref e) x)), ('switch e items) with ('case v) and
 ; ('dflt) markers inline (fallthrough is the flat list), ('do body cond),
-; ('goto name) ('lbl name), ('tdef) (a typedef, gen skips it). still fenced:
-; function pointers and the recursive declarator core (stage 4b), unsigned,
-; struct params/returns BY VALUE and struct assignment (pointers walk fine),
-; case labels past constants and enum names, local typedefs.
+; ('goto name) ('lbl name), ('tdef) (a typedef, gen skips it). stage 4b adds
+; the function-pointer declarator ('ptr ('fn), a table ('arr ('ptr ('fn)) n))
+; and generalizes a call HEAD to any postfix expr ('call headexpr args). still
+; fenced: unsigned, struct params/returns BY VALUE (struct ASSIGNMENT walks),
+; brace/designated initializers and flexible arrays (stage 4c), case labels
+; past constants and enum names, local typedefs.
 (:
    ; token readers: t = (kind val line)
    (tkk t) (cap t) (tkv t) (caup t)
@@ -58,12 +60,43 @@
                      (tsz ps ty))
    (aup n a) (& (+ n (- a 1)) (- 0 a))              ; round n up to alignment a
 
-   ; -- declarators (stars XOR one array suffix; the dragon proper is 4b) --
+   ; -- declarators: stars XOR one array suffix, PLUS the function-pointer
+   ; dragon -- T (*name)(..) and the dispatch-table T (*name[n])(..). the
+   ; parameter list is BALANCE-SKIPPED (gen calls untyped); a function pointer
+   ; is ('ptr ('fn)), a table of them ('arr ('ptr ('fn)) n).
+   (skipbal s d) (? (< d 1) s
+                    (! (two? s)) ()
+                    (peekp s "(") (skipbal (cup s) (+ d 1))
+                    (peekp s ")") (skipbal (cup s) (- d 1))
+                    (skipbal (cup s) d))
    (pdtor ts base)                                  ; -> ((name ty) rest) | ()
     (: (stars ts2 ty) (? (peekp ts2 "*") (stars (cup ts2) (L 'ptr ty)) (L ty ts2))
        sr (stars ts base)
        ty (cap sr) ts2 (caup sr)
-       (? (! (&& (two? ts2) (= (tkk (cap ts2)) 'id))) ()
+       (? (peekp ts2 "(")                            ; (*name) or (*name[n]) then (params)
+           (: t3 (cup ts2)
+              (? (! (peekp t3 "*")) ()
+                 (: t4 (cup t3)
+                    (? (! (&& (two? t4) (= (tkk (cap t4)) 'id))) ()
+                       (: name (tkv (cap t4))
+                          t5 (cup t4)
+                          ar (? (peekp t5 "[")
+                                (: t6 (cup t5)
+                                   (? (! (&& (two? t6) (= (tkk (cap t6)) 'num))) ()
+                                      (: r (want (cup t6) "]")
+                                         (? (two? r) (L (tkv (cap t6)) r) ()))))
+                                (L () t5))
+                          (? (! (two? ar)) ()
+                             (: arn (cap ar) t7 (caup ar)
+                                r7 (want t7 ")")
+                                (? (! (two? r7)) ()
+                                   (! (peekp r7 "(")) ()
+                                   (: t8 (skipbal (cup r7) 1)
+                                      (? (! (two? t8)) ()
+                                         (: fty (L 'ptr (L 'fn))
+                                            finalty (? (charm? arn) (L 'arr fty arn) fty)
+                                            (L (L name finalty) t8))))))))))))
+          (! (&& (two? ts2) (= (tkk (cap ts2)) 'id))) ()
           (: name (tkv (cap ts2))
              ts3 (cup ts2)
              (? (! (peekp ts3 "[")) (L (L name ty) ts3)
@@ -209,9 +242,9 @@
     (: r (pprim ps ts)
        (? (! (two? r)) ()
           (: (more e ts2)
-              (? (&& (peekp ts2 "(") (= (cap e) 'var))
+              (? (peekp ts2 "(")                     ; a call: the HEAD is any postfix expr (fn pointers)
                   (: ra (pargs ps (cup ts2) ())
-                     (? (two? ra) (more (L 'call (caup e) (cap ra)) (caup ra)) (L () ())))
+                     (? (two? ra) (more (L 'call e (cap ra)) (caup ra)) (L () ())))
                  (peekp ts2 "[")
                   (: ri (pexpr ps (cup ts2))
                      (? (! (two? ri)) (L () ())

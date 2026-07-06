@@ -9,9 +9,13 @@
 ; globals and string literals are LABELED RAW DATA after the code, reached
 ; by holo's (la) -- the one RWX segment carries text and data both until
 ; the .o seam (the doc). args ride the SysV registers r6 r5 r2 r1 r7 r8,
-; at most six; call args evaluate left to right. fenced and refused, not
-; fudged: ptr+ptr, deref of a non-pointer, assigning to an array, global
-; initializers past a constant, string-initialized globals.
+; at most six; call args evaluate left to right. stage 4b: a bare function
+; name is its address (la); a call HEAD that is a function-pointer value goes
+; through holo's (callr) after parking the callee in r3; a whole-struct assign
+; is a word-then-byte block copy (bcopy). fenced and refused, not fudged:
+; ptr+ptr, deref of a non-pointer, assigning to an array, struct params or
+; returns by value, global initializers past a constant, string-initialized
+; globals, brace/designated initializers (stage 4c).
 (:
    ; the gen state g (a tablet): 'n the label counter, 'off the frame's
    ; high-water offset, 'brk/'cnt the loop label stacks, 'glob the global
@@ -25,6 +29,7 @@
    (ptr? ty) (&& (two? ty) (= (cap ty) 'ptr))
    (arr? ty) (&& (two? ty) (= (cap ty) 'arr))
    (stru? ty) (&& (two? ty) (= (cap ty) 'struct))
+   (fn? ty) (&& (two? ty) (= (cap ty) 'fn))         ; ('fn) -- a function; decays to its address
    (tsz g ty) (? (ptr? ty) 8
                  (arr? ty) (* (cauup ty) (tsz g (caup ty)))
                  (stru? ty) (caup (peep (g 'stag) (caup ty) 0))
@@ -46,6 +51,14 @@
                              (go (+ i 1) (link (& (>> v (* 8 i)) 255) acc)))
               (go 0 ()))
    (zeros n) (? (< n 1) () (link 0 (zeros (- n 1))))
+   ; a straight-line block copy of sz bytes, src address in r0, dest in r1,
+   ; r2 the scratch -- 8 at a time, then a byte tail (struct = struct copies)
+   (bcopy off sz acc)
+    (? (<= 8 sz) (bcopy (+ off 8) (- sz 8)
+                  (cat acc (L (L 'ld 'r2 'r0 off) (L 'st 'r1 off 'r2))))
+       (< 0 sz) (bcopy (+ off 1) (- sz 1)
+                  (cat acc (L (L 'ld1 'r2 'r0 off) (L 'st1 'r1 off 'r2))))
+       acc)
 
    ; -- the environments: locals shadow globals --
    (vent g env name)                                ; -> ('loc off ty) | ('glo lbl ty) | 'bad
@@ -90,11 +103,14 @@
               (? (bad? r) 'bad
                  (: ty (cap r)
                     (? (arr? ty) (L (L 'ptr (caup ty)) (caup r))
+                       (fn? ty) (L (L 'ptr ty) (caup r))     ; a fn-pointer member is its address
                        (stru? ty) 'bad               ; no struct VALUES in registers
                        (L ty (cat (caup r) (L (L (ldop ty) 'r0 'r0 0))))))))
           (= k 'var)
            (: en (vent g env (caup e))
-              (? (bad? en) 'bad
+              (? (bad? en)
+                  (? (peep (g 'fns) (caup e) ())     ; a function name is its address
+                     (L (L 'ptr (L 'fn)) (L (L 'la 'r0 (intern (caup e))))) 'bad)
                  (: ty (cauup en)
                     (? (stru? ty) 'bad               ; a struct name is only an lvalue base
                        (arr? ty)                     ; arrays decay to their address
@@ -112,13 +128,21 @@
               (? (bad? r) 'bad
                  (: ty (cap r)
                     (? (arr? ty) (L (L 'ptr (caup ty)) (caup r))   ; pointee array: decay again
+                       (fn? ty) (L (L 'ptr ty) (caup r))           ; *fp -- a function is its address
                        (stru? ty) 'bad                             ; no struct values
                        (L ty (cat (caup r) (L (L (ldop ty) 'r0 'r0 0))))))))
           (= k 'asn)
            (: lv (clval g env (caup e))
               (? (bad? lv) 'bad
                  (arr? (cap lv)) 'bad                ; an array is not assignable
-                 (stru? (cap lv)) 'bad               ; nor a whole struct (stage 4b+)
+                 (stru? (cap lv))                    ; a whole-struct copy (dest r1, src r0)
+                  (: rv (clval g env (cauup e))
+                     (? (bad? rv) 'bad
+                        (! (stru? (cap rv))) 'bad
+                        (L (cap lv)
+                           (cat (caup lv) (cat (L (L 'push 'r0))
+                            (cat (caup rv) (cat (L (L 'pop 'r1))
+                             (bcopy 0 (tsz g (cap lv)) ()))))))))
                  (: r (cgexpr g env (cauup e))
                     (? (bad? r) 'bad
                        (: ty (cap lv)
@@ -184,7 +208,8 @@
                      (cat (caup t) (cat (L (L 'jmp ld) (L 'label le))
                       (cat (caup el) (L (L 'label ld))))))))))
           (= k 'call)
-           (: args (cauup e)
+           (: head (caup e)
+              args (cauup e)
               n (tally args)
               (? (< 6 n) 'bad
                  (: (pushes as acc)
@@ -197,8 +222,18 @@
                     (pops i acc) (? (< i 0) acc
                                     (pops (- i 1) (cat acc (L (L 'pop (nthr argregs i))))))
                     (? (bad? up) 'bad
-                       (L 'long (cat up (cat (pops (- n 1) ())
-                                             (L (L 'call (intern (caup e)))))))))))
+                       ; a bare name that is NOT a variable -> a direct call by label
+                       (&& (= (cap head) 'var) (bad? (vent g env (caup head))))
+                        (L 'long (cat up (cat (pops (- n 1) ())
+                                              (L (L 'call (intern (caup head)))))))
+                       ; otherwise the head is a function-pointer VALUE: eval it,
+                       ; park in the callee-saved r3, load the args, callr
+                       (: hr (cgexpr g env head)
+                          (? (bad? hr) 'bad
+                             (L 'long (cat up (cat (caup hr)
+                                          (cat (L (L 'mov 'r3 'r0))
+                                           (cat (pops (- n 1) ())
+                                                (L (L 'callr 'r3)))))))))))))
           (= k 'bin) (cgbin g env e)
           'bad))
    (cgbin g env e)
@@ -456,8 +491,14 @@
    (cgen ast stbl)                                  ; ('prog items) + the stag -> (1 forms) | ()
     (: g (: t (tablet 0) _ (pin t 'n 0) _ (pin t 'brk ()) _ (pin t 'cnt ())
             _ (pin t 'glob (tablet 0)) _ (pin t 'globs ()) _ (pin t 'strs ())
-            _ (pin t 'stag stbl) t)
+            _ (pin t 'fns (tablet 0)) _ (pin t 'stag stbl) t)
        crt0 (L (L 'call 'main) (L 'mov 'r6 'r0) (L 'li 'r0 60) (L 'sys))
+       ; pass 0: every function name -- so a bare use of one is its address (la)
+       (recfns fs) (? (! (two? fs)) 1
+                      (: f (cap fs)
+                         _ (? (member? (cap f) '(fn proto)) (pin (g 'fns) (caup f) 1) ())
+                         (recfns (cup fs))))
+       _ (recfns (caup ast))
        ; pass 1: record the globals (constant or absent initializers only)
        (rec fs)
         (? (! (two? fs)) 1

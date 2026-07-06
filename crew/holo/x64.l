@@ -190,6 +190,9 @@
    ;; jmpr: FF /4 -- an indirect jump through a register (the glaze's Continue / deopt tail). REX.B
    ;; for an extended register; no REX.W (jmp defaults to 64-bit operand size).
    (emit-jmpr d) (: dn (rn d) (cat (? (>= dn 8) (L 65) ()) (L 255 (modrm 3 4 dn))))
+   ;; callr: FF /2 -- an indirect call through a register (a call through a function pointer). same
+   ;; shape as jmpr with the /digit at 2; REX.B for r8+, no REX.W.
+   (emit-callr d) (: dn (rn d) (cat (? (>= dn 8) (L 65) ()) (L 255 (modrm 3 2 dn))))
    ;; mulo: d <- a*b (low 64), branch to lbl on signed overflow. imul (0F AF) sets OF when the
    ;; product leaves signed-64, so a plain `jo` is exact -- the scratch `t` is UNUSED on x86 (only
    ;; aarch64 needs it, for SMULH).
@@ -288,6 +291,7 @@
             (= op 'jmp)  (emit-jmp  (at ins 1))
             (= op 'br)   (emit-br   (at ins 1) (at ins 2))
             (= op 'jmpr) (emit-jmpr (at ins 1))
+            (= op 'callr) (emit-callr (at ins 1))
             (= op 'mulo) (emit-mulo (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (mulo d a b t lbl)
             (= op 'set)  (emit-set  (at ins 1) (at ins 2))
             (= op 'div)  (emit-div 0 (at ins 1) (at ins 2) (at ins 3))

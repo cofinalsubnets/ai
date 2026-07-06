@@ -109,6 +109,8 @@
       ;; multiply, condition->0/1. each objdump-verified (-M intel).
       (L "jmpr.rax"    "ffe0"                  '((jmpr r0)))              ; jmp rax  (Continue/deopt tail)
       (L "jmpr.r8"     "41ffe0"                '((jmpr r7)))              ; jmp r8
+      (L "callr.rax"   "ffd0"                  '((callr r0)))            ; call rax (through a fn pointer)
+      (L "callr.r8"    "41ffd0"                '((callr r7)))            ; call r8
       (L "set.eq"      "0f94c0480fb6c0"        '((set eq r0)))           ; sete al ; movzx rax,al
       (L "set.lt"      "0f9cc0480fb6c0"        '((set lt r0)))           ; setl al ; movzx rax,al
       (L "adds"        "4c01c0"                '((adds r0 r0 r7)))       ; add rax,r8  (sets OF -> br vs)
@@ -200,6 +202,7 @@
       ;; the P0 glaze ops -- each llvm-mc-verified (--triple=aarch64). adds/subs are the S-variant
       ;; (set NZCV); set is CSET; mulo is the SMULH+CMP-vs-ASR#63 overflow idiom (no flag-setting mul).
       (L "a64.jmpr"   "00001fd6"          '((jmpr r0)))                 ; br x0
+      (L "a64.callr"  "00003fd6"          '((callr r0)))                ; blr x0  (through a fn pointer)
       (L "a64.set.eq" "e0179f9a"          '((set eq r0)))               ; cset x0, eq
       (L "a64.set.vs" "e0779f9a"          '((set vs r0)))               ; cset x0, vs  (overflow -> 0/1)
       (L "a64.adds"   "000007ab"          '((adds r0 r0 r7)))           ; adds x0,x0,x7

@@ -151,6 +151,9 @@
                             (L (fix 4 'b19 label (| 0x54000000 cc))))
    ;; jmpr: BR Xn -- branch to the address held in a register (the glaze's Continue / deopt tail).
    (arm64-jmpr d) (: dn (rn d) (le32 (| 0xD61F0000 (<< dn 5))))
+   ;; callr: BLR Xn -- call the address held in a register (a call through a function pointer),
+   ;; linking x30. same field as BR with bit 21 set.
+   (arm64-callr d) (: dn (rn d) (le32 (| 0xD63F0000 (<< dn 5))))
    ;; mulo: d <- a*b (low 64); branch to lbl on signed overflow. aarch64 has NO flag-setting multiply,
    ;; so detect it directly: SMULH t,a,b is the high 64 bits of the signed product; the result fits a
    ;; signed 64 iff that high half equals the sign-extension of the low half. so MUL d,a,b ; CMP t, d
@@ -259,6 +262,7 @@
             (= op 'jmp)  (arm64-jmp  (at ins 1))
             (= op 'br)   (arm64-br   (at ins 1) (at ins 2))
             (= op 'jmpr) (arm64-jmpr (at ins 1))
+            (= op 'callr) (arm64-callr (at ins 1))
             (= op 'mulo) (arm64-mulo (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (mulo d a b t lbl)
             (= op 'set)  (arm64-set  (at ins 1) (at ins 2))
             (member? op '(shl shr sar rol ror)) (arm64-shift op (at ins 1) (at ins 2))

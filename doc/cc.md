@@ -75,10 +75,12 @@ gate per stage. the pipeline, each its own file:
   immediate shifts, setcc (`set cond d`), call/ret/sys, indirect jmp,
   scaled-index addressing, and an SSE2 double lane (x64). C still needs:
   SIZED loads/stores (ld1/ld2/ld4 + sign/zero extends; ld/st are 64-bit
-  today), shifts by REGISTER count, an indirect CALL (callr -- function
-  pointers are the lvm dispatch), double->int cvt, unsigned div/compare
-  lanes, rip-relative/global addressing for the .o world, and the arm64
-  float lane for parity. each lands with holotest.l's objdump goldens.
+  today, LANDED), shifts by REGISTER count (LANDED), an indirect CALL
+  (callr -- function pointers are the lvm dispatch; LANDED 2026-07-06, x64
+  FF /2 + arm64 BLR, holotest 177), and-address-of-label (la; LANDED).
+  still open: double->int cvt, unsigned div/compare lanes,
+  rip-relative/global addressing for the .o world, and the arm64 float lane
+  for parity. each lands with holotest.l's objdump goldens.
 * **elf.l**: today it lays runnable ELFs; cc needs RELOCATABLE .o -- symbol
   table, .text/.data/.rodata/.bss, RELA relocations (PC32/PLT32/64/GOTPCREL
   minimum). a well-fenced extension with its own laws (readelf as oracle).
@@ -198,13 +200,24 @@ two ideas to keep warm as the stages climb, neither committed yet:
    (function-scoped name mangling). the deep change: the PARSER CARRIES
    STATE now -- typedef names, enum constants, and the struct tag table,
    which rides out with the AST for gen's sizing (C cannot be parsed
-   stateless; the lexer-hack wrinkle, met on schedule). fenced for 4b:
-   the recursive declarator core (function pointers + holo's callr),
-   whole-struct assignment/params/returns by value, designated
-   initializers, flexible arrays, local typedefs, case-label expressions.
+   stateless; the lexer-hack wrinkle, met on schedule).
    the trap that cost the debugging hour: (two? x) tests PAIRHOOD -- both
    () and a text fail it; presence wants truthiness (texts net positive).
-   battery at 41; the torture-set vendoring moves to 4b/5.
+   the DECLARATOR DRAGON (4b) LANDED 2026-07-06: function pointers as a
+   real type ('ptr ('fn)), the dispatch-table declarator T (*t[n])(..)
+   (parameters BALANCE-SKIPPED -- gen calls untyped), a bare function name
+   decaying to its address (holo (la)), a generalized call whose HEAD is any
+   postfix expression ('call headexpr args) reaching the callee through the
+   NEW holo (callr) -- indirect call, x64 FF /2, arm64 BLR, both objdump/
+   llvm-mc frozen (holotest 177) -- after parking the pointer in callee-saved
+   r3; and WHOLE-STRUCT ASSIGNMENT as a word-then-byte block copy (bcopy),
+   so a = b and *p = *q copy structs. THE ai.c dispatch tables now compile.
+   still fenced for 4c: struct params/returns BY VALUE (assignment walks),
+   brace/designated initializers + flexible arrays (gen has no brace-init
+   yet), local typedefs, case-label expressions, and TOP-LEVEL fn-pointer
+   globals (ptop lays its own declarators, doesn't route through pdtor).
+   battery at 46 (fn-pointer call, dispatch table, struct copy by value and
+   through pointers, fn-pointer parameter); the torture-set vendoring is 5.
 5. **the preprocessor**: cpp.l complete (##, variadics, #if trees,
    includes). gate: gcc -E vs cc -E token streams on the torture set AND on
    ai.c itself (the real headers, our include/).

@@ -60,9 +60,12 @@
          '(prog ((fn "f" (("c" char) ("s" short)) (blk ((ret (var "c"))))))))
       (= (cast "int f(void); int main() { return 0; }")
          '(prog ((proto "f") (fn "main" () (blk ((ret (num 0))))))))
-      (= (cexp "f(1, 2+3)") '(call "f" ((num 1) (bin + (num 2) (num 3)))))
-      (= (cexp "f()") '(call "f" ()))
-      (= (cexp "f(g(1))") '(call "f" ((call "g" ((num 1))))))
+      ; a call's HEAD is an expression now (function pointers) -- (call headexpr args)
+      (= (cexp "f(1, 2+3)") '(call (var "f") ((num 1) (bin + (num 2) (num 3)))))
+      (= (cexp "f()") '(call (var "f") ()))
+      (= (cexp "f(g(1))") '(call (var "f") ((call (var "g") ((num 1))))))
+      ; a call through a dereferenced function pointer
+      (= (cexp "(*fp)(7)") '(call (deref (var "fp")) ((num 7))))
       (= (cexp "2+3*4") '(bin + (num 2) (bin * (num 3) (num 4))))
       (= (cexp "10-3-2") '(bin - (bin - (num 10) (num 3)) (num 2)))
       (= (cexp "(2+3)*4") '(bin * (bin + (num 2) (num 3)) (num 4)))
@@ -162,9 +165,15 @@
       (two? (cgn "int main() { int x = 2; switch (x) { case 1: return 9; default: return 7; } }"))
       (two? (cgn "int main() { int i = 0; do i++; while (i < 3); return i; }"))
       (two? (cgn "int main() { int i = 0; top: i++; if (i < 3) goto top; return i; }"))
-      (! (cgn "struct S { int x; }; int main() { struct S a; struct S b; a = b; return 0; }"))   ; whole-struct assignment: 4b+
-      (! (cgn "struct S { int x; }; int main() { struct S s; return s; }"))                       ; no struct values
-      (! (cgn "struct S { int x; }; int main() { struct S s; return s.y; }"))))                   ; no such member
+      (! (cgn "struct S { int x; }; int main() { struct S s; return s; }"))                       ; no struct VALUES
+      (! (cgn "struct S { int x; }; int main() { struct S s; return s.y; }"))                      ; no such member
+      ; --- stage 4b: whole-struct assignment (a block copy) and function pointers ---
+      (two? (cgn "struct S { int x; int y; }; int main() { struct S a; struct S b; a.x = 3; a.y = 4; b = a; return b.x + b.y; }"))
+      (two? (cgn "struct S { long a; long b; }; int f(struct S *p, struct S *q) { *p = *q; return p->a; } int main() { return 0; }"))
+      (two? (cgn "int inc(int x) { return x + 1; } int main() { int (*fp)(int); fp = inc; return fp(41); }"))
+      (two? (cgn "int inc(int x) { return x+1; } int main() { int (*fp)(int) = 0; fp = inc; return (*fp)(41); }"))
+      ; a dispatch table -- an array of function pointers, THE ai.c pattern
+      (two? (cgn "int a(int x){return x+1;} int b(int x){return x*2;} int main(){ int (*t[2])(int); t[0]=a; t[1]=b; return t[0](10)+t[1](10); }"))))
 
 (say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) ok")
 (put err 10)
