@@ -10,7 +10,7 @@
  (= 0 (peep t 9 0))                              ; missing key -> default
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (keys t)))      ; three entries
  ; empty + single-entry printer forms are deterministic (no bucket-order dependence)
- (= "(tablet 0)" (show (tablet 0)))
+ (= "#()" (show (tablet 0)))
  (= "#(1 100)" (show (hash 1 100)))
  (= "#(1 \"hi\")" (show (hash 1 "hi")))
  (string? (show t))                             ; multi-entry: just exercise the path
@@ -31,7 +31,7 @@
  !(tablet 0) !#()                               ; both the empty map (falsy); #() reads to (tablet 0)
  (= 50 (peep (pin (tablet 0) 5 50) 5 0))                ; the empty hash is mutable
  (= 3 (foldl (\ n _ (+ 1 n)) 0 (keys #(1 10 2 20 3 30))))   ; splice builds all entries
- (= "(tablet 0)" (show #()))                    ; #() is the empty map
+ (= "#()" (show #()))                           ; #() is the empty map, and round-trips
  (= "#(1 \"hi\")" (show #(1 "hi"))))
 
 ; # on a NON-LIST datum boxes it: #x = #(0 x), a fresh mutable hash pinning x

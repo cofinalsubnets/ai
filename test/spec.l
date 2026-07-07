@@ -315,7 +315,7 @@
  !() !0 !"" !@() !#() !~(0 0) !(cask 0)           ; every empty is false (blue)
  (nil? ()) (nil? 0) !(= () 0) !(id? () 0)        ; () (zero-point) and 0 (number) are DISTINCT, both nothing
  ("@()" = (show @())) (1 = (rank @())) (0 = (tally @())) (star-tray = (tier @()))  ; @() the empty array, round-trips
- (book? #()) (0 = $#()) ("(tablet 0)" = (show #()))   ; #() the empty map
+ (book? #()) (0 = $#()) ("#()" = (show #()))   ; #() the empty map, show round-trips it
  (0 = @0) (nil? (rank @0))                      ; @0 wraps the VALUE 0 -> the scalar 0 (a 1-cell demotes)
  (book? #0) (1 = $#0) !!#0)                       ; #0 wraps the VALUE 0 -> a box (present)
 

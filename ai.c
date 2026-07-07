@@ -3577,7 +3577,7 @@ static ai_inline struct ai*ioput_nom(struct ai*g, word _) {
  return ai_ok(g) ? ai_pop(g, 1) : g; }
 
 
-// Maps print as #(k v …), the empty map as (tablet 0); both round-trip.
+// Maps print as #(k v …), the empty map as #(); both round-trip (the reader's # empty exception).
 // A map is mutable and can hold itself, so guard the recursion with the seen
 // list. Snapshot k/v into a list first (printing may GC and move the map).
 static ai_inline struct ai*ioput_map(struct ai*g, word x, uintptr_t off) {
@@ -3596,7 +3596,7 @@ static ai_inline struct ai*ioput_map(struct ai*g, word x, uintptr_t off) {
    ini_chain(kv, s[2 * i], s[2 * i + 1]);                 // (k . v)
    ini_chain(p, (word) kv, list), list = (word) p++; }    // link onto the snapshot
  fs0(g) = list;
- if (!chainp(fs0(g))) g = ioputcs(g, "(tablet 0)");             // the empty map prints (tablet 0): "#()" reads as #0, the 0-box
+ if (!chainp(fs0(g))) g = ioputcs(g, "#()");                    // the empty map prints #(), which reads straight back to it
  else {
   if (ai_ok(g = ioprintf(g, "#("))) for (bool sp = false;;) {
    if (sp) g = ioputc(g, ' ');
