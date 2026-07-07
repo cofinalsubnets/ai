@@ -61,11 +61,11 @@
  !(star? @(1 2 3)) !(galaxy? 5) !(galaxy? '(1 2))            ; star?/galaxy? are DISJOINT; a scalar / a list is neither a galaxy nor a tray
  (!"" = 0 = $"") (!-5 = 0 = $-5))                ; the invariant !x == (0 = $x), as an = chain
 
-; --- types & predicates --- storage: charm? big? full? gem? twin? tray? string? nom? name? two? book?;
+; --- types & predicates --- storage: charm? big? sun? gem? twin? tray? string? nom? name? two? book?;
 ; derived constellation? whole? atom?; lit? = a top-region reference (map/fn/hot, ai_kind>=KMap); hot? the opaque cask/port subset.
 (assert
  (charm? 5) (two? '(1 2)) (string? "hi") (nom? 'x) (lit? cap) (book? #(1 2))
- (big? (100 2)) ((? word full? big?) (62 2)) (gem? 1.5) (twin? i) (tray? @(1 2 3))
+ (big? (100 2)) ((? word sun? big?) (62 2)) (gem? 1.5) (twin? i) (tray? @(1 2 3))
  (constellation? 1.5) (constellation? i) (constellation? (62 2)) (whole? (62 2)) (atom? 'x) !(atom? '(1))
  (hot? (cask 4)) (hot? out) (hot? (tap '(104)))   ; the hot zoo, named
  !(hot? #()) !(hot? cap) !(hot? 5) !(hot? "s")   ; maps/functions/data are not hots

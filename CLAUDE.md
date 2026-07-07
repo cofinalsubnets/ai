@@ -73,8 +73,9 @@
 ; "nomenclature"; a vocabulary is living and chosen, warm not clinical. the style is COZY:
 ; lowercase, plain, a touch playful, names that earn their keep. we frame in the GREEN -- name what
 ; a value IS and KEEPS, not what it lacks. the surface stays small ((names ()) is the whole
-; vocabulary). the celestial numerics: a CHARM is a fixnum (a word); a STAR is a self-netting scalar
-; (charm/full/big/gem/twin-gem); a GALAXY is a tray of stars (a numeric array); a CONSTELLATION is
+; vocabulary). the celestial numerics: a CHARM is a fixnum (a word); a SUN a full-word integer (the
+; charm's overflow, one rung under big); a STAR is a self-netting scalar
+; (charm/sun/big/gem/twin-gem); a GALAXY is a tray of stars (a numeric array); a CONSTELLATION is
 ; any numeric (star or galaxy) -- a charm is a star is a constellation. the jewels under the star: a
 ; GEM is a float (the smooth kind between the charms), a TWIN GEM a complex (two gems paired (re,im);
 ; `twin` pairs them). the global env is the `book` -- *the* book, the outermost one; a map is a book,

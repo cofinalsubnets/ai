@@ -83,7 +83,7 @@
    (seek 1 th))
    ;; FIXME rename | -> bit-or to free | for pipe operator
    (constellation? x) (| (charm? x) (| (packp x) (big? x)))   ; whole tower: fixnum / float / wide int / complex / array / bignum
-   (whole? n) (| (charm? n) (| (full? n) (big? n)))       ; integer-valued numeral (exact power exponent / composition count)
+   (whole? n) (| (charm? n) (| (sun? n) (big? n)))       ; integer-valued numeral (exact power exponent / composition count)
    ; b ** k by exact squaring (O(log k)); k>=0. The lone home of integer power --
    ; (k b) numeral application routes here, so `**` is unneeded.
    ; the count ceiling: a PUBLIC tunable box. a numeral compose count or exact-power
@@ -598,7 +598,7 @@
 ; non-positive -> 0, a float ceils, a complex its modulus, a vector its net sum). a list
 ; shape is coerced per-dim; a lone numeric is a rank-1 length (so (array 2.5 …)
 ; means rank-1 length 3, (array ~(3 4) …) length 5).
-(: (a-rank x) (? (gem? x) 1 (| (charm? x) (full? x)) 0 (twin? x) 2 3)
+(: (a-rank x) (? (gem? x) 1 (| (charm? x) (sun? x)) 0 (twin? x) 2 3)
    (a-emax m x) (: k (a-rank x) (? (< m k) k m))
    (a-type d) (: k (foldl a-emax 0 d) (? (= k 0) 0 (= k 1) 0.0 (= k 2) ~(0 0) ()))   ; a witness star of the tier
    (a-dim d) (? (two? d) (tally d) (sat d))

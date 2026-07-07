@@ -18,7 +18,7 @@
 (: mx-fix 5                              ; KCharm
    mx-real 2.5                            ; KFlo, float box (gem?)
    mx-cpx ~(2 3)                        ; KCplx, complex scalar (Cp)
-   mx-box (<< 1 62)                      ; KWide, wide int (full?)
+   mx-box (<< 1 62)                      ; KWide, wide int (sun?)
    mx-big (100 2)                     ; KBig
    mx-az  @(10 20)                       ; KArrZ (int array)
    mx-ar  @(1.5 2.5)                     ; KArrR (float array)
@@ -94,7 +94,7 @@
  (= 5.0 (+ 2.5 2.5))                          ; float + float
  (? word (= (63 2) (+ (<< 1 62) (<< 1 62))) 1)   ; box + box -> 2^63 (64-bit word only)
  (? word (big? (+ (<< 1 62) (<< 1 62))) 1)
- (? word (full? (+ (<< 1 62) 1)) 1)              ; box + fix stays a box
+ (? word (sun? (+ (<< 1 62) 1)) 1)              ; box + fix stays a box
  (? word (= (+ (<< 1 62) 1) (+ 1 (<< 1 62))) 1) ; ...and commutes
  (= (+ 1 (100 2)) (+ (100 2) 1))        ; big + fix == fix + big (commutes)
  (= (* 2 (100 2)) (+ (100 2) (100 2))) ; big + big
