@@ -107,22 +107,20 @@
                     (peekp s "(") (skipbal (cup s) (+ d 1))
                     (peekp s ")") (skipbal (cup s) (- d 1))
                     (skipbal (cup s) d))
-   ; an array dimension token -> its charm value: a numeric literal, or an ENUM
-   ; CONSTANT (folded through `en`, the ps 'enums tablet -- `int m[KN][KN]`). () = not a dim.
-   (dimval en t) (? (= (tkk t) 'num) (tkv t)
-                    (= (tkk t) 'id) (peep en (tkv t) ())
-                    ())
-   ; a RUN of [n] / [] suffixes -> (dims rest) | (); only the first (outer) dim may be [] (size 0)
-   (adims en ts2 acc) (? (! (peekp ts2 "[")) (L (rev acc) ts2)
+   ; a RUN of [const-expr] / [] suffixes -> (dims rest) | (). the dimension is any
+   ; integer CONSTANT expression -- a literal, an enum constant, `64 / limb_bits` --
+   ; parsed by pexpr and folded by cfold. only the first (outer) dim may be [] (size 0).
+   (adims ps ts2 acc) (? (! (peekp ts2 "[")) (L (rev acc) ts2)
                          (: t2 (cup ts2)
-                            (? (peekp t2 "]") (adims en (cup t2) (link 0 acc))
-                               (: dv (? (two? t2) (dimval en (cap t2)) ())
-                                  (? (! (charm? dv)) ()
-                                     (: rest (want (cup t2) "]")
-                                        (? (two? rest) (adims en rest (link dv acc)) ())))))))
+                            (? (peekp t2 "]") (adims ps (cup t2) (link 0 acc))
+                               (: er (pexpr ps t2)
+                                  (? (! (two? er)) ()
+                                     (: dv (cfold (cap er))
+                                        rest (want (caup er) "]")
+                                        (? (&& (charm? dv) (two? rest)) (adims ps rest (link dv acc)) ())))))))
    ; fold dims (outer..inner) into a nested arr: [3][4] of T -> (arr (arr T 4) 3)
    (mkarr ety dims) (? (! (two? dims)) ety (L 'arr (mkarr ety (cup dims)) (cap dims)))
-   (pdtor en ts base)                               ; en = ps 'enums (for enum-constant array dims); -> ((name ty) rest) | ()
+   (pdtor ps ts base)                               ; ps threads to adims for const-expr array dims; -> ((name ty) rest) | ()
     (: (stars ts2 ty) (: s (pquals ts2) (? (peekp s "*") (stars (cup s) (L 'ptr ty)) (L ty s)))
        sr (stars ts base)
        ty (cap sr) ts2 (pquals (caup sr))           ; attrs may sit before the name
@@ -157,7 +155,7 @@
                  (: t2 (skipbal (cup ts3) 1)
                     (? (two? t2) (L (L name (L 'fn)) t2) ()))
                 (! (peekp ts3 "[")) (L (L name ty) ts3)
-                (: dr (adims en ts3 ())               ; one or more [n]/[] suffixes -> a nested arr of ty
+                (: dr (adims ps ts3 ())               ; one or more [n]/[] suffixes -> a nested arr of ty
                    (? (! (two? dr)) ()
                       (L (L name (mkarr ty (cap dr))) (caup dr))))))))
 
@@ -172,7 +170,7 @@
                 (? (peekp ts2 ";")                   ; an anonymous struct/union member
                    (? (stru? bty) (pmembers ps (cup ts2) (link (L () bty) acc)) ())
                    (: (dts ts3 acc2)                 ; dtor (, dtor)* ;
-                       (: dr (pdtor (ps 'enums) ts3 bty)
+                       (: dr (pdtor ps ts3 bty)
                           (? (! (two? dr)) ()
                              (peekp (caup dr) ",") (dts (cup (caup dr)) (link (cap dr) acc2))
                              (: rest (want (caup dr) ";")
@@ -258,7 +256,7 @@
    (pcty ps ts)
     (: br (pbty ps ts)
        (? (! (two? br)) ()
-          (: dr (pdtor (ps 'enums) (caup br) (cap br))
+          (: dr (pdtor ps (caup br) (cap br))
              (? (two? dr) (L (caup (cap dr)) (caup dr)) ()))))
 
    ; one left-associative binary level
@@ -483,12 +481,12 @@
                     (: v (pinit ps r)
                        (? (two? v) (L (L 'dfield name (cap v)) (caup v)) ()))))))
        (peekp ts "[")
-        (: t2 (cup ts)
-           (? (! (&& (two? t2) (= (tkk (cap t2)) 'num))) ()
-              (: n (tkv (cap t2))
-                 r1 (want (cup t2) "]")
+        (: er (pexpr ps (cup ts))                         ; a designator index: any const-expr ([KMint]=.., [2]=..)
+           (? (! (two? er)) ()
+              (: n (cfold (cap er))
+                 r1 (want (caup er) "]")
                  r2 (? (two? r1) (want r1 "=") ())
-                 (? (! (two? r2)) ()
+                 (? (! (&& (charm? n) (two? r2))) ()
                     (: v (pinit ps r2)
                        (? (two? v) (L (L 'didx n (cap v)) (caup v)) ()))))))
        (: v (pinit ps ts)
@@ -539,7 +537,7 @@
           (: base (cap br) ts0 (caup br)
              (? (peekp ts0 ";") (L (L 'decl ()) (cup ts0))   ; a bare definition (struct S {..};)
                 (: (one ts2)
-                    (: dr (pdtor (ps 'enums) ts2 base)
+                    (: dr (pdtor ps ts2 base)
                        (? (! (two? dr)) ()
                           (: name (cap (cap dr)) ty (caup (cap dr))
                              ts3 (caup dr)
@@ -666,15 +664,30 @@
                 (? (! (two? r)) ()
                    (: rest (want (caup r) ";")
                       (? (two? rest) (L (L 'expr (cap r)) rest) ())))))))
+   ; block-scoped typedef shadowing (C scope): a local variable whose NAME is a
+   ; typedef HIDES that typedef for the rest of the block, so a later `name op name`
+   ; reads as an expression, not a cast `(type)..`. record (name oldty), pin the name
+   ; to 0 (not-a-type), restore on block exit. ai.h makes `num`/`word` typedefs, and
+   ; ai.c freely uses them as local variable names.
+   (declnames form) (? (&& (two? form) (= (cap form) 'decl)) (map cap (caup form)) ())
+   (shadow1 ps nm shadows) (: old (peep (ps 'types) nm 'none)
+                              (? (= old 'none) shadows
+                                 (: _ (pin (ps 'types) nm 0) (link (L nm old) shadows))))
+   (shadowdecl ps names shadows) (? (! (two? names)) shadows
+                                     (shadowdecl ps (cup names) (shadow1 ps (cap names) shadows)))
+   (unshadow ps shadows) (? (! (two? shadows)) ()
+                            (: _ (pin (ps 'types) (cap (cap shadows)) (caup (cap shadows)))
+                               (unshadow ps (cup shadows))))
    (pblock ps ts)
     (: ts0 (want ts "{")
        (? (! (two? ts0)) ()
-          (: (items ts2 acc)
-              (? (! (two? ts2)) ()
-                 (tp? (cap ts2) "}") (L (L 'blk (rev acc)) (cup ts2))
+          (: (items ts2 acc sh)
+              (? (! (two? ts2)) (: _ (unshadow ps sh) ())
+                 (tp? (cap ts2) "}") (: _ (unshadow ps sh) (L (L 'blk (rev acc)) (cup ts2)))
                  (: r (? (tkbty? ps (cap (pquals ts2))) (pdecl ps ts2) (pstmt ps ts2))
-                    (? (two? r) (items (caup r) (link (cap r) acc)) ())))
-             (items ts0 ()))))
+                    (? (! (two? r)) (: _ (unshadow ps sh) ())
+                       (items (caup r) (link (cap r) acc) (shadowdecl ps (declnames (cap r)) sh)))))
+             (items ts0 () ()))))
 
    ; params := void | TYPE '*'* id (, ..)* [, ...]   -> (entries rest variadic?)
    (pparams ps ts acc)
@@ -683,7 +696,7 @@
        (! (tkbty? ps (cap (pquals ts)))) ()
        (: br (pbty ps ts)
           (? (! (two? br)) ()
-             (: dr (pdtor (ps 'enums) (caup br) (cap br))
+             (: dr (pdtor ps (caup br) (cap br))
                 (? (! (two? dr)) ()
                    ; a parameter of ARRAY type decays to a pointer (the C rule) --
                    ; so `int a[]`, and a va_list (an array typedef), ride as pointers
@@ -718,7 +731,7 @@
    ; a comma-list of typedef declarators sharing one base type (`typedef T a, b;`);
    ; pins each name -> its declared type. answers ('tdef) rest | ().
    (tdeflist ps base ts)
-    (: dr (pdtor (ps 'enums) ts base)
+    (: dr (pdtor ps ts base)
        (? (! (two? dr)) ()
           (: _ (pin (ps 'types) (cap (cap dr)) (caup (cap dr)))
              af (caup dr)
@@ -758,7 +771,7 @@
                                ; a global declaration; the first declarator's stars came off `sr`
                                (: (one ts3 nm t2)                        ; t2 is the element type (stars included)
                                    (? (peekp ts3 "[")
-                                      (: dr (adims (ps 'enums) ts3 ())  ; one or more [n]/[] dims (enum consts fold)
+                                      (: dr (adims ps ts3 ())  ; one or more [n]/[] dims (enum consts fold)
                                          (? (! (two? dr)) ()
                                             (: dims (cap dr) rest0 (caup dr)
                                                (? (&& (! (two? (cup dims))) (= (cap dims) 0))   ; a LONE [] -- size from init, or 0 (extern)
@@ -786,7 +799,7 @@
                                   (? (! (two? first)) ()
                                      (: (more ts3 acc)
                                          (? (peekp ts3 ",")
-                                            (: dr (pdtor (ps 'enums) (cup ts3) base)
+                                            (: dr (pdtor ps (cup ts3) base)
                                                (? (! (two? dr)) ()
                                                   (: r (one (caup dr) (cap (cap dr)) (caup (cap dr)))
                                                      (? (two? r) (more (caup r) (link (cap r) acc)) ()))))

@@ -448,5 +448,25 @@
       (= (cast "enum q { A, B, KN }; int m[KN][KN]; int main(void){return 0;}")   ; an ENUM CONSTANT dim folds (KN = 2)
          '(prog ((tdef) (gdecl (("m" (arr (arr int 2) 2) ()))) (fn "main" () (blk ((ret (num 0))))))))))
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE, bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with enum-constant dims) ok")
+; -- 7c-iii part 3: the last of ai.c's parse tail. a hex FLOAT literal (0x1.0p-53,
+; a base-2 exponent after `p`). an array dimension is any integer CONSTANT EXPRESSION
+; (2*3, 64/limb_bits) parsed by pexpr + cfold -- subsuming the enum-constant dim. a
+; DESIGNATED array initializer `[i]=v` takes a const-expr (enum) index. and BLOCK-SCOPED
+; typedef shadowing: a local variable whose name is a typedef (ai.h makes `num`/`word`
+; typedefs) hides it for the rest of the block, so `num + num` reads as an expression
+; (not a cast) -- restored at block exit so a sibling function still sees the type.
+(: (cast src) (caup (cparse (caup (clex src))))
+   (cexp src) (: ast (cast (+ "int main() { return " (+ src "; }")))
+                 fn (cap (caup ast)) items (caup (caup (cuup fn))) (caup (cap items)))
+   (dty src)  (: ast (cast (+ src " int main(void){return 0;}")) (caup (cap (caup (cap (caup ast))))))
+   (assert
+      (= (cexp "0x1p4") '(flo 16.0))                               ; 0x1p4 = 1 * 2^4
+      (= (cexp "0xff") '(num 255))                                 ; a plain hex integer is unchanged
+      (= (dty "int m[2 * 3];") '(arr int 6))                       ; a const-EXPRESSION dimension folds
+      (= (cast "enum e { A, B, C }; int t[3] = { [A]=10, [C]=30 }; int main(void){return 0;}")   ; designated init, enum index
+         '(prog ((tdef) (gdecl (("t" (arr int 3) (init ((didx 0 (num 10)) (didx 2 (num 30))))))) (fn "main" () (blk ((ret (num 0))))))))
+      (= (cast "typedef long num; int main(void){ long num = 1; return (int)(num + num); }")   ; a local shadows the `num` typedef
+         '(prog ((tdef) (fn "main" () (blk ((decl (("num" long (num 1)))) (ret (cast int (bin + (var "num") (var "num"))))))))))))
+
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE, bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) ok")
 (put err 10)

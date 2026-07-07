@@ -507,14 +507,28 @@ two ideas to keep warm as the stages climb, neither committed yet:
    crew/cc/{lex,cpp,parse,gen,cc}.l) whose tail SEAT in cc.l fires cc-main -- so a cc
    edit rebuilds only aicc, never the whole au cat, and a parallel au rebuild can no
    longer tear the compiler mid-run. `make test_cc` and `make install` both target aicc.
-   ai.c now parses up to the add/mul kind matrices (`ai_add_mx[KN][KN]`); the next
-   blocker is their DESIGNATED INITIALIZERS (`[KMint]=ADD_MINT, [KNom]=..`, nested two
-   deep with enum-constant indices) -- a fresh initializer-syntax + sparse-zero-fill
-   feature, localized via a ptop-loop driver over the preprocessed token stream.
-   STILL AHEAD (7c-iii part 3+): designated array initializers, the `__asm__("divq")` 128-bit-divide fallback,
-   __attribute__((weak))/((section)) -> the linker, unions by value, and the >6-arg
-   overflow (both fixed and variadic, avoiding the boxfix trap); 7d link cc-built
-   ai.o + gcc-built host/*.o + libc and boot the egg green.
+   7c-iii PART 3 (THE LAST OF THE PARSE TAIL) LANDED 2026-07-07 -- ai.c NOW PARSES END
+   TO END (all 925 top-level forms; localized form by form with a ptop-loop driver over
+   the preprocessed token stream, since macro-expanded tokens carry the macro-SITE line).
+   four gaps, each found by grinding: (1) DESIGNATED array initializers `[i]=v` were
+   already parsed (`didx`) and gen'd -- only the index was num-only; now it folds a
+   const-expr index so enum `[KMint]=..` works (the add/mul kind matrices). (2) HEX FLOAT
+   literals `0x1.0p-53` (a base-2 exponent after `p`; a `hexlit` lexer helper mirroring
+   `flolit`, the plain-hex-int path folded in). (3) array DIMENSIONS are now any integer
+   CONSTANT EXPRESSION -- `adims` parses the dim with pexpr + cfold (subsuming the
+   enum-constant case), so `ai_limb limb[64 / limb_bits]` folds. (4) BLOCK-SCOPED TYPEDEF
+   SHADOWING: ai.h makes `num`/`word` typedefs, and ai.c uses them as local variable
+   names; a local whose name is a typedef now HIDES it for the rest of the block (pblock
+   pins the name to not-a-type on the declaration, restores at `}`), so `num + num` reads
+   as an expression, not a cast -- and a sibling function still sees the type. gate:
+   76-ctail3.c (hex float, const-expr dim, nested enum-indexed designated init, a shadowed
+   local, gcc = cc = 41); law.l goldens each. the next wall is CODEGEN (`aicc -c ai.c`
+   parses, then errors in gen) -- 7d territory.
+   STILL AHEAD (codegen + 7d): whatever gen chokes on across ai.c's 925 forms, then the
+   `__asm__("divq")` path (AVOIDED for now -- cc predefines neither `__x86_64__` nor
+   `__SIZEOF_INT128__`, so ai.c takes the portable 32-bit-limb branch, no asm/no __int128),
+   __attribute__((weak))/((section)) -> the linker, unions by value, the >6-arg overflow;
+   7d link cc-built ai.o + gcc-built host/*.o + libc and boot the egg green.
 8. **the fixpoint + the flat stack**: (a) determinism -- cc(cc(ai)) builds
    byte-identical objects to cc(ai); (b) guaranteed sibcalls for the lvm
    shape, ai_tco=1, `make vmret` honest, benches vs gcc recorded.

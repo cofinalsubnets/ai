@@ -66,6 +66,27 @@
            val (? isflo (? (< dxp 0) (+ 0.0 (/ mant (ipow 10 (- 0 dxp))))
                            (+ 0.0 (* mant (ipow 10 dxp)))) iv)
            (L j3 isflo val))
+       ; -- hex literals: 0x integer (0xff), OR a hex FLOAT 0x H.H p [+-] D (a binary
+       ; exponent, base 2): 0x1.0p-53, 0x1p4, 0x.8p1. i points at the '0'. -> (endj isflo? value). --
+       (hxrun j v nd) (? (&& (< j n) (hexd? (src j))) (hxrun (+ j 1) (+ (* 16 v) (hexv (src j))) (+ nd 1)) (L j v nd))
+       (hexlit i)
+        (: ir (hxrun (+ i 2) 0 0) j0 (cap ir) im (caup ir)
+           dot (&& (< j0 n) (= (src j0) 46))
+           fr (? dot (hxrun (+ j0 1) im 0) (L j0 im 0))
+           j1 (cap fr) mant (caup fr) fd (cauup fr)          ; mant folds the fractional hex digits in; fd counts them
+           hasp (&& (< j1 n) (|| (= (src j1) 112) (= (src j1) 80)))    ; p / P -- the (required) binary exponent
+           (? (! (|| dot hasp)) (L (skipsuf j0) () im)       ; a plain hex integer -- eat its suffix
+              (: ee (? hasp (: k (+ j1 1)
+                               neg (&& (< k n) (= (src k) 45))
+                               k2 (? (|| neg (&& (< k n) (= (src k) 43))) (+ k 1) k)
+                               er (digrun k2)
+                               (L (cap er) (? neg (- 0 (caup er)) (caup er))))
+                            (L j1 0))
+                 j2 (cap ee) exp (caup ee)
+                 bexp (- exp (* 4 fd))                        ; each fractional hex digit is 2^-4
+                 val (? (< bexp 0) (+ 0.0 (/ mant (ipow 2 (- 0 bexp)))) (+ 0.0 (* mant (ipow 2 bexp))))
+                 j3 (? (&& (< j2 n) (member? (src j2) '(102 70 108 76))) (+ j2 1) j2)
+                 (L j3 1 val))))
        (go i line acc)
         (? (<= n i) (L 1 (rev acc))
            (: c (src i)
@@ -102,10 +123,9 @@
                              (? (&& (charm? v) (&& (<= j n) (= (src (- j 1)) 39)))
                                 (go j line (link (L 'num v line) acc))
                                 ()))
-                 (&& (= c 48) (&& (< (+ i 1) n) (|| (= (src (+ i 1)) 120) (= (src (+ i 1)) 88))))  ; 0x / 0X hex
-                  (: (hx j v) (? (&& (< j n) (hexd? (src j))) (hx (+ j 1) (+ (* 16 v) (hexv (src j)))) (L j v))
-                     r (hx (+ i 2) 0)
-                     (go (skipsuf (cap r)) line (link (L 'num (caup r) line) acc)))
+                 (&& (= c 48) (&& (< (+ i 1) n) (|| (= (src (+ i 1)) 120) (= (src (+ i 1)) 88))))  ; 0x / 0X hex (int or float)
+                  (: r (hexlit i)
+                     (go (cap r) line (link (L (? (caup r) 'flo 'num) (cauup r) line) acc)))
                  (|| (dig? c) (&& (= c 46) (&& (< (+ i 1) n) (dig? (src (+ i 1))))))
                   (: r (flolit i)                        ; a digit run, or .digit -- integer or float
                      j2 (? (caup r) (cap r) (skipsuf (cap r)))    ; an integer eats its u/U/l/L suffix
