@@ -28,7 +28,9 @@
 ;   editing ai.h needs no clean (every object deps on $(ai_h), the lcat'd headers re-lay on ai0).
 ; * C and docs EMBED ai the .l sweeps miss -- grep on every rename: host/main.c (s2cl + runner),
 ;   port/inle/kmain.c (the K_TEST runner), port/{playdate,rp2040}/main.c (g_evals_ driver strings),
-;   wasm/; and index.html (the static page, style.css beside it) runs live demos as data-run chips.
+;   wasm/; and index.html (the static page, style.css beside it) runs live demos as data-run chips --
+;   its reference section's examples + "; answers" are PROBED against out/host/ai, never written
+;   from memory; re-probe on every rename or semantic change.
 ; * a bare all-punct symbol mid-list captures its left operand when code compiles (opfix) -- escape
 ;   in parens ((+) is + as a value); GLUED to a datum it is monadic instead (the valence law: space
 ;   your dyadics); quoted lists are data, operators plain.

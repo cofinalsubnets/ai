@@ -135,9 +135,24 @@ footer { margin-top: 3.5em; color: #414868; font-size: .85em;
 .crew dd { margin: 0 0 0 1.4em; color: #737aa2; font-size: .92em; }
 .crew dt + dd { color: #73daca; }
 
+/* --- the reference --- */
+.ref dt { color: #c0caf5; font-weight: 600; margin-top: .85em; }
+.ref dt code { font-weight: normal; }
+.ref dt a { color: inherit; }
+.ref dt a:hover { text-decoration: none; }
+.ref dt a:hover::after { content: " #"; color: #545c7e; }
+.ref dd { margin: .1em 0 0 1.4em; color: #737aa2; font-size: .94em; }
+.ref dd code { background: none; border: none; padding: 0; }
+.ref .chip { margin: .15em .1em; }
+.ans { color: #565f89; }   /* the "; answer" beside a chip */
+
 /* --- glossary --- */
 .glossary dt { color: #c0caf5; font-weight: 600; margin-top: .85em; }
 .glossary dt code { font-weight: normal; }
+/* dt self-links: same look as the h2 anchors */
+.glossary dt a { color: inherit; }
+.glossary dt a:hover { text-decoration: none; }
+.glossary dt a:hover::after { content: " #"; color: #545c7e; }
 .glossary dd { margin: .1em 0 0 1.4em; color: #737aa2; font-size: .94em;
                text-align: justify; hyphens: auto; }
 .glossary dd code { background: none; border: none; padding: 0; }
@@ -147,6 +162,11 @@ footer { margin-top: 3.5em; color: #414868; font-size: .85em;
 .hi.green { color: #34ff9e; }
 .hi.blue { color: #3a9dff; }
 .hi.gray { color: #565f89; }
+
+.hi.red a { color: #ff3b6b; }
+.hi.green a { color: #34ff9e; }
+.hi.blue a { color: #3a9dff; }
+.hi.gray a { color: #565f89; }
 /* the color words' glossary entries wear their color too */
 #g-green { color: #34ff9e; } #g-red { color: #ff3b6b; } #g-blue { color: #3a9dff; }
 h1::before { content: "🌑 "; }

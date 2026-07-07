@@ -8,10 +8,22 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<nav class="topnav"><span class="here">ai</span> &nbsp;&middot;&nbsp; <a href="language.html">language</a> &nbsp;&middot;&nbsp; <a href="#glossary">glossary</a> &nbsp;&middot;&nbsp; <a href="crew/index.html">crew</a> &nbsp;&middot;&nbsp; <a href="bench/bench.html">bench</a></nav>
 <h1><a href="https://github.com/cofinalsubnets/ai">ai</a></h1>
 
 <!-- the live bao shell: status, terminal, runnable chips, and the wasm driver.
      raw HTML/JS, since the terminal + the data-run chips are markup, not prose. -->
+     <p class="lead">ai is a dynamically typed <a href="language.html">lisp superset</a> with curried evaluation, fast
+generics, and optional infix/prefix notation.</p>
+<span class="chip" data-run='."hello world\n", 15 (\ n (: f (? !(n % 3) "fizz") b (? !(n % 5) "buzz") (.(? ($f | $b) (f + b) n), ."\n", n + 1))) 1'>hello world, fizzbuzz</span>
+<span class="chip" data-run="2 3 4">2 3 4</span>
+<span class="chip" data-run="map (+ 1) '(1 2 3)">map (+ 1) '(1 2 3)</span>
+<span class="chip" data-run="map (net * jot * (+ 2)) (jot (3 3))">map (net * jot * (+ 2)) (jot (3 3))</span>
+<span class="chip" data-run="(1 / 2) 2">(1 / 2) 2</span>
+<span class="chip" data-run="(1 / 2) -1">(1 / 2) -1</span>
+<span class="chip" data-run="(i * pi) e">(i * pi) e</span>
+<span class="chip" data-run="'ab + 'cd">'ab + 'cd</span>
+
 <p id="status">loading the image...</p>
 
 <div id="term">
@@ -117,139 +129,292 @@
     ch.addEventListener('click', () => { run(ch.dataset.run); cmd.focus(); }));
 })();
 </script>
-<span class="chip" data-run='."hello world\n", (15 (\ n (: f (? (n % 3) "" "fizz") b (? (n % 5) "" "buzz") (.(? ($f | $b) (f + b) n), ."\n", n + 1))) 1)'>hello world, fizzbuzz</span>
-<span class="chip" data-run=': tri ((map (net * jot * (+ 2))) * jot) (tri 67)'>: tri ((map (net * jot * (+ 2))) * jot) (tri 67)</span>
-<span class="chip" data-run="0 2">0 2</span>
-<span class="chip" data-run="2 3 4">2 3 4</span>
-<span class="chip" data-run="i * i">i * i</span>
-<span class="chip" data-run="log -1">log -1</span>
-<span class="chip" data-run="(1 / 2) 2">(1 / 2) 2</span>
-<span class="chip" data-run="(1 / 2) -1">(1 / 2) -1</span>
 
 <hr>
+<h2 id="reference"><a href="#reference">the reference</a></h2>
+<p>the essentials. every example is a chip &mdash; click it and it runs in the shell above,
+answers shown here after the <code>;</code>. the whole surface, law by law, lives in
+<a href="test/spec.l"><code>test/spec.l</code></a>; the words link into the
+<a href="#glossary">glossary</a> below.</p>
 
-<h2 id="intro"><a href="#intro">ai intro</a></h2>
-<p>ai is a dynamically typed lisp superset with curried evaluation, fast generics,
-and optional infix/prefix notation. other facts include</p>
-<ul>
-  <li>every value is theoretically a one argument total function of global type</li>
-  <li>alpha-equivalent lambdas compare equally: <code>(\ x x) = (\ y y)</code></li>
-  <li>integers act as their church numerals: <code>(1 x) = x</code>, <code>8 = 3 2 (+ 1) 0</code></li>
-  <li>infix/prefix notation (desugars to lisp)</li>
-  <li>integer, float and complex types plus shaped numeric arrays</li>
-  <li>mandatory co-op scheduling</li>
-  <li>the usual lisp stuff: lists, symbols, lambda, quote, macros, call/cc, etc. </li>
-  <li>strictly optional static dependent type system (in early development)</li>
-  <li>repl with native line editing</li>
-  <li>self-hosting threaded code interpreter with template JIT compiler (amd64/arm64 only)</li>
-</ul>
+<h3 id="r-forms"><a href="#r-forms">special forms</a></h3>
+<dl class="ref">
+  <dt id="r-colon"><code>:</code> ◦ bind</dt>
+    <dd>letrec* + sequence: binds in source order, the last form is the result; <code>(f x)</code> on the left is define-sugar.
+      <span class="chip" data-run="(: a 1 b 2 (a + b))">(: a 1 b 2 (a + b))</span> <span class="ans">; 3</span>
+      <span class="chip" data-run="(: (twice f x) (f (f x)) (twice (+ 1) 10))">(: (twice f x) (f (f x)) (twice (+ 1) 10))</span> <span class="ans">; 12</span></dd>
+  <dt id="r-cond"><code>?</code> ◦ cond</dt>
+    <dd>test/result pairs, then a final else.
+      <span class="chip" data-run="(? 0 'no (1 &lt; 2) 'yes 'else)">(? 0 'no (1 &lt; 2) 'yes 'else)</span> <span class="ans">; yes</span></dd>
+  <dt id="r-lambda"><code>\</code> ◦ lambda</dt>
+    <dd>args then body, auto-<a href="#g-curry">curried</a>; at one operand it is quote, so <code>'x</code> is <code>(\ x)</code>.
+      <span class="chip" data-run="((\ x y (x + y)) 3 4)">((\ x y (x + y)) 3 4)</span> <span class="ans">; 7</span>
+      <span class="chip" data-run="'(1 2 3)">'(1 2 3)</span> <span class="ans">; (1 2 3)</span></dd>
+</dl>
 
-<hr>
-<nav><a href="https://github.com/cofinalsubnets/ai">README</a> &nbsp;&middot;&nbsp; <a href="test/spec.l"><code>test/spec.l</code></a> &nbsp;&middot;&nbsp; <a href="proof/rocq/spec.v"><code>proof/rocq/spec.v</code></a></nav>
-<hr>
-<h2 id="vocabulary"><a href="#vocabulary">vocabulary note</a></h2>
-<p>ai uses its own names for many things. any overlap with outside terminology or definitions is coincidental.
-</p>
-<ul>
-  <li>numerics are called constellations and astronomy/mineralogy-themed</li>
-  <li>fixnums are called charms because they're chars and nice to have</li>
-  <li>pairs are called chains and cons/car/cdr are called link/cap/cup</li>
-  <li>the generic get/set/delete functions are called peep/pin/pull</li>
-  <li>hash tables are called books or tablets (synonyms)</li>
-  <li>every value has a color (this is a new concept, not just a new name)</li>
-</ul>
+<h3 id="r-truth"><a href="#r-truth">truth &amp; measures</a></h3>
+<dl class="ref">
+  <dt id="r-bang"><code>!</code> ◦ nothing?</dt>
+    <dd>1 on every nothing (<a href="#g-net">net</a> &le; 0), 0 otherwise.
+      <span class="chip" data-run="!0">!0</span> <span class="ans">; 1</span>
+      <span class="chip" data-run="!5">!5</span> <span class="ans">; 0</span></dd>
+  <dt id="r-sat"><code>$</code> ◦ <a href="#g-sat">saturate</a></dt>
+    <dd>the net clamped onto the <span class="hi green"><a href="#g-green">green</a></span> <a href="#g-charm">charms</a>; the truth value of <code>x</code> is <code>!!$x</code>.
+      <span class="chip" data-run="($ '(1 2 3))">($ '(1 2 3))</span> <span class="ans">; 6</span>
+      <span class="chip" data-run="($ -7)">($ -7)</span> <span class="ans">; 0</span></dd>
+  <dt id="r-net"><code>net</code></dt>
+    <dd>the content measure: a number is its own net, text sums its bytes, a list or array sums its elements.
+      <span class="chip" data-run='(net "abc")'>(net "abc")</span> <span class="ans">; 294</span></dd>
+  <dt id="r-tally"><code>tally</code></dt>
+    <dd>the count &mdash; how many, not how much.
+      <span class="chip" data-run='(tally "hello")'>(tally "hello")</span> <span class="ans">; 5</span></dd>
+</dl>
+
+<h3 id="r-numbers"><a href="#r-numbers">numbers</a></h3>
+<dl class="ref">
+  <dt id="r-arith"><code>+ - * / // %</code></dt>
+    <dd>dyadic arithmetic, infix or prefix.
+      <span class="chip" data-run="7 % 3">7 % 3</span> <span class="ans">; 1</span>
+      <span class="chip" data-run="1 / 2">1 / 2</span> <span class="ans">; 0.5</span></dd>
+  <dt id="r-pow">application ◦ power</dt>
+    <dd>a number applied is exponentiation: <code>(n x)</code> is x&#8319; (the <a href="#g-church">church numeral</a> at work); results grow into <a href="#g-big">bigs</a> freely.
+      <span class="chip" data-run="3 2">3 2</span> <span class="ans">; 8</span>
+      <span class="chip" data-run="100 2">100 2</span> <span class="ans">; 1267650600228229401496703205376</span></dd>
+  <dt id="r-roots">fractional powers ◦ roots</dt>
+    <dd><span class="chip" data-run="(1 / 2) 9">(1 / 2) 9</span> <span class="ans">; 3.0</span>
+      <span class="chip" data-run="(1 / 2) -1">(1 / 2) -1</span> <span class="ans">; ~(0.0 1.0)</span></dd>
+  <dt id="r-numfns"><code>abs gcd min max</code></dt>
+    <dd>min/max reduce a <a href="#g-galaxy">galaxy</a>.
+      <span class="chip" data-run="(abs -5)">(abs -5)</span> <span class="ans">; 5</span>
+      <span class="chip" data-run="(gcd 12 18)">(gcd 12 18)</span> <span class="ans">; 6</span>
+      <span class="chip" data-run="(max @(3 1 2))">(max @(3 1 2))</span> <span class="ans">; 3</span></dd>
+  <dt id="r-trans"><code>sine cosine log</code> ◦ <code>pi e i</code></dt>
+    <dd>the only transcendental nifs &mdash; power is application.
+      <span class="chip" data-run="sine (pi / 2)">sine (pi / 2)</span> <span class="ans">; 1.0</span>
+      <span class="chip" data-run="log e">log e</span> <span class="ans">; 1.0</span></dd>
+  <dt id="r-complex"><code>twin re im</code></dt>
+    <dd>the <a href="#g-twin">twins</a>: complex numbers, <code>~(re im)</code>.
+      <span class="chip" data-run="i * i">i * i</span> <span class="ans">; ~(-1.0 0.0)</span>
+      <span class="chip" data-run="(re (twin 3 4))">(re (twin 3 4))</span> <span class="ans">; 3.0</span></dd>
+</dl>
+
+<h3 id="r-lists"><a href="#r-lists">lists &amp; chains</a></h3>
+<dl class="ref">
+  <dt id="r-link"><code>link cap cup</code></dt>
+    <dd>build a <a href="#g-chain">chain</a>; take the above and underneath parts.
+      <span class="chip" data-run="(link 1 '(2 3))">(link 1 '(2 3))</span> <span class="ans">; (1 2 3)</span>
+      <span class="chip" data-run="(cap '(1 2 3))">(cap '(1 2 3))</span> <span class="ans">; 1</span>
+      <span class="chip" data-run="(cup '(1 2 3))">(cup '(1 2 3))</span> <span class="ans">; (2 3)</span></dd>
+  <dt id="r-map"><code>map filter</code></dt>
+    <dd><span class="chip" data-run="map (+ 1) '(1 2 3)">map (+ 1) '(1 2 3)</span> <span class="ans">; (2 3 4)</span>
+      <span class="chip" data-run="filter (&lt; 1) '(0 1 2 3)">filter (&lt; 1) '(0 1 2 3)</span> <span class="ans">; (2 3)</span></dd>
+  <dt id="r-fold"><code>foldl foldr</code></dt>
+    <dd>a bare <code>+</code> mid-list reads as infix &mdash; <code>(+)</code> passes it as a value.
+      <span class="chip" data-run="foldl (+) 0 '(1 2 3)">foldl (+) 0 '(1 2 3)</span> <span class="ans">; 6</span></dd>
+  <dt id="r-jot"><code>jot</code></dt>
+    <dd>0 up to n, as a list; <code>iota</code> is its <a href="#g-galaxy">galaxy</a> sibling.
+      <span class="chip" data-run="jot 5">jot 5</span> <span class="ans">; (0 1 2 3 4)</span></dd>
+  <dt id="r-revtake"><code>rev take drop sort</code></dt>
+    <dd><span class="chip" data-run="(rev '(1 2 3))">(rev '(1 2 3))</span> <span class="ans">; (3 2 1)</span>
+      <span class="chip" data-run="(take 2 '(1 2 3 4))">(take 2 '(1 2 3 4))</span> <span class="ans">; (1 2)</span>
+      <span class="chip" data-run="(drop 2 '(1 2 3 4))">(drop 2 '(1 2 3 4))</span> <span class="ans">; (3 4)</span>
+      <span class="chip" data-run="(sort '(3 1 2))">(sort '(3 1 2))</span> <span class="ans">; (1 2 3)</span></dd>
+  <dt id="r-cat"><code>cat catmap</code></dt>
+    <dd><span class="chip" data-run="(cat '(1 2) '(3 4))">(cat '(1 2) '(3 4))</span> <span class="ans">; (1 2 3 4)</span></dd>
+  <dt id="r-assoc"><code>assoc member? any all</code></dt>
+    <dd>absence reads the <span class="hi gray"><a href="#g-zero-point">zero point</a></span>.
+      <span class="chip" data-run="(assoc 'b '((a 1) (b 2)))">(assoc 'b '((a 1) (b 2)))</span> <span class="ans">; (b 2)</span>
+      <span class="chip" data-run="(member? 2 '(1 2 3))">(member? 2 '(1 2 3))</span> <span class="ans">; 1</span></dd>
+  <dt id="r-listalg">list algebra</dt>
+    <dd><code>+</code> appends, <code>*</code> is the cartesian product.
+      <span class="chip" data-run="'(1 2) + '(3 4)">'(1 2) + '(3 4)</span> <span class="ans">; (1 2 3 4)</span>
+      <span class="chip" data-run="'(1 2) * '(10 20)">'(1 2) * '(10 20)</span> <span class="ans">; ((1 10) (1 20) (2 10) (2 20))</span></dd>
+</dl>
+
+<h3 id="r-strings"><a href="#r-strings">strings &amp; names</a></h3>
+<dl class="ref">
+  <dt id="r-stralg">string algebra</dt>
+    <dd>the free monoid: <code>+</code> concatenates, <code>*</code> by a number repeats.
+      <span class="chip" data-run='"abc" + "def"'>"abc" + "def"</span> <span class="ans">; "abcdef"</span>
+      <span class="chip" data-run='"ab" * 3'>"ab" * 3</span> <span class="ans">; "ababab"</span></dd>
+  <dt id="r-strindex">a string indexes its bytes</dt>
+    <dd><span class="chip" data-run='"hello" 1'>"hello" 1</span> <span class="ans">; 101</span></dd>
+  <dt id="r-string"><code>string</code></dt>
+    <dd>bytes back to text.
+      <span class="chip" data-run="(string '(104 105))">(string '(104 105))</span> <span class="ans">; "hi"</span></dd>
+  <dt id="r-show"><code>show</code></dt>
+    <dd>a value as its reparsable printed form.
+      <span class="chip" data-run="(show 42)">(show 42)</span> <span class="ans">; "42"</span></dd>
+  <dt id="r-names"><a href="#g-name">names</a> inherit string algebra</dt>
+    <dd><span class="chip" data-run="'ab + 'cd">'ab + 'cd</span> <span class="ans">; abcd</span></dd>
+</dl>
+
+<h3 id="r-trays"><a href="#r-trays">trays &amp; galaxies</a></h3>
+<dl class="ref">
+  <dt id="r-traylit"><code>@(..)</code> ◦ <code>iota</code></dt>
+    <dd>the rank-1 <a href="#g-tray">tray</a> literal; <code>iota</code> is the counting <a href="#g-galaxy">galaxy</a>.
+      <span class="chip" data-run="iota 3">iota 3</span> <span class="ans">; @(0 1 2)</span></dd>
+  <dt id="r-broadcast">arithmetic broadcasts</dt>
+    <dd><span class="chip" data-run="@(1 2 3) + @(10 20 30)">@(1 2 3) + @(10 20 30)</span> <span class="ans">; @(11 22 33)</span>
+      <span class="chip" data-run="@(1 2 3) * 2">@(1 2 3) * 2</span> <span class="ans">; @(2 4 6)</span></dd>
+  <dt id="r-traypeep"><code>peep</code></dt>
+    <dd>index with a miss default.
+      <span class="chip" data-run="(peep @(10 20 30) 1 -1)">(peep @(10 20 30) 1 -1)</span> <span class="ans">; 20</span></dd>
+  <dt id="r-reduce"><code>net prod max min</code> reduce</dt>
+    <dd><span class="chip" data-run="(net @(1 2 3))">(net @(1 2 3))</span> <span class="ans">; 6</span></dd>
+  <dt id="r-inner"><code>inner</code></dt>
+    <dd>the contraction: dot product, matmul at rank 2.
+      <span class="chip" data-run="(inner @(1 2 3) @(4 5 6))">(inner @(1 2 3) @(4 5 6))</span> <span class="ans">; 32</span></dd>
+</dl>
+
+<h3 id="r-books"><a href="#r-books">books</a></h3>
+<dl class="ref">
+  <dt id="r-booklit"><code>#(..)</code> ◦ a <a href="#g-book">book</a> is its own lookup</dt>
+    <dd>a miss reads the <span class="hi gray"><a href="#g-zero-point">zero point</a></span>.
+      <span class="chip" data-run="(#('a 1 'b 2) 'b)">(#('a 1 'b 2) 'b)</span> <span class="ans">; 2</span>
+      <span class="chip" data-run="(#('a 1) 'z)">(#('a 1) 'z)</span> <span class="ans">; ()</span></dd>
+  <dt id="r-pin"><code>tablet pin</code></dt>
+    <dd><code>(tablet ())</code> opens an empty book; <code>pin</code> writes.
+      <span class="chip" data-run="(: b (tablet ()) _ (pin b 'x 1) (b 'x))">(: b (tablet ()) _ (pin b 'x 1) (b 'x))</span> <span class="ans">; 1</span></dd>
+  <dt id="r-pull"><code>pull</code></dt>
+    <dd>delete, answering the miss value.
+      <span class="chip" data-run="(: b #('x 1) _ (pull b 'x ()) (b 'x))">(: b #('x 1) _ (pull b 'x ()) (b 'x))</span> <span class="ans">; ()</span></dd>
+  <dt id="r-keys"><code>keys tally</code></dt>
+    <dd><span class="chip" data-run="(keys #('a 1 'b 2))">(keys #('a 1 'b 2))</span> <span class="ans">; (b a)</span></dd>
+</dl>
+
+<h3 id="r-functions"><a href="#r-functions">functions</a></h3>
+<dl class="ref">
+  <dt id="r-zeroone"><code>0</code> and <code>1</code></dt>
+    <dd>const-1 and the identity &mdash; the numerals do double duty.
+      <span class="chip" data-run="0 5">0 5</span> <span class="ans">; 1</span>
+      <span class="chip" data-run="1 5">1 5</span> <span class="ans">; 5</span></dd>
+  <dt id="r-compose"><code>*</code> composes</dt>
+    <dd>so numerals multiply for free.
+      <span class="chip" data-run="((+ 1) * (2 *)) 5">((+ 1) * (2 *)) 5</span> <span class="ans">; 11</span></dd>
+  <dt id="r-flip"><code>flip</code></dt>
+    <dd><span class="chip" data-run="(flip (-) 1 10)">(flip (-) 1 10)</span> <span class="ans">; 9</span></dd>
+  <dt id="r-callcc"><code>call-cc</code></dt>
+    <dd>a one-shot escape.
+      <span class="chip" data-run="(call-cc (\ k (+ 1 (k 41))))">(call-cc (\ k (+ 1 (k 41))))</span> <span class="ans">; 41</span></dd>
+  <dt id="r-ev"><code>ev</code></dt>
+    <dd>compile and run a quoted form &mdash; the self-hosted compiler, in the image.
+      <span class="chip" data-run="(ev '((+) 1 2))">(ev '((+) 1 2))</span> <span class="ans">; 3</span></dd>
+</dl>
+
+<h3 id="r-io"><a href="#r-io">io</a></h3>
+<dl class="ref">
+  <dt id="r-puts"><code>puts putc putn</code></dt>
+    <dd>text, a byte, a number; each answers what it printed.
+      <span class="chip" data-run='(puts "hello")'>(puts "hello")</span> <span class="ans">; prints hello, answers "hello"</span>
+      <span class="chip" data-run="(putc 104)">(putc 104)</span> <span class="ans">; prints h, answers 104</span></dd>
+</dl>
 
 <hr>
 <h2 id="glossary"><a href="#glossary">glossary</a></h2>
+<p class="lead">ai has its own names for things. overlap with outside terminology or definitions is coincidental.</p>
 <dl class="glossary">
-  <dt id="g-application">🍛 application</dt>
-    <dd>see: <a href="#g-roll">roll</a></dd>
-  <dt id="g-blue">🔵 blue</dt>
+  <dt id="g-apply"><a href="#g-apply">📋 apply</a></dt>
+  <dd>(verb) the binary operation of calling a function with an argument. corresponds to exponentiation in <a href="#g-church">church arithmetic</a>. written <code>(f x)</code> meaning apply <code>f</code> to <code>x</code>. see also: <a href="#g-curry">curry</a></dd>
+  <dt id="g-big"><a href="#g-big">💥 big</a></dt>
+    <dd>a big integer aka bignum. a type of <a href="#g-star">star</a></dd>
+  <dt id="g-blue"><a href="#g-blue">🔵 blue</a></dt>
     <dd><a href="#g-color">color</a> of a value whose net is 0: (<code>0</code>, <code>()</code>, <code>""</code>, <code>'(1 2 -3)</code>). boolean false.</dd>
-  <dt id="g-book">📒 book</dt>
-    <dd>a mutable hash that is its own lookup function. <em>the book</em> refers to the global scope.</dd>
-  <dt id="g-chain">🔗 chain</dt>
-  <dd>a traditional lisp cons cell. the native supporting vocab are <code>link cap cup</code> in place of the traditional <code>cons car cdr</code>.</dd>
-  <dt id="g-charm">🧿 charm</dt>
-    <dd>a register-allocated fixed-width integer, also called a fixnum</dd>
-  <dt id="g-coin">🪙 coin</dt>
-    <dd>a user-kind value struck from a <em>die</em> over a payload; rides <code>+</code>/<code>*</code> through the die, nets and shows by its payload.</dd>
-  <dt id="g-color">🌈 color</dt>
-    <dd>the order-sign of a value's net: green, red, or blue</dd>
-  <dt id="g-constellation">✨ constellation</dt>
+  <dt id="g-book"><a href="#g-book">📒 book</a></dt>
+    <dd>aka tablet. a mutable hash table</dd>
+  <dt id="g-box"><a href="#g-box">📦 box</a></dt>
+  <dd>a <a href="#g-book">book</a> used as a mutable container for another value</dd>
+  <dt id="g-cap"><a href="#g-cap">🧢 cap</a></dt>
+    <dd>contents of the above part of the product. aka <code>car</code>/<code>fst</code>/<code>hd</code>. see also: <a href="#g-chain">chain</a></dd>
+  <dt id="g-chain"><a href="#g-chain">⛓️ chain</a></dt>
+    <dd>a free binary product, aka pair or cons cell. used for lists per lisp usual. the local supporting vocab are <code>link cap cup</code>.</dd>
+  <dt id="g-charm"><a href="#g-charm">🧿 charm</a></dt>
+    <dd>a register-allocated fixed-width integer, aka fixnum. a type of <a href="#g-star">star</a></dd>
+  <dt id="g-church"><a href="#g-church">⛪ church numeral</a></dt>
+    <dd>natural numbers interpreted as iterators. for example, <code>(0 x) = 1</code>, <code>(1 x) = x</code>, <code>(2 x y) = x (x y)</code>, etc.
+      numeral-on-numeral application corresponds to exponentiation. numeral composition corresponds to multiplication.</dd>
+  <dt id="g-coin"><a href="#g-coin">🪙 coin</a></dt>
+    <dd>a value of a newtype. see also: <a href="#g-die">die</a></dd>
+  <dt id="g-color"><a href="#g-color">🌈 color</a></dt>
+    <dd>the order-sign of a value's <a href="#g-net">net</a>: <span class="hi red"><a href="#g-red">red</a></span>, <span class="hi green"><a href="#g-green">green</a></span> or <span class="hi blue"><a href="#g-blue">blue</a></span></dd>
+  <dt id="g-constellation"><a href="#g-constellation">✨ constellation</a></dt>
     <dd>any number -- a star or a galaxy.</dd>
-  <dt id="g-die">🎲 die</dt>
-    <dd>a user type descriptor -- a monoid or ring as a little book of methods. a die strikes <em>coins</em>; <code>()</code> stays their identity for free.</dd>
-  <dt id="g-galaxy">🌌 galaxy</dt>
-  <dd>a <a href="#g-tray">tray</a> of <a href="#g-star">stars</a>, aka shaped numeric array</dd>
-  <dt id="g-gem">💎 gem</dt>
-    <dd>a floating point number</dd>
-  <dt id="g-green">🟢 green</dt>
+  <dt id="g-cup"><a href="#g-cup">🧋 cup</a></dt>
+    <dd>contents of the underneath part of the product. aka <code>cdr</code>/<code>snd</code>/<code>tl</code>. see also: <a href="#g-chain">chain</a></dd>
+  <dt id="g-curry"><a href="#g-curry">🍛 curry</a></dt>
+    <dd>(verb) to unroll a multi-argument function into a sequence of one-argument functions. see also: <a href="#g-roll">roll</a></dd>
+  <dt id="g-die"><a href="#g-die">🎲 die</a></dt>
+    <dd>aka a newtype. see also: <a href="#g-coin">coin</a></dd>
+  <dt id="g-galaxy"><a href="#g-galaxy">🌌 galaxy</a></dt>
+    <dd>a <a href="#g-tray">tray</a> of <a href="#g-star">stars</a>, aka shaped numeric array</dd>
+  <dt id="g-gem"><a href="#g-gem">💎 gem</a></dt>
+    <dd>a floating point number (<code>double</code> or <code>float</code>). a type of <a href="#g-star">star</a></dd>
+  <dt id="g-green"><a href="#g-green">🟢 green</a></dt>
     <dd><a href="#g-color">color</a> of a value whose net is positive: <code>1 "hi" '(2 3 -1) (\ x x)</code>. boolean true.</dd>
-  <dt id="g-hot">🔥 hot</dt>
-    <dd>an opaque internal or external runtime object</dd>
-  <dt id="g-kind">🔡 kind</dt>
-    <dd>a value's type tag; the kinds form the dispatch lattice.</dd>
-  <dt id="g-lattice">🔷 lattice</dt>
-    <dd>the runtime-reflective partial order over all values that guides generic dispatch</dd>
-  <dt id="g-mint">🍬 mint</dt>
-    <dd>a traditional lisp gensym. nets zero and algebraically neutral.</dd>
-  <dt id="g-name">🪪 name</dt> <dd>a traditional lisp symbol. considered a newtype over (string * mint). inherits algebra from strings.</dd> <dt id="g-net">🥅 net (<code>+</code>)</dt> <dd>a value's content measure, a complex number; truth is its sign. a list nets its spine, text its charms.</dd>
-  <dt id="g-nil"><span class="hi gray">🈚 nil</span></dt>
+  <dt id="g-hot"><a href="#g-hot">🔥 hot</a></dt>
+  <dd>an opaque internal or external runtime object. conceptually and positionally dual to <a href="#g-mint">mints</a> on the <a href="#g-lattice">lattice</a></dd>
+  <dt id="g-kind"><a href="#g-kind">🃏 kind</a></dt>
+    <dd>a value's type classification under the <a href="#g-lattice">lattice</a></dd>
+  <dt id="g-lattice"><a href="#g-lattice">🔷 lattice</a></dt>
+    <dd>the runtime-reflective partial order over all values that guides generic dispatch and comparison</dd>
+  <dt id="g-link"><a href="#g-link">🔗 link</a></dt>
+    <dd>the <a href="#g-chain">chain</a> constructor, aka <code>cons</code>/<code>(,)</code></dd>
+  <dt id="g-mint"><a href="#g-mint">🍬 mint</a></dt>
+  <dd>an otherwise empty unique identifier, aka gensym. conceptually, the non-zero mints fill a plane
+    directly above <span class="hi gray"><a href="#g-nothing"><code>()</code></a></span> in the
+    <a href="#g-lattice">lattice</a>.</dd>
+  <dt id="g-name"><a href="#g-name">🪪 name</a></dt>
+    <dd>aka a lisp symbol or erlang atom.
+    formally considered as a die over a chain of string and mint.
+    inherits algebra from strings.</dd>
+  <dt id="g-net"><a href="#g-net">🌐 net (<code>+</code>)</a></dt>
+    <dd>a value's content measure, a <a href="#g-star">star</a></dd>
+  <dt id="g-nothing"><span class="hi gray"><a href="#g-nothing">🈚 nothing</a></span></dt>
     <dd>the designated serial zero <a href="#g-mint">mint</a>, acting as a global <span class="hi gray">empty</span> element <code>()</code>. algebraically neutral. conceptually the lowest inhabited point of the <a href="#g-lattice">lattice</a></dd>
-  <dt id="g-red">🔴 red</dt>
+  <dt id="g-red"><a href="#g-red">🔴 red</a></dt>
     <dd><a href="#g-color">color</a> of a value whos net is negative: <code>-1 '(1 2 3 -99999)</code>. boolean false.</dd>
-  <dt id="g-roll">🎱 roll</dt>
-    <dd>the main vm operation: <code>(f x)</code> rolls <code>x</code> into <code>f</code>. numerically corresponds to exponentiation.</dd>
-  <dt id="g-sat">🌊 saturate (<code>$</code>)</dt>
-    <dd>retraction of the net measure onto <span class="hi green">green</span> charms: <code>$x = (max 0 (min max-charm (ceil (net x))))</code>. the truth value of <code>x</code> is <code>!!$x</code>.</dd>
-  <dt id="g-star">⭐ star</dt>
-    <dd>a self-netting scalar: a number that is its own net.</dd>
-  <dt id="g-string">🧵 string</dt>
+  <dt id="g-sat"><a href="#g-sat">🌊 saturate (<code>$</code>)</a></dt>
+  <dd>retraction of a value's <a href="#g-net">net</a> (a <a href="#g-star">star</a>-typed value) onto the <span class="hi green"><a href="#g-green">green</a></span> <a href="#g-charm">charms</a>, ie. an integer in the interval [0, max-charm].
+    overflow or underflow goes to the limit (saturation).
+    therefore <span class="hi red"><a href="#g-red">red</a></span>
+    and <span class="hi blue"><a href="#g-blue">blue</a></span>
+      both saturate to <span class="hi blue"><a href="#g-blue">blue</a></span>,
+      while <span class="hi green"><a href="#g-green">green</a></span>
+      saturates to <span class="hi green"><a href="#g-green">green</a></span>.</dd>
+  <dt id="g-star"><a href="#g-star">⭐ star</a></dt>
+    <dd>a scalar fixpoint of <a href="#g-net">net</a>: <a href="#g-charm">charm</a>, <a href="#g-sun">sun</a>, <a href="#g-big">big</a>, <a href="#g-gem">gem</a> or <a href="#g-twin">twin</a>.</dd>
+  <dt id="g-string"><a href="#g-string">🧵 string</a></dt>
     <dd>a byte vector: indexes its bytes, nets its charm-sum.</dd>
-  <dt id="g-tablet">📱 tablet</dt>
+  <dt id="g-sun"><a href="#g-sun">☀️ sun</a></dt>
+    <dd>a pointer-width integer (<code>intptr_t</code>). a type of <a href="#g-star">star</a></dd>
+  <dt id="g-tablet"><a href="#g-tablet">📱 tablet</a></dt>
     <dd>see: <a href="#g-book">book</a></dd>
-  <dt id="g-tally">🧮 tally</dt>
-    <dd>suface level how-many-items count. length of a list, string, map, etc</dd>
-  <dt id="g-tray">📥 tray</dt>
+  <dt id="g-tally"><a href="#g-tally">🧮 tally</a></dt>
+    <dd>surface level item count. length of a <a href="#g-chain">chain</a>, <a href="#g-string">string</a>, <a href="#g-tray">tray</a> or <a href="#g-book">book</a></dd>
+  <dt id="g-tray"><a href="#g-tray">📥 tray</a></dt>
     <dd>a shaped array. see also <a href="#g-chain">chain</a>, <a href="#g-galaxy">galaxy</a></dd>
-  <dt id="g-twin">💠 twin</dt>
-    <dd>a complex <code>~(re im)</code></dd>
-  <dt id="g-unit"><span class="hi gray">1️⃣ unit</span></dt>
-    <dd>see: <a href="#g-nil">nil</a></dd>
-  <dt id="g-zero-point"><span class="hi gray">0️⃣ zero point</span></dt>
-    <dd>see: <a href="#g-nil">nil</a></dd>
+  <dt id="g-truth"><a href="#g-truth">⚖️ truth value</a></dt>
+  <dd>given by the <a href="#g-color">color</a> of a value's <a href="#g-sat">saturated</a> <a href="#g-net">net</a>:
+    <span class="hi blue"><a href="#g-blue">blue</a></span> false, <span class="hi green"><a href="#g-green">green</a></span> true.
+      the exact 0-or-1 truth bit of <code>x</code> is <code>!!$x</code></dd>
+  <dt id="g-twin"><a href="#g-twin">💠 twin</a></dt>
+    <dd>a <a href="#g-gem">gem</a>-based complex number, written <code>~(re im)</code>. a type of <a href="#g-star">star</a></dd>
+  <dt id="g-unit"><span class="hi gray"><a href="#g-unit">1️⃣ unit</a></span></dt>
+    <dd>see: <a href="#g-nothing">nothing</a></dd>
+  <dt id="g-zero-point"><span class="hi gray"><a href="#g-zero-point">0️⃣ zero point</a></span></dt>
+    <dd>see: <a href="#g-nothing">nothing</a></dd>
 </dl>
 
-<hr>
-<h2 id="crew"><a href="#crew">the crew</a></h2>
-<p>the <em>black rabbit of inle</em> and crew travel through namespace searching for the legendary island of svalbard.</p>
-<dl class="crew">
-  <dt>🌑 inle ◦ the vessel</dt>
-    <dd>wherein the tale unfolds</dd>
-  <dt>🔭 tele ◦ the viewer</dt>
-    <dd>big telescope. pilot face of inle. pytorch clone</dd>
-  <dt>🐇 bellberry ◦ the navigator</dt>
-    <dd>light brown rabbit with silver stripes</dd>
-  <dt>🕊 gwen ◦ the synthesist</dt>
-    <dd>mourning dove friend of bellberry and tele</dd>
-  <dt>🐈 ain ◦ the netcat</dt>
-    <dd>white cat. ambivalently misanthropic. openbsd netcat clone</dd>
-  <dt>🐕 bao ◦ the shell</dt>
-    <dd>corgi / shiba inu mix. very eager to please. rlwrap clone</dd>
-  <dt>🐀 cook ◦ the build system</dt>
-    <dd>a colony of gray rats. gnu make clone</dd>
-  <dt>🐐 mow ◦ the grass chewer (garbage collector)</dt>
-    <dd>goat. formerly gregarious, now solitary. two-gen two-space copying</dd>
-  <dt>🕷️ holo ◦ the assembler</dt>
-    <dd>cave spider. short for holophrasm. currently amd64/arm64</dd>
-  <dt>🦇 tom ◦ the SAT bat</dt>
-    <dd>cave bat friend of holo. they often discuss their inner lives</dd>
-  <dt>🦐 phos ◦ the window manager</dt>
-    <dd>mantis shrimp. frequents a brine pool in holo's cave. xmonad clone</dd>
-  <dt>🦑 quay ◦ the terminal emulator</dt>
-    <dd>cuttlefish. 256 color skin. likes writing screensavers</dd>
-</dl>
+<h2 id="site"><a href="#site">around the site</a></h2>
+<ul>
+  <li><a href="https://github.com/cofinalsubnets/ai">README</a> ◦ building, running, the long story</li>
+  <li><a href="language.html">the language</a> ◦ why everything is a function, and the pedigree of the three forms</li>
+  <li><a href="#glossary">glossary</a> ◦ the vocabulary, word by word</li>
+  <li><a href="crew/index.html">the crew</a> ◦ the black rabbit of inle and friends</li>
+  <li><a href="bench/bench.html">benchmarks</a> ◦ milliseconds per iteration among the neighbors</li>
+  <li><a href="test/spec.l"><code>test/spec.l</code></a> ◦ the executable spec, every law in its section</li>
+  <li><a href="proof/rocq/spec.v"><code>proof/rocq/spec.v</code></a> ◦ the core laws as machine-checked theorems</li>
+</ul>
 <hr>
 
 

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ai ◦ the language</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" href="style.css">
+<style> h1::before { content: "λ "; } h1::after { content: ""; } </style>
+</head>
+<body>
+<nav class="topnav"><a href="index.html">ai</a> &nbsp;&middot;&nbsp; <span class="here">language</span> &nbsp;&middot;&nbsp; <a href="index.html#glossary">glossary</a> &nbsp;&middot;&nbsp; <a href="crew/index.html">crew</a> &nbsp;&middot;&nbsp; <a href="bench/bench.html">bench</a></nav>
+
+<h1>the language</h1>
+<p class="sub">where application is currying and everything is a function</p>
+
+<p class="lead">ai is a dynamically typed lisp superset with curried evaluation, fast generics,
+and optional infix/prefix notation. the front page is the brass tacks &mdash; the shell and
+<a href="index.html#reference">the reference</a>; this page is the why. every demo here runs
+live in the <a href="index.html">front page shell</a>, and every law has its proof-by-assertion
+in <a href="test/spec.l"><code>test/spec.l</code></a>.</p>
+
+<hr>
+<h2 id="function"><a href="#function">everything is a function</a></h2>
+<p>every value is theoretically a one-argument total function of global type. application
+associates left &mdash; <code>(f x y)</code> is <code>((f x) y)</code> &mdash; so multi-argument
+calls are just currying, and partial application is not a feature, it is what application
+<em>is</em>. at zero operands <code>(f)</code> is <code>f</code>: there is nothing to apply, so
+nothing happens.</p>
+<p>numbers act as their <a href="index.html#g-church">church numerals</a> &mdash; <code>n</code>
+applied is n-fold iteration, so a number applied to a number is exponentiation, and the numerals
+you compute with and the numerals you iterate with agree by construction. data self-applies too:
+a string indexes its bytes, a <a href="index.html#g-book">book</a> is its own lookup.</p>
+<pre><code>(0 5)              ; 1        0 is const-1
+(1 5)              ; 5        1 is the identity
+(0 0 'x)           ; x        const of const is id
+(3 2)              ; 8        (n x) = x&#8319;
+(2 3 4)            ; 262144   the tower 4^(3^2)
+(3 3 3)            ; 7625597484987    tetration is the tower with one base
+(8 = 3 2 (+ 1) 0)  ; 1        iterating (+ 1) agrees with the arithmetic
+(map (+ 1) '(1 2 3)) ; (2 3 4)  currying is partial application
+((/ 1 2) 9)        ; 3.0      fractional powers are roots</code></pre>
+
+<hr>
+<h2 id="forms"><a href="#forms">three special forms</a></h2>
+<p><code>:</code> is letrec* and sequence, <code>?</code> is cond, <code>\</code> is lambda
+(and, at one operand, quote). everything else &mdash; the whole rest of the language &mdash; is a
+function call.</p>
+<pre><code>(: a 1 b 2 (a + b))          ; 3     bind in source order; the last form is the result
+(? 0 'no (1 &lt; 2) 'yes 'else) ; yes   test/result pairs, then an else
+((\ x y (x + y)) 3 4)        ; 7     args then body, auto-curried</code></pre>
+<p>the trio has a pedigree: they are exactly the three forms of steele &amp; sussman's
+<em>lambda: the ultimate imperative</em> (1976), where they are called LABELS, IF, and LAMBDA
+&mdash; the kernel the lambda papers showed could swallow every imperative construct. they are
+also the three generators of plotkin's PCF, the canonical minimal calculus of general recursive
+computation: abstraction (<code>\</code>), case analysis (<code>?</code>), and fixpoint
+(<code>:</code> &mdash; letrec is fix in friendly clothing).</p>
+<p>in pure lambda calculus two of the three are redundant &mdash; church booleans make
+conditionals mere application, and the Y combinator conjures recursion from <code>\</code> alone.
+what the trio minimally generates here is something more honest about <em>evaluation</em>: they
+are precisely the forms that must not evaluate all their operands. <code>\</code> defers its
+body, <code>?</code> must not run the untaken branch, <code>:</code> lets a binding refer to what
+isn't pinned yet. a form that evaluates everything can be a function &mdash; and in ai, is
+&mdash; so the special forms are the minimal set of evaluation-order exceptions: one each for
+binding, choice, and time.</p>
+
+<hr>
+<h2 id="truth"><a href="#truth">true and false</a></h2>
+<p>false is <em>nothing</em>: whatever <a href="index.html#g-net">nets</a> &le; 0. the net is the
+content measure &mdash; a number is its own net, text sums its bytes, a list or array sums its
+elements, negatives cancelling. every value wears a <a href="index.html#g-color">color</a> by
+its net's sign &mdash; <span class="hi green">green</span> positive,
+<span class="hi red">red</span> negative, <span class="hi blue">blue</span> the zero floor
+&mdash; and truth is exactly <span class="hi green">green</span>. there is no truthy and falsy:
+the truth bit of <code>x</code> is <code>!!$x</code>, and every nothing (<code>0</code>,
+<code>()</code>, <code>""</code>, an empty or cancelled list) sits on the same
+<span class="hi blue">blue</span> floor.</p>
+<pre><code>!0  !""  !()       ; 1      every nothing is false
+!'(-2 1)           ; 1      red at any rank is false too
+!5                 ; 0      positive green is true
+($ '(1 2 3))       ; 6      $ sums the nets, then clamps once
+($ -7)             ; 0      red saturates to the floor</code></pre>
+
+<hr>
+<h2 id="equality"><a href="#equality">equality is exact</a></h2>
+<p><code>=</code> compares functions by alpha-equivalence and structure &mdash; two lambdas that
+differ only in the names of their binders are the same value. and it is exact everywhere else
+too: identities hold on the nose or not at all, never approximately.</p>
+<pre><code>((\ x x) = (\ y y))            ; 1    alpha-equivalent lambdas compare equal
+((\ x y (x + y)) = (\ a b (a + b))) ; 1
+((log -1) = i * pi)            ; 1    euler, in the exact direction
+(i = ((/ 1 2) -1))             ; 1    the principal root, on the nose
+(2 i)                          ; ~(-1.0 0.0)    i&#178; = -1</code></pre>
+
+<hr>
+<h2 id="goto"><a href="#goto">the ultimate goto</a></h2>
+<p>the lambda papers' companion thesis &mdash; steele's <em>lambda: the ultimate goto</em>
+&mdash; argued that a procedure call is a jump wearing a return address it doesn't need. ai's vm
+takes that literally and makes it law: the interpreter is tail-threaded, every operation
+tail-jumps to the next, and calls never return (<code>make vmret</code> checks it). scheduling is
+mandatory and cooperative, riding the same discipline; <code>call-cc</code> is a one-shot escape
+through it.</p>
+<pre><code>(call-cc (\ k (+ 1 (k 41))))   ; 41   the escape fires, the (+ 1) never runs</code></pre>
+
+<hr>
+<h2 id="rest"><a href="#rest">the rest of the facts</a></h2>
+<ul>
+  <li>infix and prefix notation are strictly sugar &mdash; they desugar to lisp before anything
+    else looks at the source</li>
+  <li>the numeric tower: <a href="index.html#g-charm">charms</a> overflow into
+    <a href="index.html#g-big">bigs</a>, <a href="index.html#g-gem">gems</a> and
+    <a href="index.html#g-twin">twins</a> for the smooth and rotating kinds, and
+    <a href="index.html#g-galaxy">galaxies</a> broadcast over all of them</li>
+  <li>the usual lisp stuff: lists, symbols, quote, macros, call/cc</li>
+  <li>a strictly optional static dependent type system (in early development) &mdash; its kernel
+    is proved sound and its proofs export to rocq and lean</li>
+  <li>a repl with native line editing</li>
+  <li>a self-hosting threaded-code interpreter with a template JIT
+    (amd64/arm64) &mdash; see the <a href="bench/bench.html">benchmarks</a></li>
+</ul>
+
+<hr>
+<nav><a href="test/spec.l"><code>test/spec.l</code></a> &nbsp;&middot;&nbsp; <a href="proof/rocq/spec.v"><code>proof/rocq/spec.v</code></a> &nbsp;&middot;&nbsp; <a href="https://github.com/cofinalsubnets/ai">README</a></nav>
+
+<footer>for ()
+  <span class="note">&middot; set in <a href="https://int10h.org/oldschool-pc-fonts/">DOS/V TWN16 + re. PRC16</a> by VileR, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></span>
+</footer>
+</body>
+</html>

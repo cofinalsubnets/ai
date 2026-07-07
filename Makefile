@@ -1259,7 +1259,7 @@ out/host/flamegraph.svg: out/host/perf.data
 repl: host
 	@exec $m
 cloc:
-	cloc --by-file ai ai.c ai.h main.c port tools test vim
+	cloc --by-file ai ai.c ai.h main.c port tools test vim crew
 cat: clean all test
 cata: clean all test_all
 # Full clean rebuild, every frontend, all tests, then the corpus under valgrind.
