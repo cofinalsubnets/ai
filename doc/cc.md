@@ -464,10 +464,30 @@ two ideas to keep warm as the stages climb, neither committed yet:
    unsigned compare/div/mod + zero-extend, gcc = cc = 177) in the battery; law.l goldens
    the hex/suffix/escape lexing and the specifier-soup canonicalizer. ai.c now advances
    PAST lexing to a parse error (7c-iii).
-   STILL AHEAD: 7c-iii the C-feature tail ai.c needs (compact multi-function-declarator
-   protos like `void *malloc(size_t), free(void*)`, the `__asm__("divq")` 128-bit-divide
-   fallback, __attribute__((weak))/((section)) -> the linker, unions by value) + the
-   >6-arg overflow (both fixed and variadic, avoiding the boxfix trap); 7d link cc-built
+   7c-iii PART 1 (THE PARSE TAIL) LANDED 2026-07-07: the accumulated ~a-dozen parse/cpp
+   gaps that ai.c hits once it lexes, found by grinding cc through ai.c form by form.
+   cpp learned the OBJECT-vs-FUNCTION macro distinction: a macro `(` is a function macro
+   ONLY when GLUED to the name (no space) -- the lexer now flags a glued `(` with a 4th
+   token field (set when the prior char is an idchar), so `#define EOF (-1)` is an object
+   macro whose body is `(-1)` while `#define M(x) ..` is a function macro; plus GNU
+   `, ##__VA_ARGS__` comma-elision at zero variadic args. the parser gained: multi-
+   declarator typedefs (`typedef long a, b;` binds BOTH via a top-level `tdeflist`),
+   function-type typedefs (`typedef int F(int);`), a comma-list of function prototypes
+   (`int f(int), g(long);` via a top-level `mproto`), sizeof of a TYPE (folds to a `num`)
+   vs sizeof of an EXPR (a `szof` node gen sizes from the operand's type), a bare `void`
+   return, a folded/EOF case label, the function-pointer cast type `(int (*)(int))`, an
+   incomplete array `extern int v[];`, and a stray top-level `;`. gen grew the `szof`
+   handler (clval-or-cgexpr for the type, then `li (tsz type)`). the mproto/tdeflist
+   helpers are TOP-LEVEL siblings taking explicit params -- NOT nested -- to dodge the
+   boxfix capture trap (a deep-nested recursive helper captures outer `:`-locals as
+   unfilled cells -> `;; missing <name>` at runtime). gate: 74-ctail.c (sizeof expr/type,
+   void return, folded case, fn-ptr cast, function-type + multi-decl typedef, object-vs-
+   function macro, gcc = cc = 50) in the battery; law.l goldens each. ai.c now parses
+   through ~5000 lines and stops at the first 2D array (`lvm_t *const tbl[KN][KN]`).
+   STILL AHEAD (7c-iii part 2+): multidimensional arrays (nested `(arr (arr T m) n)` in
+   parser + gen layout/index/init), the `__asm__("divq")` 128-bit-divide fallback,
+   __attribute__((weak))/((section)) -> the linker, unions by value, and the >6-arg
+   overflow (both fixed and variadic, avoiding the boxfix trap); 7d link cc-built
    ai.o + gcc-built host/*.o + libc and boot the egg green.
 8. **the fixpoint + the flat stack**: (a) determinism -- cc(cc(ai)) builds
    byte-identical objects to cc(ai); (b) guaranteed sibcalls for the lvm

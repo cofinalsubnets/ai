@@ -116,8 +116,14 @@
                      (go (+ i 1) (revcat sub acc)))
                  (&& var? (idv? t "__VA_ARGS__"))               ; the variadic tail
                   (: va (vaargs args params)
-                     sub (? (adjh i) va (expand va macs))
-                     (go (+ i 1) (revcat sub acc)))
+                     prevhh (&& (< 0 i) (pv? (argn mb (- i 1)) "##"))
+                     commahh (&& (&& prevhh (< 1 i)) (pv? (argn mb (- i 2)) ","))
+                     (? commahh                                 ; GNU `, ## __VA_ARGS__` elision: the ## is a marker, not a paste
+                         (: acc2 (cup acc)                       ; drop the ## already emitted (no join)
+                            (? (two? va) (go (+ i 1) (revcat (expand va macs) acc2))         ; args present: keep the comma
+                               (go (+ i 1) (? (&& (two? acc2) (pv? (cap acc2) ",")) (cup acc2) acc2))))  ; empty: drop the comma too
+                        prevhh (go (+ i 1) (revcat va acc))     ; a real `## __VA_ARGS__` paste: unexpanded, paste folds it
+                        (go (+ i 1) (revcat (expand va macs) acc))))
                  (go (+ i 1) (link t acc)))))
        (paste (go 0 ()) line))
    (revcat l acc) (? (! (two? l)) acc (revcat (cup l) (link (cap l) acc)))
@@ -229,9 +235,10 @@
     (? (! (two? line-toks)) ()
        (: name (vof (cap line-toks))
           r (cup line-toks)
-          ; function-like ONLY if '(' immediately follows the name (no space) --
-          ; clex drops spaces, so approximate: a '(' as the very next token.
-          (? (&& (two? r) (pv? (cap r) "("))
+          ; function-like ONLY if '(' immediately follows the name (no space) -- the
+          ; lexer marks a glued '(' with a 4th token field (`#define F(x)` vs the
+          ; object macro `#define EOF (-1)`, whose '(' is spaced and begins the body).
+          (? (&& (two? r) (&& (pv? (cap r) "(") (cauup (cup (cap r)))))
               (: pr (defparams (cup r) () ())
                  (? (! (two? pr)) ()
                     (: params (cap pr) var? (caup pr) body (caup (cup pr))

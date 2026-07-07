@@ -117,6 +117,8 @@
                              (go j line (link (? (member? s kws) (L 'kw s line) (L 'id t line)) acc)))
                  (: hit (firstat i (cat p3 p2))
                     (? hit (go (+ i (tally hit)) line (link (L 'p hit line) acc))
-                       (in1? c) (go (+ i 1) line (link (L 'p (string c) line) acc))
+                       (in1? c)                        ; a '(' GLUED to a preceding id (no space) carries a 4th field: the function-macro paren
+                        (: gl (&& (= c 40) (&& (< 0 i) (idc? (src (- i 1)))))
+                           (go (+ i 1) line (link (? gl (L 'p (string c) line 1) (L 'p (string c) line)) acc)))
                        ())))))
        (go 0 1 ())))

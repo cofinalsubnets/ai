@@ -185,7 +185,12 @@
    ; -- expressions: answers (type forms) | 'bad, the value in r0 --
    (cgexpr g env e)
     (: k (cap e)
-       (? (= k 'num) (L 'long (L (L 'li 'r0 (caup e))))
+       (? (= k 'szof)                                   ; sizeof EXPR: the UNDECAYED type (clval keeps arrays), size a constant
+           (: e2 (caup e)
+              lv (clval g env e2)
+              ty (? (bad? lv) (: r (cgexpr g env e2) (? (bad? r) 'bad (cap r))) (cap lv))
+              (? (bad? ty) 'bad (L 'ulong (L (L 'li 'r0 (tsz g ty))))))
+          (= k 'num) (L 'long (L (L 'li 'r0 (caup e))))
           (= k 'flo) (L 'double (L (L 'li 'r0 (fbits (caup e))) (L 'movqxr 'f0 'r0)))
           (= k 'str)
            (: lbl (nlab g ".S")
@@ -650,12 +655,13 @@
    ; stmt -> forms | 'bad
    (cgstmt g env s)
     (: k (cap s)
-       (? (= k 'ret) (: r (cgexpr g env (caup s))
+       (? (= k 'ret) (? (! (two? (caup s))) epi                          ; bare `return;` -- just the epilogue
+                      (: r (cgexpr g env (caup s))
                         rt (cap (peep (g 'sigs) (g 'fn) (L 'long ())))   ; the current function's return type
                         (? (bad? r) 'bad
                            (flo? rt) (cat (asflo r) epi)                 ; a double return leaves f0 (xmm0)
                            (flo? (cap r)) (cat (asint r) epi)            ; a double value, an int return -> truncate to r0
-                           (cat (caup r) epi)))                          ; int -> int, as before
+                           (cat (caup r) epi))))                         ; int -> int, as before
           (= k 'expr) (: r (cgexpr g env (caup s))
                          (? (bad? r) 'bad (caup r)))
           (= k 'nop) ()

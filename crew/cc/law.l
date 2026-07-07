@@ -16,7 +16,7 @@
       (two? r) (= (tally ts) 9)
       (= (tn ts 0) (L 'kw 'int 1))
       (= (tn ts 1) (L 'id "main" 1))
-      (= (tn ts 2) (L 'p "(" 1))
+      (= (tn ts 2) (L 'p "(" 1 1))              ; a '(' GLUED to `main` carries the 4th field (function-macro paren marker)
       (= (tn ts 3) (L 'p ")" 1))
       (= (tn ts 4) (L 'p "{" 1))
       (= (tn ts 5) (L 'kw 'return 1))
@@ -358,6 +358,9 @@
       (= (pps "#define N 42\nN + 1") "42 + 1")                         ; object macro
       (= (pps "#define A B\n#define B 7\nA") "7")                      ; rescan to fixpoint
       (= (pps "#define ADD(a,b) a+b\nADD(1,2)") "1 + 2")               ; function macro
+      (= (pps "#define EOF (-1)\nEOF") "( - 1 )")                      ; 7c-iii: a SPACE before ( = an object macro whose body is parenthesized
+      (= (pps "#define M(x, ...) f(x, ##__VA_ARGS__)\nM(a)") "f ( a )")        ; GNU `, ##__VA_ARGS__` elides the comma at zero args
+      (= (pps "#define M(x, ...) f(x, ##__VA_ARGS__)\nM(a, b, c)") "f ( a , b , c )")
       (= (pps "#define SQ(x) ((x)*(x))\nSQ(SQ(2))")                    ; nested / re-expansion
          "( ( ( ( 2 ) * ( 2 ) ) ) * ( ( ( 2 ) * ( 2 ) ) ) )")
       (= (pps "#define S(x) #x\nS(a b)") "\"a b\"")                    ; # stringize
@@ -409,5 +412,25 @@
       (= (ty1 "long long q;")     'long)     ; long long -> long
       (= (ty1 "int i;")           'int)))
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) ok")
+; -- 7c-iii: the C-feature tail cc needs to read ai.c -- function-type typedefs,
+; multi-declarator typedefs, sizeof EXPR (a node gen sizes from the type), a bare
+; void return, a folded case label, the function-pointer cast type, an incomplete
+; array. the object-vs-function macro distinction rides in the cpp section above.
+(: (cast src) (caup (cparse (caup (clex src))))
+   (cexp src) (: ast (cast (+ "int main() { return " (+ src "; }")))
+                 fn (cap (caup ast))
+                 items (caup (caup (cuup fn)))
+                 (caup (cap items)))
+   (assert
+      (= (cast "void f(void){return;}") '(prog ((fn "f" () (blk ((ret ())))))))   ; bare void return
+      (= (cexp "sizeof x") '(szof (var "x")))                                       ; sizeof EXPR -> a node (not folded)
+      (= (cexp "(int (*)(int)) p") '(cast (ptr (fn)) (var "p")))                    ; a function-pointer cast type
+      (= (cexp "sizeof(int)") '(num 4))                                             ; sizeof TYPE folds to a num literal
+      (= (cast "typedef long a, b; int main(void){ b x; return x; }")                ; a multi-declarator typedef binds BOTH names as `long`
+         '(prog ((tdef) (fn "main" () (blk ((decl (("x" long ()))) (ret (var "x"))))))))
+      (= (cast "typedef int F(int); int main(void){return 0;}") '(prog ((tdef) (fn "main" () (blk ((ret (num 0))))))))
+      (= (cast "extern int v[]; int main(void){return 0;}")                         ; an incomplete array (no size, no init)
+         '(prog ((gdecl (("v" (arr int 0) ()))) (fn "main" () (blk ((ret (num 0))))))))))
+
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE, bare void return, folded case labels, function-pointer cast types, incomplete arrays) ok")
 (put err 10)
