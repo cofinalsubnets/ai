@@ -395,12 +395,40 @@ two ideas to keep warm as the stages climb, neither committed yet:
    cc-compiles a lib + a main TU, links them with a gcc-built third TU via the
    system linker (-no-pie), runs, and matches an all-gcc build; probed live: cc<->
    gcc interop both directions, cc calling libc (abs/strlen), the ai.c static
-   (name, fn-ptr) table across an R_64 link. STILL AHEAD for the gate: 7b real SysV
-   varargs + single-precision float at the ABI boundary (cc's simplified shapes are
-   self-consistent but not gcc-compatible); 7c compile ai.c itself against
-   freestanding headers (math.h/signal.h/setjmp.h/sys/mman.h/unistd.h -- ai.c is
-   8449 lines and pulls the system headers today); 7d link cc-built ai.o + gcc-built
-   host/*.o + libc and boot the egg green.
+   (name, fn-ptr) table across an R_64 link.
+   7b REAL SysV VARARGS LANDED 2026-07-07: cc's variadic ABI is now gcc-compatible,
+   so ai_push (a variadic function DEFINED in ai.c but CALLED from the gcc-built
+   host objects -- ai.h declares it) works across the toolchain seam. the va_list
+   is the real 24-byte struct { int gp_offset; int fp_offset; void
+   *overflow_arg_area; void *reg_save_area; } (crew/cc/include/stdarg.h), a typedef
+   to __va_list_tag[1] so it DECAYS to a pointer when handed to another function
+   (ai.c's gvzprintf/ai_pushr take a va_list). the CALLEE prologue lays a 176-byte
+   register save area (6 gp @ +0 step 8, 8 xmm @ +48 step 16) and addresses its
+   named register-passed params INSIDE it; va_start seeds gp_offset = 8*named-gp,
+   fp_offset = 48 + 16*named-xmm, overflow = rbp+16, reg_save = &area; va_arg walks
+   the register area until its offset passes the limit (48 gp / 176 fp), then the
+   overflow area, stepping. the xmm registers are saved unconditionally (reading an
+   xmm never faults), so the callee needs no `al` guard; the CALLER sets al = #xmm
+   args before the call (its variadic callee -- or libc's -- reads it). every call
+   now routes through call-fixed (the variadic difference is just al), and va_start/
+   va_arg use cgexpr (not clval) to get the struct pointer UNIFORMLY -- a va_list
+   LOCAL (array) decays to its address, a va_list PARAM (a decayed pointer) loads
+   its value, both landing the struct pointer. a parameter of ARRAY type now decays
+   to a pointer (pparams -- the C rule, which the va_list param needs). probed live:
+   cc<->gcc variadic BOTH directions, integer AND double varargs, va_list handed to
+   a helper, array-param decay; battery 70->71 (71-varargs-sysv), the make gate
+   links a cc-compiled variadic function against a gcc main. THE PAID BUG: a
+   caller-side stack-OVERFLOW rewrite (for >6 gp / >8 xmm args) tripped the boxfix
+   cell trap (a helper's params shadowing sibling :-locals) into a load-time
+   `;; missing`-scare block (0% CPU, looks like a hang) -- reverted to register-only,
+   so >6-arg calls still refuse (a shared limitation with fixed calls, a later
+   rung). float at the ABI boundary stays cc's double-in-xmm (self-consistent,
+   matches gcc for representable values); real single-precision is deferred -- it is
+   off the 64-bit critical path (ai_flo_t is `double`; the `float` typedef is the
+   32-bit variant). STILL AHEAD: 7c compile ai.c itself against freestanding headers
+   (math.h/signal.h/setjmp.h/sys/mman.h/unistd.h -- ai.c is 8449 lines and pulls the
+   system headers today) + the >6-arg overflow it will need; 7d link cc-built ai.o +
+   gcc-built host/*.o + libc and boot the egg green.
 8. **the fixpoint + the flat stack**: (a) determinism -- cc(cc(ai)) builds
    byte-identical objects to cc(ai); (b) guaranteed sibcalls for the lvm
    shape, ai_tco=1, `make vmret` honest, benches vs gcc recorded.

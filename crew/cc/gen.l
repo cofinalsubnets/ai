@@ -314,22 +314,41 @@
                     (cat (caup c) (cat (L (L 'cmp 'r0 0) (L 'br 'eq le))
                      (cat (caup t) (cat (L (L 'jmp ld) (L 'label le))
                       (cat (caup el) (L (L 'label ld))))))))))
-          ; -- the varargs builtins (cc's simplified all-stack ABI): a va_list is
-          ; a char* cursor over the caller's pushed argument block. va_start aims
-          ; it past the named params; va_arg reads a slot and steps 8; va_end nops.
+          ; -- the varargs builtins (the SysV ABI). a va_list is the 24-byte struct
+          ; { int gp_offset; int fp_offset; void *overflow_arg_area; void
+          ; *reg_save_area; } (crew/cc/include/stdarg.h). va_start seeds it past the
+          ; named params; va_arg fetches from the register save area until its
+          ; offset passes the reg limit, then from the overflow (stack) area,
+          ; stepping the offset; va_end nops. --
           (= k 'vastart)
-           (: lv (clval g env (caup e))                 ; &ap in r0
-              nc (tally (caup (peep (g 'sigs) (g 'fn) (L () () ()))))   ; the current function's named-param count
+           ; cgexpr (not clval) gives the struct pointer uniformly: a va_list LOCAL
+           ; (array) decays to its address, a va_list PARAM (a decayed pointer)
+           ; loads its value -- both land the struct address in r0.
+           (: lv (cgexpr g env (caup e))                 ; the va_list struct pointer in r0
+              rsa (peep g 'rsa 0) ngp (peep g 'vagp 0) nxmm (peep g 'vaxmm 0)
               (? (bad? lv) 'bad
-                 (L 'long (cat (caup lv) (L (L 'lea 'r1 'r4 (+ 16 (* 8 nc))) (L 'st 'r0 0 'r1))))))
+                 (L 'long (cat (caup lv)
+                   (L (L 'li 'r1 (* 8 ngp))         (L 'st4 'r0 0 'r1)     ; gp_offset = 8*named-gp
+                      (L 'li 'r1 (+ 48 (* 16 nxmm))) (L 'st4 'r0 4 'r1)    ; fp_offset = 48 + 16*named-xmm
+                      (L 'lea 'r1 'r4 16)  (L 'st 'r0 8 'r1)               ; overflow_arg_area = rbp+16
+                      (L 'lea 'r1 'r4 rsa) (L 'st 'r0 16 'r1))))))          ; reg_save_area = rbp+rsa
           (= k 'vaarg)
-           (: lv (clval g env (caup e)) ty (cauup e)
+           (: lv (cgexpr g env (caup e)) ty (cauup e)    ; the va_list struct pointer in r0
+              lov (nlab g ".vo") ld (nlab g ".vd")
+              foff (? (flo? ty) 4 0)                      ; the offset field: fp_offset (4) vs gp_offset (0)
+              lim (? (flo? ty) 176 48)                    ; the register-area limit
+              step (? (flo? ty) 16 8)                     ; the offset stride
+              ; r1 = the relevant offset; if it is below the limit, p = reg_save_area
+              ; + offset and the offset advances; else p = overflow, which advances 8.
+              walk (L (L 'ld4 'r1 'r0 foff) (L 'cmp 'r1 lim) (L 'br 'ge lov)
+                      (L 'ld 'r2 'r0 16) (L 'add 'r2 'r2 'r1)            ; p = reg_save_area + offset
+                      (L 'add 'r1 'r1 step) (L 'st4 'r0 foff 'r1)         ; advance the offset
+                      (L 'jmp ld) (L 'label lov)
+                      (L 'ld 'r2 'r0 8) (L 'mov 'r3 'r2) (L 'add 'r3 'r3 8) (L 'st 'r0 8 'r3)   ; p = overflow; overflow += 8
+                      (L 'label ld))
               (? (bad? lv) 'bad
-                 (flo? ty)
-                  (L 'double (cat (caup lv) (L (L 'mov 'r3 'r0) (L 'ld 'r2 'r3 0)
-                                               (L 'ldsd 'f0 'r2 0) (L 'add 'r2 'r2 8) (L 'st 'r3 0 'r2))))
-                 (L ty (cat (caup lv) (L (L 'mov 'r3 'r0) (L 'ld 'r2 'r3 0)
-                                         (L (ldop ty) 'r0 'r2 0) (L 'add 'r2 'r2 8) (L 'st 'r3 0 'r2))))))
+                 (flo? ty) (L 'double (cat (caup lv) (cat walk (fldf ty 'f0 'r2 0))))
+                 (L ty (cat (caup lv) (cat walk (L (L (ldop ty) 'r0 'r2 0)))))))
           (= k 'vaend) (L 'long ())
           (= k 'call)
            ; the SysV ABI: integer/pointer args ride r6 r5 r2 r1 r7 r8 (<=6),
@@ -344,44 +363,27 @@
               ptys (? (two? sig) (caup sig) ())
               rt (? (two? sig) (cap sig) 'long)
               variadic (? (two? sig) (nthr sig 2) ())
-              ; a VARIADIC callee rides cc's all-stack ABI: every argument (named
-              ; args converted to their param type, varargs as-is) is pushed as an
-              ; 8-byte slot, arg0 landing at [rbp+16], a pad word keeping rsp 16-
-              ; aligned; the caller pops the block after the call.
-              (? (&& direct variadic)
-                  (: n (tally args)
-                     pad (? (= (& n 1) 1) 8 0)
-                     (blocks as i acc)
-                      (? (! (two? as)) (rev acc)
-                         (: a (cgexpr g env (cap as))
-                            (? (bad? a) 'bad
-                               (: pty (nthty ptys i)
-                                  wd (? pty (flo? pty) (flo? (cap a)))
-                                  conv (? wd (asflo a) (asint a))
-                                  blk (? wd (cat conv (L (L 'movqrx 'r0 'f0) (L 'push 'r0)))
-                                            (cat conv (L (L 'push 'r0))))
-                                  (blocks (cup as) (+ i 1) (link blk acc))))))
-                     bl (blocks args 0 ())
-                     (? (bad? bl) 'bad
-                        (: pushcode (foldl (\ ac b (cat ac b)) (? (< 0 pad) (L (L 'sub 'sp 'sp 8)) ()) (rev bl))
-                           (L rt (cat pushcode (cat (L (L 'call (intern (caup head))))
-                                                    (L (L 'add 'sp 'sp (+ pad (* 8 n))))))))))
-                 (call-fixed g env head args direct ptys rt)))
+              ; every call rides the SysV registers (call-fixed); a variadic one
+              ; additionally sets al = #xmm args for its callee's register save area.
+              (call-fixed g env head args direct ptys rt variadic))
           (= k 'clit)                              ; a compound literal as a value: fill the temp, load it
            (: lv (clval g env e)
               (? (bad? lv) 'bad (loadval (cap lv) (caup lv))))
           (= k 'bin) (cgbin g env e)
           'bad))
-   ; the fixed-arity call (SysV registers). params named uniquely so no lambda
-   ; parameter shadows a sibling :-local through boxfix's shared cell (stage 5).
-   (call-fixed g env hd ags dir pts ret)
+   ; the SysV register call. va? marks a call to a VARIADIC function -- the only
+   ; difference is that `al` (rax's low byte) must carry the number of vector
+   ; (xmm) arguments, which its variadic callee's prologue reads to decide whether
+   ; to spill the xmm registers. params named uniquely so no lambda parameter
+   ; shadows a sibling :-local through boxfix's shared cell (stage 5).
+   (call-fixed g env hd ags dir pts ret va?)
     (: (ca as i gpc xmmc pf tg)                          ; -> (pushforms targets) | 'bad
         (? (! (two? as)) (L pf (rev tg))
            (: a (cgexpr g env (cap as))
               (? (bad? a) 'bad
                  (: pty (nthty pts i)
                     wd (? pty (flo? pty) (flo? (cap a)))   ; classify by the param type if known, else the arg's
-                    (? (&& wd (< 7 xmmc)) 'bad       ; over 8 double args
+                    (? (&& wd (< 7 xmmc)) 'bad       ; over 8 double args (stack overflow: a later rung)
                        (&& (! wd) (< 5 gpc)) 'bad     ; over 6 integer args
                        (: push (? wd (cat (asflo a) (L (L 'movqrx 'r0 'f0) (L 'push 'r0)))
                                      (cat (asint a) (L (L 'push 'r0))))
@@ -390,18 +392,20 @@
        car (ca ags 0 0 0 () ())
        (? (bad? car) 'bad
           (: pf (cap car) tg (caup car)
+             nxmm (foldl (\ a t (? (= (cap t) 'x) (+ a 1) a)) 0 tg)   ; the vector-arg count (al)
              (popr ts acc) (? (! (two? ts)) acc
                               (: t (cap ts)
                                  (popr (cup ts) (cat acc
                                    (? (= (cap t) 'g) (L (L 'pop (nthr argregs (caup t))))
                                       (L (L 'pop 'r0) (L 'movqxr (xmmreg (caup t)) 'r0)))))))
              pops (popr (rev tg) ())
+             setal (? va? (L (L 'li 'r0 nxmm)) ())        ; al = #xmm, set AFTER pops (r0 is no arg register)
              (? dir
-                 (L ret (cat pf (cat pops (L (L 'call (intern (caup hd)))))))
+                 (L ret (cat pf (cat pops (cat setal (L (L 'call (intern (caup hd))))))))
                 (: hr (cgexpr g env hd)                   ; a function-pointer value: park in r3, callr
                    (? (bad? hr) 'bad
                       (L 'long (cat pf (cat (caup hr) (cat (L (L 'mov 'r3 'r0))
-                                (cat pops (L (L 'callr 'r3)))))))))))))
+                                (cat pops (cat setal (L (L 'callr 'r3))))))))))))))
    (cgbin g env e)
     (: op (caup e)
        a (cgexpr g env (cauup e))
@@ -787,12 +791,28 @@
                      (spill (cup ps) gpi (+ xmmi 1) env2 (cat acc (fstf pty 'r4 off (xmmreg xmmi)))))
                  (? (< 5 gpi) 'bad
                     (spill (cup ps) (+ gpi 1) xmmi env2 (cat acc (L (L 'st 'r4 off (nthr argregs gpi)))))))))
-       ; a VARIADIC function reads its NAMED params off the caller's stack
-       ; ([rbp+16+i*8], cc's all-stack ABI) -- no register spill, no save area
-       (place ps i env) (? (! (two? ps)) env
-                           (place (cup ps) (+ i 1)
-                                  (link (L (cap (cap ps)) (+ 16 (* i 8)) (caup (cap ps))) env)))
-       sp0 (? vararg (L () (place params 0 ())) (spill params 0 0 () ()))
+       ; a VARIADIC function (SysV): a 176-byte register SAVE AREA holds the 6 gp
+       ; arg registers (@ +0, step 8) and 8 xmm registers (@ +48, step 16, low 8
+       ; bytes each). named register-passed params are addressed INSIDE the area;
+       ; overflow named params ride the caller stack (rbp+16+). va_start reads back
+       ; g's rsa / vagp / vaxmm. the xmm registers are saved unconditionally (safe
+       ; -- reading an xmm never faults -- so no `al` guard is needed on this side).
+       (vaspill ps)
+        (: rsa (- 0 (+ (peep g 'off 0) 176))
+           _ (pin g 'off (+ (peep g 'off 0) 176))
+           _ (pin g 'rsa rsa)
+           savegp (: (go i acc) (? (< 5 i) acc (go (+ i 1) (cat acc (L (L 'st 'r4 (+ rsa (* 8 i)) (nthr argregs i)))))) (go 0 ()))
+           savex  (: (go i acc) (? (< 7 i) acc (go (+ i 1) (cat acc (L (L 'stsd 'r4 (+ rsa (+ 48 (* 16 i))) (xmmreg i)))))) (go 0 ()))
+           (cls qs gpi xmmi ov env)
+            (? (! (two? qs)) (: _ (pin g 'vagp gpi) _ (pin g 'vaxmm xmmi) (L (cat savegp savex) env))
+               (: p (cap qs) pty (caup p)
+                  (? (flo? pty)
+                      (? (< 7 xmmi) (cls (cup qs) gpi xmmi (+ ov 8) (link (L (cap p) (+ 16 ov) pty) env))
+                         (cls (cup qs) gpi (+ xmmi 1) ov (link (L (cap p) (+ rsa (+ 48 (* 16 xmmi))) pty) env)))
+                     (? (< 5 gpi) (cls (cup qs) gpi xmmi (+ ov 8) (link (L (cap p) (+ 16 ov) pty) env))
+                        (cls (cup qs) (+ gpi 1) xmmi ov (link (L (cap p) (+ rsa (* 8 gpi)) pty) env))))))
+           (cls ps 0 0 0 ()))
+       sp0 (? vararg (vaspill params) (spill params 0 0 () ()))
        (? (bad? sp0) 'bad
           (: body (cgitems g (caup sp0) (caup (caup (cuup f))) ())
              (? (bad? body) 'bad

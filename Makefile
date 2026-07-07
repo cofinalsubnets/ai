@@ -404,7 +404,14 @@ test_cc: host out/host$(hsuf)/au
 	  $(ho)/.oexe; a=$$?; \
 	  $$cc_g -O0 -o $(ho)/.oexeg $(ho)/.omain.c $(ho)/.olib.c $(ho)/.oext.c && $(ho)/.oexeg; b=$$?; \
 	  { [ $$a -eq 42 ] && [ $$a -eq $$b ]; } || { echo "FAIL au cc -c link+run (ours $$a gcc $$b)"; exit 1; }; \
-	  echo "au: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop) ok"; \
+	  printf '#include <stdarg.h>\nint isum(int n,...){va_list ap;va_start(ap,n);long s=0;for(int i=0;i<n;i++)s+=va_arg(ap,int);va_end(ap);return s;}\n' > $(ho)/.valib.c; \
+	  printf 'int isum(int n,...);\nint main(){return isum(4,10,11,12,9);}\n' > $(ho)/.vamain.c; \
+	  $m $(ho)/au cc -c $(ho)/.valib.c $(ho)/.valib.o > /dev/null 2>&1 || { echo "FAIL au cc -c variadic"; exit 1; }; \
+	  $$cc_g -O0 -c -o $(ho)/.vamain.o $(ho)/.vamain.c; \
+	  $$cc_g -no-pie -o $(ho)/.vaexe $(ho)/.vamain.o $(ho)/.valib.o > /dev/null 2>&1 || { echo "FAIL ld cc-variadic + gcc-main"; exit 1; }; \
+	  $(ho)/.vaexe; a=$$?; \
+	  [ $$a -eq 42 ] || { echo "FAIL cc-variadic <- gcc-caller (SysV va ABI, got $$a want 42)"; exit 1; }; \
+	  echo "au: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop + SysV varargs cross-toolchain) ok"; \
 	else echo "au: cc (laws only -- x86_64 e2e skipped on $$(uname -m)) ok"; fi
 # The neutral assembler (crew/holo/) + its x86-64 backend: every encoder golden is
 # objdump-checked (crew/holo/holotest.l). A host-only app (like sat) -- it rides the

@@ -633,8 +633,10 @@
           (? (! (two? br)) ()
              (: dr (pdtor (caup br) (cap br))
                 (? (! (two? dr)) ()
-                   (= (cap (caup (cap dr))) 'arr) ()
-                   (: entry (cap dr)
+                   ; a parameter of ARRAY type decays to a pointer (the C rule) --
+                   ; so `int a[]`, and a va_list (an array typedef), ride as pointers
+                   (: e0 (cap dr) ty0 (caup e0)
+                      entry (? (arr? ty0) (L (cap e0) (L 'ptr (caup ty0))) e0)
                       ts3 (caup dr)
                       (? (peekp ts3 ",")
                           (? (peekp (cup ts3) "...")              ; ... after this param -> variadic

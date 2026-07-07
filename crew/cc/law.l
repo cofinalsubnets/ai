@@ -272,6 +272,11 @@
       ; the generator: a variadic fn and a variadic call both compile
       (two? (cgn "int f(int n, ...) { return n; } int main() { return f(1); }"))
       (two? (cgn "int s(int n, ...) { char *ap; __builtin_va_start(ap,n); int t=0; int i=0; while(i<n){ t=t+__builtin_va_arg(ap,int); i++; } __builtin_va_end(ap); return t; } int main() { return s(2, 3, 4); }"))
+      ; a parameter of ARRAY type decays to a pointer (the C rule -- so a va_list,
+      ; which is an array typedef, rides as a pointer and can be handed on)
+      (= (cast "int f(int a[], int n) { return n; }")
+         '(prog ((fn "f" (("a" (ptr int)) ("n" int)) (blk ((ret (var "n"))))))))
+      (two? (cgn "int sum(int a[], int n) { int s = 0; for (int i = 0; i < n; i++) s += a[i]; return s; } int main() { int x[2]; x[0] = 40; x[1] = 2; return sum(x, 2); }"))
       ; a true _Static_assert compiles; a false one refuses the whole program
       (two? (cgn "int main() { _Static_assert(sizeof(int) == 4, \"w\"); return 0; }"))
       (two? (cgn "_Static_assert(1 + 2 * 3 == 7, \"folds\"); int main() { return 0; }"))
@@ -362,5 +367,5 @@
       (! (cpp (caup (clex "#if 1\nx")) ()))                            ; unterminated #if refuses
       (= (pps "#define E\nE + E") "+")))                               ; empty macro body vanishes
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) ok")
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) ok")
 (put err 10)
