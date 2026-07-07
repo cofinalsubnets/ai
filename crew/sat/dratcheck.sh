@@ -29,7 +29,7 @@ fi
 DRV='(: f (php @H@) nv (php-vars @H@)@PIN@
  _ (say out (+ "p cnf " (+ (show nv) (+ " " (+ (show (tally f)) "\n")))))
  _ (foldl (\ _ c (: _ (foldl (\ _ l (: _ (say out (show l)) (say out " "))) 0 c) _ (say out "0\n") 0)) 0 f)
- j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f nv)
+ j (jug 0) _ (pin fdrat0 () j) r (fcdcl f nv)
  _ (say out "c ==proof\n") _ (say out (slurp j))
  (? (id? r (\ unsat)) 0 (say err "dratcheck: not unsat?!\n")))'
 
@@ -46,5 +46,5 @@ check() { # $1 = row name, $2 = h, $3 = the extra pin form (or empty)
   else echo "$1 NOT VERIFIED"; fail=1; fi
 }
 for h in 5 6 7 8; do check "php$h" "$h" ""; done
-check php5raw 5 " _ (pin fbva0 0 0)"
+check php5raw 5 " _ (pin fbva0 () 0)"
 exit $fail

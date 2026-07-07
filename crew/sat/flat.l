@@ -569,12 +569,12 @@
        _ (pin s 'lvo (lvo-of nv)) _ (pin s 'rso (rso-of nv)) _ (pin s 'who (who-of nv)) _ (pin s 'vao (vao-of nv))
        _ (pin s 'ar (cask 4096)) _ (pin s 'wn (cask 4096))  ; words 0-1 of each reserved: 0 stays "none"
        _ (pin s 'bad 0)
-       _ (pin s 'nconf 0) _ (pin s 'rnum 1) _ (pin s 'climit (peep fru0 0 400)) _ (pin s 'rew 0)
-       _ (pin s 'mode 0) _ (pin s 'mconf 0) _ (pin s 'mbudget (peep fst0 0 10000)) _ (pin s 'sclimit 2000)
+       _ (pin s 'nconf 0) _ (pin s 'rnum 1) _ (pin s 'climit (peep fru0 () 400)) _ (pin s 'rew 0)
+       _ (pin s 'mode 0) _ (pin s 'mconf 0) _ (pin s 'mbudget (peep fst0 () 10000)) _ (pin s 'sclimit 2000)
        _ (pin s 'btop 0) _ (pin s 'bph (cask (* 8 (+ nv 1))))
-       _ (pin s 'learnts ()) _ (pin s 'nl 0) _ (pin s 'maxl (peep fmaxl0 0 2000))
+       _ (pin s 'learnts ()) _ (pin s 'nl 0) _ (pin s 'maxl (peep fmaxl0 () 2000))
        ks (fbcpk nv)
-       use (&& (two? ks) (= 0 (peep fknob 0 0)))
+       use (&& (two? ks) (= 0 (peep fknob () 0)))
        _ (pin s 'bcp  (? use (cap ks) fbcp3))
        _ (pin s 'conf (? use (caup ks) fconf3))
        _ (pin s 'dec  (? use (caup (cup ks)) fdec3))
@@ -600,7 +600,7 @@
              _ ((: (go v) (? (> v nv) 0 (: _ (putw fx (+ aco v) (>> (getw fx (+ aco v)) 8)) (go (+ v 1))))) 1)
              (putw fx 6 (>> vi 8)))
           (putw fx 6 vi)))
-   (fnext-restart s) (: rn (+ 1 (peep s 'rnum 1)) _ (pin s 'rnum rn) _ (pin s 'nconf 0) _ (pin s 'climit (* (luby rn) (peep fru0 0 400))) 0)
+   (fnext-restart s) (: rn (+ 1 (peep s 'rnum 1)) _ (pin s 'rnum rn) _ (pin s 'nconf 0) _ (pin s 'climit (* (luby rn) (peep fru0 () 400))) 0)
    (frephase s st)                                          ; randomize every saved phase; -> st'
     (: fx (peep s 'fx ()) nv (peep s 'nvars 0) pho (pho-of nv)
        ((: (go v st) (? (> v nv) st
@@ -641,7 +641,7 @@
        ; the tombstone stashes the slab's true length at cid+1 (nothing reads a dead
        ; clause's lits -- the size-0 check precedes every access), so fcompact can walk
        ; the arena without it.
-       j (peep fdrat0 0 0)
+       j (peep fdrat0 () 0)
        _ (foldl (\ _ cid (: n (getw ar cid)
                             _ (? (hot? j) (fdsay j "d " (map fdlit (fclits s cid))) 0)
                             _ (putw ar cid 0) _ (putw ar (+ cid 1) n) 0)) 0 (keys dead))
@@ -719,7 +719,7 @@
                     r ((peep s 'conf ()) fx (peep s 'ar ()) (peep s 'wn ()) confl)
                     (? (= r -1) 'unsat
                        (: cid (>> r 6) glue (& r 63)
-                          _ (: j (peep fdrat0 0 0)              ; the learnt is RUP: log it
+                          _ (: j (peep fdrat0 () 0)              ; the learnt is RUP: log it
                                (? (hot? j) (fdsay j "" (map fdlit (fclits s cid))) 0))
                           _ (? (< 1 (getw (peep s 'ar ()) cid))     ; size >= 2: track for reduction
                                (: _ (pin s 'learnts (link (link cid glue) (peep s 'learnts ())))
@@ -732,7 +732,7 @@
                          (> (peep s 'nl 0) (peep s 'maxl 2000))))
                     (: _ (fbackjump s 0) _ (fnext-restart s)
                        _ (? (> (peep s 'nl 0) (peep s 'maxl 2000)) (freduce s) 0)
-                       _ (? (> (getw fx 4) (peep fcmp0 0 1048576)) (fcompact s) 0)
+                       _ (? (> (getw fx 4) (peep fcmp0 () 1048576)) (fcompact s) 0)
                        ; STABLE/FOCUSED alternation on a growing conflict budget (fst0,
                        ; x3/2 per switch): focused = the luby schedule; stable = rare
                        ; GEOMETRIC restarts (climit 2000 x6/5 within the phase) with
@@ -746,7 +746,7 @@
                        st2 (? (> (peep s 'mconf 0) (peep s 'mbudget 0))
                               (: m (peep s 'mode 0) _ (pin s 'mode (- 1 m)) _ (pin s 'mconf 0)
                                  _ (pin s 'mbudget (// (* (peep s 'mbudget 0) 3) 2))
-                                 (? (&& (= m 0) (> (peep frp0 0 0) 0))
+                                 (? (&& (= m 0) (> (peep frp0 () 0) 0))
                                     (: _ (pin s 'sclimit 2000)
                                        w (peep s 'rew 0) _ (pin s 'rew (+ w 1))
                                        ; random FIRST: at the first entry bph ~= the current
@@ -794,12 +794,12 @@
     (? (atom? r) (cap d) (= (cap d) (cap r)) (bva-x1 (cup d) (cup r)) (cap d))
    (fbva formula nvars)                                     ; -> (formula2 . nvars2), equisatisfiable
     (: cls (tablet 0) ckey (tablet 0) occ (tablet 0) ncid #0 nv #0
-       _ (pin nv 0 nvars)
+       _ (pin nv () nvars)
        addc (\ c0                                           ; canon + dedupe + index; drops tautologies
         (: c (sort (dedup-lits c0))
            (? (= 1 (taut? c)) 0
               (? (whole? (peep ckey c ())) 0                ; the sorted clause ITSELF is the key (chains key by value)
-                 (: cid (peep ncid 0 0) _ (pin ncid 0 (+ cid 1))
+                 (: cid (peep ncid () 0) _ (pin ncid () (+ cid 1))
                     _ (pin cls cid c) _ (pin ckey c cid)
                     _ (foldl (\ _ m (: _ (pin occ m (link cid (peep occ m ()))) 0)) 0 c)
                     1)))))
@@ -809,8 +809,8 @@
        orig (\ m (<= (>> (abs m) 0) nvars))                 ; an ORIGINAL-variable literal
        ofree (\ c (all orig c))                             ; ... clause of only those
        try (\ l                                             ; one greedy factoring attempt at l -> 1 if applied
-        (: mcls0 (? (&& (= 1 (peep fbvac0 0 0)) (! (orig l))) ()
-                    (? (= 1 (peep fbvac0 0 0)) (filter (\ cid (= 1 (ofree (peep cls cid ())))) (livec l))
+        (: mcls0 (? (&& (= 1 (peep fbvac0 () 0)) (! (orig l))) ()
+                    (? (= 1 (peep fbvac0 () 0)) (filter (\ cid (= 1 (ofree (peep cls cid ())))) (livec l))
                        (livec l)))
            (? (< (tally mcls0) 4) 0
               (: g ((: (grow mlit mcls red)                  ; extend M_lit while the reduction strictly grows
@@ -826,7 +826,7 @@
                                              (! (= (tally d) (tally c))) 0
                                              (! (= 1 (bva-sub? r d))) 0
                                              (: m (bva-x1 d r)
-                                                (? (&& (= 1 (peep fbvac0 0 0)) (! (orig m))) 0
+                                                (? (&& (= 1 (peep fbvac0 () 0)) (! (orig m))) 0
                                                    (member? m mlit) 0
                                                    (: _ (pin pc m (+ 1 (peep pc m 0)))
                                                       _ (pin pl m (link cid (peep pl m ()))) 0))))))
@@ -845,13 +845,13 @@
                  mlit (cap g) mcls (cup g)
                  nl (tally mlit) ncl (tally mcls)
                  (? (< (- (* nl ncl) (+ nl ncl)) 1) 0        ; apply only when it strictly shrinks the formula
-                    (: x (+ 1 (peep nv 0 0)) _ (pin nv 0 x)
+                    (: x (+ 1 (peep nv () 0)) _ (pin nv () x)
                        rs (map (\ cid (rem-lit l (peep cls cid ()))) mcls)
                        ; the proof lines, in RAT-checkable order: the definitions
                        ; (-x m) while NO clause carries x (blocked on -x), then the
                        ; x-clauses (RAT on x: every resolvent is an original (m r),
                        ; still present, or a tautology), then the originals deleted
-                       _ (: j (peep fdrat0 0 0)
+                       _ (: j (peep fdrat0 () 0)
                             (? (hot? j)
                                (: _ (foldl (\ _ m (: _ (fdsay j "" (L (- 0 x) m)) 0)) 0 mlit)
                                   _ (fdsay j "" (link x (map (\ m (- 0 m)) mlit)))
@@ -874,11 +874,11 @@
                            (filter (\ p (>= (cap p) 4)) (map (\ m (link (tally (livec m)) m)) (keys occ))))   ; cumulative find
                 ch (foldl (\ a p (+ a (try (cup p)))) 0 ls)                                           ; is a handful (a sweep
                 (? (&& (> ch 0)                                                                       ; costs a full pass; an
-                       (&& (> (* 16 (- (peep nv 0 0) nvars)) nvars)                                   ; incidental 6-of-300 is
-                           (&& (< r (peep fbvar0 0 8)) (< (peep nv 0 0) (+ (* 4 nvars) 64)))))        ; not worth another)
+                       (&& (> (* 16 (- (peep nv () 0) nvars)) nvars)                                   ; incidental 6-of-300 is
+                           (&& (< r (peep fbvar0 () 8)) (< (peep nv () 0) (+ (* 4 nvars) 64)))))        ; not worth another)
                    (round (+ r 1)) 0)))
            0)
-       (link (map (\ cid (peep cls cid ())) (keys cls)) (peep nv 0 0)))
+       (link (map (\ cid (peep cls cid ())) (keys cls)) (peep nv () 0)))
    (fcdcl formula nvars)
     ; the fbva LADDER: re-run the pass on its own output with the baseline lifted (level-1
     ; aux become "original" for level 2) while it keeps factoring SUBSTANTIALLY (> nvars/16
@@ -888,14 +888,14 @@
     ; that bump a deeper tree actively hurts, so the ladder rides the bump). an instance
     ; with nothing factorable exits after one pass (randoms: no ladder cost). models
     ; still project by the ORIGINAL nvars.
-    (: p (? (= 0 (peep fbva0 0 1)) (link formula nvars)
+    (: p (? (= 0 (peep fbva0 () 1)) (link formula nvars)
             ((: (go p k) (: p2 (fbva (cap p) (cup p))
                             (? (|| (<= (* 16 (- (cup p2) (cup p))) (cup p)) (>= k 3)) p2 (go p2 (+ k 1)))))
              (link formula nvars) 1))
        s (fmk (cap p) (cup p))
        r (? (= 1 (peep s 'bad 0)) 'unsat
             (: r (fsearch s) (? (id? r 'unsat) 'unsat (fextract s nvars))))
-       j (peep fdrat0 0 0)                                  ; cap an UNSAT proof with the empty clause
+       j (peep fdrat0 () 0)                                  ; cap an UNSAT proof with the empty clause
        _ (? (&& (hot? j) (id? r 'unsat)) (fdsay j "" ()) 0)
        r)
    (count-fcdcl formula nvars)                              ; #SAT by blocking clauses, on the flat engine
@@ -906,7 +906,7 @@
        (? (! (= dsat csat)) 0  (! csat) 1  (sat? c f)))
    (ffuzz k n m) (all (\ i (= 1 (fdiff (+ 1009 (* i 7919)) n m))) (jot k))
    (fboth f n)                                              ; kernels and twins agree, verdict for verdict
-    (: _ (pin fknob 0 1) a (fcdcl f n) _ (pin fknob 0 0) b (fcdcl f n)
+    (: _ (pin fknob () 1) a (fcdcl f n) _ (pin fknob () 0) b (fcdcl f n)
        (? (id? a 'unsat) (id? b 'unsat) (&& (! (id? b 'unsat)) (sat? b f))))
 
    ; --- the in-gate DRAT checker: RUP + RAT on the first literal, a from-scratch
@@ -994,32 +994,32 @@
     ; DRAT: an UNSAT solve's emitted proof re-checks against the ORIGINAL formula --
     ; pure RUP on the tiny ones, BVA's RAT lines on php(4), `d` lines under a tiny
     ; learnt cap. fd-check is the in-gate eye; crew/sat/dratcheck.sh aims drat-trim at php.
-    (: f '((1) (-1)) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f 1) _ (pin fdrat0 0 0)
+    (: f '((1) (-1)) j (jug 0) _ (pin fdrat0 () j) r (fcdcl f 1) _ (pin fdrat0 () 0)
        (&& (id? r 'unsat) (= 1 (fd-check f (fd-parse (slurp j))))))
-    (: f '((1 2) (1 -2) (-1 2) (-1 -2)) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f 2) _ (pin fdrat0 0 0)
+    (: f '((1 2) (1 -2) (-1 2) (-1 -2)) j (jug 0) _ (pin fdrat0 () j) r (fcdcl f 2) _ (pin fdrat0 () 0)
        (&& (id? r 'unsat) (= 1 (fd-check f (fd-parse (slurp j))))))
-    (: f (php 4) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f (php-vars 4)) _ (pin fdrat0 0 0)
+    (: f (php 4) j (jug 0) _ (pin fdrat0 () j) r (fcdcl f (php-vars 4)) _ (pin fdrat0 () 0)
        ps (fd-parse (slurp j))
        bad (map (\ st (? (&& (= 0 (cap st)) (= 2 (tally (cup st))))    ; negate a literal in every
                          (link 0 (link (- 0 (cap (cup st))) (cup (cup st)))) st))  ; 2-lit add line:
             ps)                                                        ; the checker must refuse
        (&& (id? r 'unsat) (&& (= 1 (fd-check f ps)) (= 0 (fd-check f bad)))))
-    (: keep (peep fmaxl0 0 0) _ (pin fmaxl0 0 24)
-       f (php 4) j (jug 0) _ (pin fdrat0 0 j) r (fcdcl f (php-vars 4))
-       _ (pin fdrat0 0 0) _ (pin fmaxl0 0 keep)
+    (: keep (peep fmaxl0 () 0) _ (pin fmaxl0 () 24)
+       f (php 4) j (jug 0) _ (pin fdrat0 () j) r (fcdcl f (php-vars 4))
+       _ (pin fdrat0 () 0) _ (pin fmaxl0 () keep)
        (&& (id? r 'unsat) (= 1 (fd-check f (fd-parse (slurp j))))))
     ; force the learnt-DB REDUCTION path hard (a tiny cap -> reduction every few restarts)
     ; and re-run the differential battery through it, both engines
-    (: keep (peep fmaxl0 0 0) _ (pin fmaxl0 0 24)
+    (: keep (peep fmaxl0 () 0) _ (pin fmaxl0 () 24)
        ok (&& (id? (fcdcl (php 5) (php-vars 5)) 'unsat)
               (&& (ffuzz 30 12 50) (fboth (php 4) (php-vars 4))))
-       _ (pin fmaxl0 0 keep) ok)
+       _ (pin fmaxl0 () keep) ok)
     ; force the REAL COMPACTION path the same way (a tiny arena threshold -> fcompact at
     ; every level-0 restart; its all-false-at-level-0 UNSAT verdict and cid remapping are
     ; only reachable here -- an untested fcompact once shipped a bogus SAT on uuf250)
-    (: keep (peep fcmp0 0 0) _ (pin fcmp0 0 64)
+    (: keep (peep fcmp0 () 0) _ (pin fcmp0 () 64)
        ok (&& (id? (fcdcl (php 5) (php-vars 5)) 'unsat)
               (&& (ffuzz 30 12 50) (= (count-fcdcl (cyclic 10) 10) (lucas 10))))
-       _ (pin fcmp0 0 keep) ok))
+       _ (pin fcmp0 () keep) ok))
  _ (say err (+ "crew/sat/flat: ok -- flat-arena CDCL == DPLL on 150 fuzzed + PHP(5) + #SAT==Lucas"
                (? (two? (fbcpk 8)) " (native bcp+conf+dec kernels live)\n" " (interpreted twins)\n"))))
