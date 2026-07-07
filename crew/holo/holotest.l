@@ -139,7 +139,12 @@
       (L "ucomisd"     "660f2ec8"               '((ucomisd f1 f0)))       ; ucomisd xmm1,xmm0 (sets flags)
       (L "stsd.disp"   "f20f114208"             '((stsd r2 8 f0)))        ; movsd [rdx+8],xmm0   (box store)
       (L "stsd.rsp"    "f20f110424"             '((stsd sp 0 f0)))        ; movsd [rsp],xmm0     (spill)
-      (L "ldsd.rsp"    "f20f100c24"             '((ldsd f1 sp 0))))       ; movsd xmm1,[rsp]     (reload)
+      (L "ldsd.rsp"    "f20f100c24"             '((ldsd f1 sp 0)))        ; movsd xmm1,[rsp]     (reload)
+      ;; the 4-byte single lane (the C `float` slot): widen/narrow + movss load/store
+      (L "cvtss2sd"    "f30f5ac1"               '((cvtss2sd f0 f1)))      ; cvtss2sd xmm0,xmm1 (single->double)
+      (L "cvtsd2ss"    "f20f5ac8"               '((cvtsd2ss f1 f0)))      ; cvtsd2ss xmm1,xmm0 (double->single)
+      (L "stss"        "f30f114208"             '((stss r2 8 f0)))        ; movss [rdx+8],xmm0
+      (L "ldss"        "f30f100b"               '((ldss f1 r3 0))))       ; movss xmm1,[rbx]
    _ (foldl (\ _ t (chk (at t 0) (at t 1) (at t 2))) 0 tests)
 
    ;; -- label addresses are exposed on the assemble result, for a loader/linker to read. --
@@ -265,6 +270,10 @@
       (L "a64.ucomisd"  "0020611e"          '((ucomisd f0 f1)))           ; fcmp  d0, d1
       (L "a64.stsd"     "400400fd"          '((stsd r2 8 f0)))            ; str   d0, [x2, #8]
       (L "a64.ldsd"     "610040fd"          '((ldsd f1 r3 0)))            ; ldr   d1, [x3]
+      (L "a64.cvtss2sd" "20c0221e"          '((cvtss2sd f0 f1)))          ; fcvt  d0, s1  (single -> double)
+      (L "a64.cvtsd2ss" "0140621e"          '((cvtsd2ss f1 f0)))          ; fcvt  s1, d0  (double -> single)
+      (L "a64.stss"     "400800bd"          '((stss r2 8 f0)))            ; str   s0, [x2, #8]
+      (L "a64.ldss"     "610040bd"          '((ldss f1 r3 0)))            ; ldr   s1, [x3]
       (L "a64.xorpd"    "841c242e"          '((xorpd f4 f4)))             ; eor   v4.8b, v4.8b, v4.8b  (zero a double)
       ;; the sized family, checked vs llvm-objdump
       (L "a64.ld1"      "80809f38"          '((ld1 r0 r4 -8)))            ; ldursb x0, [x4, #-8]

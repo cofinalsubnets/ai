@@ -278,6 +278,40 @@
       (! (cgn "int main() { _Static_assert(sizeof(int) == 5, \"bad\"); return 0; }"))
       (! (cgn "_Static_assert(0, \"nope\"); int main() { return 0; }"))))
 
+; --- the `float` scalar + the compound literal (stage 6d). float is 4 bytes in
+; memory but shares the double register lane (a load widens, a store narrows);
+; sizeof(float) is 4. a compound literal (type){init} parses to ('clit ty init),
+; an unnamed object whose ADDRESS is an lvalue. ---
+(: (cast src) (caup (cparse (caup (clex src))))
+   (cgn src) (: r (cparse (caup (clex src)))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r))) ()))
+   (cexp src) (: ast (cast (+ "int main() { return " (+ src "; }")))
+                 fn (cap (caup ast))
+                 items (caup (caup (cuup fn)))
+                 (caup (cap items)))
+   (assert
+      ; float parses as a scalar type; sizeof(float) is 4
+      (= (cast "int main() { float f = 1.5; return 0; }")
+         '(prog ((fn "main" () (blk ((decl (("f" float (flo 1.5)))) (ret (num 0))))))))
+      (= (cexp "sizeof(float)") '(num 4))
+      (= (cexp "sizeof(float*)") '(num 8))
+      ; a compound literal parses to ('clit ty init), address-takeable
+      (= (cexp "(int){7}") '(clit int (init ((num 7)))))
+      (= (cexp "&(int){7}") '(addr (clit int (init ((num 7))))))
+      ; the generator: the float value path -- locals, arithmetic, compare, the
+      ; calling convention, arrays, struct members, and a single-precision global
+      (two? (cgn "int main() { float a = 1.5; float b = 2.25; return (int)(a + b); }"))
+      (two? (cgn "int main() { float a = 3.0; return a < 5.0; }"))
+      (two? (cgn "float sc(float x, float k) { return x * k; } int main() { return (int)sc(2.5, 3.0); }"))
+      (two? (cgn "int main() { float a[2] = {1.5, 2.5}; return (int)(a[0] + a[1]); }"))
+      (two? (cgn "struct V { float x; int n; }; int main() { struct V v; v.x = 4.5; v.n = 2; return (int)v.x + v.n; }"))
+      (two? (cgn "float g = 6.25; int main() { return (int)g; }"))                 ; a float global -> a 4-byte single image
+      (! (cgn "int main() { float a = 1.0; return ~a; }"))                          ; ~ on a float is still invalid
+      ; the compound literal: a struct one address-taken and read, a scalar one
+      (two? (cgn "struct P { int a; int b; }; int f(struct P *p) { return p->a + p->b; } int main() { return f(&(struct P){10, 32}); }"))
+      (two? (cgn "int main() { int *p = &(int){42}; return *p; }"))
+      (two? (cgn "struct P { int a; int b; }; int main() { return (&(struct P){3, 4})->a; }"))))
+
 ; --- the preprocessor (stage 5): object/function macros, rescan, hidesets,
 ; # stringize, ## paste, variadics, and #if/#ifdef conditional const-expr eval.
 ; pps runs cpp (no includes) and joins the output tokens' spellings to a string. --
@@ -309,5 +343,5 @@
       (! (cpp (caup (clex "#if 1\nx")) ()))                            ; unterminated #if refuses
       (= (pps "#define E\nE + E") "+")))                               ; empty macro body vanishes
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / const-fold-or-refuse) ok")
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals ok")
 (put err 10)

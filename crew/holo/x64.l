@@ -233,6 +233,7 @@
            `('mulpd 102 89) `('addpd 102 88) `('subpd 102 92) `('divpd 102 94)
            `('mulsd 242 89) `('addsd 242 88) `('subsd 242 92) `('divsd 242 94)
            `('xorpd 102 87) `('pcmpeqd 102 118) `('andpd 102 84) `('psubq 102 251)
+           `('cvtss2sd 243 90) `('cvtsd2ss 242 90)                                    ; F3/F2 0F 5A /r  widen/narrow single<->double (the `float` lane)
            `('ucomisd 102 46)))                                                       ; 66 0F 2E /r  ucomisd xmm,xmm (sets flags)
    (xrex w r b) (? (|| (= w 1) (|| (>= r 8) (>= b 8))) (L (rex w (hi r) 0 (hi b))) ())   ; REX only when needed
    (emit-sse op d s)                                                                     ; xmm <- xmm two-address
@@ -256,6 +257,11 @@
       (: sn (xrn s) (catall (L (L 242) (xrex 0 sn (rn base)) (L 15 17) (mem sn base disp))))
    (emit-ldsd d base disp)                                                               ; (ldsd f base disp)  xmm(d) <- [base+disp]
       (: dn (xrn d) (catall (L (L 242) (xrex 0 dn (rn base)) (L 15 16) (mem dn base disp))))
+   ;; movss to/from MEMORY -- the 4-byte single lane (the C `float` slot). F3 0F 11 /r stores, F3 0F 10 /r loads.
+   (emit-stss base disp s)                                                               ; (stss base disp f)  [base+disp] <- xmm(s) (low 32)
+      (: sn (xrn s) (catall (L (L 243) (xrex 0 sn (rn base)) (L 15 17) (mem sn base disp))))
+   (emit-ldss d base disp)                                                               ; (ldss f base disp)  xmm(d) <- [base+disp] (low 32)
+      (: dn (xrn d) (catall (L (L 243) (xrex 0 dn (rn base)) (L 15 16) (mem dn base disp))))
 
    ;; the dispatch: one IR form -> its byte/fixup chunk.
    (x64-lower ins)
@@ -314,6 +320,8 @@
             (= op 'movqrx)   (emit-movqrx   (at ins 1) (at ins 2))                        ; (movqrx gp xmm)  gp <- xmm
             (= op 'stsd)     (emit-stsd     (at ins 1) (at ins 2) (at ins 3))             ; (stsd base disp xmm)  [base+disp] <- xmm
             (= op 'ldsd)     (emit-ldsd     (at ins 1) (at ins 2) (at ins 3))             ; (ldsd xmm base disp)  xmm <- [base+disp]
+            (= op 'stss)     (emit-stss     (at ins 1) (at ins 2) (at ins 3))             ; (stss base disp xmm)  [base+disp] <- xmm (4-byte single)
+            (= op 'ldss)     (emit-ldss     (at ins 1) (at ins 2) (at ins 3))             ; (ldss xmm base disp)  xmm <- [base+disp] (4-byte single)
             (two? (peep x64-alu op ())) (emit-alu op (at ins 1) (at ins 2) (at ins 3))
             (scare 'bad-op op)))
 

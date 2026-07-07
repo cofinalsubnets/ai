@@ -23,7 +23,9 @@
 ; string table char *m[] parses. still fenced: unsigned, struct params/returns
 ; BY VALUE (struct ASSIGNMENT walks), case labels past constants and enum
 ; names, local typedefs, and a bare TOP-LEVEL fn-pointer array (ptop lays its
-; own declarators, does not route through pdtor).
+; own declarators, does not route through pdtor). stage 6d adds the `float`
+; scalar (4-byte) and the compound literal ('clit ty init) -- an unnamed object
+; from a parenthesized type followed by a brace initializer, (type){ init }.
 (:
    ; token readers: t = (kind val line)
    (tkk t) (cap t) (tkv t) (caup t)
@@ -33,7 +35,7 @@
    (peekp ts s) (&& (two? ts) (tp? (cap ts) s))
    asnops (L (L "=" ()) (L "+=" '+) (L "-=" '-) (L "*=" '*) (L "/=" '/) (L "%=" '%)
              (L "&=" '&) (L "|=" '|) (L "^=" '^) (L "<<=" 'shl) (L ">>=" 'shr))
-   scalars '(char short int long void double)
+   scalars '(char short int long void double float)
    (passoc s tbl) (? (! (two? tbl)) ()
                      (= (cap (cap tbl)) s) (cap tbl)
                      (passoc s (cup tbl)))
@@ -49,7 +51,7 @@
    ; does a type begin here?
    (tkbty? ps t)
     (? (! (two? t)) ()
-       (= (tkk t) 'kw) (member? (tkv t) '(char short int long void double struct union enum))
+       (= (tkk t) 'kw) (member? (tkv t) '(char short int long void double float struct union enum))
        (= (tkk t) 'id) (? (peep (ps 'types) (tkv t) 0) 1 ())
        ())
 
@@ -60,7 +62,7 @@
    (tsz ps ty) (? (ptr? ty) 8
                   (arr? ty) (* (cauup ty) (tsz ps (caup ty)))
                   (stru? ty) (caup (peep (ps 'stag) (caup ty) 0))
-                  (= ty 'char) 1 (= ty 'short) 2 (= ty 'int) 4 8)
+                  (= ty 'char) 1 (= ty 'short) 2 (|| (= ty 'int) (= ty 'float)) 4 8)
    (talign ps ty) (? (ptr? ty) 8
                      (arr? ty) (talign ps (caup ty))
                      (stru? ty) (cauup (peep (ps 'stag) (caup ty) 0))
@@ -304,6 +306,9 @@
               (: tr (pcty ps (cup ts))
                  rest (? (two? tr) (want (caup tr) ")") ())
                  (? (! (two? rest)) ()
+                    (peekp rest "{")                    ; a compound literal (type){ init } -- an unnamed object
+                     (: iv (pinit ps rest)
+                        (? (two? iv) (L (L 'clit (cap tr) (cap iv)) (caup iv)) ()))
                     (: r (punary ps rest)
                        (? (two? r) (L (L 'cast (cap tr) (cap r)) (caup r)) ()))))
              (tkw? t 'sizeof)

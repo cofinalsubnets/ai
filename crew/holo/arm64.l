@@ -233,6 +233,11 @@
    (arm64-fmovrx g d) (: gn (rn g) dn (frn d) (le32 (| 0x9E660000 (| (<< dn 5) gn))))           ; FMOV Xg, Dd   (fpr -> gpr bits)  == movqrx
    (arm64-fst base disp s) (: tn (frn s) bn (rn base) (le32 (| 0xFD000000 (| (<< (// disp 8) 10) (| (<< bn 5) tn)))))   ; STR Ds, [base, #disp]  (disp a multiple of 8)
    (arm64-fld d base disp) (: dn (frn d) bn (rn base) (le32 (| 0xFD400000 (| (<< (// disp 8) 10) (| (<< bn 5) dn)))))   ; LDR Dd, [base, #disp]
+   ;; the 4-byte single lane (the C `float` slot): widen/narrow via FCVT, load/store an S-register (disp a multiple of 4).
+   (arm64-fcvt-widen  d s) (: dn (frn d) sn (frn s) (le32 (| 0x1E22C000 (| (<< sn 5) dn))))            ; FCVT Dd, Ss  (single -> double)  == cvtss2sd
+   (arm64-fcvt-narrow d s) (: dn (frn d) sn (frn s) (le32 (| 0x1E624000 (| (<< sn 5) dn))))            ; FCVT Sd, Ds  (double -> single)  == cvtsd2ss
+   (arm64-fsts base disp s) (: tn (frn s) bn (rn base) (le32 (| 0xBD000000 (| (<< (// disp 4) 10) (| (<< bn 5) tn)))))  ; STR Ss, [base, #disp]  (disp a multiple of 4)
+   (arm64-flds d base disp) (: dn (frn d) bn (rn base) (le32 (| 0xBD400000 (| (<< (// disp 4) 10) (| (<< bn 5) dn)))))  ; LDR Sd, [base, #disp]
    (arm64-xorpd d s) (: dn (frn d) sn (frn s) (le32 (| 0x2E201C00 (| (<< sn 16) (| (<< dn 5) dn)))))   ; EOR Vd.8B, Vd.8B, Vs.8B (zero a double when d==s; the grid's fvar-init)
 
    (arm64-lower ins)
@@ -287,6 +292,10 @@
             (= op 'movqrx)   (arm64-fmovrx (at ins 1) (at ins 2))
             (= op 'stsd)     (arm64-fst    (at ins 1) (at ins 2) (at ins 3))      ; (stsd base disp f)
             (= op 'ldsd)     (arm64-fld    (at ins 1) (at ins 2) (at ins 3))      ; (ldsd f base disp)
+            (= op 'cvtss2sd) (arm64-fcvt-widen  (at ins 1) (at ins 2))           ; (cvtss2sd d s)  single -> double
+            (= op 'cvtsd2ss) (arm64-fcvt-narrow (at ins 1) (at ins 2))           ; (cvtsd2ss d s)  double -> single
+            (= op 'stss)     (arm64-fsts   (at ins 1) (at ins 2) (at ins 3))      ; (stss base disp f)  4-byte single
+            (= op 'ldss)     (arm64-flds   (at ins 1) (at ins 2) (at ins 3))      ; (ldss f base disp)  4-byte single
             (= op 'xorpd)    (arm64-xorpd  (at ins 1) (at ins 2))                 ; zero a double (d==s)
             (= op 'ret)  (le32 0xD65F03C0)                     ; ret x30
             (= op 'sys)  (le32 0xD4000001)                     ; svc #0

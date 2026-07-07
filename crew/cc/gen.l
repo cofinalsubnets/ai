@@ -21,6 +21,10 @@
 ; rodata string), a static (name, fn-ptr) table (ai.c's nifs), &global,
 ; a decayed array. fenced and refused, not fudged: ptr+ptr, deref of a
 ; non-pointer, assigning to an array, struct params or returns by value.
+; stage 6d: the `float` scalar (4 bytes in memory, but a value in an xmm
+; register is ALWAYS a double -- a load widens, a store narrows), and the
+; compound literal ('clit ty init), an unnamed object filled into a frame
+; temp whose ADDRESS is the lvalue (so &(struct S){..} and (int){k} work).
 (:
    ; the gen state g (a tablet): 'n the label counter, 'off the frame's
    ; high-water offset, 'brk/'cnt the loop label stacks, 'glob the global
@@ -40,7 +44,7 @@
    (tsz g ty) (? (ptr? ty) 8
                  (arr? ty) (* (cauup ty) (tsz g (caup ty)))
                  (stru? ty) (caup (peep (g 'stag) (caup ty) 0))
-                 (= ty 'char) 1 (= ty 'short) 2 (= ty 'int) 4 8)
+                 (= ty 'char) 1 (= ty 'short) 2 (|| (= ty 'int) (= ty 'float)) 4 8)
    ; a member's (offset ty) off a struct type, | 'bad
    (fmem g ty name)
     (? (! (stru? ty)) 'bad
@@ -57,7 +61,11 @@
    ; its type is the flag; fbits is the compile-time IEEE-754 encoder; asflo/asint
    ; move a cgexpr result between the lanes (int<->double conversion); fcc maps a
    ; comparison to the UNSIGNED setcc ucomisd's flags want. --
-   (flo? ty) (= ty 'double)
+   ; a float and a double share the register lane: a value in an xmm register is
+   ; ALWAYS a 64-bit double; only MEMORY differs -- a `float` slot is 4 bytes, so
+   ; a load widens (ldss + cvtss2sd) and a store narrows (cvtsd2ss + stss). fldf/
+   ; fstf pick the lane by the DECLARED type; every loaded float types 'double.
+   (flo? ty) (|| (= ty 'double) (= ty 'float))
    (fbits x)                                        ; finite double -> its IEEE-754 u64 bits (ported from the glaze)
     (? (= x 0.0) 0
        (: s (? (< x 0.0) 1 0) ax (? (< x 0.0) (- 0.0 x) x)
@@ -65,6 +73,19 @@
           e  ((: (go e) (? (< ax (e 2.0)) (go (- e 1)) e)) eu)
           (+ (* s 9223372036854775808) (+ (* (+ e 1023) 4503599627370496)
              (int (* (- (/ ax (e 2.0)) 1.0) 4503599627370496.0))))))
+   (fbits32 x)                                      ; finite double -> its IEEE-754 SINGLE (u32) bits (a `float` image)
+    (? (= x 0.0) 0
+       (: s (? (< x 0.0) 1 0) ax (? (< x 0.0) (- 0.0 x) x)
+          eu ((: (go e) (? (<= ((+ e 1) 2.0) ax) (go (+ e 1)) e)) (int (/ (log ax) (log 2.0))))
+          e  ((: (go e) (? (< ax (e 2.0)) (go (- e 1)) e)) eu)
+          (+ (* s 2147483648) (+ (* (+ e 127) 8388608)
+             (int (* (- (/ ax (e 2.0)) 1.0) 8388608.0))))))
+   (fldf ty freg base off)                          ; load a float/double from [base+off] into freg (widen if float)
+    (? (= ty 'float) (L (L 'ldss freg base off) (L 'cvtss2sd freg freg))
+       (L (L 'ldsd freg base off)))
+   (fstf ty base off val)                           ; store val (a double in an xmm) to [base+off] as ty (narrow if float)
+    (? (= ty 'float) (L (L 'cvtsd2ss 'f2 val) (L 'stss base off 'f2))    ; f2 the narrow scratch (val untouched)
+       (L (L 'stsd base off val)))
    (asflo r) (? (flo? (cap r)) (caup r) (cat (caup r) (L (L 'cvtsi2sd 'f0 'r0))))   ; result -> f0 as a double
    (asint r) (? (flo? (cap r)) (cat (caup r) (L (L 'cvttsd2si 'r0 'f0))) (caup r))  ; result -> r0 as an int
    (fcc op) (? (= op 'lt) 'below (= op 'le) 'be (= op 'gt) 'above (= op 'ge) 'ae op)
@@ -77,6 +98,9 @@
           r))
    ; 8 little-endian bytes of a constant (the global initializer image)
    (le8s v) (: (go i acc) (? (< 7 i) (rev acc)
+                             (go (+ i 1) (link (& (>> v (* 8 i)) 255) acc)))
+              (go 0 ()))
+   (le4s v) (: (go i acc) (? (< 3 i) (rev acc)
                              (go (+ i 1) (link (& (>> v (* 8 i)) 255) acc)))
               (go 0 ()))
    (zeros n) (? (< n 1) () (link 0 (zeros (- n 1))))
@@ -95,6 +119,30 @@
        (? (two? e) (L 'loc (caup e) (cauup e))
           (: ge (peep (g 'glob) name 0)
              (? (two? ge) (L 'glo (cap ge) (caup ge)) 'bad))))
+
+   ; a fresh frame temp of type ty -> its (negative) offset. bumps the frame's
+   ; high-water like a local; used to give a compound literal a home.
+   (ntmp g ty) (: span (& (+ (tsz g ty) 7) -8)
+                  off (- 0 (+ (peep g 'off 0) span))
+                  _ (pin g 'off (+ (peep g 'off 0) span))
+                  off)
+   ; load a value from the address in r0, by type -- the deref/clit value tail
+   ; (arrays and functions decay to the address; a struct has no register value)
+   (loadval ty addrf)
+    (? (arr? ty) (L (L 'ptr (caup ty)) addrf)
+       (fn? ty) (L (L 'ptr ty) addrf)
+       (stru? ty) 'bad
+       (flo? ty) (L 'double (cat addrf (fldf ty 'f0 'r0 0)))
+       (L ty (cat addrf (L (L (ldop ty) 'r0 'r0 0)))))
+   ; the fill code for a compound literal at frame offset off: an aggregate zeroes
+   ; then fills (cgfill), a scalar unwraps its single-element brace and stores.
+   (clitcode g env off ty ini)
+    (? (|| (arr? ty) (stru? ty))
+        (: f (cgfill g env off ty ini)
+           (? (bad? f) 'bad (cat (cgzero off (& (+ (tsz g ty) 7) -8)) f)))
+       (: v (? (&& (two? ini) (= (cap ini) 'init))
+               (? (two? (caup ini)) (cap (caup ini)) (L 'num 0)) ini)
+          (cgstore g env off ty v)))
 
    ; -- lvalues: the ADDRESS lands in r0; answers (pointee-ty forms) | 'bad --
    (clval g env e)
@@ -117,6 +165,12 @@
                        (L (caup fm)
                           (cat (caup r)
                                (? (= (cap fm) 0) () (L (L 'add 'r0 'r0 (cap fm))))))))))
+          (= k 'clit)                               ; a compound literal is an lvalue: fill a temp, address it
+           (: ty (caup e) ini (caup (cup e))
+              off (ntmp g ty)
+              fill (clitcode g env off ty ini)
+              (? (bad? fill) 'bad
+                 (L ty (cat fill (L (L 'lea 'r0 'r4 off))))))
           'bad))
 
    ; -- expressions: answers (type forms) | 'bad, the value in r0 --
@@ -135,7 +189,7 @@
                     (? (arr? ty) (L (L 'ptr (caup ty)) (caup r))
                        (fn? ty) (L (L 'ptr ty) (caup r))     ; a fn-pointer member is its address
                        (stru? ty) 'bad               ; no struct VALUES in registers
-                       (flo? ty) (L 'double (cat (caup r) (L (L 'ldsd 'f0 'r0 0))))
+                       (flo? ty) (L 'double (cat (caup r) (fldf ty 'f0 'r0 0)))
                        (L ty (cat (caup r) (L (L (ldop ty) 'r0 'r0 0))))))))
           (= k 'var)
            (: en (vent g env (caup e))
@@ -148,10 +202,10 @@
                         (? (= (cap en) 'loc)
                            (L (L 'ptr (caup ty)) (L (L 'lea 'r0 'r4 (caup en))))
                            (L (L 'ptr (caup ty)) (L (L 'la 'r0 (caup en)))))
-                       (flo? ty)                     ; a double loads into f0 (ldsd)
+                       (flo? ty)                     ; a float/double loads into f0 (widened if float)
                         (? (= (cap en) 'loc)
-                           (L 'double (L (L 'ldsd 'f0 'r4 (caup en))))
-                           (L 'double (L (L 'la 'r1 (caup en)) (L 'ldsd 'f0 'r1 0))))
+                           (L 'double (fldf ty 'f0 'r4 (caup en)))
+                           (L 'double (cat (L (L 'la 'r1 (caup en))) (fldf ty 'f0 'r1 0))))
                        (? (= (cap en) 'loc)
                           (L ty (L (L (ldop ty) 'r0 'r4 (caup en))))
                           (L ty (L (L 'la 'r1 (caup en)) (L (ldop ty) 'r0 'r1 0))))))))
@@ -165,7 +219,7 @@
                     (? (arr? ty) (L (L 'ptr (caup ty)) (caup r))   ; pointee array: decay again
                        (fn? ty) (L (L 'ptr ty) (caup r))           ; *fp -- a function is its address
                        (stru? ty) 'bad                             ; no struct values
-                       (flo? ty) (L 'double (cat (caup r) (L (L 'ldsd 'f0 'r0 0))))
+                       (flo? ty) (L 'double (cat (caup r) (fldf ty 'f0 'r0 0)))
                        (L ty (cat (caup r) (L (L (ldop ty) 'r0 'r0 0))))))))
           (= k 'asn)
            (: lv (clval g env (caup e))
@@ -179,11 +233,11 @@
                            (cat (caup lv) (cat (L (L 'push 'r0))
                             (cat (caup rv) (cat (L (L 'pop 'r1))
                              (bcopy 0 (tsz g (cap lv)) ()))))))))
-                 (flo? (cap lv))                     ; a double store (addr in r1, value in f0)
+                 (flo? (cap lv))                     ; a float/double store (addr in r1, value in f0; narrow if float)
                   (: r (cgexpr g env (cauup e))
                      (? (bad? r) 'bad
                         (L 'double (cat (caup lv) (cat (L (L 'push 'r0))
-                         (cat (asflo r) (L (L 'pop 'r1) (L 'stsd 'r1 0 'f0))))))))
+                         (cat (asflo r) (cat (L (L 'pop 'r1)) (fstf (cap lv) 'r1 0 'f0))))))))
                  (: r (cgexpr g env (cauup e))
                     (? (bad? r) 'bad
                        (: ty (cap lv)
@@ -313,6 +367,9 @@
                            (L rt (cat pushcode (cat (L (L 'call (intern (caup head))))
                                                     (L (L 'add 'sp 'sp (+ pad (* 8 n))))))))))
                  (call-fixed g env head args direct ptys rt)))
+          (= k 'clit)                              ; a compound literal as a value: fill the temp, load it
+           (: lv (clval g env e)
+              (? (bad? lv) 'bad (loadval (cap lv) (caup lv))))
           (= k 'bin) (cgbin g env e)
           'bad))
    ; the fixed-arity call (SysV registers). params named uniquely so no lambda
@@ -436,7 +493,7 @@
    (cgstore g env off ty val)                       ; store a scalar value expr into [r4+off]
     (: r (cgexpr g env val)
        (? (bad? r) 'bad
-          (flo? ty) (cat (asflo r) (L (L 'stsd 'r4 off 'f0)))
+          (flo? ty) (cat (asflo r) (fstf ty 'r4 off 'f0))
           (cat (asint r) (cat (cvt ty 'r0) (L (L (stop ty) 'r4 off 'r0))))))
    (cgfill g env off ty ini)                        ; fill an aggregate at frame offset off (no zero)
     (? (= (cap ini) 'str) (? (arr? ty) (cgstr off (caup ini)) 'bad)
@@ -500,8 +557,10 @@
        ())
    (imgbytes g ty ini)                              ; a byte/fix list of length tsz(ty) | 'bad
     (? (! (two? ini)) (zeros (tsz g ty))
-       (= (cap ini) 'flo) (? (flo? ty) (le8s (fbits (caup ini))) 'bad)     ; a double literal -> 8 IEEE bytes
-       (= (cap ini) 'num) (? (aggish? ty) 'bad (flo? ty) (le8s (fbits (+ 0.0 (caup ini)))) (imnum g ty (caup ini)))
+       (= (cap ini) 'flo) (? (= ty 'float) (le4s (fbits32 (caup ini)))    ; a float literal -> 4 IEEE single bytes
+                             (flo? ty) (le8s (fbits (caup ini))) 'bad)     ; a double literal -> 8 IEEE bytes
+       (= (cap ini) 'num) (? (aggish? ty) 'bad (= ty 'float) (le4s (fbits32 (+ 0.0 (caup ini))))
+                             (flo? ty) (le8s (fbits (+ 0.0 (caup ini)))) (imnum g ty (caup ini)))
        (&& (= (cap ini) 'str) (arr? ty))
         (: t (caup ini) n (tsz g ty)
            (bs i acc) (? (<= n i) (rev acc) (bs (+ i 1) (link (? (< i (tally t)) (t i) 0) acc)))
@@ -563,7 +622,7 @@
                  (arr? ty) 'bad                          ; a bare-expr init of an array
                  (: r (cgexpr g env3 init)               ; a scalar (a pointer = string rides cgexpr -> la)
                     (? (bad? r) 'bad
-                       (flo? ty) (one (cup ps) env3 (cat acc (cat (asflo r) (L (L 'stsd 'r4 off 'f0)))))
+                       (flo? ty) (one (cup ps) env3 (cat acc (cat (asflo r) (fstf ty 'r4 off 'f0))))
                        (one (cup ps) env3
                             (cat acc (cat (asint r)
                                      (cat (cvt ty 'r0)
@@ -725,7 +784,7 @@
               env2 (link (L (cap p) off pty) env)
               (? (flo? pty)
                   (? (< 7 xmmi) 'bad
-                     (spill (cup ps) gpi (+ xmmi 1) env2 (cat acc (L (L 'stsd 'r4 off (xmmreg xmmi))))))
+                     (spill (cup ps) gpi (+ xmmi 1) env2 (cat acc (fstf pty 'r4 off (xmmreg xmmi)))))
                  (? (< 5 gpi) 'bad
                     (spill (cup ps) (+ gpi 1) xmmi env2 (cat acc (L (L 'st 'r4 off (nthr argregs gpi)))))))))
        ; a VARIADIC function reads its NAMED params off the caller's stack

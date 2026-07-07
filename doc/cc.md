@@ -346,6 +346,30 @@ two ideas to keep warm as the stages climb, neither committed yet:
    deferred (6d, small): the one compound literal and `float` (4-byte). the
    simplified ABI is a KNOWN gap: it does not interoperate with libc's printf
    until the gate wires real SysV varargs -- that's stage 7's linking moment.
+   THE `float` SCALAR + THE COMPOUND LITERAL (6d) LANDED 2026-07-07: the last two
+   items ai.c needs (typedef float ai_flo_t; the `mm` macro's &(struct ai_r){..}).
+   float is 4 bytes in MEMORY but shares the double register lane -- the core
+   invariant is that a value in an xmm register is ALWAYS a 64-bit double, so a
+   float LOAD widens (ldss + cvtss2sd) and a float STORE narrows (cvtsd2ss + stss);
+   every loaded float types 'double, and only the DECLARED type (float vs double,
+   read at the store/spill/global-image sites) drives the 4-vs-8-byte choice.
+   fldf/fstf pick the lane; a global float bakes a single-precision image (fbits32,
+   the 23-bit-mantissa cousin of fbits, + le4s). the ABI keeps floats as doubles in
+   the xmm registers (self-consistent within cc; the callee narrows on spill),
+   which is NOT gcc-SysV-compatible (deferred with varargs to stage 7's linker) but
+   matches gcc -O0 exactly for values representable in single AND double -- the
+   battery holds to those, so double intermediates round identically. holo grew
+   FOUR ops (x64 + arm64, both llvm-mc-verified, holotest 181->189): cvtss2sd,
+   cvtsd2ss (F3/F2 0F 5A; arm64 FCVT), ldss, stss (F3 0F 10/11 movss; arm64 LDR/STR
+   Sd, disp scaled by 4). the COMPOUND LITERAL (type){init} parses to ('clit ty
+   init): an unnamed object filled into a fresh frame TEMP (ntmp bumps the frame
+   high-water like a local), whose ADDRESS is the lvalue -- so clval handles it
+   (&(struct S){..}, (&(struct P){..})->a) and cgexpr loads it as a value (loadval,
+   the shared deref/decay tail); an aggregate zeroes-then-fills (cgfill), a scalar
+   unwraps its one-element brace. battery 68->70 (69-float: the whole value path +
+   ABI + a float global/struct; 70-compound-literal: struct + scalar literals
+   address-taken and read); law.l gains the float / clit goldens. RUNG 3 IS NOW
+   FEATURE-COMPLETE for ai.c's C subset; stage 7 (the linker + real SysV) is next.
 7. **THE GATE**: cc-built ai.c (+ host/*.c, system ld, ai_tco=0) boots the
    egg and runs `make test` green -- the corpus under a cc-built binary.
    this is the rung's aiutils-feature-complete moment.
