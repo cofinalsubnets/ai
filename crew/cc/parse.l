@@ -43,6 +43,7 @@
                 _ (pin t 'types (tablet 0))         ; typedef name -> ty
                 _ (pin t 'enums (tablet 0))         ; enum constant -> value
                 _ (pin t 'stag (tablet 0))          ; tag -> (fields size align)
+                _ (pin t 'sigs (tablet 0))          ; fn/proto name -> (rettype (paramty..)) for the call ABI
                 _ (pin t 'anon 0)                   ; the anonymous-tag counter
                 t)
    ; does a type begin here?
@@ -595,13 +596,13 @@
                       (? (! (&& (two? ts1) (= (tkk (cap ts1)) 'id))) ()
                          (: name (tkv (cap ts1))
                             ts2 (cup ts1)
-                            (? (peekp ts2 "(")                ; a function (the return type parsed, unused)
+                            (? (peekp ts2 "(")                ; a function (the return type rides the sig table)
                                (: rp (pparams ps (cup ts2) ())
                                   (? (! (two? rp)) ()
-                                     (peekp (caup rp) ";")
-                                      (L (L 'proto name) (cup (caup rp)))
-                                     (: b (pblock ps (caup rp))
-                                        (? (two? b) (L (L 'fn name (cap rp) (cap b)) (caup b)) ()))))
+                                     (: _ (pin (ps 'sigs) name (L rty (map caup (cap rp))))
+                                        (? (peekp (caup rp) ";") (L (L 'proto name) (cup (caup rp)))
+                                           (: b (pblock ps (caup rp))
+                                              (? (two? b) (L (L 'fn name (cap rp) (cap b)) (caup b)) ()))))))
                                ; a global declaration; the first declarator's stars came off `sr`
                                (: (one ts3 nm t2)                        ; t2 is the element type (stars included)
                                    (? (peekp ts3 "[")
@@ -641,7 +642,7 @@
    (cparse ts)
     (: ps (psnew ())
        (tops ts2 acc)
-        (? (! (two? ts2)) (? (two? acc) (L 1 (L 'prog (rev acc)) (ps 'stag)) ())
+        (? (! (two? ts2)) (? (two? acc) (L 1 (L 'prog (rev acc)) (ps 'stag) (ps 'sigs)) ())
            (: r (ptop ps ts2)
               (? (two? r) (tops (caup r) (link (cap r) acc)) ())))
        (tops ts ())))

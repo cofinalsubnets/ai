@@ -116,7 +116,7 @@
 ; --- the generator: one full golden, and the refusals that guard the seams ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r)) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r))) ()))
    ir (caup (cgn "int main() { return 42; }"))
    (assert
       (= ir '((call main) (mov r6 r0) (li r0 60) (sys)
@@ -143,7 +143,7 @@
 ; --- stage 4a: aggregates -- layout to the C rules, members, the new statements ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r)) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r))) ()))
    (cexpp pre e) (: ast (cast (+ pre (+ " int main() { return " (+ e "; }"))))
                     (last l) (? (two? (cup l)) (last (cup l)) (cap l))
                     fn (last (caup ast))
@@ -199,10 +199,10 @@
       (! (cgn "int a(int x){return x;} int (*t[1])(int) = {a}; int main() { return t[0](3); }"))))
 
 ; --- the double lane (stage 6a, the gem): float literals lex, `double` types,
-; the xmm value path, int<->double conversions, and the 6b fences refuse. ---
+; the xmm value path, int<->double conversions, and the calling convention. ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r)) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r))) ()))
    (tn ts k) (? (< k 1) (cap ts) (tn (cup ts) (- k 1)))
    irbits (caup (cgn "int main() { double d = 1.0; return (int)d; }"))
    (has op forms) (: (go l) (? (! (two? l)) () (&& (two? (cap l)) (= (cap (cap l)) op)) 1 (go (cup l))) (go forms))
@@ -228,12 +228,18 @@
       (two? (cgn "double g = 2.5; int main() { return (int)g; }"))                      ; a double global image
       (two? (cgn "int main() { double a[2] = {1.5, 2.5}; return (int)(a[0] + a[1]); }")); a double array + element load
       (two? (cgn "struct P { double x; int n; }; int main() { struct P p = {1.5, 2}; return (int)p.x + p.n; }"))
-      ; the 6b fences refuse (double params/returns/args need the xmm ABI)
-      (! (cgn "int f(double x) { return 1; } int main() { return 0; }"))               ; a double parameter
-      (! (cgn "double f() { return 1.5; } int main() { return 0; }"))                  ; a double return
-      (! (cgn "int f(int x) { return x; } int main() { return f(2.5); }"))             ; a double call argument
-      (! (cgn "int main() { double d = 3.5; return d; }"))                             ; a bare double return (needs (int))
-      (! (cgn "int main() { double a = 1.0; return ~a; }"))))                          ; ~ on a double is invalid
+      ; the xmm CALLING convention (6b): double params/returns/args ride f0..f7
+      (two? (cgn "int f(double x) { return (int)x; } int main() { return 0; }"))       ; a double parameter
+      (two? (cgn "double f() { return 1.5; } int main() { return (int)f(); }"))        ; a double return + read
+      (two? (cgn "double add(double a, double b) { return a + b; } int main() { return (int)add(1.5, 2.5); }"))
+      (two? (cgn "int f(int x) { return x; } int main() { return f(2.5); }"))          ; a double arg -> an int param converts
+      (two? (cgn "int main() { double d = 3.5; return d; }"))                          ; a double value, an int return truncates
+      (two? (cgn "int mix(int a, double b, int c) { return a + (int)b + c; } int main() { return mix(1, 2.5, 3); }"))
+      (two? (cgn "double add(double a, double b) { return a + b; } int main() { int i = add(2, 3); return i; }"))  ; a double result into an int slot truncates
+      (two? (cgn "int main() { int i = 3.5; return i; }"))                             ; a double literal into an int local
+      (two? (cgn "int main() { double d = 3.0; int n = 0; while (d) { d = d - 1.0; n++; } return n; }"))  ; a bare double condition (d != 0.0)
+      (two? (cgn "int main() { double d = 2.5; return d ? 9 : 4; }"))                  ; a double ternary condition
+      (! (cgn "int main() { double a = 1.0; return ~a; }"))))                          ; ~ on a double is still invalid
 
 ; --- the preprocessor (stage 5): object/function macros, rescan, hidesets,
 ; # stringize, ## paste, variadics, and #if/#ifdef conditional const-expr eval.
@@ -266,5 +272,5 @@
       (! (cpp (caup (clex "#if 1\nx")) ()))                            ; unterminated #if refuses
       (= (pps "#define E\nE + E") "+")))                               ; empty macro body vanishes
 
-(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/6b fences) ok")
+(say err "crew/cc/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) ok")
 (put err 10)

@@ -296,6 +296,30 @@ two ideas to keep warm as the stages climb, neither committed yet:
    battery 59->63 (arithmetic, the six compares, a loop accumulator + negate +
    ternary, doubles in arrays/structs/globals with pointer walks); law.l gains
    the float-literal/type/value-path/fence goldens. all match gcc -O0.
+   THE CALLING CONVENTION (6b) LANDED 2026-07-06: the xmm ABI, so double params,
+   returns, and arguments compile -- what 6a fenced. the parser now threads a
+   SIGNATURE table (ps 'sigs: name -> (rettype (paramty..)) from every fn
+   definition and prototype), returned as a 4th value from cparse and handed to
+   cgen; the AST shape is unchanged (no golden churn), and a function's own
+   return type is read back through the name already in `g 'fn`. cgfn spills each
+   parameter from its SysV register by type -- integers from r6 r5 r2 r1 r7 r8
+   (<=6), doubles from f0..f7 (<=8), SEPARATE counters. a call places each
+   argument by the callee's PARAM type (converting the arg to it -- an int into a
+   double slot cvtsi2sd's, a double into an int slot cvttsd2si's), or by the
+   arg's own type when the callee is unknown (an indirect call); the result rides
+   f0 for a double-returning callee, r0 otherwise. a `return <double>` in a
+   double function leaves f0; in an int function it truncates. the conversion
+   fixes rippled to every scalar-store site (a double value into an int local /
+   assignment / call arg goes through asint), and to every CONDITION site
+   (if/while/for/do/ternary/&&/|| fold a double to `d != 0.0` via ctest, since a
+   bare double left its bits in f0 where `cmp r0 0` reads garbage). the classify
+   bug paid: a scalar param type is an ATOM, so `(two? pty)` is false -- test
+   presence with `pty` itself (a type is truthy, () absent). battery 63->65
+   (double add/scale/poly with int->double and double->int arg conversion, a
+   double-returning recursion + a 6-double fan). still deferred to 6c: DEFINING
+   variadic functions (va_list/va_start/va_arg -- the register save area),
+   calling variadic functions (al = the vector-register count), _Static_assert,
+   the one compound literal, and `float` (4-byte).
 7. **THE GATE**: cc-built ai.c (+ host/*.c, system ld, ai_tco=0) boots the
    egg and runs `make test` green -- the corpus under a cc-built binary.
    this is the rung's aiutils-feature-complete moment.
