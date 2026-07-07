@@ -21,7 +21,7 @@
 
 ; #(…) reader macro: splices a list operand into (hash …), wraps an atom as (hash x) --
 ; a BOX. #() reads to the EMPTY MAP directly: the reader emits (tablet 0) -- () is the
-; zero-point, distinct from 0. hashes print as #(…), the empty map as (tablet 0).
+; zero-point, distinct from 0. hashes print as #(…), the empty map as #().
 (: ht #(1 100 2 200 3 300))
 (assert
  (book? ht)
@@ -34,18 +34,19 @@
  (= "#()" (show #()))                           ; #() is the empty map, and round-trips
  (= "#(1 \"hi\")" (show #(1 "hi"))))
 
-; # on a NON-LIST datum boxes it: #x = #(0 x), a fresh mutable hash pinning x
-; at 0 (the number) -- distinct from #() the empty map, since () (the zero-point)
-; is NOT 0. the reader emits (tablet 0) for #() directly (the # empty exception).
+; # on a NON-LIST datum boxes it: #x = #(() x), a fresh mutable hash pinning x
+; at () (the unit -- the do-nothing key is NOTHING, the 0->() flip) -- still distinct
+; from #() the empty map (one ()-keyed entry vs no entries). key 0 is a MISS now.
 (: bx #0)
 (assert
  (book? #0) !!#0 (= 1 $#0)                       ; a box is a nonempty 1-entry hash
- (= 0 (peep bx 0 9))                            ; the boxed value sits at key 0 (the number, not the empty)
- (= 9 (: _ (pin bx 0 9) (peep bx 0 0)))         ; ... and is mutable in place
- (= 5 (peep #5 0 0)) (= "s" (peep #"s" 0 0))    ; any scalar boxes (at key 0)
- (= 'a (peep (hash 'a) 0 0))                   ; (NB #'a SPLICES -- a quote form is a chain)
- (= "#(0 5)" (show #5))                      ; a box prints as #(0 v), reads back
- (= 7 (peep #(1 2 7) 0 0))                      ; an odd trailing operand lands in the box slot (key 0)
+ (= 0 (peep bx () 9))                           ; the boxed value sits at key () (the unit)
+ (= 9 (peep bx 0 9))                            ; ... and key 0 is a MISS (the flip's tell)
+ (= 9 (: _ (pin bx () 9) (peep bx () 0)))       ; ... and is mutable in place
+ (= 5 (peep #5 () 0)) (= "s" (peep #"s" () 0))  ; any scalar boxes (at the unit)
+ (= 'a (peep (hash 'a) () 0))                   ; (NB #'a SPLICES -- a quote form is a chain)
+ (= "#(() 5)" (show #5))                     ; a box prints as #(() v), reads back
+ (= 7 (peep #(1 2 7) () 0))                     ; an odd trailing operand lands in the box slot (the unit key)
  (= 2 (peep #(1 2 7) 1 0)))
 
 ; # reader macro wraps its operand in (pin …): #x -> (pin x)

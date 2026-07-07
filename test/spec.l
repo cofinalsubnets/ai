@@ -296,7 +296,7 @@
 ; apply ((t k) == (peep t k ()) -- a map is a lookup function, absence the zero point), and
 ; (missing t k) -- a present k answers, a miss is the missing condition (k the payload).
 (assert
- (: b #0 (&& (book? b) (1 = $b) (0 = (peep b 0 9)) (: _ (pin b 0 7) (7 = (b 0)))))
+ (: b #0 (&& (book? b) (1 = $b) (0 = (peep b () 9)) (: _ (pin b () 7) (7 = (b ())))))
  (book? #()) (0 = $#()) !#()                      ; #() is the empty map: 0 keys, falsy
  (: t #(1 10 2 20) (&& (20 = (peep t 2 0)) (20 = (t 2)) (99 = (peep t 9 99))))
  (10 = (missing #(1 10) 1)) (id? (:) (missing (tablet 0) 'k)) (0 = (missing #(1 0) 1))   ; missing: the conditioned read; presence beats value

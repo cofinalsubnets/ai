@@ -39,9 +39,9 @@
    ; --- a toy heap: a 16-aligned bump allocator over a map ---
    heap (tablet 0)                             ; address -> #(0 word0 1 word1)
    hp   #0                                      ; the bump pointer (a 1-cell box)
-   _    (pin hp 0 16)                           ; address 0 reserved as nil
-   (alloc w0 w1) (: a (peep hp 0 16)
-                    _ (pin hp 0 (+ a 16))
+   _    (pin hp () 16)                           ; address 0 reserved as nil
+   (alloc w0 w1) (: a (peep hp () 16)
+                    _ (pin hp () (+ a 16))
                     _ (pin heap a #(0 w0 1 w1))
                     a)                          ; return the raw 16-aligned address
    (cell a i)    (peep (peep heap a 0) i 0)

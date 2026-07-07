@@ -620,7 +620,7 @@
 ; at 0, so #5 = #(0 5) and #() IS #0 (() is 0); chains pin as usual, and an odd
 ; trailing operand lands in the 0 box slot. the empty hash is (tablet 0).
 (: (hashtx a) (? (atom? a) '(tablet 0)
-                 (atom? (cup a)) (list 'pin (hashtx 0) 0 (cap a))
+                 (atom? (cup a)) (list 'pin (hashtx 0) () (cap a))
                  (list 'pin (hashtx (cuup a)) (cap a) (caup a))))
 (:: 'hash (\ a (hashtx a)))
 
