@@ -1139,7 +1139,9 @@
                         (: ln (loopinfo-n e)
                            (? ln (memo e (\ l (njit-loop-n l (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))))))
                               (base-ev (autogroup (autonat (twolow (castbuild e))))))))))    ; fall-through: cask-build a string-accumulator loop (the jug threads as a loop param -> survives autogroup's pure passes), LOWER a complex(twin) grid to real-pairs (twolow), then glaze a float-grid nest / mutually-recursive arith group if either fits, else interpret
-   ev (? glaze-loaded? ev auto-ev)                             ; rebind the global: ev is now auto-native. On a RE-LOAD (glaze-loaded?) KEEP the baked auto-ev -- it captured the correct baked helpers, so the user's program runs through the working glaze; double-loading is a no-op, not a crash.
+   ev (? glaze-loaded? ev                                      ; rebind the global: ev is now auto-native. On a RE-LOAD (glaze-loaded?) KEEP the baked auto-ev -- it captured the correct baked helpers, so the user's program runs through the working glaze; double-loading is a no-op, not a crash.
+         (< 0 ai-tco) auto-ev
+         ev)                                                   ; a TRAMPOLINE build (ai-tco 0): glazed code Continues by tail-jump, which only the threaded VM honors -- stay the pure interpreter (the glaze book still installs for probes)
 )
 
 ; the module span closes here (opened by glaze-mark in emit.l): the names bound since

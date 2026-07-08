@@ -963,7 +963,12 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
    // max-charm/min-charm: this build's fixnum bounds, exposed so width-specific
    // tests gate on the real boundary (it differs on 32- vs 64-bit ports).
    {"max-charm", putcharm((ai_word)((uintptr_t)-1 >> 2))},
-   {"min-charm", putcharm(-(ai_word)((uintptr_t)-1 >> 2) - 1)}, };
+   {"min-charm", putcharm(-(ai_word)((uintptr_t)-1 >> 2) - 1)},
+   // ai-tco: 1 = the tail-threaded VM, 0 = the trampoline. glazed code CONTINUES
+   // by tail-jump (registers carry Ip/Hp/Sp), which only the threaded build
+   // honors -- auto.l reads this and keeps the pure interpreter on a trampoline
+   // build (a tco=0 host with the glaze installed segfaulted on its first hot loop).
+   {"ai-tco", putcharm(ai_tco)}, };
   g = ai_defn(g, def0, countof(def0));
   g = ai_defn(g, def1, countof(def1));
   g = ai_defn(g, frontend_defaults, countof(frontend_defaults));   // overridable by the frontend
