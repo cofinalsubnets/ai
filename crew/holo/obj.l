@@ -25,19 +25,20 @@
    ; is resolved in place when the section may (text-internal, pc-relative to a
    ; label defined here); otherwise it becomes a relocation record (off kind label)
    ; and W zero bytes hold its place (RELA overwrites the field outright).
-   (o-walk be items labels internal? off bacc racc)
+   (o-walk be items labels wkset internal? off bacc racc)
     (? (! (two? items)) (L (rev bacc) (rev racc))
        (: x (cap items)
           (? ((holo 'fix?) x)
               (: lbl ((holo 'fix-l) x) w ((holo 'fix-w) x) k ((holo 'fix-k) x)
-                 (? (&& (&& internal? (id? k 'rel32)) (o-has? labels lbl))
+                 (? (&& (&& internal? (id? k 'rel32))
+                        (&& (o-has? labels lbl) (! (o-has? wkset lbl))))   ; a weak target stays a reloc
                      (: tgt (peep labels lbl 0)
                         bs ((holo 'patch-with) be k tgt off w ((holo 'fix-a) x))
-                        (o-walk be (cup items) labels internal? (+ off w)
+                        (o-walk be (cup items) labels wkset internal? (+ off w)
                                 (cat (rev bs) bacc) racc))
-                    (o-walk be (cup items) labels internal? (+ off w)
+                    (o-walk be (cup items) labels wkset internal? (+ off w)
                             (cat (o-zeros w) bacc) (link (L off k lbl) racc))))
-             (o-walk be (cup items) labels internal? (+ off 1) (link x bacc) racc))))
+             (o-walk be (cup items) labels wkset internal? (+ off 1) (link x bacc) racc))))
    (o-zeros n) (? (< n 1) () (link 0 (o-zeros (- n 1))))
 
    ; the externals: labels referenced by a relocation but defined in NEITHER
@@ -70,15 +71,20 @@
    ; build the whole .o image. textforms/dataforms are cgen-obj's split IR,
    ; funcnames the DEFINED functions (global FUNC symbols), globnames the global
    ; variables (global OBJECT symbols). -> a byte list.
-   (objelf target textforms dataforms funcnames globnames)
+   (objelf target textforms dataforms funcnames globnames wknames)
     (: _ (? (id? target 'x64) 0 (scare 'obj-x64-only target))
        machine (peep elf-machines target 0)
        be (peep (holo 'backends) target ())
        tp ((holo 'lay) textforms be 0 () (tablet 0))  ; assemble each section at org 0
        dp ((holo 'lay) dataforms be 0 () (tablet 0))
        tlabels (cup tp) dlabels (cup dp)
-       tw (o-walk be (cap tp) tlabels 1 0 () ())
-       dw (o-walk be (cap dp) dlabels 0 0 () ())
+       ; a WEAK-defined function's callers must go through a RELOCATION -- an
+       ; in-place resolve would pin them to the local body, and the linker could
+       ; never redirect to a strong override
+       wkset (: t (tablet 0) (go ws) (? (! (two? ws)) t (: _ (pin t (intern (cap ws)) 1) (go (cup ws))))
+                (go wknames))
+       tw (o-walk be (cap tp) tlabels wkset 1 0 () ())
+       dw (o-walk be (cap dp) dlabels wkset 0 0 () ())
        tbytes (cap tw) trel (caup tw)
        dbytes (cap dw) drel (caup dw)
        exts (o-exts trel drel tlabels dlabels)
@@ -88,6 +94,8 @@
        fstart 3 gstart (+ 3 nfun) estart (+ (+ 3 nfun) nglob)
        extidx (: t (tablet 0) (go es i) (? (! (two? es)) t (: _ (pin t (cap es) (+ estart i)) (go (cup es) (+ i 1))))
                   (go exts 0))
+       fnidx (: t (tablet 0) (go fs i) (? (! (two? fs)) t (: _ (pin t (intern (cap fs)) (+ fstart i)) (go (cup fs) (+ i 1))))
+                (go funcnames 0))                    ; interned fn name -> its symbol index (weak-target relocs bind here)
 
        ; -- .strtab: every symbol's name (funcs, globs, exts as spellings) --
        symnames (cat funcnames (cat globnames (map (\ s (string s)) exts)))
@@ -99,7 +107,9 @@
        symbytes
         (: fsyms (: (go fs i acc) (? (! (two? fs)) acc
                                      (go (cup fs) (+ i 1)
-                                         (cat acc (o-sym (nthr stroffs i) 1 2 1 (peep tlabels (intern (cap fs)) 0)))))
+                                         (cat acc (o-sym (nthr stroffs i)
+                                                         (? (member? (cap fs) wknames) 2 1)   ; STB_WEAK: a strong def elsewhere wins
+                                                         2 1 (peep tlabels (intern (cap fs)) 0)))))
                     (go funcnames 0 ()))
            gsyms (: (go gs i acc) (? (! (two? gs)) acc
                                      (go (cup gs) (+ i 1)
@@ -123,7 +133,9 @@
         (: (go rs acc)
             (? (! (two? rs)) acc
                (: r (cap rs) off (cap r) lbl (caup (cup r))
-                  (? (o-has? dlabels lbl)
+                  (? (o-has? wkset lbl)               ; a weak-defined fn: bind its OWN symbol (overridable)
+                      (go (cup rs) (cat acc (o-rela off (peep fnidx lbl 0) r-plt32 -4)))
+                     (o-has? dlabels lbl)
                       (go (cup rs) (cat acc (o-rela off 2 r-pc32 (- (peep dlabels lbl 0) 4))))
                      (go (cup rs) (cat acc (o-rela off (peep extidx lbl 0) r-plt32 -4))))))
            (go trel ()))
@@ -131,7 +143,9 @@
         (: (go rs acc)
             (? (! (two? rs)) acc
                (: r (cap rs) off (cap r) lbl (caup (cup r))
-                  (? (o-has? tlabels lbl)
+                  (? (o-has? wkset lbl)               ; a weak fn's address in data: via its symbol too
+                      (go (cup rs) (cat acc (o-rela off (peep fnidx lbl 0) r-64 0)))
+                     (o-has? tlabels lbl)
                       (go (cup rs) (cat acc (o-rela off 1 r-64 (peep tlabels lbl 0))))
                      (o-has? dlabels lbl)
                       (go (cup rs) (cat acc (o-rela off 2 r-64 (peep dlabels lbl 0))))

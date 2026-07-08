@@ -420,7 +420,15 @@ test_cc: host out/host$(hsuf)/aicc
 	  $$cc_g -no-pie -o $(ho)/.vaexe $(ho)/.vamain.o $(ho)/.valib.o > /dev/null 2>&1 || { echo "FAIL ld cc-variadic + gcc-main"; exit 1; }; \
 	  $(ho)/.vaexe; a=$$?; \
 	  [ $$a -eq 42 ] || { echo "FAIL cc-variadic <- gcc-caller (SysV va ABI, got $$a want 42)"; exit 1; }; \
-	  echo "aicc: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop + SysV varargs cross-toolchain) ok"; \
+	  printf '__attribute__((weak)) int wpick(void){return 7;}\nint main(){return wpick() + 30;}\n' > $(ho)/.wklib.c; \
+	  printf 'int wpick(void){return 12;}\n' > $(ho)/.wkstr.c; \
+	  $m $(ho)/aicc -c $(ho)/.wklib.c $(ho)/.wklib.o > /dev/null 2>&1 || { echo "FAIL aicc -c weak"; exit 1; }; \
+	  $$cc_g -no-pie -o $(ho)/.wkdef $(ho)/.wklib.o > /dev/null 2>&1 && $(ho)/.wkdef; a=$$?; \
+	  [ $$a -eq 37 ] || { echo "FAIL weak default (got $$a want 37)"; exit 1; }; \
+	  $$cc_g -O0 -c -o $(ho)/.wkstr.o $(ho)/.wkstr.c; \
+	  $$cc_g -no-pie -o $(ho)/.wkovr $(ho)/.wklib.o $(ho)/.wkstr.o > /dev/null 2>&1 && $(ho)/.wkovr; a=$$?; \
+	  [ $$a -eq 42 ] || { echo "FAIL weak override (got $$a want 42)"; exit 1; }; \
+	  echo "aicc: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop + SysV varargs cross-toolchain + weak override) ok"; \
 	else echo "aicc: cc (laws only -- x86_64 e2e skipped on $$(uname -m)) ok"; fi
 # The neutral assembler (crew/holo/) + its x86-64 backend: every encoder golden is
 # objdump-checked (crew/holo/holotest.l). A host-only app (like sat) -- it rides the

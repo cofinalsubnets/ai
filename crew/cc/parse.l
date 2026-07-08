@@ -64,6 +64,21 @@
              (&& (= (tkk t) 'id) (member? (tkv t) qualid))
               (: r (cup ts) (? (peekp r "(") (pquals (skipbal (cup r) 1)) (pquals r)))
              ts)))
+   ; a leading __attribute__((..)) whose balance names `weak` -> the tokens after
+   ; the run; anything else (no attribute, or one without weak) -> ()
+   (weakat? ts)
+    (? (! (two? ts)) ()
+       (! (&& (= (tkk (cap ts)) 'id) (= (tkv (cap ts)) "__attribute__"))) ()
+       (: r (cup ts)
+          (? (! (peekp r "(")) ()
+             (: (wscan s d hit)
+                 (? (< d 1) (? hit s ())
+                    (! (two? s)) ()
+                    (peekp s "(") (wscan (cup s) (+ d 1) hit)
+                    (peekp s ")") (wscan (cup s) (- d 1) hit)
+                    (wscan (cup s) d (|| hit (&& (= (tkk (cap s)) 'id)
+                                                 (|| (= (tkv (cap s)) "weak") (= (tkv (cap s)) "__weak__"))))))
+                (wscan (cup r) 1 ())))))
    (passoc s tbl) (? (! (two? tbl)) ()
                      (= (cap (cap tbl)) s) (cap tbl)
                      (passoc s (cup tbl)))
@@ -71,6 +86,7 @@
    ; -- the parse state --
    (psnew _) (: t (tablet 0)
                 _ (pin t 'types (tablet 0))         ; typedef name -> ty
+                _ (pin t 'weaks ())                 ; __attribute__((weak)) function names
                 _ (pin t 'enums (tablet 0))         ; enum constant -> value
                 _ (pin t 'stag (tablet 0))          ; tag -> (fields size align)
                 _ (pin t 'sigs (tablet 0))          ; fn/proto name -> (rettype (paramty..)) for the call ABI
@@ -759,6 +775,13 @@
    (ptop ps ts)
     (? (peekp ts ";") (L (L 'tdef) (cup ts))          ; a stray top-level `;` -- an empty declaration
        (static? ts) (pstatic ps ts)
+       ; a leading __attribute__((weak)): parse past it and record the function's
+       ; name -- the .o emitter binds its symbol WEAK (a host override wins at link)
+       (two? (weakat? ts))
+        (: r (ptop ps (weakat? ts))
+           (? (! (two? r)) ()
+              (: _ (? (= (cap (cap r)) 'fn) (pin ps 'weaks (link (caup (cap r)) (ps 'weaks))) ())
+                 r)))
        ; `extern` data DECLARES, never defines: an init-less gdecl under a leading
        ; extern becomes ('xdecl pairs) -- addressable, no storage laid (the linker
        ; binds the defining object's symbol). protos/typedefs pass through untouched.
@@ -831,13 +854,31 @@
                                                (? (! (two? dr)) ()
                                                   (: r (one (caup dr) (cap (cap dr)) (caup (cap dr)))
                                                      (? (two? r) (more (caup r) (link (cap r) acc)) ()))))
+                                            ; a declarator whose type is a FUNCTION type (a function-type
+                                            ; typedef: ai.h's `lvm_t lvm_ret0, lvm_cur, ..;`) DECLARES a
+                                            ; function -- register its sig (the typedef carries the return),
+                                            ; lay NO storage (a gdecl here laid duplicate .data symbols)
                                             (: rest (want ts3 ";")
-                                               (? (two? rest) (L (L 'gdecl (rev acc)) rest) ())))
+                                               (fnp? pr) (: t (caup pr) (? (two? t) (= (cap t) 'fn) ()))
+                                               _ (: (regs l) (? (! (two? l)) ()
+                                                                (: p2 (cap l)
+                                                                   _ (? (fnp? p2)
+                                                                        (pin (ps 'sigs) (cap p2)
+                                                                             (L (? (two? (cup (caup p2))) (caup (caup p2)) 'long) () ()))
+                                                                        ())
+                                                                   (regs (cup l))))
+                                                    (regs acc))
+                                               vps (: (go2 l a2) (? (! (two? l)) a2
+                                                                    (go2 (cup l) (? (fnp? (cap l)) a2 (link (cap l) a2))))
+                                                      (go2 acc ()))
+                                               (? (! (two? rest)) ()
+                                                  (two? vps) (L (L 'gdecl vps) rest)
+                                                  (L (L 'tdef) rest))))
                                         (more (caup first) (L (cap first)))))))))))))))
    (cparse ts)
     (: ps (psnew ())
        (tops ts2 acc)
-        (? (! (two? ts2)) (? (two? acc) (L 1 (L 'prog (rev acc)) (ps 'stag) (ps 'sigs)) ())
+        (? (! (two? ts2)) (? (two? acc) (L 1 (L 'prog (rev acc)) (ps 'stag) (ps 'sigs) (ps 'weaks)) ())
            (: r (ptop ps ts2)
               (? (two? r) (tops (caup r) (link (cap r) acc)) ())))
        (tops ts ())))

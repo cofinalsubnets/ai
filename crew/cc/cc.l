@@ -49,7 +49,7 @@
     (: ps (cc-parse src)
        ob (cgen-obj (caup ps) (cauup ps) (caup (cuup ps)))
        _ (? (two? ob) () (udie 1 (+ "cc: codegen error in " src)))
-       bytes (objelf 'x64 (el ob 1) (el ob 2) (el ob 3) (el ob 4))
+       bytes (objelf 'x64 (el ob 1) (el ob 2) (el ob 3) (el ob 4) (el ps 4))
        _ (write-bytes dst bytes)
        (quit 0))
    (cc-main as)
