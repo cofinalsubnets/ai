@@ -435,7 +435,11 @@ test_cc: host out/host$(hsuf)/aicc
 	  $$cc_g -no-pie -o $(ho)/.rbexe $(ho)/.rbmain.o $(ho)/.rblib.o > /dev/null 2>&1 || { echo "FAIL ld rbx interop"; exit 1; }; \
 	  $(ho)/.rbexe; a=$$?; \
 	  [ $$a -eq 42 ] || { echo "FAIL callee-saved rbx across cc call (-O2 caller loop bound, got $$a want 42)"; exit 1; }; \
-	  echo "aicc: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop + SysV varargs cross-toolchain + weak override + callee-saved rbx) ok"; \
+	  printf 'static long cd(long n,long a){if(n==0)return a;return cd(n-1,a+1);}\nstatic long tb(long n);\nstatic long ta(long n){if(n==0)return 21;return tb(n-1);}\nstatic long tb(long n){if(n==0)return 22;return ta(n-1);}\nstatic long dp(long(*f)(long,long),long n){return f(n,0);}\nint main(void){long a=cd(50000000,0)/2500000;long b=ta(30000000);long c=dp(cd,1000000)/1000000;return (int)(a+b+c);}\n' > $(ho)/.sib.c; \
+	  $m $(ho)/aicc $(ho)/.sib.c $(ho)/.sibx > /dev/null 2>&1 || { echo "FAIL aicc sibcall"; exit 1; }; \
+	  $(ho)/.sibx; a=$$?; \
+	  [ $$a -eq 42 ] || { echo "FAIL sibcall flat recursion (50M-deep self + mutual + fn-ptr, got $$a want 42 -- a non-tail call would stack-overflow to 139)"; exit 1; }; \
+	  echo "aicc: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop + SysV varargs cross-toolchain + weak override + callee-saved rbx + guaranteed sibcalls) ok"; \
 	else echo "aicc: cc (laws only -- x86_64 e2e skipped on $$(uname -m)) ok"; fi
 # The neutral assembler (crew/holo/) + its x86-64 backend: every encoder golden is
 # objdump-checked (crew/holo/holotest.l). A host-only app (like sat) -- it rides the

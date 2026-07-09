@@ -80,6 +80,7 @@
       (L "st.disp32"   "48899c2400010000"      '((st sp 256 r3)))
       (L "lea.disp8"   "488d4710"              '((lea r0 r6 16)))
       (L "lea.neg"     "488d6424e0"            '((lea sp sp -32)))
+      (L "lean"        "488d4710"              '((lean r0 r6 16)))       ; cc's consumed frame address: lea's bytes, off the sibcall gate's books
       ;; stack
       (L "push.pop"    "5059"                  '((push r0) (pop r1)))
       (L "push.ext"    "41504158"              '((push r7) (pop r7)))

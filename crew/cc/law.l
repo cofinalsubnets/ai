@@ -133,6 +133,13 @@
               (li r0 42) (ld r3 r4 -8) (mov sp r4) (pop r4) (ret)
               (li r0 0) (ld r3 r4 -8) (mov sp r4) (pop r4) (ret)))
       (two? (cgn "int main() { int x=1; while (x<5) x++; return x; }"))
+      ; a RET-POSITION call tail-JUMPS (stage 8): the epilogue then (jmp F), no
+      ; (call F) -- so deep tail recursion runs flat and the lvm shape Continues
+      ; by jmp at ai_tco=1. a fn whose frame ESCAPES (& a local) keeps its calls.
+      (member? '(jmp rec) (caup (cgn "int rec(int n){ if(n==0) return 5; return rec(n-1); } int main(){ return rec(3); }")))
+      (! (member? '(call rec) (caup (cgn "int rec(int n){ if(n==0) return 5; return rec(n-1); } int main(){ return rec(3); }"))))
+      ; a frame-escaping fn keeps the plain call (the address outlives the frame)
+      (member? '(call g) (caup (cgn "int g(int*p){ return *p; } int h(int n){ int x=n; return g(&x); } int main(){ return h(3); }")))
       (! (cgn "int f() { return 1; }"))                      ; no main, no program
       (! (cgn "int main() { return y; }"))                   ; undeclared name
       (! (cgn "int main() { return 5=3; }"))                 ; not an lvalue

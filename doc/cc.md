@@ -596,9 +596,33 @@ two ideas to keep warm as the stages climb, neither committed yet:
    reversed made it linear: **4.3 seconds**. gates: 83-ternflo 84-nan + the
    rbx interop check. unions by value stay refused; running the cc build at
    ai_tco=1 (`make vmret`-honest sibcalls) is stage 8's flat-stack rung.
-8. **the fixpoint + the flat stack**: (a) determinism -- cc(cc(ai)) builds
-   byte-identical objects to cc(ai); (b) guaranteed sibcalls for the lvm
-   shape, ai_tco=1, `make vmret` honest, benches vs gcc recorded.
+8. **the fixpoint + the flat stack** (2026-07-08):
+   (a) THE FIXPOINT LANDED -- `cc(cc(ai))` is BYTE-IDENTICAL to `cc(ai)`. the
+   cc-built ai (tco=0), running aicc, compiles ai.c to an object bit-for-bit
+   the same as the host-built aicc does. self-hosting is a closed loop:
+   `cmp aiA.o aiB.o` where aiB.o = ai-cc0 compiling ai.c. (the self-hosted
+   compile is ~6x slower -- 24s vs 4s -- because the cc build runs the pure
+   interpreter, no glaze; correctness, not speed, is the fixpoint's claim.)
+   (b) GUARANTEED SIBCALLS LANDED -- a RET-position call tail-JUMPS: the
+   epilogue reloads rbx and `jmp F` replaces `call F`, so deep tail recursion
+   runs flat (the 50M-frame battery would need ~2GB of stack as plain calls;
+   flat, it's a loop) and the lvm shape Continues by jmp. the rewrite is a
+   LOCAL peephole (call immediately followed by the exact epilogue, or by a
+   join label leading to it -- the nested-ternary return), gated per fn by an
+   ESCAPE analysis: a frame address that becomes a VALUE (the & lane, a local
+   array decaying, a struct-value rep, va_start's save area) pins `fesc` and
+   the fn keeps all its calls; an lvalue's own load/store rides `lean` (lea's
+   bytes, invisible to the gate) and stays eligible. holo grew `lean`; the
+   overflow builtins' `&t` arg is argpos-exempt like a call arg. `make vmret`
+   on the cc build drops from ~all-lvm-suspects to the tail (the gcc host has
+   1). battery: the flat-recursion gate (self + mutual + fn-ptr) + gen laws
+   (a self-recursive tail is `jmp rec` not `call rec`; a frame-escaping fn
+   keeps its call).
+   STILL AHEAD: running the cc build ITSELF at ai_tco=1 with the glaze LIVE.
+   the tco=1 object links and boots and passes spec.l, but a glazed hot loop
+   crashes -- a SEPARATE cc-at-tco=1 miscompile (PROVEN sibcall-independent:
+   it crashes with the sibcall pass disabled too) where Sp threads wrong into
+   glazed-native entry. that + benches vs gcc are the flat-stack tail.
 9. **stretch, as appetite allows**: arm64 parity through the same holo
    seam (the IR is neutral; gen.l shouldn't care), our own static linker
    (elf.l already lays executables -- close the last binutils door), -g

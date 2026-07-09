@@ -287,6 +287,7 @@
             (= op 'ld)   (emit-ld   (at ins 1) (at ins 2) (at ins 3))
             (= op 'st)   (emit-st   (at ins 1) (at ins 2) (at ins 3))
             (= op 'lea)  (emit-lea  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'lean) (emit-lea  (at ins 1) (at ins 2) (at ins 3))    ; cc's CONSUMED frame address (an lvalue's own store eats it) -- same bytes, invisible to the sibcall escape gate
             (= op 'ldx)  (emit-ldx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (ldx d base index scale disp)
             (= op 'stx)  (emit-stx  (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (stx base index scale disp s)
             (= op 'leax) (emit-leax (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (leax d base index scale disp)

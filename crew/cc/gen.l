@@ -175,7 +175,10 @@
        (? (= k 'var)
            (: en (vent g env (caup e))
               (? (bad? en) 'bad
-                 (= (cap en) 'loc) (L (cauup en) (L (L 'lea 'r0 'r4 (caup en))))
+                 ; lean, not lea: an lvalue's address is CONSUMED by its own
+                 ; load/store -- the sibcall escape gate must not see it. the
+                 ; & lane flips it back to lea (there it really escapes).
+                 (= (cap en) 'loc) (L (cauup en) (L (L 'lean 'r0 'r4 (caup en))))
                  (L (cauup en) (L (L 'la 'r0 (caup en))))))
           (= k 'deref)
            (: r (cgexpr g env (caup e))
@@ -195,7 +198,7 @@
               off (ntmp g ty)
               fill (clitcode g env off ty ini)
               (? (bad? fill) 'bad
-                 (L ty (cat fill (L (L 'lea 'r0 'r4 off))))))
+                 (L ty (cat fill (L (L 'lea 'r0 'r4 off))))))   ; a real lea: the temp's address is the value (& pins via the addr lane, a call blocks via the window)
           'bad))
 
    ; -- expressions: answers (type forms) | 'bad, the value in r0 --
@@ -227,13 +230,15 @@
                   (? (peep (g 'fns) (caup e) ())     ; a function name is its address
                      (L (L 'ptr (fnty g (caup e))) (L (L 'la 'r0 (intern (caup e))))) 'bad)
                  (: ty (cauup en)
+                    ap? (peep g 'argpos ())
+                    _ (? (|| (stru? ty) (arr? ty)) (pin g 'argpos ()) ())
                     (? (stru? ty)                    ; a struct value is its ADDRESS (the sse2 rep)
                         (? (= (cap en) 'loc)
-                           (L ty (L (L 'lea 'r0 'r4 (caup en))))
+                           (: v (L ty (L (L 'lea 'r0 'r4 (caup en)))) (? ap? v (escan g v)))
                            (L ty (L (L 'la 'r0 (caup en)))))
                        (arr? ty)                     ; arrays decay to their address
                         (? (= (cap en) 'loc)
-                           (L (L 'ptr (caup ty)) (L (L 'lea 'r0 'r4 (caup en))))
+                           (: v (L (L 'ptr (caup ty)) (L (L 'lea 'r0 'r4 (caup en)))) (? ap? v (escan g v)))
                            (L (L 'ptr (caup ty)) (L (L 'la 'r0 (caup en)))))
                        (flo? ty)                     ; a float/double loads into f0 (widened if float)
                         (? (= (cap en) 'loc)
@@ -244,7 +249,10 @@
                           (L ty (L (L 'la 'r1 (caup en)) (L (ldop ty) 'r0 'r1 0))))))))
           (= k 'addr)
            (: r (clval g env (caup e))
-              (? (! (bad? r)) (L (L 'ptr (cap r)) (caup r))
+              ap? (peep g 'argpos ())
+              _ (pin g 'argpos ())
+              (? (! (bad? r))                        ; under & the lvalue's address ESCAPES: flip its leans to leas
+                 (: v (L (L 'ptr (cap r)) (unlean (caup r))) (? ap? v (escan g v)))
                  ; &f on a function name: same address as the bare use (no lvalue)
                  (&& (= (cap (caup e)) 'var) (peep (g 'fns) (caup (caup e)) ()))
                   (L (L 'ptr (fnty g (caup (caup e)))) (L (L 'la 'r0 (intern (caup (caup e))))))
@@ -374,11 +382,12 @@
            (: lv (cgexpr g env (caup e))                 ; the va_list struct pointer in r0
               rsa (peep g 'rsa 0) ngp (peep g 'vagp 0) nxmm (peep g 'vaxmm 0)
               (? (bad? lv) 'bad
-                 (L 'long (cat (caup lv)
-                   (L (L 'li 'r1 (* 8 ngp))         (L 'st4 'r0 0 'r1)     ; gp_offset = 8*named-gp
-                      (L 'li 'r1 (+ 48 (* 16 nxmm))) (L 'st4 'r0 4 'r1)    ; fp_offset = 48 + 16*named-xmm
-                      (L 'lea 'r1 'r4 16)  (L 'st 'r0 8 'r1)               ; overflow_arg_area = rbp+16
-                      (L 'lea 'r1 'r4 rsa) (L 'st 'r0 16 'r1))))))          ; reg_save_area = rbp+rsa
+                 (: _ (pin g 'fesc 1)                                       ; the va_list HOLDS frame addresses: no sibcalls here
+                    (L 'long (cat (caup lv)
+                      (L (L 'li 'r1 (* 8 ngp))         (L 'st4 'r0 0 'r1)   ; gp_offset = 8*named-gp
+                         (L 'li 'r1 (+ 48 (* 16 nxmm))) (L 'st4 'r0 4 'r1)  ; fp_offset = 48 + 16*named-xmm
+                         (L 'lea 'r1 'r4 16)  (L 'st 'r0 8 'r1)             ; overflow_arg_area = rbp+16
+                         (L 'lea 'r1 'r4 rsa) (L 'st 'r0 16 'r1)))))))       ; reg_save_area = rbp+rsa
           (= k 'vaarg)
            (: lv (cgexpr g env (caup e)) ty (cauup e)    ; the va_list struct pointer in r0
               lov (nlab g ".vo") ld (nlab g ".vd")
@@ -430,7 +439,11 @@
                  (member? bi '("__builtin_add_overflow" "__builtin_sub_overflow" "__builtin_mul_overflow"))
                   (: e1 (cgexpr g env (cap args))
                      e2 (cgexpr g env (caup args))
-                     e3 (cgexpr g env (cauup args))
+                     ; the &t arg is consumed by the splice's own store -- argpos,
+                     ; like a call arg (else every overflow user loses sibcalls)
+                     e3 (: _ (? (member? (cap (cauup args)) '(addr var)) (pin g 'argpos 1) ())
+                           (cgexpr g env (cauup args)))
+                     _ (pin g 'argpos ())
                      opb (? (= bi "__builtin_add_overflow") (L 72 1 200)      ; add rax,rcx
                             (= bi "__builtin_sub_overflow") (L 72 41 200)     ; sub rax,rcx
                             (L 72 15 175 193))                                ; imul rax,rcx
@@ -478,7 +491,13 @@
    (call-fixed g env hd ags dir pts ret va?)
     (: (kls as i gpc xmmc ovc acc)                       ; classify + evaluate, L->R -> (((class idx) pushforms)..) | 'bad
         (? (! (two? as)) (rev acc)
-           (: a (cgexpr g env (cap as))
+           ; a DIRECT &x / array / struct-var argument is presumed dead once the
+           ; callee returns (the &Hp / &_res idiom): argpos exempts its lea from
+           ; the fesc pin, one-shot, cleared right after. the sibs WINDOW rule
+           ; still keeps the address out of a tail call's own staging.
+           (: a (: _ (? (member? (cap (cap as)) '(addr var)) (pin g 'argpos 1) ())
+                   (cgexpr g env (cap as)))
+              _ (pin g 'argpos ())
               (? (bad? a) 'bad
                  (: pty (nthty pts i)
                     aty (? pty pty (cap a))                ; classify by the param type if known, else the arg's
@@ -623,6 +642,75 @@
    ; loop bound rode ebx straight through gxr). every fn owns frame slot -8 for
    ; it: the prologue stores, this shared epilogue reloads.
    epi (L (L 'ld 'r3 'r4 -8) (L 'mov 'sp 'r4) (L 'pop 'r4) (L 'ret))
+
+   ; -- the SIBCALL pass (stage 8): a RET-position call tail-JUMPS instead, so
+   ; deep tail recursion runs flat and the lvm shape Continues by jmp at
+   ; ai_tco=1 (`make vmret` reads the disassembly). the rewrite is LOCAL:
+   ; (call F) followed by exactly the epilogue becomes epilogue + (jmp F) -- at
+   ; a ret-position call the operand stack is exactly the frame, and the
+   ; epilogue parks sp on the return address, a call's entry state, so the
+   ; callee answers our caller directly. (callr r3) parks the target in r10
+   ; first (the epilogue reloads r3). anything BETWEEN the call and the
+   ; epilogue -- an overflow-arg clean, a result conversion, a struct
+   ; materialization -- breaks the pattern and keeps the plain call. GATED per
+   ; fn: any (lea _ r4 _) means a frame address ESCAPES (a local's address, a
+   ; struct temp, a va register save area) and the frame must outlive every
+   ; call -- that fn keeps all its calls. the ESCAPE is tracked at the SOURCE
+   ; (the g 'fesc pin, reset per fn): clval's lea for ordinary assignment is
+   ; consumed by its own store and stays eligible -- only an address that
+   ; becomes a VALUE (the & lane, a local array decaying, a struct-value rep,
+   ; a compound literal, va_start's save area, the struct-return temp) pins.
+   (leas? fs) (? (! (two? fs)) ()
+                 (: f (cap fs)
+                    (? (&& (two? f) (&& (= (cap f) 'lea) (= (cauup f) 'r4))) 1
+                       (leas? (cup fs)))))
+   (escan g r) (: _ (? (&& (two? r) (leas? (caup r))) (pin g 'fesc 1) ()) r)
+   (unlean fs) (? (! (two? fs)) ()                   ; & makes a consumed address ESCAPE: lean -> lea, so the gate sees it
+                  (: f (cap fs)
+                     (link (? (&& (two? f) (= (cap f) 'lean)) (link 'lea (cup f)) f)
+                           (unlean (cup fs)))))
+   (epi4? fs) (&& (two? fs) (&& (= (cap fs) '(ld r3 r4 -8))
+              (: f2 (cup fs) (&& (two? f2) (&& (= (cap f2) '(mov sp r4))
+              (: f3 (cup f2) (&& (two? f3) (&& (= (cap f3) '(pop r4))
+              (: f4 (cup f3) (&& (two? f4) (= (cap f4) '(ret))))))))))))
+   ; lw = the WINDOW rule: a frame lea seen since the last call boundary means
+   ; the candidate's OWN staging may hand the callee a frame address (`return
+   ; f(&x)`, `return f(buf)`) -- that call stays a call; the boundary resets
+   ; the window (a consumed &Hp two statements up doesn't block the Continue).
+   ; a ternary's JOIN LABEL may sit between the call and the epilogue (lvm_eval's
+   ; Continue): the jump sequence lands BEFORE the labels and the labels + epi
+   ; stay -- the other arm still flows through them.
+   (lbl-epi? fs) (? (! (two? fs)) ()
+                    (&& (two? (cap fs)) (= (cap (cap fs)) 'label))
+                     (? (epi4? (cup fs)) 1 (lbl-epi? (cup fs)))
+                    ())
+   ; a nested-ternary return leaves each arm as (call F)(jmp JOIN) with JOIN
+   ; leading to the epilogue: elabs collects those epilogue labels first, and
+   ; a candidate followed by (jmp X), X collected, rewrites too (the dead jmp
+   ; drops -- nothing lands mid-instruction).
+   (elabs fs t) (? (! (two? fs)) t
+                   (: f (cap fs)
+                      _ (? (&& (two? f) (&& (= (cap f) 'label)
+                                            (|| (epi4? (cup fs)) (lbl-epi? (cup fs)))))
+                           (pin t (caup f) 1) ())
+                      (elabs (cup fs) t)))
+   (sibjmp f) (? (= (cap f) 'call)
+                 (L (L 'ld 'r3 'r4 -8) (L 'mov 'sp 'r4) (L 'pop 'r4) (L 'jmp (caup f)))
+                 (L (L 'mov 'r10 'r3) (L 'ld 'r3 'r4 -8) (L 'mov 'sp 'r4) (L 'pop 'r4) (L 'jmpr 'r10)))
+   (sibs fs lw el)
+    (? (! (two? fs)) ()
+       (: f (cap fs) r (cup fs)
+          lw2 (? (&& (two? f) (&& (= (cap f) 'lea) (= (cauup f) 'r4))) 1 lw)
+          cand (&& (! lw2) (&& (two? f) (|| (&& (= (cap f) 'call) (two? (cup f)))
+                                            (= f '(callr r3)))))
+          (? (&& cand (epi4? r))
+              (cat (sibjmp f) (sibs (cup (cup (cup (cup r)))) () el))
+             (&& cand (lbl-epi? r))
+              (cat (sibjmp f) (sibs r () el))
+             (&& cand (: nx (cap r) (&& (two? nx) (&& (= (cap nx) 'jmp) (peep el (caup nx) ())))))
+              (cat (sibjmp f) (sibs (cup r) () el))
+             (link f (sibs r (? (&& (two? f) (member? (cap f) '(call callr raw))) () lw2) el)))))   ; raw: a builtin splice consumes its address like a call
+   (sibcall g fs) (? (peep g 'fesc ()) fs (sibs fs () (elabs fs (tablet 0))))
 
    ; -- aggregate initializers: ('init (item..)), items plain | ('dfield
    ; name val) | ('didx n val), nesting for arrays of structs. shared bits: --
@@ -945,6 +1033,7 @@
    (cgfn g f)                                       ; ('fn name params ('blk items)) -> forms | 'bad
     (: params (cauup f)
        _ (pin g 'off 8)                              ; slot -8 = saved r3 (see epi)
+       _ (pin g 'fesc ())                            ; fresh escape flag (the sibcall gate reads it)
        _ (pin g 'fn (caup f))
        sig (peep (g 'sigs) (caup f) ())
        vararg (? (two? sig) (nthr sig 2) ())
@@ -999,11 +1088,12 @@
           (: body (cgitems g (caup sp0) (caup (caup (cuup f))) ())
              (? (bad? body) 'bad
                 (: frame (& (+ (peep g 'off 0) 15) -16)
-                   (cat (L (L 'label (intern (caup f)))
-                           (L 'push 'r4) (L 'mov 'r4 'sp) (L 'sub 'sp 'sp frame)
-                           (L 'st 'r4 -8 'r3))
-                    (cat (cap sp0)
-                     (cat body (cat (L (L 'li 'r0 0)) epi)))))))))
+                   (sibcall g
+                    (cat (L (L 'label (intern (caup f)))
+                            (L 'push 'r4) (L 'mov 'r4 'sp) (L 'sub 'sp 'sp frame)
+                            (L 'st 'r4 -8 'r3))
+                     (cat (cap sp0)
+                      (cat body (cat (L (L 'li 'r0 0)) epi))))))))))
 
    ; the data tail: globals in declaration order, then the string table
    (cgdata g)
