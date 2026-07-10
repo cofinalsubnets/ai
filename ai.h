@@ -42,11 +42,8 @@
 #endif
 
 // The generational collector is the ONLY collector: every frontend's g->alloc must supply the major
-// pool (host + the inle kernel both malloc), or ai_ini_0 fails. AI_STAT defaults ON -- it no longer
-// gates the mechanism, only names the (always-cheap) instrumentation `gauge` reports.
-#ifndef AI_STAT
-#define AI_STAT
-#endif
+// pool (host + the inle kernel both malloc), or ai_ini_0 fails. Its instrumentation (the counters
+// `gauge` reports) is always present and always cheap -- a handful of adds per (rare) collection.
 
 // port read-buffer size in bytes (the one buffered-io knob; a small device
 // shrinks it like ai_major0)
@@ -159,12 +156,12 @@ struct ai {
                         // young set lands later. See doc/gengc.md.
  // GENERATIONAL collector state -- ALWAYS present (it is the only collector; ai_ini_0 requires the
  // major pool). The counters are cheap (a handful of adds per collection, which is rare) and `gauge`
- // reports them; -DAI_STAT no longer gates them.
+ // reports them.
  uintptr_t n_gc, max_len, max_heap, // gc instrumentation (cycles, peak pool len, peak live heap; words)
            n_seen, n_evac;          // Σ over collections: heap occupancy entering each (scanned = live+dead) and survivors copied out (live). mortality = (n_seen-n_evac)/n_seen; copy-amp = n_evac/max_heap -- the generational-GC justifier (does the same live set get recopied every cycle?)
  // generational write-barrier AUDIT (stage 2): the remembered set -- old objects that hold a young
- // pointer (recorded by the barrier at ai_mapput/map_grow). A malloc'd buffer: AI_STAT is host-only,
- // so the freestanding kernel never sees this. gen_audit walks the old region each collection and
+ // pointer (recorded by the barrier at ai_mapput/map_grow). A malloc'd buffer (via g->alloc, like the
+ // major pool it audits). gen_audit walks the old region each collection and
  // counts rem_miss = old->young edges the barrier failed to remember (a soundness hole for the minor).
  ai_word *rem; uintptr_t rem_cap, rem_n, rem_hi, rem_miss;
  // the DIRTY flag: a non-map write hit an old cell (reader set-tail / poke into a tenured thread /
@@ -172,7 +169,7 @@ struct ai {
  // collection with dirty set must be a MAJOR (full); dirty clear -> a minor is sound. Cleared on
  // every collection. The audit runs only when clear, so it proves a minor would lose nothing.
  uintptr_t dirty;
- // stage 3: the MINOR + the MAJOR pool (AI_STAT/host only). The main pool is now a pure MINOR pool
+ // stage 3: the MINOR + the MAJOR pool. The main pool is now a pure MINOR pool
  // (the whole heap [end,hp) is young -- the `minor` watermark stays == end, never advanced); OLD lives
  // in the `major_pool`, a separate two-space (di) region. A MINOR evacuates the minor pool -> major-pool
  // active half (append) and resets hp=end; a MAJOR drains {minor pool + a full major-pool scan} -> the
