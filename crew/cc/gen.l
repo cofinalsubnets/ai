@@ -149,8 +149,10 @@
    (vent g env name)                                ; -> ('regv rN ty) | ('loc off ty) | ('glo lbl ty) | 'bad
     (: e (assoc name env)
        (? (two? e)
-           (: h (caup e)                             ; a homed param's "off" slot is a (reg rN) list
-              (? (&& (two? h) (= (cap h) 'reg)) (L 'regv (caup h) (cauup e)) (L 'loc h (cauup e))))
+           (: h (caup e)                             ; a homed param's "off" slot is a (reg rN) list;
+              (? (&& (two? h) (= (cap h) 'reg)) (L 'regv (caup h) (cauup e))   ; a block-scope static's is (glob lbl)
+                 (&& (two? h) (= (cap h) 'glob)) (L 'glo (caup h) (cauup e))
+                 (L 'loc h (cauup e))))
           (: ge (peep (g 'glob) name 0)
              (? (two? ge) (L 'glo (cap ge) (caup ge)) 'bad))))
 
@@ -915,6 +917,25 @@
                                           (L (L (stop ty) 'r4 off 'r0)))))))))))
        (one pairs env ()))
 
+   ; block-scope `static` ((name ty init)..): each name gets a UNIQUE global
+   ; laid in .bss/.data (persists across calls, one instance), NOT a stack slot.
+   ; the name binds in the LOCAL env to a (glob lbl) marker (so it shadows outer
+   ; names + is distinct per function), and vent turns that into a 'glo the same
+   ; read/write/& paths a file-scope global already use. no runtime init code --
+   ; a static's initializer is a compile-time constant image (cgdata emits it via
+   ; cgimage, exactly like a file-scope global; a non-constant init -> 'bad there).
+   ; -> (forms env) | 'bad, the same shape as cgdecl.
+   (cgsdecl g env pairs)
+    (: (one ps env2)
+        (? (! (two? ps)) (L () env2)
+           (: p (cap ps)
+              name (cap p) ty (caup p) init (cauup p)
+              lbl (nlab g (+ (g 'fn) "."))           ; `fn.N` -- the `.` bars any C-identifier collision
+              _ (pin (g 'glob) lbl (L lbl ty init))   ; a LOCAL data label (internal linkage): g 'statics,
+              _ (pin g 'statics (link lbl (g 'statics)))  ; NOT g 'globs -- a static is never an exported symbol
+              (one (cup ps) (link (L name (L 'glob lbl) ty) env2))))
+       (one pairs env))
+
    ; stmt -> forms | 'bad
    (cgstmt g env s)
     (: k (cap s)
@@ -964,6 +985,7 @@
               lc (nlab g ".c") ls (nlab g ".s") ld (nlab g ".d")
               ir (? (! (two? init)) (L () env)
                     (= (cap init) 'decl) (cgdecl g env (caup init))
+                    (= (cap init) 'sdecl) (cgsdecl g env (caup init))
                     (: r (cgexpr g env (caup init))
                        (? (bad? r) 'bad (L (caup r) env))))
               (? (bad? ir) 'bad
@@ -1037,6 +1059,10 @@
                                        (: r (cgdecl g env2 (caup it))
                                           (? (bad? r) 'bad
                                              (go (cup is) ls (caup r) (cat acc (cap r)))))
+                                      (= (cap it) 'sdecl)
+                                       (: r (cgsdecl g env2 (caup it))
+                                          (? (bad? r) 'bad
+                                             (go (cup is) ls (caup r) (cat acc (cap r)))))
                                       (: r (cgstmt g env2 it)
                                          (? (bad? r) 'bad
                                             (go (cup is) ls env2 (cat acc r)))))))
@@ -1053,6 +1079,10 @@
        (: it (cap items)
           (? (= (cap it) 'decl)
              (: r (cgdecl g env (caup it))
+                (? (bad? r) 'bad
+                   (cgitems g (caup r) (cup items) (cat acc (cap r)))))
+             (= (cap it) 'sdecl)
+             (: r (cgsdecl g env (caup it))
                 (? (bad? r) 'bad
                    (cgitems g (caup r) (cup items) (cat acc (cap r)))))
              (: r (cgstmt g env it)
@@ -1201,14 +1231,15 @@
               t (caup p)
               (strs (cup ss) (cat acc (L (L 'label (cap p))
                                          (L 'raw (cat (bts t (- (tally t) 1) ()) (L 0))))))))
-       (: gb (globs (rev (g 'globs)) ())
-          (? (bad? gb) 'bad (cat gb (strs (g 'strs) ())))))
+       (: gb (globs (rev (g 'globs)) ())              ; exported globals, then block-scope statics
+          sb (? (bad? gb) 'bad (globs (rev (g 'statics)) ()))   ; (local data labels), then strings
+          (? (|| (bad? gb) (bad? sb)) 'bad (cat gb (cat sb (strs (g 'strs) ()))))))
 
    ; the shared core: build the gen state, then TEXT (the functions, no _start)
    ; and DATA (globals + strings) separately -> (g textforms dataforms) | ().
    (cgen-core ast stbl sigs)
     (: g (: t (tablet 0) _ (pin t 'n 0) _ (pin t 'brk ()) _ (pin t 'cnt ())
-            _ (pin t 'glob (tablet 0)) _ (pin t 'globs ()) _ (pin t 'strs ())
+            _ (pin t 'glob (tablet 0)) _ (pin t 'globs ()) _ (pin t 'strs ()) _ (pin t 'statics ())
             _ (pin t 'fns (tablet 0)) _ (pin t 'stag stbl) _ (pin t 'sigs sigs) t)
        ; pass 0: every function name -- so a bare use of one is its address (la).
        ; the sig table too: an mproto sibling (`double sin(..), cos(..);`) has a

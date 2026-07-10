@@ -64,6 +64,19 @@
              (&& (= (tkk t) 'id) (member? (tkv t) qualid))
               (: r (cup ts) (? (peekp r "(") (pquals (skipbal (cup r) 1)) (pquals r)))
              ts)))
+   ; does the leading declaration-specifier run carry `static`? scans the front
+   ; run of qualifier + type-specifier keywords (and balance-skips attribute ids),
+   ; the same tokens pquals drops, and flags the `static` storage class -- so a
+   ; BLOCK-SCOPE `static` local is laid in .bss (a real global), not a stack slot
+   ; (a stack `static` is uninitialised garbage every call -- the ai_pagesize bug).
+   (leadstatic? ts)
+    (? (! (two? ts)) ()
+       (: t (cap ts)
+          (? (&& (= (tkk t) 'kw) (= (tkv t) 'static)) 1
+             (&& (= (tkk t) 'kw) (|| (member? (tkv t) qualkw) (member? (tkv t) tyspec))) (leadstatic? (cup ts))
+             (&& (= (tkk t) 'id) (member? (tkv t) qualid))
+              (: r (cup ts) (? (peekp r "(") (leadstatic? (skipbal (cup r) 1)) (leadstatic? r)))
+             ())))
    ; a leading __attribute__((..)) whose balance names `weak` -> the tokens after
    ; the run; anything else (no attribute, or one without weak) -> ()
    (weakat? ts)
@@ -587,6 +600,7 @@
    ; decl := TYPE [dtor [= asn] (, dtor [= asn])*] ;
    (pdecl ps ts)
     (: br (pbty ps ts)
+       stat (leadstatic? ts)                          ; block-scope `static` -> ('sdecl ..), laid in .bss
        (? (! (two? br)) ()
           (: base (cap br) ts0 (caup br)
              (? (peekp ts0 ";") (L (L 'decl ()) (cup ts0))   ; a bare definition (struct S {..};)
@@ -608,7 +622,7 @@
                        (? (! (two? r)) ()
                           (peekp (caup r) ",") (more (cup (caup r)) (link (cap r) acc))
                           (: rest (want (caup r) ";")
-                             (? (two? rest) (L (L 'decl (rev (link (cap r) acc))) rest) ()))))
+                             (? (two? rest) (L (L (? stat 'sdecl 'decl) (rev (link (cap r) acc))) rest) ()))))
                    (more ts0 ()))))))
 
    (pstmt ps ts)
