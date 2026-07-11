@@ -20,64 +20,62 @@
 ; dispatcher is the one thing that fires. ONE body-having `:` -- the registry, the
 ; thin mains that live here (diff over the engines, as over the holo book), and the
 ; dispatch as the body; nothing leaks, and every path ends in a quit (the exit door).
-(: (read-text p) (: q (open p "r") (? q (: t (slurp q) _ (close q) (L 1 t)) ()))   ; (1 text) | ()
+(: (read-text p) (: q (open p "r") (? q (: t (slurp q) _ (close q) `(1 t)) ()))   ; (1 text) | ()
    (die m) (: _ (say err m) _ (put err 10) (quit 2))
 
    ; diff: two files -> unified hunks on out; the classic exit triple
    (diff-main as)
-    (? (! (two? (cup as))) (die "usage: au diff OLD NEW")
-       (: fa (cap as) fb (caup as)
+    (? (! (two? >as)) (die "usage: au diff OLD NEW")
+       (: fa <as fb <>as
           ta (read-text fa) tb (read-text fb)
-          _ (? (two? ta) () (die (+ "diff: cannot open " fa)))
-          _ (? (two? tb) () (die (+ "diff: cannot open " fb)))
-          d (udiff fa fb (caup ta) (caup tb))
+          _ (? (two? ta) () (die ("diff: cannot open " + fa)))
+          _ (? (two? tb) () (die ("diff: cannot open " + fb)))
+          d (udiff fa fb <>ta <>tb)
           (? (nil? d) (quit 0)
              (: _ (puts d) _ (flush out) (quit 1)))))
 
    ; as: IR forms -> a runnable ELF (crew/holo/elf.l over the baked holo book)
    (as-main as)
-    (? (! (two? (cup (cup as)))) (die "usage: au as TARGET IN OUT   (TARGET: x64 | arm64)")
-       (: tgt (intern (cap as)) src (caup as) dst (caup (cup as))
-          _ (? (|| (= tgt 'x64) (|| (= tgt 'amd64) (|| (= tgt 'arm64) (= tgt 'aarch64)))) ()
-               (die (+ "as: unknown target " (cap as))))
+    (? (! (two? >>as)) (die "usage: au as TARGET IN OUT   (TARGET: x64 | arm64)")
+       (: tgt (intern <as) src <>as dst <>>as
+          _ (? (|| (tgt = 'x64) (|| (tgt = 'amd64) (|| (tgt = 'arm64) (tgt = 'aarch64)))) ()
+               (die ("as: unknown target " + <as)))
           q (open src "r")
-          _ (? q () (die (+ "as: cannot open " src)))
+          _ (? q () (die ("as: cannot open " + src)))
           e (nom 0)
           (rd acc) (: r (sound q e)
                       (? (id? r e) (rev acc)
-                         (id? r q) (die (+ "as: unfinished form in " src))
+                         (id? r q) (die ("as: unfinished form in " + src))
                          (rd (link r acc))))
           ir (rd ())
-          _ (? (two? ir) () (die (+ "as: no IR forms in " src)))
+          _ (? (two? ir) () (die ("as: no IR forms in " + src)))
           res (elf64 tgt (\ _ ir) ())
           _ (write-bytes dst (peep res 'bytes 0))
-          _ (say err (+ "as: wrote " dst)) _ (put err 10)
+          _ (say err ("as: wrote " + dst)) _ (put err 10)
           (quit 0)))
 
    ; the registry: name -> main (aliases share)
-   applets (: t (tablet 0)
-              _ (pin t 'diff diff-main)
-              _ (pin t 'nc ain-main) _ (pin t 'ain ain-main)
-              _ (pin t 'make cook-main) _ (pin t 'cook cook-main)
-              _ (pin t 'as as-main)
-              _ (pin t 'cat cat-main) _ (pin t 'echo echo-main)
-              _ (pin t 'head head-main) _ (pin t 'tail tail-main)
-              _ (pin t 'wc wc-main) _ (pin t 'sort sort-main)
-              _ (pin t 'uniq uniq-main) _ (pin t 'tee tee-main)
-              _ (pin t 'seq seq-main) _ (pin t 'yes yes-main)
-              _ (pin t 'true true-main) _ (pin t 'false false-main)
-              _ (pin t 'basename basename-main) _ (pin t 'dirname dirname-main)
-              _ (pin t 'cut cut-main) _ (pin t 'tr tr-main)
-              _ (pin t 'nl nl-main) _ (pin t 'rev rev-main)
-              _ (pin t 'ls ls-main) _ (pin t 'cp cp-main) _ (pin t 'mv mv-main)
-              _ (pin t 'rm rm-main) _ (pin t 'mkdir mkdir-main) _ (pin t 'rmdir rmdir-main)
-              _ (pin t 'ln ln-main) _ (pin t 'touch touch-main)
-              _ (pin t 'pwd pwd-main) _ (pin t 'chmod chmod-main)
-              _ (pin t 'grep grep-main) _ (pin t 'sed sed-main)
-              _ (pin t 'vi vi-main)
-              _ (pin t 'env env-main) _ (pin t 'sleep sleep-main)
-              _ (pin t 'kill kill-main) _ (pin t 'xargs xargs-main)
-              t)
+   applets #('diff diff-main
+             'nc ain-main 'ain ain-main
+             'make cook-main 'cook cook-main
+             'as as-main
+             'cat cat-main 'echo echo-main
+             'head head-main 'tail tail-main
+             'wc wc-main 'sort sort-main
+             'uniq uniq-main 'tee tee-main
+             'seq seq-main 'yes yes-main
+             'true true-main 'false false-main
+             'basename basename-main 'dirname dirname-main
+             'cut cut-main 'tr tr-main
+             'nl nl-main 'rev rev-main
+             'ls ls-main 'cp cp-main 'mv mv-main
+             'rm rm-main 'mkdir mkdir-main 'rmdir rmdir-main
+             'ln ln-main 'touch touch-main
+             'pwd pwd-main 'chmod chmod-main
+             'grep grep-main 'sed sed-main
+             'vi vi-main
+             'env env-main 'sleep sleep-main
+             'kill kill-main 'xargs xargs-main)
    (usage _) (: _ (say err "au -- the ai multi-call toolbox
 usage: au TOOL ARGS..     (or symlink a tool's name to au)
   diff OLD NEW       unified diff, patience hunks (0 same / 1 differ / 2 trouble)
@@ -95,7 +93,7 @@ usage: au TOOL ARGS..     (or symlink a tool's name to au)
 ")
                 (quit 2))
    (bn p) (: n (tally p)
-             (go k r) (? (< k n) (go (+ k 1) (? (= (p k) 47) (+ k 1) r)) (snip p r n))
+             (go k r) (? (k < n) (go (k + 1) (? ((p k) = 47) (k + 1) r)) (snip p r n))
              (go 0 0))
 
    ; -- the dispatch (this form's body) --
@@ -105,13 +103,13 @@ usage: au TOOL ARGS..     (or symlink a tool's name to au)
    ; -- a tool name (the symlink lane) runs that tool on the rest; anything else
    ; (au itself, a dev path) reads the next word as the tool.
    (seat a) (? (! (two? a)) ()
-               (= (cap a) "-l") (? (two? (cup a)) (seat (cuup a)) ())
+               (<a = "-l") (? (two? >a) (seat >>a) ())
                a)
-   (: s (seat (cup cmdline))
+   (: s (seat >cmdline)
       _ (? (two? s) () (usage ()))
-      f0 (applets (intern (bn (cap s))))
-      _ (? f0 (: _ (f0 (cup s)) (quit 0)) ())
-      t (cup s)
-      f (? (two? t) (applets (intern (cap t))) ())
-      _ (? f (: _ (f (cup t)) (quit 0)) ())
+      f0 (applets (intern (bn <s)))
+      _ (? f0 (: _ (f0 >s) (quit 0)) ())
+      t >s
+      f (? (two? t) (applets (intern <t)) ())
+      _ (? f (: _ (f >t) (quit 0)) ())
       (usage ())))
