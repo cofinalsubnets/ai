@@ -721,6 +721,49 @@
               (? (bad? lv) 'bad (loadval (vty lv) (vfs lv))))
           (= k 'bin) (cgbin g env e wnt)
           'bad))
+   ; a TARGETABLE gp register argument: pure and single-emission, reading only
+   ; an immediate, the frame, a home register, or a label -- so it skips the
+   ; push/pop cell entirely and lands straight in its own argument register,
+   ; emitted between the home spills and the pops (targets are disjoint; pops
+   ; read only sp cells). deferring a pure read past its siblings is the same
+   ; unspecified-order license the overflow-first emission already rides. a
+   ; homed-param read is the one cross-entry hazard (another targeted arg may
+   ; write its home first), so it carries BOTH emissions -- the home mov and
+   ; the spill-slot load -- and the caller picks by conflict.
+   ; -> ((ez i) forms) | ((ezm i rH) movforms ldforms) | 'no
+   (ezarg g env e pty i)
+    (: rT (nthr argregs i)
+       (fin ty fs) (: aty (? pty pty ty)
+                      (? (|| (flo? aty) (stru? aty)) 'no (L (L 'ez i) fs)))
+       (? (= (cap e) 'num) (fin 'long (L (L 'li rT (caup e))))
+          (= (cap e) 'str)
+           (: lbl (nlab g ".S")
+              _ (pin g 'strs (link (L lbl (caup e)) (g 'strs)))
+              (fin (L 'ptr 'char) (L (L 'la rT lbl))))
+          (= (cap e) 'addr)                          ; &var only: lea/la, argpos-equivalent (no escan)
+           (? (! (= (cap (caup e)) 'var)) 'no
+              (: en (vent g env (caup (caup e)))
+                 (? (bad? en) 'no
+                    (= (cap en) 'loc) (fin (L 'ptr (cauup en)) (L (L 'lea rT 'r4 (caup en))))
+                    (= (cap en) 'glo) (fin (L 'ptr (cauup en)) (L (L 'la rT (caup en))))
+                    'no)))
+          (! (= (cap e) 'var)) 'no
+          (: en (vent g env (caup e))
+             (? (bad? en) 'no
+                (: ty (cauup en)
+                   (? (= (cap en) 'regv)             ; a homed param: mov from the home, or ld its spill slot
+                       (? (|| (flo? (? pty pty ty)) (stru? (? pty pty ty))) 'no
+                          (: sl (assoc (caup en) (peep g 'homes ()))
+                             (? (! (two? sl)) 'no
+                                (L (L 'ezm i (caup en))
+                                   (L (L 'mov rT (caup en)))
+                                   (L (L 'ld rT 'r4 (caup sl)))))))
+                      (arr? ty)                      ; array decay: its address
+                       (? (= (cap en) 'loc) (fin (L 'ptr (caup ty)) (L (L 'lea rT 'r4 (caup en))))
+                          (fin (L 'ptr (caup ty)) (L (L 'la rT (caup en)))))
+                      (|| (stru? ty) (flo? ty)) 'no
+                      (= (cap en) 'loc) (fin ty (L (L (ldop ty) rT 'r4 (caup en))))
+                      (fin ty (L (L 'la rT (caup en)) (L (ldop ty) rT rT 0)))))))))   ; a global: la then a self-based load
    ; the SysV register call, stack overflow included: args 1..6 gp / 1..8 xmm ride
    ; registers, the REST ride the caller stack (arg7 shallowest). evaluation order is
    ; free in C, so the overflow group emits FIRST, then the register group, both
@@ -734,6 +777,10 @@
    (call-fixed g env hd ags dir pts ret va?)
     (: (kls as i gpc xmmc ovc acc)                       ; classify + evaluate, L->R -> (((class idx) pushforms)..) | 'bad
         (? (! (two? as)) (rev acc)
+           ; a targetable leaf skips the cell: classified 'ez/'ezm, emitted
+           ; straight into its argument register after the spills.
+           (: ez (? (< gpc 6) (ezarg g env (cap as) (nthty pts i) gpc) 'no)
+              (? (! (id? ez 'no)) (kls (cup as) (+ i 1) (+ gpc 1) xmmc ovc (link ez acc))
            ; a DIRECT &x / array / struct-var argument is presumed dead once the
            ; callee returns (the &Hp / &_res idiom): argpos exempts its lea from
            ; the fesc pin, one-shot, cleared right after. the sibs WINDOW rule
@@ -763,7 +810,7 @@
                           opush (cat aval (L (L 'push 'r0)))
                           (? (&& wd (< xmmc 8)) (kls (cup as) (+ i 1) gpc (+ xmmc 1) ovc (link (L (L 'x xmmc) rpush) acc))
                              (&& (! wd) (< gpc 6)) (kls (cup as) (+ i 1) (+ gpc 1) xmmc ovc (link (L (L 'g gpc) rpush) acc))
-                             (kls (cup as) (+ i 1) gpc xmmc (+ ovc 1) (link (L (L 'ov ovc) opush) acc)))))))))
+                             (kls (cup as) (+ i 1) gpc xmmc (+ ovc 1) (link (L (L 'ov ovc) opush) acc)))))))))))
        kr (kls ags 0 0 0 0 ())
        (? (bad? kr) 'bad
           (: ov? (\ kent (= (cap (cap kent)) 'ov))
@@ -771,13 +818,14 @@
                                      (go1 (cup l1) (? (ov? (cap l1)) (link (cap l1) acc1) acc1)))
                     (go1 kr ()))                          ; overflow entries, REVERSED (deepest pushes first)
              rgr (: (go2 l2 acc2) (? (! (two? l2)) acc2
-                                     (go2 (cup l2) (? (ov? (cap l2)) acc2 (link (cap l2) acc2))))
-                    (go2 kr ()))                          ; register entries, reversed (pops run forward)
+                                     (go2 (cup l2) (? (member? (cap (cap (cap l2))) '(g x x2))
+                                                      (link (cap l2) acc2) acc2)))
+                    (go2 kr ()))                          ; PUSHING register entries, reversed (pops run forward)
              (pushcat l3 acc3) (? (! (two? l3)) acc3 (pushcat (cup l3) (cat acc3 (caup (cap l3)))))
              pops (: (go4 l4 acc4)
                       (? (! (two? l4)) acc4
                          (: kc (cap (cap l4))
-                            (go4 (cup l4) (? (= (cap kc) 'ov) acc4
+                            (go4 (cup l4) (? (member? (cap kc) '(ov ez ezm)) acc4
                                              (cat acc4 (? (= (cap kc) 'g) (spop (nthr argregs (caup kc)))
                                                           (= (cap kc) 'x2)   ; the struct pair: re then im (a natural 16-byte cell)
                                                            (L (L 'pop 'r0) (L 'movqxr (xmmreg (caup kc)) 'r0)
@@ -803,12 +851,30 @@
              hs (peep g 'homes ())
              spills (foldl (\ a2 p2 (cat a2 (L (L 'st 'r4 (caup p2) (cap p2))))) () hs)
              relods (foldl (\ a2 p2 (cat a2 (L (L 'ld (cap p2) 'r4 (caup p2))))) () hs)
+             ; the targeted emissions, after the spills and before the pops: an
+             ; 'ezm home mov demotes to its spill-slot load when ANOTHER targeted
+             ; arg writes that home (a self-mov stays -- the fold drops it).
+             ezt (: (go6 l6 a6) (? (! (two? l6)) a6
+                                   (go6 (cup l6) (: kc (cap (cap l6))
+                                                    (? (member? (cap kc) '(ez ezm))
+                                                       (link (nthr argregs (caup kc)) a6) a6))))
+                    (go6 kr ()))
+             ezf (: (go7 l7 a7) (? (! (two? l7)) a7
+                                   (go7 (cup l7)
+                                        (: kc (cap (cap l7))
+                                           (? (= (cap kc) 'ez) (cat a7 (caup (cap l7)))
+                                              (! (= (cap kc) 'ezm)) a7
+                                              (: rH (cauup kc)
+                                                 (? (&& (member? rH ezt) (! (id? rH (nthr argregs (caup kc)))))
+                                                    (cat a7 (cauup (cap l7)))
+                                                    (cat a7 (caup (cap l7)))))))))
+                    (go7 kr ()))
              (? dir
-                 (mkv ret 'r0 (cat pf (cat spills (cat pops (cat setal (cat (L (L 'call (intern (caup hd)))) (cat clean relods)))))))
+                 (mkv ret 'r0 (cat pf (cat spills (cat ezf (cat pops (cat setal (cat (L (L 'call (intern (caup hd)))) (cat clean relods))))))))
                 (: hr (cgexpr g env hd)                   ; a function-pointer value: park in r3, callr
                    (? (bad? hr) 'bad
                       (mkv (fnret (vty hr)) 'r0 (cat pf (cat (tor0 g hr) (cat (L (L 'mov 'r3 'r0))
-                                (cat spills (cat pops (cat setal (cat (L (L 'callr 'r3)) (cat clean relods)))))))))))))))
+                                (cat spills (cat ezf (cat pops (cat setal (cat (L (L 'callr 'r3)) (cat clean relods))))))))))))))))
    (cgbin g env e wnt)
     (: op (caup e)
        lhs (cauup e) rhs (caup (cuup e))
