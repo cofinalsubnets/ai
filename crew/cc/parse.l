@@ -92,6 +92,32 @@
                     (wscan (cup s) d (|| hit (&& (= (tkk (cap s)) 'id)
                                                  (|| (= (tkv (cap s)) "weak") (= (tkv (cap s)) "__weak__"))))))
                 (wscan (cup r) 1 ())))))
+   ; the declaration's section attribute, if any: scan this form's tokens (to
+   ; the first depth-0 `;` or `{`) for `section ( "NAME" )` -- inside a
+   ; declaration that shape only occurs in an __attribute__. -> NAME | ()
+   (secat? ts)
+    (: (go s d) (? (! (two? s)) ()
+                   (: t (cap s)
+                      (? (&& (< d 1) (|| (tp? t ";") (tp? t "{"))) ()
+                         (tp? t "(") (go (cup s) (+ d 1))
+                         (tp? t ")") (go (cup s) (- d 1))
+                         (&& (= (tkk t) 'id) (= (tkv t) "section"))
+                          (? (&& (peekp (cup s) "(") (&& (two? (cuup s)) (= (tkk (cap (cuup s))) 'str)))
+                             (tkv (cap (cuup s)))
+                             (go (cup s) d))
+                         (go (cup s) d))))
+       (go ts 0))
+   (anyat? ts)                                       ; ANY leading __attribute__((..)): the rest | ()
+    (? (! (two? ts)) ()
+       (! (&& (= (tkk (cap ts)) 'id) (= (tkv (cap ts)) "__attribute__"))) ()
+       (: r (cup ts)
+          (? (! (peekp r "(")) ()
+             (: (ascan s d) (? (< d 1) s
+                               (! (two? s)) ()
+                               (peekp s "(") (ascan (cup s) (+ d 1))
+                               (peekp s ")") (ascan (cup s) (- d 1))
+                               (ascan (cup s) d))
+                (ascan (cup r) 1)))))
    (passoc s tbl) (? (! (two? tbl)) ()
                      (= (cap (cap tbl)) s) (cap tbl)
                      (passoc s (cup tbl)))
@@ -104,6 +130,9 @@
                 _ (pin t 'stag (tablet 0))          ; tag -> (fields size align)
                 _ (pin t 'sigs (tablet 0))          ; fn/proto name -> (rettype (paramty..)) for the call ABI
                 _ (pin t 'anon 0)                   ; the anonymous-tag counter
+                _ (pin t 'sfns (tablet 0))          ; top-level `static` fn names: LOCAL symbols in the .o
+                _ (pin t 'svars (tablet 0))         ; top-level `static` globals: internal linkage, never exported
+                _ (pin t 'sects (tablet 0))         ; global name -> its __attribute__((section "..")) string
                 t)
    ; does a type begin here?
    (tkbty? ps t)
@@ -786,21 +815,26 @@
                          (: rest (want ts3 ")")
                             (? (two? rest) (L (rev (link entry acc)) rest ()) ())))))))))
 
-   ; a comma-list of `*.. name (params)` function prototypes sharing one base type
-   ; (the return type is discarded -- cc calls untyped -- so only `base` seeds the
-   ; sig's return slot). registers each sig; answers the token stream after `;` | ().
+   ; a comma-list of `*.. name (params)` function prototypes sharing one base type.
+   ; each sibling's OWN stars ride into its sig's return slot -- dropping them read
+   ; `struct ai *ai_strof(..)` as a struct-by-value return, and every host-TU call
+   ; to an mproto sibling refused (invisible from ai.c: the DEFINITIONS re-pin).
+   ; registers each sig; answers (L rest-after-`;`) | ().
    (mproto ps base ts)
-    (: (skipstars s) (: s2 (pquals s) (? (peekp s2 "*") (skipstars (cup s2)) s2))
-       s0 (skipstars ts)
+    (: (stars s ty) (: s2 (pquals s) (? (peekp s2 "*") (stars (cup s2) (L 'ptr ty)) (L ty s2)))
+       sr (stars ts base)
+       rty (cap sr) s0 (caup sr)
        (? (! (&& (two? s0) (= (tkk (cap s0)) 'id))) ()
           (: nm (tkv (cap s0)) s1 (cup s0)
              (? (! (peekp s1 "(")) ()
                 (: rp (pparams ps (cup s1) ())
                    (? (! (two? rp)) ()
-                      (: _ (pin (ps 'sigs) nm (L base (map caup (cap rp)) (cauup rp)))
+                      (: _ (pin (ps 'sigs) nm (L rty (map caup (cap rp)) (cauup rp)))
                          af (caup rp)
                          (? (peekp af ",") (mproto ps base (cup af))
-                            (peekp af ";") (cup af)
+                            ; answer WRAPPED (L rest): a bare rest conflates the
+                            ; empty remainder (a proto list at EOF) with refusal
+                            (peekp af ";") (L (cup af))
                             ()))))))))
 
    ; a comma-list of typedef declarators sharing one base type (`typedef T a, b;`);
@@ -811,10 +845,18 @@
           (: _ (pin (ps 'types) (cap (cap dr)) (caup (cap dr)))
              af (caup dr)
              (? (peekp af ",") (tdeflist ps base (cup af))
-                (: rest (want af ";") (? (two? rest) (L (L 'tdef) rest) ()))))))
+                ; peek for the `;`: the remainder may be EMPTY (a typedef at EOF)
+                (peekp af ";") (L (L 'tdef) (cup af))
+                ()))))
 
-   ; the top level: typedefs, functions, globals, bare type definitions
+   ; the top level: typedefs, functions, globals, bare type definitions.
+   ; staticness + the section attribute are noted at ENTRY (the attribute-skip
+   ; lanes recurse, so the outermost sighting wins) and pinned per name by tops.
    (ptop ps ts)
+    (: _ (? (peep ps 'curstat ()) () (? (leadstatic? ts) (pin ps 'curstat 1) ()))
+       _ (? (peep ps 'cursect ()) () (: sc (secat? ts) (? sc (pin ps 'cursect sc) ())))
+       (ptop9 ps ts))
+   (ptop9 ps ts)
     (? (peekp ts ";") (L (L 'tdef) (cup ts))          ; a stray top-level `;` -- an empty declaration
        (static? ts) (pstatic ps ts)
        ; a leading __attribute__((weak)): parse past it and record the function's
@@ -824,6 +866,9 @@
            (? (! (two? r)) ()
               (: _ (? (= (cap (cap r)) 'fn) (pin ps 'weaks (link (caup (cap r)) (ps 'weaks))) ())
                  r)))
+       ; any OTHER leading __attribute__((..)) (noinline, section, ..): a hint
+       ; the codegen owes nothing -- skip it and parse the declaration proper
+       (two? (anyat? ts)) (ptop ps (anyat? ts))
        ; `extern` data DECLARES, never defines: an init-less gdecl under a leading
        ; extern becomes ('xdecl pairs) -- addressable, no storage laid (the linker
        ; binds the defining object's symbol). protos/typedefs pass through untouched.
@@ -858,7 +903,7 @@
                                            ; (size_t), free(void*)` / ai.h's `struct ai *ai_ini(void), *ai_ini_m(..)`)
                                            (peekp (caup rp) ",")
                                             (: rest (mproto ps base (cup (caup rp)))
-                                               (? (two? rest) (L (L 'proto name) rest) ()))
+                                               (? (two? rest) (L (L 'proto name) (cap rest)) ()))
                                            (: b (pblock ps (caup rp))
                                               (? (two? b) (L (L 'fn name (cap rp) (cap b)) (caup b)) ()))))))
                                ; a global declaration; the first declarator's stars came off `sr`
@@ -900,27 +945,46 @@
                                             ; typedef: ai.h's `lvm_t lvm_ret0, lvm_cur, ..;`) DECLARES a
                                             ; function -- register its sig (the typedef carries the return),
                                             ; lay NO storage (a gdecl here laid duplicate .data symbols)
-                                            (: rest (want ts3 ";")
-                                               (fnp? pr) (: t (caup pr) (? (two? t) (= (cap t) 'fn) ()))
-                                               _ (: (regs l) (? (! (two? l)) ()
-                                                                (: p2 (cap l)
-                                                                   _ (? (fnp? p2)
-                                                                        (pin (ps 'sigs) (cap p2)
-                                                                             (L (? (two? (cup (caup p2))) (caup (caup p2)) 'long) () ()))
-                                                                        ())
-                                                                   (regs (cup l))))
-                                                    (regs acc))
-                                               vps (: (go2 l a2) (? (! (two? l)) a2
-                                                                    (go2 (cup l) (? (fnp? (cap l)) a2 (link (cap l) a2))))
-                                                      (go2 acc ()))
-                                               (? (! (two? rest)) ()
-                                                  (two? vps) (L (L 'gdecl vps) rest)
-                                                  (L (L 'tdef) rest))))
+                                            ; `;` ends the declaration -- PEEK for it: the remainder may
+                                            ; be EMPTY (a global at EOF), which want's () would conflate
+                                            ; with the missing-semicolon refusal
+                                            (? (! (peekp ts3 ";")) ()
+                                               (: rest (cup ts3)
+                                                  (fnp? pr) (: t (caup pr) (? (two? t) (= (cap t) 'fn) ()))
+                                                  _ (: (regs l) (? (! (two? l)) ()
+                                                                   (: p2 (cap l)
+                                                                      _ (? (fnp? p2)
+                                                                           (pin (ps 'sigs) (cap p2)
+                                                                                (L (? (two? (cup (caup p2))) (caup (caup p2)) 'long) () ()))
+                                                                           ())
+                                                                      (regs (cup l))))
+                                                       (regs acc))
+                                                  vps (: (go2 l a2) (? (! (two? l)) a2
+                                                                       (go2 (cup l) (? (fnp? (cap l)) a2 (link (cap l) a2))))
+                                                         (go2 acc ()))
+                                                  (? (two? vps) (L (L 'gdecl vps) rest)
+                                                     (L (L 'tdef) rest)))))
                                         (more (caup first) (L (cap first)))))))))))))))
    (cparse ts)
     (: ps (psnew ())
+       ; note the completed form's staticness/section per declared name, then
+       ; clear the stashes for the next form
+       (note f)
+        (: st (peep ps 'curstat ()) sc (peep ps 'cursect ())
+           _ (? (&& st (member? (cap f) '(fn proto))) (pin (ps 'sfns) (caup f) 1) ())
+           _ (? (&& (= (cap f) 'gdecl) (|| st sc))
+                (: (go2 prs) (? (! (two? prs)) 1
+                                (: nm (cap (cap prs))
+                                   _ (? st (pin (ps 'svars) nm 1) ())
+                                   _ (? sc (pin (ps 'sects) nm sc) ())
+                                   (go2 (cup prs))))
+                   (go2 (caup f)))
+                ())
+           _ (pin ps 'curstat ())
+           (pin ps 'cursect ()))
        (tops ts2 acc)
-        (? (! (two? ts2)) (? (two? acc) (L 1 (L 'prog (rev acc)) (ps 'stag) (ps 'sigs) (ps 'weaks)) ())
+        (? (! (two? ts2)) (? (two? acc) (L 1 (L 'prog (rev acc)) (ps 'stag) (ps 'sigs) (ps 'weaks)
+                                           (ps 'sfns) (ps 'svars) (ps 'sects)) ())
            (: r (ptop ps ts2)
-              (? (two? r) (tops (caup r) (link (cap r) acc)) ())))
+              (? (two? r) (: _ (note (cap r)) (tops (caup r) (link (cap r) acc))) ())))
        (tops ts ())))

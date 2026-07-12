@@ -16,6 +16,27 @@ first, arm64 by parity. the closure it buys: ai-in-ai compiles the compiler
 that compiles ai.c, so userland is fully self-hosting and the KERNEL is the
 one imported artifact.
 
+**RUNG 2 LANDED 2026-07-12: EVERY out/host object compiles under aicc.** ai.c
+plus all thirteen host/*.c (cb/cuda/drm/fs/haven/image/image_baked/init/main/
+net/phos/pty) go through `aicc -c`, and clang links the bag -- gcc appears
+ONLY as the linker. The all-aicc binary boots and passes the whole 2831-test
+corpus. Delivered: our own POSIX headers under crew/cc/include (errno, string,
+stdio, stdlib, fcntl, time, poll, termios, dirent, link, sys/{types,stat,wait,
+socket,un,ioctl,mount,signalfd}, netinet/in, arpa/inet, netdb, sched,
+stdnoreturn) -- glibc-x86-64 ABI-faithful, NOT glibc's headers; plus the cc
+gaps they exposed: top-level `static` fns/globals stay LOCAL symbols, an
+AI_NIF's `__attribute__((section("ai_nifs")))` global lays in a real ai_nifs
+ELF section (obj.l grew the 10th section + its bracket symbols so main()'s
+`__start_/__stop_ai_nifs` drain finds the entries), leading `__attribute__`
+before/after `static` skips, a lone global/typedef/proto-list at EOF parses
+(the `want ";"`-vs-refusal conflation), struct-by-value locals copy their
+FULL byte width (was a bogus 16-byte SSE-only copy), an integer-pair struct
+returns/receives in rax:rdx (the SSE2 pair's twin), and -- the boot-blocker
+-- pointer subtraction over a struct now divides by the real pointee size
+(`lg2` was capped at 3, so every >8-byte struct-pointer difference divided by
+8; non-power-of-two sizes take a real idiv). NEXT (rung 3): our own static
+linker over obj.l's relocations, so `ld` goes too.
+
 the fence, firmly: NOT the Linux kernel (GNU extensions, gcc stays), NOT an
 optimizer (chibicc-class means correct and plain; the glaze is where this
 repo optimizes), NOT a C library (glibc/musl linked, plus our own tiny

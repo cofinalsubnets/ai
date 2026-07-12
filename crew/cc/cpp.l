@@ -313,7 +313,11 @@
        (= dir "endif") (? (two? cond) (cup cond) 'err)
        'err)
 
-   ; #include: resolve via incf, lex, and preprocess sharing macs.
+   ; #include: resolve via incf, lex, and preprocess sharing macs. incf may
+   ; answer (1 text child-incf): the child resolves the INCLUDED file's own
+   ; quote includes relative to ITS dir (gcc's rule -- host/cb.c's unity
+   ; include of ../port/quay/quay.c needs quay.c's "quay.h" found beside it);
+   ; a plain (1 text) keeps this incf (the laws feed includes as data).
    (doinc body macs cond out rest incf)
     (? (! (condactive cond)) (cppgo rest macs cond () out incf)
        (: sys? (&& (two? body) (pv? (cap body) "<"))
@@ -323,7 +327,8 @@
              (: lr (clex (caup txt))
                 (? (! (two? lr)) ()
                    (: itoks (caup lr)
-                      done (cppgo itoks macs () () out incf)   ; recurse with FRESH cond; shares macs; accumulates
+                      chf (: c (cauup txt) (? c c incf))
+                      done (cppgo itoks macs () () out chf)   ; recurse with FRESH cond; shares macs; accumulates
                       (? (id? done 'unbalanced) ()
                          (cppgo rest macs cond () (rev done) incf))))))))
    (incname body)                                     ; the header name from #include tokens
@@ -348,6 +353,9 @@
                ; so the bignum limbs stay the portable 32-bit branch and the lone
                ; `divq` __asm__ (guarded && limb_bits == 64) stays out of reach.
                _ (pin t "__x86_64__" (L 'obj (L (tok 'num 1 0))))
+               ; gcc's limit predefines, the ones the host seam reads
+               _ (pin t "__INT_MAX__" (L 'obj (L (tok 'num 2147483647 0))))
+               _ (pin t "__LONG_MAX__" (L 'obj (L (tok 'num 9223372036854775807 0))))
                t)
        r (cppgo toks macs () () () incf)
        (? (|| (id? r 'unbalanced) (! (two? r))) () (L 1 (strcat-pass r)))))

@@ -91,6 +91,18 @@
                             (&& (= (caup se) 16)
                                 (&& (= (tally fs) 2)
                                     (&& (flo? (cauup (cap fs))) (flo? (cauup (caup fs))))))))))
+   ; the sse2 pair's INTEGER twin: a 16-byte struct of scalar int/pointer
+   ; members returns in rax:rdx (SysV's two INTEGER eightbytes). members stay
+   ; flat scalars -- a nested aggregate or a float punts to the refusal.
+   (ipair? g ty) (? (! (stru? ty)) ()
+                    (: se (peep (g 'stag) (caup ty) 0)
+                       (? (! (two? se)) ()
+                          (! (= (caup se) 16)) ()
+                          (: (ints? fs) (? (! (two? fs)) 1
+                                           (: mty (cauup (cap fs))
+                                              (? (|| (flo? mty) (|| (stru? mty) (arr? mty))) ()
+                                                 (ints? (cup fs)))))
+                             (ints? (cap se))))))
    (fnret ty) (? (! (&& (two? ty) (= (cap ty) 'ptr))) 'long   ; an indirect callee's result type: ('ptr ('fn ret)) | 'long
                  (: ft (caup ty) (? (&& (fn? ft) (two? (cup ft))) (caup ft) 'long)))
    ; unsigned scalars ride 'uchar 'ushort 'uint 'ulong -- same WIDTH as their signed
@@ -114,7 +126,7 @@
           (? (! (two? e)) 'bad
              (: f (assoc name (cap e))
                 (? (two? f) (L (caup f) (cauup f)) 'bad)))))
-   (lg2 n) (? (= n 1) 0 (= n 2) 1 (= n 4) 2 3)
+   (lg2 n) (: (go k v) (? (<= v 1) k (go (+ k 1) (>> v 1))) (go 0 n))   ; a true log2 -- a pointer diff over a >8-byte struct needs sar 4+, not a capped 3
    (homable? pty) (|| (ptr? pty) (member? pty '(long ulong)))   ; an 8-byte gp scalar: what a register home can carry
    ; -- the immediate lane: the left value already in r0, a compile-time constant
    ; on the right -> ONE imm-form op (holo's add/sub/imul/and/or/xor/cmp take a
@@ -348,7 +360,7 @@
    (loadval ty addrf)
     (? (arr? ty) (mkv (L 'ptr (caup ty)) 'r0 addrf)
        (fn? ty) (mkv (L 'ptr ty) 'r0 addrf)
-       (stru? ty) 'bad
+       (stru? ty) (mkv ty 'r0 addrf)                 ; a struct value IS its address (the pair reps read through it)
        (flo? ty) (mkv 'double 'r0 (cat addrf (fldf ty 'f0 'r0 0)))
        (mkv ty 'r0 (cat addrf (L (L (ldop ty) 'r0 'r0 0)))))
    ; the fill code for a compound literal at frame offset off: an aggregate zeroes
@@ -715,6 +727,12 @@
                                         (cat (fstf 'double 'r4 toff (xmmreg 0))
                                          (cat (fstf 'double 'r4 (+ toff 8) (xmmreg 1))
                                               (L (L 'lea 'r0 'r4 toff)))))))
+                       (ipair? g (vty cr))             ; a two-int struct result: park rax:rdx the same way
+                        (: toff (- 0 (+ (peep g 'off 0) 16))
+                           _ (pin g 'off (+ (peep g 'off 0) 16))
+                           (mkv (vty cr) 'r0 (cat (vfs cr)
+                                        (L (L 'st 'r4 toff 'r0) (L 'st 'r4 (+ toff 8) 'r2)
+                                           (L 'lea 'r0 'r4 toff)))))
                        'bad))))))
           (= k 'clit)                              ; a compound literal as a value: fill the temp, load it
            (: lv (clval g env e)
@@ -934,10 +952,16 @@
                                 (= op '-)
                                  (? (&& pa pb)
                                      (? (= (tsz g (caup ta)) (tsz g (caup tb)))
-                                        (mkv 'long 'r0 (cat mid (cat (L (L 'sub 'r1 'r1 'r0))
-                                                          (cat back (? (< 1 (tsz g (caup ta)))
-                                                                       (L (L 'sar 'r0 (lg2 (tsz g (caup ta)))))
-                                                                       ())))))
+                                        ; a pointer difference divides the byte gap by the pointee size.
+                                        ; mid leaves left in r1, right in r0; `sub r1 r1 r0` makes r1 the
+                                        ; gap. a power-of-two size shifts (move to r0, sar); any other
+                                        ; size takes a real signed divide (the / lane's shape: dividend
+                                        ; r1, divisor r0, result r1 -> r0). size 1 is just the move.
+                                        (: esz (tsz g (caup ta))
+                                           (mkv 'long 'r0 (cat mid (cat (L (L 'sub 'r1 'r1 'r0))
+                                                            (? (<= esz 1) back
+                                                               (pow2? esz) (cat back (L (L 'sar 'r0 (lg2 esz))))
+                                                               (L (L 'li 'r0 esz) (L 'div 'r1 'r1 'r0) (L 'mov 'r0 'r1)))))))
                                         'bad)
                                     pa (mkv ta 'r0 (cat mid (cat (? (< 1 (tsz g (caup ta)))
                                                              (L (L 'imul 'r0 'r0 (tsz g (caup ta)))) ())
@@ -1666,14 +1690,18 @@
                         (? (bad? f) 'bad
                            (one (cup ps) env3 (cat acc (cat (cgzero off span) f))))))
                  (arr? ty) 'bad                          ; a bare-expr init of an array
-                 (stru? ty)                              ; a struct local from a struct VALUE (an address): 16-byte copy
-                  (? (! (sse2? g ty)) 'bad
-                     (: r (cgexpr g env3 init)
-                        (? (bad? r) 'bad
-                           (one (cup ps) env3
-                                (cat acc (cat (tor0 g r)
-                                 (L (L 'ld 'r1 'r0 0) (L 'st 'r4 off 'r1)
-                                    (L 'ld 'r1 'r0 8) (L 'st 'r4 (+ off 8) 'r1))))))))
+                 (stru? ty)                              ; a struct local from a struct VALUE (an address): copy its bytes
+                  (: r (cgexpr g env3 init)
+                     (? (bad? r) 'bad
+                        (: sz (tsz g ty)
+                           cpf (: (go k acc9)
+                                   (? (<= 8 (- sz k)) (go (+ k 8) (cat acc9 (L (L 'ld 'r1 'r0 k) (L 'st 'r4 (+ off k) 'r1))))
+                                      (<= 4 (- sz k)) (go (+ k 4) (cat acc9 (L (L 'ld4 'r1 'r0 k) (L 'st4 'r4 (+ off k) 'r1))))
+                                      (<= 2 (- sz k)) (go (+ k 2) (cat acc9 (L (L 'ld2 'r1 'r0 k) (L 'st2 'r4 (+ off k) 'r1))))
+                                      (<= 1 (- sz k)) (go (+ k 1) (cat acc9 (L (L 'ld1 'r1 'r0 k) (L 'st1 'r4 (+ off k) 'r1))))
+                                      acc9)
+                                  (go 0 ()))
+                           (one (cup ps) env3 (cat acc (cat (tor0 g r) cpf))))))
                  (: r (cgexpr g env3 init)               ; a scalar (a pointer = string rides cgexpr -> la)
                     (? (bad? r) 'bad
                        (flo? ty) (one (cup ps) env3 (cat acc (cat (asflo g r) (fstf ty 'r4 off 'f0))))
@@ -1720,6 +1748,8 @@
                       (sse2? g rt)                                       ; a two-double struct returns as the xmm PAIR
                        (cat (tor0 g r) (cat (fldf 'double (xmmreg 0) 'r0 0)
                                        (cat (fldf 'double (xmmreg 1) 'r0 8) epi)))
+                      (ipair? g rt)                                      ; a two-int struct returns as rax:rdx (r0:r2)
+                       (cat (tor0 g r) (cat (L (L 'ld 'r2 'r0 8) (L 'ld 'r0 'r0 0)) epi))
                       (|| (stru? rt) (stru? (vty r))) 'bad               ; any other struct return, or a struct where a scalar is due
                       (flo? (vty r)) (cat (asint g r) (? il (L (L 'jmp il)) epi))   ; a double value, an int return -> truncate to r0
                       (cat (tor0 g r) (? il (L (L 'jmp il)) epi))))))    ; int -> int, as before
@@ -2205,14 +2235,22 @@
                 ir1))))
 
    ; the data tail: globals in declaration order, then the string table
+   ; -> (dataforms nifforms) | 'bad. a global pinned to the `ai_nifs` section
+   ; (AI_NIF's registry entries) lays in ITS OWN stream -- the .o emitter puts
+   ; it in a real `ai_nifs` ELF section so the linker's __start_/__stop_
+   ; bracket symbols exist and main()'s boot drain finds the entries. any
+   ; OTHER named section stays in .data (reached by symbol, not by bracket).
    (cgdata g)
-    (: (globs gs acc)
+    (: sects (peep g 'sects (tablet 0))
+       (nif? nm) (? (= (peep sects nm ()) "ai_nifs") 1 ())   ; canonical 1/() -- the walk compares with id?
+       (globs gs nif acc)
         (? (! (two? gs)) acc
+           (! (id? (nif? (cap gs)) nif)) (globs (cup gs) nif acc)   ; the other stream's
            (: ge (peep (g 'glob) (cap gs) 0)
               lbl (cap ge) ty (caup ge) init (cauup ge)
               bytes (cgimage g ty init)                 ; a constant image | 'bad (label values -> 4d)
               (? (bad? bytes) 'bad
-                 (globs (cup gs) (cat acc (L (L 'label lbl) (L 'raw bytes)))))))
+                 (globs (cup gs) nif (cat acc (L (L 'label lbl) (L 'raw bytes)))))))
        (strs ss acc)
         (? (! (two? ss)) acc
            (: p (cap ss)
@@ -2220,19 +2258,24 @@
               t (caup p)
               (strs (cup ss) (cat acc (L (L 'label (cap p))
                                          (L 'raw (cat (bts t (- (tally t) 1) ()) (L 0))))))))
-       (: gb (globs (rev (g 'globs)) ())              ; exported globals, then block-scope statics
-          sb (? (bad? gb) 'bad (globs (rev (g 'statics)) ()))   ; (local data labels), then strings
-          (? (|| (bad? gb) (bad? sb)) 'bad (cat gb (cat sb (strs (g 'strs) ()))))))
+       (: gb (globs (rev (g 'globs)) () ())           ; exported globals, then block-scope statics
+          sb (? (bad? gb) 'bad (globs (rev (g 'statics)) () ()))   ; (local data labels), then strings
+          nb (? (|| (bad? gb) (bad? sb)) 'bad (globs (rev (g 'globs)) 1 ()))
+          (? (|| (bad? gb) (|| (bad? sb) (bad? nb))) 'bad
+             (L (cat gb (cat sb (strs (g 'strs) ()))) nb))))
 
    ; the shared core: build the gen state, then TEXT (the functions, no _start)
    ; and DATA (globals + strings) separately -> (g textforms dataforms) | ().
    ; weaks: the __attribute__((weak)) names -- NEVER inlined (an inlined body
    ; would bake past the strong override the linker owes them).
-   (cgen-core ast stbl sigs weaks)
+   ; xtra: the parser's (sfns svars sects) tablets -- static fns, static
+   ; globals, name -> section. () reads as three empties (the law harness).
+   (cgen-core ast stbl sigs weaks xtra)
     (: g (: t (tablet 0) _ (pin t 'n 0) _ (pin t 'brk ()) _ (pin t 'cnt ())
             _ (pin t 'glob (tablet 0)) _ (pin t 'globs ()) _ (pin t 'strs ()) _ (pin t 'statics ())
             _ (pin t 'fns (tablet 0)) _ (pin t 'inl (tablet 0)) _ (pin t 'cgitems cgitems)
-            _ (pin t 'stag stbl) _ (pin t 'sigs sigs) t)
+            _ (pin t 'stag stbl) _ (pin t 'sigs sigs)
+            _ (pin t 'sects (? (two? xtra) (cauup xtra) (tablet 0))) t)
        ; pass 0: every function name -- so a bare use of one is its address (la).
        ; the sig table too: an mproto sibling (`double sin(..), cos(..);`) has a
        ; sig but no proto form of its own. a small single-return definition also
@@ -2272,24 +2315,40 @@
            (: f (cap fs)
               (? (member? (cap f) '(proto gdecl xdecl tdef)) (gfns (cup fs) acc saw)
                  (: r (cgfn g f)
-                    (? (bad? r) ()
+                    (? (bad? r) (: _ (puts (+ ";; cgfn refuses " (+ (caup f) "\n"))) ())
                        (gfns (cup fs) (cat acc r)
                              (|| saw (= (caup f) "main"))))))))
        (? ok (gfns (caup ast) () ()) ()))
-   (cgen ast stbl sigs weaks)                       ; the STATIC EXECUTABLE: _start (crt0) + text + data -> (1 forms) | () -- needs main
+   (cgen ast stbl sigs weaks xtra)                  ; the STATIC EXECUTABLE: _start (crt0) + text + data -> (1 forms) | () -- needs main
     (: crt0 (L (L 'call 'main) (L 'mov 'r6 'r0) (L 'li 'r0 60) (L 'sys))
-       r (cgen-core ast stbl sigs weaks)
+       r (cgen-core ast stbl sigs weaks xtra)
        (? (! (two? r)) ()
           (! (nthr r 3)) ()                          ; no main -> no program (the exe has nothing to start)
-          (L 1 (cat crt0 (cat (caup r) (cauup r))))))
+          (: dat (cauup r)                           ; (dataforms nifforms): the exe resolves labels itself,
+             (L 1 (cat crt0 (cat (caup r) (cat (cap dat) (caup dat))))))))   ; so the nif stream just rides along
    ; the RELOCATABLE OBJECT view (stage 7a): text and data split, plus the
-   ; DEFINED function names (global FUNC symbols) and global-variable names
-   ; (global OBJECT symbols) -- the .o emitter (crew/holo/obj.l) turns the rest
-   ; (undefined labels, cross-section refs) into a symbol table + relocations.
-   (cgen-obj ast stbl sigs weaks)                   ; -> (1 textforms dataforms funcnames globnames) | ()
-    (: r (cgen-core ast stbl sigs weaks)
+   ; DEFINED function names (global FUNC symbols, statics excluded -- they stay
+   ; LOCAL, ai.h's inline helpers land in every TU) and global-variable names
+   ; (global OBJECT symbols, statics excluded), plus the ai_nifs stream -- the
+   ; .o emitter (crew/holo/obj.l) turns the rest (undefined labels,
+   ; cross-section refs) into a symbol table + relocations.
+   (cgen-obj ast stbl sigs weaks xtra)              ; -> (1 textforms dataforms funcnames globnames nifforms) | ()
+    (: r (cgen-core ast stbl sigs weaks xtra)
        (? (! (two? r)) ()
-          (: fnames (: (go fs acc) (? (! (two? fs)) (rev acc)
-                                      (: f (cap fs) (go (cup fs) (? (= (cap f) 'fn) (link (caup f) acc) acc))))
-                      (go (caup ast) ()))
-             (L 1 (caup r) (cauup r) fnames (rev ((cap r) 'globs)))))))
+          (: sfns (? (two? xtra) (cap xtra) (tablet 0))
+             svars (? (two? xtra) (caup xtra) (tablet 0))
+             sects (? (two? xtra) (cauup xtra) (tablet 0))
+             (loc? nm) (|| (! (id? (peep svars nm 'no) 'no))
+                           (= (peep sects nm ()) "ai_nifs"))     ; a nif entry is static by shape; any OTHER
+                                                                 ; named section stays exported (.image is read by symbol)
+             fnames (: (go fs acc) (? (! (two? fs)) (rev acc)
+                                      (: f (cap fs)
+                                         (go (cup fs) (? (&& (= (cap f) 'fn)
+                                                            (id? (peep sfns (caup f) 'no) 'no))
+                                                         (link (caup f) acc) acc))))
+                       (go (caup ast) ()))
+             gnames (: (go gs acc) (? (! (two? gs)) (rev acc)
+                                      (go (cup gs) (? (loc? (cap gs)) acc (link (cap gs) acc))))
+                       (go (rev ((cap r) 'globs)) ()))
+             dat (cauup r)
+             (L 1 (caup r) (cap dat) fnames gnames (caup dat))))))

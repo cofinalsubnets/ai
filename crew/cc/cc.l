@@ -20,13 +20,18 @@
                   (? (< 0 d) (snip path 0 d) ""))
    ; #include resolver bound to a source dir + the -I list: "" searches relative
    ; first (the src dir, then cwd) then the -I dirs; <> the -I dirs straight off;
-   ; both fall to the system pair, our own headers before /usr. -> (1 text) | ().
+   ; both fall to the system pair, our own headers before /usr. answers
+   ; (1 text child) -- the child hook resolves the hit file's OWN quote
+   ; includes beside it (gcc's rule; cpp.l threads it). -> that | ().
    (incload is srcdir name sys?)
     (: dirs (? sys? (cat is (L "crew/cc/include/" "/usr/include/"))   ; our headers (stdarg.h ..) win for <>
                 (cat (L srcdir "") (cat is (L "crew/cc/include/" "/usr/include/"))))
        (go ds) (? (! (two? ds)) ()
                   (: r (uread (+ (cap ds) name))
-                     (? (two? r) r (go (cup ds)))))
+                     (? (two? r)
+                        (: hd (cdir (+ (cap ds) name))
+                           (L 1 (caup r) (\ n2 s2 (incload is hd n2 s2))))
+                        (go (cup ds)))))
        (go dirs))
    (el l i) (? (< i 1) (cap l) (el (cup l) (- i 1)))
    ; a -D definition as #define text: the first = becomes the space, so
@@ -54,21 +59,23 @@
        ps (cparse (caup pp))
        _ (? (two? ps) () (udie 1 (+ "cc: parse error in " src)))
        ps)
+   ; the parser's static/section trio, threaded to the gen as one list
+   (pxtra ps) (L (el ps 5) (el ps 6) (el ps 7))
    ; a standalone static executable (the default): _start + text + data, chmod +x
    (cc-exe src dst is ds)
     (: ps (cc-parse src is ds)
-       ir (cgen (caup ps) (cauup ps) (caup (cuup ps)) (el ps 4))
+       ir (cgen (caup ps) (cauup ps) (caup (cuup ps)) (el ps 4) (pxtra ps))
        _ (? (two? ir) () (udie 1 (+ "cc: codegen error in " src)))
        res (elf64 'x64 (\ _ (caup ir)) ())
        _ (write-bytes dst (peep res 'bytes 0))
        (chmod dst 493))
-   ; a relocatable object (`-c`): text/data sections + symbols + relocations, for
-   ; the system linker to bind against host/*.o + libc (stage 7a).
+   ; a relocatable object (`-c`): text/data/ai_nifs sections + symbols +
+   ; relocations, for the system linker to bind against host/*.o + libc (7a).
    (cc-obj src dst is ds)
     (: ps (cc-parse src is ds)
-       ob (cgen-obj (caup ps) (cauup ps) (caup (cuup ps)) (el ps 4))
+       ob (cgen-obj (caup ps) (cauup ps) (caup (cuup ps)) (el ps 4) (pxtra ps))
        _ (? (two? ob) () (udie 1 (+ "cc: codegen error in " src)))
-       bytes (objelf 'x64 (el ob 1) (el ob 2) (el ob 3) (el ob 4) (el ps 4))
+       bytes (objelf 'x64 (el ob 1) (el ob 2) (el ob 3) (el ob 4) (el ps 4) (el ob 5))
        (write-bytes dst bytes))
    usage "usage: aicc [-c] [-I dir] [-D name[=val]] [-o out] in.c [in2.c ..]"
    ; the flag scan: -c, -I dir / -Idir, -D def / -Ddef, -o out; every other
