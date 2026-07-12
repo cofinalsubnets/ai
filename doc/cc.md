@@ -37,10 +37,7 @@ returns/receives in rax:rdx (the SSE2 pair's twin), and -- the boot-blocker
 8; non-power-of-two sizes take a real idiv). NEXT (rung 3): our own static
 linker over obj.l's relocations, so `ld` goes too.
 
-the fence, firmly: NOT the Linux kernel (GNU extensions, gcc stays), NOT an
-optimizer (chibicc-class means correct and plain; the glaze is where this
-repo optimizes), NOT a C library (glibc/musl linked, plus our own tiny
-freestanding headers), NOT C++ ever.
+the one firm fence: NOT C++, ever.
 
 ## what ai.c actually demands (the census, 2026-07-06)
 
