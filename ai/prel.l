@@ -247,8 +247,11 @@
    (eof? s) (= s 3))
 ; here are some macro definitions
 (: l (foldr (\ a l (link link (link a (link l ())))) ()) (: _ (:: 'L l) _ (:: 'list l)))
-(:: '&& (\ l (: (and l) (? (two? (cup l)) (list '? (cap l) (and (cup l)) 0) (cap l)) (? (two? l) (and l) 1))))
-(:: '|| (\ l (: (or l) (? (two? l) (: y (nom 0) (list ': y (cap l) (list '? y y (or (cup l))))) 0) (or l))))
+; the false answer is the UNIT, never a 0-fossil: (&& a ..) expands (? a .. ())
+; and ||'s exhausted tail reads () -- both blue, but the zero point is nothing,
+; not a number (a && result must ride ? and id? against (), not arithmetic)
+(:: '&& (\ l (: (and l) (? (two? (cup l)) (list '? (cap l) (and (cup l)) ()) (cap l)) (? (two? l) (and l) 1))))
+(:: '|| (\ l (: (or l) (? (two? l) (: y (nom 0) (list ': y (cap l) (list '? y y (or (cup l))))) ()) (or l))))
 (:: ':- (\ a (link ': (cat (cup a) (link (cap a) ())))))
 (:: '?- (\ a (link '? (cat (cup a) (link (cap a) ())))))
 (:: '>>= (\ l (link (last l) (init l))))

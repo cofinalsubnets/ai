@@ -381,6 +381,10 @@
 (:: 'unless (\ a `('? (cap a) 0 (caup a))))
 (assert
  ('ok = (unless 0 'ok)) (0 = (unless 1 'ok)) (3 = (&& 1 2 3)) !(&& 1 0 3)
+ ; the false answer is the UNIT, never a 0-fossil: a && with any failing
+ ; operand, or a || with none passing, reads () -- blue like 0, but
+ ; nothing, not a number
+ (id? (&& () 5) ()) (id? (&& 1 0 3) ()) (id? (|| () ()) ()) (id? (|| () 0) ())
  (2 = (|| 0 2 3)) ('(1 2 3) = `(1 2 3)) (6 = (do 1 2 6)) (3 = (let a 1 b 2 (a + b)))
  (3 = (:- (a + b) a 1 b 2)) ('big = (?- 'else (1 < 2) 'big)) (9 = ((<=< (+ 1) (\ x (x * 2))) 4)))
 
