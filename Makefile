@@ -1414,6 +1414,7 @@ installs = \
   $d/lib/ai/prel.l \
   $d/lib/ai/ev.l \
   $d/lib/ai/bao.l \
+  $d/lib/ai/aicc.image \
   $d/lib/libai.a \
   $d/lib/libai.so \
   $d/include/ai.h \
@@ -1488,15 +1489,32 @@ $d/bin/au: $(aufiles)
 	@{ echo '#!/usr/bin/env -S ai'; cat $(aufiles); } > $@
 	@chmod 755 $@
 
-# aicc: the C compiler, ITS OWN app (doc/cc.md) -- a catted `#!/usr/bin/env -S ai -l`
-# script (the `-l` re-execs the installed ai to load it; the tail SEAT in cc.l finds
-# `aicc` on the command line and fires). Kept OUT of the au cat so a cc edit never
-# forces an au rebuild and vice versa.
-$d/bin/aicc: $(aiccfiles)
+# aicc: the C compiler, ITS OWN app (doc/cc.md). The installed bin is a WAKE SHIM:
+# it boots the baked aicc IMAGE next door (--wake, ~ms) and fires cc-main on the
+# args -- the whole-cat re-eval (~1.3 s at every compile) is paid ONCE, at bake.
+# The image is baked by the build binary against the build cat (below); strip
+# keeps .text/.rodata vaddrs, so the stripped installed ai wakes it fine -- but
+# it IS binary-specific (anchor-checked), so image and binary always install
+# from the same build. Kept OUT of the au cat so a cc edit never forces an au
+# rebuild and vice versa.
+$d/bin/aicc: Makefile
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
-	@{ echo '#!/usr/bin/env -S ai -l'; cat $(aiccfiles); } > $@
+	@{ echo '#!/bin/sh'; \
+	   echo 'h=$$(CDPATH= cd -- "$$(dirname -- "$$0")" && pwd)'; \
+	   echo 'exec "$$h/ai" --wake "$$h/../lib/ai/aicc.image" -e "(cc-main (cuup (cup cmdline)))" "$$@"'; } > $@
 	@chmod 755 $@
+# the aicc image: the compiler baked WARM (the live bake, doc/snapshot.md). The
+# cat loads under a NEUTRAL name so cc.l's tail SEAT stays quiet, then the bake
+# nif snapshots the session. AI_NO_IMAGE rides the recipe (exported above), so
+# the bake session itself egg-boots -- same warm state, deterministically.
+$(ho)/aicc.image: $(ho)/aicc $m
+	@echo AI	$(abspath $@)
+	@cp $(ho)/aicc $(ho)/.aicc-cat.l
+	@$m -l $(ho)/.aicc-cat.l -e '(? ((bake "$@") = 1) (quit 0) (quit 1))'
+$d/lib/ai/aicc.image: $(ho)/aicc.image
+	@echo CP	$(abspath $@)
+	@install -D -m 644 $< $@
 
 # phos: the window manager (crew/phos/*.l), the seven modules catted into one shebang
 # script. DISPLAY picks the socket, ~/.Xauthority the cookie (crew/phos/config.l);

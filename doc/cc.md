@@ -762,6 +762,20 @@ stands: a year of evenings at full scope -- but stage 7 is reachable well
 before that, and every stage before it is independently alive (stage 1 is
 already a lawed calculator-to-ELF; stage 4 compiles real single-file C).
 
+## the installed shape (2026-07-13): a wake shim over a baked image
+
+`make install` no longer ships the cat as `bin/aicc`. The compiler bakes WARM
+into `lib/ai/aicc.image` (the live bake nif, doc/snapshot.md) and `bin/aicc`
+is a three-line sh shim: `ai --wake aicc.image -e "(cc-main (cuup (cup
+cmdline)))" "$@"`. The whole-cat re-eval that every compile used to pay
+(~1.5 s wall) is paid once, at bake: `aicc -c ai.c` 4.3 → 2.8 s wall, and a
+small-file compile drops 0.77 s → 0.02 s -- gcc-class invocation latency.
+The image is binary-specific (anchor-checked) and installs from the same
+build as `bin/ai` (strip keeps vaddrs, so the stripped install wakes it);
+a mismatched pair falls back to a fresh boot with no cc-main, so never mix
+builds by hand. The repo cat `out/host/aicc` is unchanged -- probe with
+`./out/host/ai out/host/aicc`, as ever.
+
 ## naming
 
 crew/cc/ and `aicc` as working names; the crossing-layers name is gwen's
