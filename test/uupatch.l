@@ -3152,3 +3152,1360 @@
  (id? (vof 0 '1) (vof 0 '(occ 9 (lay (ncons 7 (ncons 3 nnil)) 1 9))))
  ((vof 0 '(ncons 7 (ncons 3 nnil))) = (vof 0 '(lay (lay (ncons 7 (ncons 3 nnil)) 1 9) 1 3))))
 
+
+; ============================================================================
+; the SWALLOW commute: patch.v's sixth slice at uu. a shallow patch is a
+; HUNK (hinv is its inverse); the deep patch mke j a b rewrites one
+; element at seat j. swal re-aims a deep-first pair: undo the deep edit
+; inside BOTH shallow sides, re-aim it at the survivor's seat -- guarded
+; by the four occurrence counts that make the rewrite canonical, all
+; seven verdicts folded into ONE andb tower so the involution cases a
+; single bool. the L1 law: swal through the groupoid inverse comes home.
+; ============================================================================
+; --- two nat facts the re-aim arithmetic leans on ---
+(assert
+ (defq 'natlehplusminus
+   '(pi i nat
+      (pi j nat (pi h (paths bool (natgtb i j) false) (paths nat (add i (natminus j i)) j))))
+   '(lam i
+      (nat_rect
+        (lam q
+          (pi j nat (pi h (paths bool (natgtb q j) false) (paths nat (add q (natminus j q)) j))))
+        (lam j (lam h (natminusn0 j)))
+        (lam k
+          (lam IH
+            (lam j
+              (nat_rect
+                (lam r
+                  (pi h (paths bool (natgtb (succ k) r) false)
+                    (paths nat (add (succ k) (natminus r (succ k))) r)))
+                (lam h
+                  (fromempty (paths nat (add (succ k) (natminus 0 (succ k))) 0)
+                    (nopathstruetofalse h)))
+                (lam r2
+                  (lam rIH
+                    (lam h
+                      (maponpaths nat nat (lam z (succ z)) (add k (natminus r2 k)) r2 (IH r2 h)))))
+                j))))
+        i)))
+ (defq 'natminusltl
+   '(pi i nat
+      (pi j nat
+        (pi n nat
+          (pi h1 (paths bool (natgtb i j) false)
+            (pi h2 (paths bool (natgtb (add i n) j) true)
+              (paths bool (natgtb n (natminus j i)) true))))))
+   '(lam i
+      (nat_rect
+        (lam q
+          (pi j nat
+            (pi n nat
+              (pi h1 (paths bool (natgtb q j) false)
+                (pi h2 (paths bool (natgtb (add q n) j) true)
+                  (paths bool (natgtb n (natminus j q)) true))))))
+        (lam j
+          (lam n
+            (lam h1
+              (lam h2
+                (transportf nat (lam z (paths bool (natgtb n z) true)) j (natminus j 0)
+                  (pathsinv0 nat (natminus j 0) j (natminusn0 j))
+                  h2)))))
+        (lam k
+          (lam IH
+            (lam j
+              (nat_rect
+                (lam r
+                  (pi n nat
+                    (pi h1 (paths bool (natgtb (succ k) r) false)
+                      (pi h2 (paths bool (natgtb (add (succ k) n) r) true)
+                        (paths bool (natgtb n (natminus r (succ k))) true)))))
+                (lam n
+                  (lam h1
+                    (lam h2
+                      (fromempty (paths bool (natgtb n (natminus 0 (succ k))) true)
+                        (nopathstruetofalse h1)))))
+                (lam r2 (lam rIH (lam n (lam h1 (lam h2 (IH r2 n h1 h2))))))
+                j))))
+        i))))
+
+; --- the model: the deep patch, its inverse, the result pair, and swal
+; --- itself -- one bool_rect on the folded guard, the payload re-aiming
+; --- the deep edit at the survivor's seat (ffind under the four counts) ---
+(assert
+ (defn 'epatch
+   'UU
+   '(total2 j nat (total2 a nat nat)))
+ (defn 'mke
+   '(pi j nat (pi a nat (pi b nat epatch)))
+   '(lam j (lam a (lam b (tpair j (tpair a b))))))
+ (defn 'ej
+   '(pi p epatch nat)
+   '(lam p (pr1 p)))
+ (defn 'ea
+   '(pi p epatch nat)
+   '(lam p (pr1 (pr2 p))))
+ (defn 'eb
+   '(pi p epatch nat)
+   '(lam p (pr2 (pr2 p))))
+ (defn 'einv
+   '(pi p epatch epatch)
+   '(lam p (mke (ej p) (eb p) (ea p))))
+ (defn 'spair
+   'UU
+   '(total2 x hunk epatch))
+ (defn 'scmside
+   '(pi c (coprod spair unit) UU)
+   '(lam c (coprod_rect (lam x UU) (lam x empty) (lam x unit) c)))
+ (defn 'swal
+   '(pi p epatch (pi s hunk (coprod spair unit)))
+   '(lam p
+      (lam s
+        (bool_rect (lam c (coprod spair unit))
+          (ii1
+            (tpair
+              (mkh (hi s) (lay (ho s) (natminus (ej p) (hi s)) (ea p))
+                (lay (hn s) (ffind (eb p) (hn s)) (ea p)))
+              (mke (add (hi s) (ffind (eb p) (hn s))) (ea p) (eb p))))
+          (ii2 tt)
+          (andb (negb (natgtb (hi s) (ej p)))
+            (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+              (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                (andb (nateqb (occ (eb p) (ho s)) 1)
+                  (andb (nateqb (occ (ea p) (ho s)) 0)
+                    (andb (nateqb (occ (eb p) (hn s)) 1) (nateqb (occ (ea p) (hn s)) 0)))))))))))
+ ; swal computes: the guarded re-aim fires, and a breach refuses
+ ((vof 0 '(swal (mke 1 9 2) (mkh 0 (ncons 7 (ncons 2 nnil)) (ncons 2 (ncons 8 nnil)))))
+  = (vof 0 '(ii1 (tpair (mkh 0 (ncons 7 (ncons 9 nnil)) (ncons 9 (ncons 8 nnil))) (mke 0 9 2)))))
+ ((vof 0 '(swal (mke 5 9 2) (mkh 0 (ncons 7 (ncons 2 nnil)) (ncons 2 (ncons 8 nnil)))))
+  = (vof 0 '(ii2 tt)))
+ ; the round trip computes: invert both results, swal again, come home
+ ((vof 0 '(swal (einv (mke 0 9 2)) (hinv (mkh 0 (ncons 7 (ncons 9 nnil)) (ncons 9 (ncons 8 nnil))))))
+  = (vof 0 '(ii1 (tpair (hinv (mkh 0 (ncons 7 (ncons 2 nnil)) (ncons 2 (ncons 8 nnil)))) (einv (mke 1 9 2)))))))
+
+; --- the core, at components: given the seven verdicts (as paths) + a/b
+; --- distinct, the inverted pair swal's home. each forward guard is one
+; --- kit lemma (occlayin/occlayout move the counts, lgetlay reads the
+; --- laid seat, ffindlay pins the survivor), the payload ties by laylay +
+; --- layget + the minus cancellations, and one maponpaths over the folded
+; --- guard fires the tower. sealed as its own defq (the eager-NbE law) ---
+(assert
+ (defq 'swal-f1
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool (negb (natgtb i (add i (ffind b N)))) true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (maponpaths bool bool (lam c (negb c))
+                                  (natgtb i (add i (ffind b N)))
+                                  false
+                                  (natlehnplusnm i (ffind b N))))))))))))))))))
+ (defq 'swal-f2
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool
+                                  (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                    (add i (ffind b N)))
+                                  true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 bool
+                                  (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                    (add i (ffind b N)))
+                                  (natgtb (add i (nlen N)) (add i (ffind b N)))
+                                  true
+                                  (maponpaths nat bool
+                                    (lam z (natgtb (add i z) (add i (ffind b N))))
+                                    (nlen (lay N (ffind b N) a))
+                                    (nlen N)
+                                    (laylen N (ffind b N) a))
+                                  (pathscomp0 bool (natgtb (add i (nlen N)) (add i (ffind b N)))
+                                    (natgtb (nlen N) (ffind b N))
+                                    true
+                                    (natgtbplusl i (nlen N) (ffind b N))
+                                    (occffind b N
+                                      (maponpaths nat bool (lam z (niszero z)) (occ b N) 1 e6)))))))))))))))))))
+ (defq 'swal-f3
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool
+                                  (nateqb
+                                    (lget (natminus (add i (ffind b N)) i) (lay N (ffind b N) a))
+                                    a)
+                                  true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 bool
+                                  (nateqb
+                                    (lget (natminus (add i (ffind b N)) i) (lay N (ffind b N) a))
+                                    a)
+                                  (nateqb a a)
+                                  true
+                                  (maponpaths nat bool (lam z (nateqb z a))
+                                    (lget (natminus (add i (ffind b N)) i) (lay N (ffind b N) a))
+                                    a
+                                    (pathscomp0 nat
+                                      (lget (natminus (add i (ffind b N)) i)
+                                        (lay N (ffind b N) a))
+                                      (lget (ffind b N) (lay N (ffind b N) a))
+                                      a
+                                      (maponpaths nat nat (lam z (lget z (lay N (ffind b N) a)))
+                                        (natminus (add i (ffind b N)) i)
+                                        (ffind b N)
+                                        (natpluslcancelminus i (ffind b N)))
+                                      (lgetlay N (ffind b N) a
+                                        (occffind b N
+                                          (maponpaths nat bool (lam z (niszero z)) (occ b N) 1
+                                            e6)))))
+                                  (nateqbrefl a)))))))))))))))))
+ (defq 'swal-f4
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool (nateqb (occ a (lay N (ffind b N) a)) 1) true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (maponpaths nat bool (lam z (nateqb z 1))
+                                  (occ a (lay N (ffind b N) a))
+                                  1
+                                  (pathscomp0 nat (occ a (lay N (ffind b N) a)) (succ (occ a N))
+                                    1
+                                    (occlayin N (ffind b N) a
+                                      (occffind b N
+                                        (maponpaths nat bool (lam z (niszero z)) (occ b N) 1 e6))
+                                      (pathscomp0 bool (nateqb (lget (ffind b N) N) a)
+                                        (nateqb b a)
+                                        false
+                                        (maponpaths nat bool (lam z (nateqb z a))
+                                          (lget (ffind b N) N)
+                                          b
+                                          (lgetffind b N
+                                            (maponpaths nat bool (lam z (niszero z)) (occ b N) 1
+                                              e6)))
+                                        (pathscomp0 bool (nateqb b a) (nateqb a b) false
+                                          (nateqbsymm b a)
+                                          e8)))
+                                    (maponpaths nat nat (lam z (succ z)) (occ a N) 0 e7))))))))))))))))))
+ (defq 'swal-f5
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool (nateqb (occ b (lay N (ffind b N) a)) 0) true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (maponpaths nat bool (lam z (nateqb z 0))
+                                  (occ b (lay N (ffind b N) a))
+                                  0
+                                  (pathsinv0 nat 0 (occ b (lay N (ffind b N) a))
+                                    (maponpaths nat nat (lam z (npred z)) 1
+                                      (succ (occ b (lay N (ffind b N) a)))
+                                      (pathscomp0 nat 1 (occ b N)
+                                        (succ (occ b (lay N (ffind b N) a)))
+                                        (pathsinv0 nat (occ b N) 1 e6)
+                                        (occlayout N (ffind b N) b a
+                                          (occffind b N
+                                            (maponpaths nat bool (lam z (niszero z)) (occ b N) 1
+                                              e6))
+                                          (lgetffind b N
+                                            (maponpaths nat bool (lam z (niszero z)) (occ b N) 1
+                                              e6))
+                                          e8))))))))))))))))))))
+ (defq 'swal-f6
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool (nateqb (occ a (lay O (natminus j i) a)) 1) true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (maponpaths nat bool (lam z (nateqb z 1))
+                                  (occ a (lay O (natminus j i) a))
+                                  1
+                                  (pathscomp0 nat (occ a (lay O (natminus j i) a))
+                                    (succ (occ a O))
+                                    1
+                                    (occlayin O (natminus j i) a
+                                      (natminusltl i j (nlen O) e1 e2)
+                                      (pathscomp0 bool (nateqb (lget (natminus j i) O) a)
+                                        (nateqb b a)
+                                        false
+                                        (maponpaths nat bool (lam z (nateqb z a))
+                                          (lget (natminus j i) O)
+                                          b
+                                          e3)
+                                        (pathscomp0 bool (nateqb b a) (nateqb a b) false
+                                          (nateqbsymm b a)
+                                          e8)))
+                                    (maponpaths nat nat (lam z (succ z)) (occ a O) 0 e5))))))))))))))))))
+ (defq 'swal-f7
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool (nateqb (occ b (lay O (natminus j i) a)) 0) true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (maponpaths nat bool (lam z (nateqb z 0))
+                                  (occ b (lay O (natminus j i) a))
+                                  0
+                                  (pathsinv0 nat 0 (occ b (lay O (natminus j i) a))
+                                    (maponpaths nat nat (lam z (npred z)) 1
+                                      (succ (occ b (lay O (natminus j i) a)))
+                                      (pathscomp0 nat 1 (occ b O)
+                                        (succ (occ b (lay O (natminus j i) a)))
+                                        (pathsinv0 nat (occ b O) 1 e4)
+                                        (occlayout O (natminus j i) b a
+                                          (natminusltl i j (nlen O) e1 e2)
+                                          e3
+                                          e8))))))))))))))))))))
+ (defq 'swal-fg
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths bool
+                                  (andb (negb (natgtb i (add i (ffind b N))))
+                                    (andb
+                                      (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                        (add i (ffind b N)))
+                                      (andb
+                                        (nateqb
+                                          (lget (natminus (add i (ffind b N)) i)
+                                            (lay N (ffind b N) a))
+                                          a)
+                                        (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                          (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0)))))))
+                                  true)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 bool
+                                  (andb (negb (natgtb i (add i (ffind b N))))
+                                    (andb
+                                      (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                        (add i (ffind b N)))
+                                      (andb
+                                        (nateqb
+                                          (lget (natminus (add i (ffind b N)) i)
+                                            (lay N (ffind b N) a))
+                                          a)
+                                        (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                          (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0)))))))
+                                  (andb
+                                    (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                      (add i (ffind b N)))
+                                    (andb
+                                      (nateqb
+                                        (lget (natminus (add i (ffind b N)) i)
+                                          (lay N (ffind b N) a))
+                                        a)
+                                      (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                        (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                          (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                            (nateqb (occ b (lay O (natminus j i) a)) 0))))))
+                                  true
+                                  (maponpaths bool bool
+                                    (lam c
+                                      (andb c
+                                        (andb
+                                          (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                            (add i (ffind b N)))
+                                          (andb
+                                            (nateqb
+                                              (lget (natminus (add i (ffind b N)) i)
+                                                (lay N (ffind b N) a))
+                                              a)
+                                            (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                              (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                                (andb
+                                                  (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                                  (nateqb (occ b (lay O (natminus j i) a)) 0))))))))
+                                    (negb (natgtb i (add i (ffind b N))))
+                                    true
+                                    (swal-f1 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                  (pathscomp0 bool
+                                    (andb
+                                      (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                        (add i (ffind b N)))
+                                      (andb
+                                        (nateqb
+                                          (lget (natminus (add i (ffind b N)) i)
+                                            (lay N (ffind b N) a))
+                                          a)
+                                        (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                          (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0))))))
+                                    (andb
+                                      (nateqb
+                                        (lget (natminus (add i (ffind b N)) i)
+                                          (lay N (ffind b N) a))
+                                        a)
+                                      (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                        (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                          (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                            (nateqb (occ b (lay O (natminus j i) a)) 0)))))
+                                    true
+                                    (maponpaths bool bool
+                                      (lam c
+                                        (andb c
+                                          (andb
+                                            (nateqb
+                                              (lget (natminus (add i (ffind b N)) i)
+                                                (lay N (ffind b N) a))
+                                              a)
+                                            (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                              (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                                (andb
+                                                  (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                                  (nateqb (occ b (lay O (natminus j i) a)) 0)))))))
+                                      (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                        (add i (ffind b N)))
+                                      true
+                                      (swal-f2 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                    (pathscomp0 bool
+                                      (andb
+                                        (nateqb
+                                          (lget (natminus (add i (ffind b N)) i)
+                                            (lay N (ffind b N) a))
+                                          a)
+                                        (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                          (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0)))))
+                                      (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                        (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                          (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                            (nateqb (occ b (lay O (natminus j i) a)) 0))))
+                                      true
+                                      (maponpaths bool bool
+                                        (lam c
+                                          (andb c
+                                            (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                              (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                                (andb
+                                                  (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                                  (nateqb (occ b (lay O (natminus j i) a)) 0))))))
+                                        (nateqb
+                                          (lget (natminus (add i (ffind b N)) i)
+                                            (lay N (ffind b N) a))
+                                          a)
+                                        true
+                                        (swal-f3 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                      (pathscomp0 bool
+                                        (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                          (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0))))
+                                        (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                          (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                            (nateqb (occ b (lay O (natminus j i) a)) 0)))
+                                        true
+                                        (maponpaths bool bool
+                                          (lam c
+                                            (andb c
+                                              (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                                (andb
+                                                  (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                                  (nateqb (occ b (lay O (natminus j i) a)) 0)))))
+                                          (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                          true
+                                          (swal-f4 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                        (pathscomp0 bool
+                                          (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0)))
+                                          (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                            (nateqb (occ b (lay O (natminus j i) a)) 0))
+                                          true
+                                          (maponpaths bool bool
+                                            (lam c
+                                              (andb c
+                                                (andb
+                                                  (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                                  (nateqb (occ b (lay O (natminus j i) a)) 0))))
+                                            (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                            true
+                                            (swal-f5 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                          (pathscomp0 bool
+                                            (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              (nateqb (occ b (lay O (natminus j i) a)) 0))
+                                            (nateqb (occ b (lay O (natminus j i) a)) 0)
+                                            true
+                                            (maponpaths bool bool
+                                              (lam c
+                                                (andb c
+                                                  (nateqb (occ b (lay O (natminus j i) a)) 0)))
+                                              (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                              true
+                                              (swal-f6 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                            (swal-f7 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))))))))))))))))))))))
+ (defq 'swal-w1
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths nlist
+                                  (lay (lay N (ffind b N) a) (natminus (add i (ffind b N)) i) b)
+                                  N)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 nlist
+                                  (lay (lay N (ffind b N) a) (natminus (add i (ffind b N)) i) b)
+                                  (lay (lay N (ffind b N) a) (ffind b N) b)
+                                  N
+                                  (maponpaths nat nlist (lam z (lay (lay N (ffind b N) a) z b))
+                                    (natminus (add i (ffind b N)) i)
+                                    (ffind b N)
+                                    (natpluslcancelminus i (ffind b N)))
+                                  (pathscomp0 nlist (lay (lay N (ffind b N) a) (ffind b N) b)
+                                    (lay N (ffind b N) b)
+                                    N
+                                    (laylay N (ffind b N) a b)
+                                    (pathscomp0 nlist (lay N (ffind b N) b)
+                                      (lay N (ffind b N) (lget (ffind b N) N))
+                                      N
+                                      (maponpaths nat nlist (lam z (lay N (ffind b N) z)) b
+                                        (lget (ffind b N) N)
+                                        (pathsinv0 nat (lget (ffind b N) N) b
+                                          (lgetffind b N
+                                            (maponpaths nat bool (lam z (niszero z)) (occ b N) 1
+                                              e6))))
+                                      (layget N (ffind b N))))))))))))))))))))
+ (defq 'swal-w2
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths nlist
+                                  (lay (lay O (natminus j i) a)
+                                    (ffind a (lay O (natminus j i) a))
+                                    b)
+                                  O)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 nlist
+                                  (lay (lay O (natminus j i) a)
+                                    (ffind a (lay O (natminus j i) a))
+                                    b)
+                                  (lay (lay O (natminus j i) a) (natminus j i) b)
+                                  O
+                                  (maponpaths nat nlist
+                                    (lam z (lay (lay O (natminus j i) a) z b))
+                                    (ffind a (lay O (natminus j i) a))
+                                    (natminus j i)
+                                    (ffindlay O (natminus j i) a e5
+                                      (natminusltl i j (nlen O) e1 e2)))
+                                  (pathscomp0 nlist
+                                    (lay (lay O (natminus j i) a) (natminus j i) b)
+                                    (lay O (natminus j i) b)
+                                    O
+                                    (laylay O (natminus j i) a b)
+                                    (pathscomp0 nlist (lay O (natminus j i) b)
+                                      (lay O (natminus j i) (lget (natminus j i) O))
+                                      O
+                                      (maponpaths nat nlist (lam z (lay O (natminus j i) z)) b
+                                        (lget (natminus j i) O)
+                                        (pathsinv0 nat (lget (natminus j i) O) b e3))
+                                      (layget O (natminus j i))))))))))))))))))))
+ (defq 'swal-seat
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths nat (add i (ffind a (lay O (natminus j i) a))) j)))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 nat (add i (ffind a (lay O (natminus j i) a)))
+                                  (add i (natminus j i))
+                                  j
+                                  (maponpaths nat nat (lam z (add i z))
+                                    (ffind a (lay O (natminus j i) a))
+                                    (natminus j i)
+                                    (ffindlay O (natminus j i) a e5
+                                      (natminusltl i j (nlen O) e1 e2)))
+                                  (natlehplusminus i j e1)))))))))))))))))
+ (defq 'swal-pay
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths spair
+                                  (tpair
+                                    (mkh i
+                                      (lay (lay N (ffind b N) a)
+                                        (natminus (add i (ffind b N)) i)
+                                        b)
+                                      (lay (lay O (natminus j i) a)
+                                        (ffind a (lay O (natminus j i) a))
+                                        b))
+                                    (mke (add i (ffind a (lay O (natminus j i) a))) b a))
+                                  (tpair (mkh i N O) (mke j b a)))))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 spair
+                                  (tpair
+                                    (mkh i
+                                      (lay (lay N (ffind b N) a)
+                                        (natminus (add i (ffind b N)) i)
+                                        b)
+                                      (lay (lay O (natminus j i) a)
+                                        (ffind a (lay O (natminus j i) a))
+                                        b))
+                                    (mke (add i (ffind a (lay O (natminus j i) a))) b a))
+                                  (tpair (mkh i N O)
+                                    (mke (add i (ffind a (lay O (natminus j i) a))) b a))
+                                  (tpair (mkh i N O) (mke j b a))
+                                  (maponpaths hunk spair
+                                    (lam z
+                                      (tpair z
+                                        (mke (add i (ffind a (lay O (natminus j i) a))) b a)))
+                                    (mkh i
+                                      (lay (lay N (ffind b N) a)
+                                        (natminus (add i (ffind b N)) i)
+                                        b)
+                                      (lay (lay O (natminus j i) a)
+                                        (ffind a (lay O (natminus j i) a))
+                                        b))
+                                    (mkh i N O)
+                                    (pathscomp0 hunk
+                                      (mkh i
+                                        (lay (lay N (ffind b N) a)
+                                          (natminus (add i (ffind b N)) i)
+                                          b)
+                                        (lay (lay O (natminus j i) a)
+                                          (ffind a (lay O (natminus j i) a))
+                                          b))
+                                      (mkh i N
+                                        (lay (lay O (natminus j i) a)
+                                          (ffind a (lay O (natminus j i) a))
+                                          b))
+                                      (mkh i N O)
+                                      (maponpaths nlist hunk
+                                        (lam z
+                                          (mkh i z
+                                            (lay (lay O (natminus j i) a)
+                                              (ffind a (lay O (natminus j i) a))
+                                              b)))
+                                        (lay (lay N (ffind b N) a)
+                                          (natminus (add i (ffind b N)) i)
+                                          b)
+                                        N
+                                        (swal-w1 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                      (maponpaths nlist hunk (lam z (mkh i N z))
+                                        (lay (lay O (natminus j i) a)
+                                          (ffind a (lay O (natminus j i) a))
+                                          b)
+                                        O
+                                        (swal-w2 i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))))
+                                  (maponpaths epatch spair (lam z (tpair (mkh i N O) z))
+                                    (mke (add i (ffind a (lay O (natminus j i) a))) b a)
+                                    (mke j b a)
+                                    (maponpaths nat epatch (lam z (mke z b a))
+                                      (add i (ffind a (lay O (natminus j i) a)))
+                                      j
+                                      (swal-seat i O N j a b e1 e2 e3 e4 e5 e6 e7 e8)))))))))))))))))))
+ (defq 'swal-core
+   '(pi i nat
+      (pi O nlist
+        (pi N nlist
+          (pi j nat
+            (pi a nat
+              (pi b nat
+                (pi e1 (paths bool (natgtb i j) false)
+                  (pi e2 (paths bool (natgtb (add i (nlen O)) j) true)
+                    (pi e3 (paths nat (lget (natminus j i) O) b)
+                      (pi e4 (paths nat (occ b O) 1)
+                        (pi e5 (paths nat (occ a O) 0)
+                          (pi e6 (paths nat (occ b N) 1)
+                            (pi e7 (paths nat (occ a N) 0)
+                              (pi e8 (paths bool (nateqb a b) false)
+                                (paths (coprod spair unit)
+                                  (swal (mke (add i (ffind b N)) b a)
+                                    (mkh i (lay N (ffind b N) a) (lay O (natminus j i) a)))
+                                  (ii1 (tpair (mkh i N O) (mke j b a))))))))))))))))))
+   '(lam i
+      (lam O
+        (lam N
+          (lam j
+            (lam a
+              (lam b
+                (lam e1
+                  (lam e2
+                    (lam e3
+                      (lam e4
+                        (lam e5
+                          (lam e6
+                            (lam e7
+                              (lam e8
+                                (pathscomp0 (coprod spair unit)
+                                  (swal (mke (add i (ffind b N)) b a)
+                                    (mkh i (lay N (ffind b N) a) (lay O (natminus j i) a)))
+                                  (ii1
+                                    (tpair
+                                      (mkh i
+                                        (lay (lay N (ffind b N) a)
+                                          (natminus (add i (ffind b N)) i)
+                                          b)
+                                        (lay (lay O (natminus j i) a)
+                                          (ffind a (lay O (natminus j i) a))
+                                          b))
+                                      (mke (add i (ffind a (lay O (natminus j i) a))) b a)))
+                                  (ii1 (tpair (mkh i N O) (mke j b a)))
+                                  (maponpaths bool (coprod spair unit)
+                                    (lam c
+                                      (bool_rect (lam c2 (coprod spair unit))
+                                        (ii1
+                                          (tpair
+                                            (mkh i
+                                              (lay (lay N (ffind b N) a)
+                                                (natminus (add i (ffind b N)) i)
+                                                b)
+                                              (lay (lay O (natminus j i) a)
+                                                (ffind a (lay O (natminus j i) a))
+                                                b))
+                                            (mke (add i (ffind a (lay O (natminus j i) a))) b a)))
+                                        (ii2 tt)
+                                        c))
+                                    (andb (negb (natgtb i (add i (ffind b N))))
+                                      (andb
+                                        (natgtb (add i (nlen (lay N (ffind b N) a)))
+                                          (add i (ffind b N)))
+                                        (andb
+                                          (nateqb
+                                            (lget (natminus (add i (ffind b N)) i)
+                                              (lay N (ffind b N) a))
+                                            a)
+                                          (andb (nateqb (occ a (lay N (ffind b N) a)) 1)
+                                            (andb (nateqb (occ b (lay N (ffind b N) a)) 0)
+                                              (andb (nateqb (occ a (lay O (natminus j i) a)) 1)
+                                                (nateqb (occ b (lay O (natminus j i) a)) 0)))))))
+                                    true
+                                    (swal-fg i O N j a b e1 e2 e3 e4 e5 e6 e7 e8))
+                                  (maponpaths spair (coprod spair unit) (lam z (ii1 z))
+                                    (tpair
+                                      (mkh i
+                                        (lay (lay N (ffind b N) a)
+                                          (natminus (add i (ffind b N)) i)
+                                          b)
+                                        (lay (lay O (natminus j i) a)
+                                          (ffind a (lay O (natminus j i) a))
+                                          b))
+                                      (mke (add i (ffind a (lay O (natminus j i) a))) b a))
+                                    (tpair (mkh i N O) (mke j b a))
+                                    (swal-pay i O N j a b e1 e2 e3 e4 e5 e6 e7 e8)))))))))))))))))))
+
+; --- (L1) the swallow commute is INVOLUTIVE through the groupoid inverse:
+; --- invert both results, swal again, and the originals come home. one
+; --- dependent bool_rect on the folded guard (an idpath convoy remembers
+; --- the verdict; the refusing branch discriminates through scmside),
+; --- andbtruel/r unstack the seven verdicts, a/b distinct falls out of
+; --- the counts (1 = 0 is succ-on-zero absurd), ii1 injects through a
+; --- coprod_rect projection, and ONE transport carries the goal from the
+; --- computed pair to the hypothesis' -- sigma-eta does the records ---
+(assert
+ (defq 'swal-involutive
+   '(pi p epatch
+      (pi s hunk
+        (pi sq hunk
+          (pi dq epatch
+            (pi h (paths (coprod spair unit) (swal p s) (ii1 (tpair sq dq)))
+              (paths (coprod spair unit) (swal (einv dq) (hinv sq))
+                (ii1 (tpair (hinv s) (einv p)))))))))
+   '(lam p
+      (lam s
+        (lam sq
+          (lam dq
+            (lam h
+              ((bool_rect
+                 (lam c
+                   (pi hc
+                     (paths bool
+                       (andb (negb (natgtb (hi s) (ej p)))
+                         (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                           (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                             (andb (nateqb (occ (eb p) (ho s)) 1)
+                               (andb (nateqb (occ (ea p) (ho s)) 0)
+                                 (andb (nateqb (occ (eb p) (hn s)) 1)
+                                   (nateqb (occ (ea p) (hn s)) 0)))))))
+                       c)
+                     (pi h2
+                       (paths (coprod spair unit)
+                         (bool_rect (lam c2 (coprod spair unit))
+                           (ii1
+                             (tpair
+                               (mkh (hi s) (lay (ho s) (natminus (ej p) (hi s)) (ea p))
+                                 (lay (hn s) (ffind (eb p) (hn s)) (ea p)))
+                               (mke (add (hi s) (ffind (eb p) (hn s))) (ea p) (eb p))))
+                           (ii2 tt)
+                           c)
+                         (ii1 (tpair sq dq)))
+                       (paths (coprod spair unit) (swal (einv dq) (hinv sq))
+                         (ii1 (tpair (hinv s) (einv p)))))))
+                 (lam hc
+                   (lam h2
+                     (transportf spair
+                       (lam u
+                         (paths (coprod spair unit) (swal (einv (pr2 u)) (hinv (pr1 u)))
+                           (ii1 (tpair (hinv s) (einv p)))))
+                       (tpair
+                         (mkh (hi s) (lay (ho s) (natminus (ej p) (hi s)) (ea p))
+                           (lay (hn s) (ffind (eb p) (hn s)) (ea p)))
+                         (mke (add (hi s) (ffind (eb p) (hn s))) (ea p) (eb p)))
+                       (tpair sq dq)
+                       (maponpaths (coprod spair unit) spair
+                         (lam c
+                           (coprod_rect (lam c2 spair) (lam s2 s2)
+                             (lam u2
+                               (tpair
+                                 (mkh (hi s) (lay (ho s) (natminus (ej p) (hi s)) (ea p))
+                                   (lay (hn s) (ffind (eb p) (hn s)) (ea p)))
+                                 (mke (add (hi s) (ffind (eb p) (hn s))) (ea p) (eb p))))
+                             c))
+                         (ii1
+                           (tpair
+                             (mkh (hi s) (lay (ho s) (natminus (ej p) (hi s)) (ea p))
+                               (lay (hn s) (ffind (eb p) (hn s)) (ea p)))
+                             (mke (add (hi s) (ffind (eb p) (hn s))) (ea p) (eb p))))
+                         (ii1 (tpair sq dq))
+                         h2)
+                       (swal-core (hi s) (ho s) (hn s) (ej p) (ea p) (eb p)
+                         (negbtrue (natgtb (hi s) (ej p))
+                           (andbtruel (negb (natgtb (hi s) (ej p)))
+                             (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                               (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                 (andb (nateqb (occ (eb p) (ho s)) 1)
+                                   (andb (nateqb (occ (ea p) (ho s)) 0)
+                                     (andb (nateqb (occ (eb p) (hn s)) 1)
+                                       (nateqb (occ (ea p) (hn s)) 0))))))
+                             hc))
+                         (andbtruel (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                           (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                             (andb (nateqb (occ (eb p) (ho s)) 1)
+                               (andb (nateqb (occ (ea p) (ho s)) 0)
+                                 (andb (nateqb (occ (eb p) (hn s)) 1)
+                                   (nateqb (occ (ea p) (hn s)) 0)))))
+                           (andbtruer (negb (natgtb (hi s) (ej p)))
+                             (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                               (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                 (andb (nateqb (occ (eb p) (ho s)) 1)
+                                   (andb (nateqb (occ (ea p) (ho s)) 0)
+                                     (andb (nateqb (occ (eb p) (hn s)) 1)
+                                       (nateqb (occ (ea p) (hn s)) 0))))))
+                             hc))
+                         (nateqbtopaths (lget (natminus (ej p) (hi s)) (ho s)) (eb p)
+                           (andbtruel (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                             (andb (nateqb (occ (eb p) (ho s)) 1)
+                               (andb (nateqb (occ (ea p) (ho s)) 0)
+                                 (andb (nateqb (occ (eb p) (hn s)) 1)
+                                   (nateqb (occ (ea p) (hn s)) 0))))
+                             (andbtruer (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                               (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                 (andb (nateqb (occ (eb p) (ho s)) 1)
+                                   (andb (nateqb (occ (ea p) (ho s)) 0)
+                                     (andb (nateqb (occ (eb p) (hn s)) 1)
+                                       (nateqb (occ (ea p) (hn s)) 0)))))
+                               (andbtruer (negb (natgtb (hi s) (ej p)))
+                                 (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                   (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                     (andb (nateqb (occ (eb p) (ho s)) 1)
+                                       (andb (nateqb (occ (ea p) (ho s)) 0)
+                                         (andb (nateqb (occ (eb p) (hn s)) 1)
+                                           (nateqb (occ (ea p) (hn s)) 0))))))
+                                 hc))))
+                         (nateqbtopaths (occ (eb p) (ho s)) 1
+                           (andbtruel (nateqb (occ (eb p) (ho s)) 1)
+                             (andb (nateqb (occ (ea p) (ho s)) 0)
+                               (andb (nateqb (occ (eb p) (hn s)) 1)
+                                 (nateqb (occ (ea p) (hn s)) 0)))
+                             (andbtruer (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                               (andb (nateqb (occ (eb p) (ho s)) 1)
+                                 (andb (nateqb (occ (ea p) (ho s)) 0)
+                                   (andb (nateqb (occ (eb p) (hn s)) 1)
+                                     (nateqb (occ (ea p) (hn s)) 0))))
+                               (andbtruer (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                 (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                   (andb (nateqb (occ (eb p) (ho s)) 1)
+                                     (andb (nateqb (occ (ea p) (ho s)) 0)
+                                       (andb (nateqb (occ (eb p) (hn s)) 1)
+                                         (nateqb (occ (ea p) (hn s)) 0)))))
+                                 (andbtruer (negb (natgtb (hi s) (ej p)))
+                                   (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                     (andb
+                                       (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                       (andb (nateqb (occ (eb p) (ho s)) 1)
+                                         (andb (nateqb (occ (ea p) (ho s)) 0)
+                                           (andb (nateqb (occ (eb p) (hn s)) 1)
+                                             (nateqb (occ (ea p) (hn s)) 0))))))
+                                   hc)))))
+                         (nateqbtopaths (occ (ea p) (ho s)) 0
+                           (andbtruel (nateqb (occ (ea p) (ho s)) 0)
+                             (andb (nateqb (occ (eb p) (hn s)) 1) (nateqb (occ (ea p) (hn s)) 0))
+                             (andbtruer (nateqb (occ (eb p) (ho s)) 1)
+                               (andb (nateqb (occ (ea p) (ho s)) 0)
+                                 (andb (nateqb (occ (eb p) (hn s)) 1)
+                                   (nateqb (occ (ea p) (hn s)) 0)))
+                               (andbtruer (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                 (andb (nateqb (occ (eb p) (ho s)) 1)
+                                   (andb (nateqb (occ (ea p) (ho s)) 0)
+                                     (andb (nateqb (occ (eb p) (hn s)) 1)
+                                       (nateqb (occ (ea p) (hn s)) 0))))
+                                 (andbtruer (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                   (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                     (andb (nateqb (occ (eb p) (ho s)) 1)
+                                       (andb (nateqb (occ (ea p) (ho s)) 0)
+                                         (andb (nateqb (occ (eb p) (hn s)) 1)
+                                           (nateqb (occ (ea p) (hn s)) 0)))))
+                                   (andbtruer (negb (natgtb (hi s) (ej p)))
+                                     (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                       (andb
+                                         (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                         (andb (nateqb (occ (eb p) (ho s)) 1)
+                                           (andb (nateqb (occ (ea p) (ho s)) 0)
+                                             (andb (nateqb (occ (eb p) (hn s)) 1)
+                                               (nateqb (occ (ea p) (hn s)) 0))))))
+                                     hc))))))
+                         (nateqbtopaths (occ (eb p) (hn s)) 1
+                           (andbtruel (nateqb (occ (eb p) (hn s)) 1)
+                             (nateqb (occ (ea p) (hn s)) 0)
+                             (andbtruer (nateqb (occ (ea p) (ho s)) 0)
+                               (andb (nateqb (occ (eb p) (hn s)) 1)
+                                 (nateqb (occ (ea p) (hn s)) 0))
+                               (andbtruer (nateqb (occ (eb p) (ho s)) 1)
+                                 (andb (nateqb (occ (ea p) (ho s)) 0)
+                                   (andb (nateqb (occ (eb p) (hn s)) 1)
+                                     (nateqb (occ (ea p) (hn s)) 0)))
+                                 (andbtruer
+                                   (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                   (andb (nateqb (occ (eb p) (ho s)) 1)
+                                     (andb (nateqb (occ (ea p) (ho s)) 0)
+                                       (andb (nateqb (occ (eb p) (hn s)) 1)
+                                         (nateqb (occ (ea p) (hn s)) 0))))
+                                   (andbtruer (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                     (andb
+                                       (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                       (andb (nateqb (occ (eb p) (ho s)) 1)
+                                         (andb (nateqb (occ (ea p) (ho s)) 0)
+                                           (andb (nateqb (occ (eb p) (hn s)) 1)
+                                             (nateqb (occ (ea p) (hn s)) 0)))))
+                                     (andbtruer (negb (natgtb (hi s) (ej p)))
+                                       (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                         (andb
+                                           (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                           (andb (nateqb (occ (eb p) (ho s)) 1)
+                                             (andb (nateqb (occ (ea p) (ho s)) 0)
+                                               (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                 (nateqb (occ (ea p) (hn s)) 0))))))
+                                       hc)))))))
+                         (nateqbtopaths (occ (ea p) (hn s)) 0
+                           (andbtruer (nateqb (occ (eb p) (hn s)) 1)
+                             (nateqb (occ (ea p) (hn s)) 0)
+                             (andbtruer (nateqb (occ (ea p) (ho s)) 0)
+                               (andb (nateqb (occ (eb p) (hn s)) 1)
+                                 (nateqb (occ (ea p) (hn s)) 0))
+                               (andbtruer (nateqb (occ (eb p) (ho s)) 1)
+                                 (andb (nateqb (occ (ea p) (ho s)) 0)
+                                   (andb (nateqb (occ (eb p) (hn s)) 1)
+                                     (nateqb (occ (ea p) (hn s)) 0)))
+                                 (andbtruer
+                                   (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                   (andb (nateqb (occ (eb p) (ho s)) 1)
+                                     (andb (nateqb (occ (ea p) (ho s)) 0)
+                                       (andb (nateqb (occ (eb p) (hn s)) 1)
+                                         (nateqb (occ (ea p) (hn s)) 0))))
+                                   (andbtruer (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                     (andb
+                                       (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                       (andb (nateqb (occ (eb p) (ho s)) 1)
+                                         (andb (nateqb (occ (ea p) (ho s)) 0)
+                                           (andb (nateqb (occ (eb p) (hn s)) 1)
+                                             (nateqb (occ (ea p) (hn s)) 0)))))
+                                     (andbtruer (negb (natgtb (hi s) (ej p)))
+                                       (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                         (andb
+                                           (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                                           (andb (nateqb (occ (eb p) (ho s)) 1)
+                                             (andb (nateqb (occ (ea p) (ho s)) 0)
+                                               (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                 (nateqb (occ (ea p) (hn s)) 0))))))
+                                       hc)))))))
+                         ((bool_rect
+                            (lam c
+                              (pi hcc (paths bool (nateqb (ea p) (eb p)) c)
+                                (paths bool (nateqb (ea p) (eb p)) false)))
+                            (lam hcc
+                              (fromempty (paths bool (nateqb (ea p) (eb p)) false)
+                                (negpathssx0 0
+                                  (pathscomp0 nat 1 (occ (eb p) (ho s)) 0
+                                    (pathsinv0 nat (occ (eb p) (ho s)) 1
+                                      (nateqbtopaths (occ (eb p) (ho s)) 1
+                                        (andbtruel (nateqb (occ (eb p) (ho s)) 1)
+                                          (andb (nateqb (occ (ea p) (ho s)) 0)
+                                            (andb (nateqb (occ (eb p) (hn s)) 1)
+                                              (nateqb (occ (ea p) (hn s)) 0)))
+                                          (andbtruer
+                                            (nateqb (lget (natminus (ej p) (hi s)) (ho s))
+                                              (eb p))
+                                            (andb (nateqb (occ (eb p) (ho s)) 1)
+                                              (andb (nateqb (occ (ea p) (ho s)) 0)
+                                                (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                  (nateqb (occ (ea p) (hn s)) 0))))
+                                            (andbtruer
+                                              (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                              (andb
+                                                (nateqb (lget (natminus (ej p) (hi s)) (ho s))
+                                                  (eb p))
+                                                (andb (nateqb (occ (eb p) (ho s)) 1)
+                                                  (andb (nateqb (occ (ea p) (ho s)) 0)
+                                                    (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                      (nateqb (occ (ea p) (hn s)) 0)))))
+                                              (andbtruer (negb (natgtb (hi s) (ej p)))
+                                                (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                                  (andb
+                                                    (nateqb
+                                                      (lget (natminus (ej p) (hi s)) (ho s))
+                                                      (eb p))
+                                                    (andb (nateqb (occ (eb p) (ho s)) 1)
+                                                      (andb (nateqb (occ (ea p) (ho s)) 0)
+                                                        (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                          (nateqb (occ (ea p) (hn s)) 0))))))
+                                                hc))))))
+                                    (pathscomp0 nat (occ (eb p) (ho s)) (occ (ea p) (ho s)) 0
+                                      (maponpaths nat nat (lam z (occ z (ho s))) (eb p) (ea p)
+                                        (pathsinv0 nat (ea p) (eb p)
+                                          (nateqbtopaths (ea p) (eb p) hcc)))
+                                      (nateqbtopaths (occ (ea p) (ho s)) 0
+                                        (andbtruel (nateqb (occ (ea p) (ho s)) 0)
+                                          (andb (nateqb (occ (eb p) (hn s)) 1)
+                                            (nateqb (occ (ea p) (hn s)) 0))
+                                          (andbtruer (nateqb (occ (eb p) (ho s)) 1)
+                                            (andb (nateqb (occ (ea p) (ho s)) 0)
+                                              (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                (nateqb (occ (ea p) (hn s)) 0)))
+                                            (andbtruer
+                                              (nateqb (lget (natminus (ej p) (hi s)) (ho s))
+                                                (eb p))
+                                              (andb (nateqb (occ (eb p) (ho s)) 1)
+                                                (andb (nateqb (occ (ea p) (ho s)) 0)
+                                                  (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                    (nateqb (occ (ea p) (hn s)) 0))))
+                                              (andbtruer
+                                                (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                                (andb
+                                                  (nateqb (lget (natminus (ej p) (hi s)) (ho s))
+                                                    (eb p))
+                                                  (andb (nateqb (occ (eb p) (ho s)) 1)
+                                                    (andb (nateqb (occ (ea p) (ho s)) 0)
+                                                      (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                        (nateqb (occ (ea p) (hn s)) 0)))))
+                                                (andbtruer (negb (natgtb (hi s) (ej p)))
+                                                  (andb
+                                                    (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                                                    (andb
+                                                      (nateqb
+                                                        (lget (natminus (ej p) (hi s)) (ho s))
+                                                        (eb p))
+                                                      (andb (nateqb (occ (eb p) (ho s)) 1)
+                                                        (andb (nateqb (occ (ea p) (ho s)) 0)
+                                                          (andb (nateqb (occ (eb p) (hn s)) 1)
+                                                            (nateqb (occ (ea p) (hn s)) 0))))))
+                                                  hc)))))))))))
+                            (lam hcc hcc)
+                            (nateqb (ea p) (eb p)))
+                           (idpath (nateqb (ea p) (eb p))))))))
+                 (lam hc
+                   (lam h2
+                     (fromempty
+                       (paths (coprod spair unit) (swal (einv dq) (hinv sq))
+                         (ii1 (tpair (hinv s) (einv p))))
+                       (transportf (coprod spair unit) scmside (ii2 tt) (ii1 (tpair sq dq)) h2
+                         tt))))
+                 (andb (negb (natgtb (hi s) (ej p)))
+                   (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                     (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                       (andb (nateqb (occ (eb p) (ho s)) 1)
+                         (andb (nateqb (occ (ea p) (ho s)) 0)
+                           (andb (nateqb (occ (eb p) (hn s)) 1) (nateqb (occ (ea p) (hn s)) 0))))))))
+                (idpath
+                  (andb (negb (natgtb (hi s) (ej p)))
+                    (andb (natgtb (add (hi s) (nlen (ho s))) (ej p))
+                      (andb (nateqb (lget (natminus (ej p) (hi s)) (ho s)) (eb p))
+                        (andb (nateqb (occ (eb p) (ho s)) 1)
+                          (andb (nateqb (occ (ea p) (ho s)) 0)
+                            (andb (nateqb (occ (eb p) (hn s)) 1) (nateqb (occ (ea p) (hn s)) 0))))))))
+                h))))))))
+

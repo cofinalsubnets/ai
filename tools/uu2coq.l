@@ -216,6 +216,7 @@
 "Print Assumptions uu_etreeeta." (string 10)
 "Print Assumptions uu_ekidsbeta." (string 10)
 "Print Assumptions uu_ffindlay." (string 10)
+"Print Assumptions uu_swal_involutive." (string 10)
                 "Print Assumptions add_comm_std." (string 10)
                 "Print Assumptions add_assoc_std." (string 10)
                 "Print Assumptions mul_comm_std." (string 10) (string 10)
