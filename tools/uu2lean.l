@@ -21,6 +21,7 @@
 
 (: _ (reads (open "test/uu.l" "r"))
    _ (reads (open "test/uulay.l" "r"))
+   _ (reads (open "test/uupatch.l" "r"))
    _ (reads (open "test/uuwm.l" "r"))
    _ (reads (open "test/uuwmlaw.l" "r"))            ; load + CERTIFY uu's corpus (populates GLOB)
    bs (intern "\\")
@@ -51,7 +52,7 @@
                            (| (deq? F) (axq? F)) (link (entry F) acc) acc)))
                       (rev acc))
    (app2 a b) (? (two? a) (link (cap a) (app2 (cup a) b)) b)   ; NOT `cat` -- the local cat is the STRING fold
-   ents (gather (app2 (forms "test/uu.l") (app2 (forms "test/uulay.l") (app2 (forms "test/uuwm.l") (forms "test/uuwmlaw.l")))) ())
+   ents (gather (app2 (forms "test/uu.l") (app2 (forms "test/uulay.l") (app2 (forms "test/uupatch.l") (app2 (forms "test/uuwm.l") (forms "test/uuwmlaw.l"))))) ())
 
    ; names that exist (corpus-wide) -- for telling a global reference from a bound var
    nt (tablet 0) _ (map (\ e (pin nt (e2 e) 1)) ents)
@@ -67,7 +68,7 @@
    ; and the universe strands at every downstream use (uu_zrow found it). ground
    ; the StackSet model's types at Type 0 and the whole tower's universes solve.
    mono (tablet 0)
-   _ (map (\ n (pin mono n 1)) '(nvec nlist stk mstk))
+   _ (map (\ n (pin mono n 1)) '(nvec nlist stk mstk patch tree ppair pvec plist cmside))
 
    ; transparent type-former/identity combinators: Lean checks a paths.rec minor premise
    ; at REDUCIBLE transparency and won't unfold a plain `def`, so an equivalence proof
@@ -208,6 +209,10 @@
 "#print axioms uu_zcountins"
 "#print axioms uu_zinsane"
 "#print axioms uu_rtwinsrow"
+"#print axioms uu_commute_involutive"
+"#print axioms uu_invert_roundtrip"
+"#print axioms uu_commute_sound"
+"#print axioms uu_applall_swap"
        "#print axioms uu_natplusassoc"
        "#print axioms uu_natmultcomm"
        "#print axioms uu_total2_paths_f"

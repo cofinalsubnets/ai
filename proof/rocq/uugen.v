@@ -520,6 +520,56 @@ Definition uu_rtwinsrow : (forall nm : nat, (forall fr : uu_nlist, (forall r : n
   (fun nm => (fun fr => (fun r => (fun row => ((nat_rect (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_rtwins nm fr r (tpair q v)) (tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun u => (fun v => (bool_rect (fun b => (@paths uu_nlist (bool_rect (fun x => uu_nlist) (uu_lapp (uu_lzipl (uu_ltake nm (tpair (S m) v)) (uu_msplitveq nm r)) (uu_lzipl (uu_ldrop nm (tpair (S m) v)) (uu_msplitvw (uu_mpadfr fr (uu_natminus (S m) nm)) r))) (uu_lzipl (tpair (S m) v) (uu_msplitveq (S m) r)) b) (tpair (S m) v))) (let D := (uu_ldrop nm (tpair (S m) v)) in (let M := (uu_lzipl (uu_ltake nm (tpair (S m) v)) (uu_msplitveq nm r)) in (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_natminus (S m) nm)) r))) (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (tpair (S m) v) (uu_maponpaths nat uu_nlist (fun t => (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr t) r)))) (uu_natminus (S m) nm) (uu_nlen D) (uu_pathsinv0 nat (uu_nlen D) (uu_natminus (S m) nm) (uu_ldroplen nm (tpair (S m) v)))) (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (uu_lapp M D) (tpair (S m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp M t)) (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r)) D (uu_lziplpadvw D fr r)) (uu_pathscomp0 uu_nlist (uu_lapp M D) (uu_lapp (uu_ltake nm (tpair (S m) v)) D) (tpair (S m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp t D)) M (uu_ltake nm (tpair (S m) v)) (uu_lzipltake nm (tpair (S m) v) r)) (uu_lapptakedrop nm (tpair (S m) v))))))) (uu_lziplveq (tpair (S m) v) r) (uu_natgtb (S m) nm))))) (pr1 row)) (pr2 row)))))).
 Definition uu_rtwinsane : (forall nm : nat, (forall fr : uu_nlist, (forall r : nat, (forall row : uu_nlist, (forall hs : (@paths bool (uu_nodupb row) true), (@paths bool (uu_nodupb (uu_rtwins nm fr r row)) true)))))) :=
   (fun nm => (fun fr => (fun r => (fun row => (fun hs => (uu_pathscomp0 bool (uu_nodupb (uu_rtwins nm fr r row)) (uu_nodupb row) true (uu_maponpaths uu_nlist bool (fun t => (uu_nodupb t)) (uu_rtwins nm fr r row) row (uu_rtwinsrow nm fr r row)) hs)))))).
+Definition uu_patch : Type :=
+  (total2 (fun k : nat => (total2 (fun a : nat => nat)))).
+Definition uu_chg : (forall k : nat, (forall a : nat, (forall b : nat, uu_patch))) :=
+  (fun k => (fun a => (fun b => (tpair k (tpair a b))))).
+Definition uu_pk : (forall p : uu_patch, nat) :=
+  (fun p => (pr1 p)).
+Definition uu_pa : (forall p : uu_patch, nat) :=
+  (fun p => (pr1 (pr2 p))).
+Definition uu_pb : (forall p : uu_patch, nat) :=
+  (fun p => (pr2 (pr2 p))).
+Definition uu_tree : Type :=
+  (forall k : nat, nat).
+Definition uu_apon : (forall t : uu_tree, (forall p : uu_patch, uu_tree)) :=
+  (fun t => (fun p => (fun q => (sum_rect (fun c => nat) (fun e => (uu_pb p)) (fun ne => (t q)) (uu_isdeceqnat q (uu_pk p)))))).
+Definition uu_valid : (forall t : uu_tree, (forall p : uu_patch, bool)) :=
+  (fun t => (fun p => (sum_rect (fun c => bool) (fun e => true) (fun ne => false) (uu_isdeceqnat (t (uu_pk p)) (uu_pa p))))).
+Definition uu_invert : (forall p : uu_patch, uu_patch) :=
+  (fun p => (uu_chg (uu_pk p) (uu_pb p) (uu_pa p))).
+Definition uu_ppair : Type :=
+  (total2 (fun x : uu_patch => uu_patch)).
+Definition uu_commute : (forall p : uu_patch, (forall q : uu_patch, (sum uu_ppair unit))) :=
+  (fun p => (fun q => (sum_rect (fun c => (sum uu_ppair unit)) (fun e => (inr tt)) (fun ne => (inl (tpair q p))) (uu_isdeceqnat (uu_pk p) (uu_pk q))))).
+Definition uu_cmside : (forall c : (sum uu_ppair unit), Type) :=
+  (fun c => (sum_rect (fun x => Type) (fun x => Empty_set) (fun x => unit) c)).
+Definition uu_commute_involutive : (forall p : uu_patch, (forall q : uu_patch, (forall q2 : uu_patch, (forall p2 : uu_patch, (forall h : (@paths (sum uu_ppair unit) (uu_commute p q) (inl (tpair q2 p2))), (@paths (sum uu_ppair unit) (uu_commute q2 p2) (inl (tpair p q)))))))) :=
+  (fun p => (fun q => (fun q2 => (fun p2 => ((sum_rect (fun c => (forall h : (@paths (sum uu_ppair unit) (sum_rect (fun c2 => (sum uu_ppair unit)) (fun e2 => (inr tt)) (fun ne2 => (inl (tpair q p))) c) (inl (tpair q2 p2))), (@paths (sum uu_ppair unit) (uu_commute q2 p2) (inl (tpair p q))))) (fun e => (fun h => (uu_fromempty (@paths (sum uu_ppair unit) (uu_commute q2 p2) (inl (tpair p q))) (uu_transportf (sum uu_ppair unit) uu_cmside (inr tt) (inl (tpair q2 p2)) h tt)))) (fun ne => (fun h => (uu_pathscomp0 (sum uu_ppair unit) (uu_commute q2 p2) (uu_commute q p) (inl (tpair p q)) (uu_pathsinv0 (sum uu_ppair unit) (uu_commute q p) (uu_commute q2 p2) (uu_maponpaths (sum uu_ppair unit) (sum uu_ppair unit) (fun c => (sum_rect (fun x => (sum uu_ppair unit)) (fun z => (uu_commute (pr1 z) (pr2 z))) (fun u => (inr tt)) c)) (inl (tpair q p)) (inl (tpair q2 p2)) h)) ((sum_rect (fun c => (@paths (sum uu_ppair unit) (sum_rect (fun c2 => (sum uu_ppair unit)) (fun e2 => (inr tt)) (fun ne2 => (inl (tpair p q))) c) (inl (tpair p q)))) (fun e2 => (uu_fromempty (@paths (sum uu_ppair unit) (inr tt) (inl (tpair p q))) (ne (uu_pathsinv0 nat (uu_pk q) (uu_pk p) e2)))) (fun ne2 => ((idpath (inl ((tpair p q) : uu_ppair))) : (@paths (sum uu_ppair unit) (inl (tpair p q)) (inl (tpair p q))))) (uu_isdeceqnat (uu_pk q) (uu_pk p))))))) (uu_isdeceqnat (uu_pk p) (uu_pk q)))))))).
+Definition uu_invert_roundtrip : (forall t : uu_tree, (forall p : uu_patch, (forall hv : (@paths bool (uu_valid t p) true), (forall q : nat, (@paths nat (uu_apon (uu_apon t p) (uu_invert p) q) (t q)))))) :=
+  (fun t => (fun p => ((sum_rect (fun c => (forall hv : (@paths bool (sum_rect (fun c2 => bool) (fun e2 => true) (fun ne2 => false) c) true), (forall q : nat, (@paths nat (uu_apon (uu_apon t p) (uu_invert p) q) (t q))))) (fun e => (fun hv => (fun q => ((sum_rect (fun c => (@paths nat (sum_rect (fun c2 => nat) (fun e2 => (uu_pa p)) (fun ne2 => (sum_rect (fun c3 => nat) (fun e3 => (uu_pb p)) (fun ne3 => (t q)) c)) c) (t q))) (fun e1 => (uu_pathscomp0 nat (uu_pa p) (t (uu_pk p)) (t q) (uu_pathsinv0 nat (t (uu_pk p)) (uu_pa p) e) (uu_maponpaths nat nat t (uu_pk p) q (uu_pathsinv0 nat q (uu_pk p) e1)))) (fun ne1 => (idpath (t q))) (uu_isdeceqnat q (uu_pk p))))))) (fun ne => (fun hv => (uu_fromempty (forall q : nat, (@paths nat (uu_apon (uu_apon t p) (uu_invert p) q) (t q))) (uu_nopathsfalsetotrue hv)))) (uu_isdeceqnat (t (uu_pk p)) (uu_pa p)))))).
+Definition uu_apon_comm : (forall p : uu_patch, (forall q : uu_patch, (forall ne : (forall e : (@paths nat (uu_pk p) (uu_pk q)), Empty_set), (forall t : uu_tree, (forall r : nat, (@paths nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r))))))) :=
+  (fun p => (fun q => (fun ne => (fun t => (fun r => ((sum_rect (fun c => (@paths nat (sum_rect (fun c2 => nat) (fun e2 => (uu_pb q)) (fun ne2 => (sum_rect (fun c3 => nat) (fun e3 => (uu_pb p)) (fun ne3 => (t r)) (uu_isdeceqnat r (uu_pk p)))) c) (sum_rect (fun c2 => nat) (fun e2 => (uu_pb p)) (fun ne2 => (sum_rect (fun c3 => nat) (fun e3 => (uu_pb q)) (fun ne3 => (t r)) c)) (uu_isdeceqnat r (uu_pk p))))) (fun e1 => ((sum_rect (fun c => (@paths nat (uu_pb q) (sum_rect (fun c2 => nat) (fun e2 => (uu_pb p)) (fun ne2 => (uu_pb q)) c))) (fun e2 => (uu_fromempty (@paths nat (uu_pb q) (uu_pb p)) (ne (uu_pathscomp0 nat (uu_pk p) r (uu_pk q) (uu_pathsinv0 nat r (uu_pk p) e2) e1)))) (fun ne2 => (idpath (uu_pb q))) (uu_isdeceqnat r (uu_pk p))))) (fun ne1 => ((sum_rect (fun c => (@paths nat (sum_rect (fun c2 => nat) (fun e2 => (uu_pb p)) (fun ne2 => (t r)) c) (sum_rect (fun c2 => nat) (fun e2 => (uu_pb p)) (fun ne2 => (t r)) c))) (fun e2 => (idpath (uu_pb p))) (fun ne2 => (idpath (t r))) (uu_isdeceqnat r (uu_pk p))))) (uu_isdeceqnat r (uu_pk q))))))))).
+Definition uu_commute_sound : (forall p : uu_patch, (forall q : uu_patch, (forall h : (@paths (sum uu_ppair unit) (uu_commute p q) (inl (tpair q p))), (forall t : uu_tree, (forall r : nat, (@paths nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r))))))) :=
+  (fun p => (fun q => ((sum_rect (fun c => (forall h : (@paths (sum uu_ppair unit) (sum_rect (fun c2 => (sum uu_ppair unit)) (fun e2 => (inr tt)) (fun ne2 => (inl (tpair q p))) c) (inl (tpair q p))), (forall t : uu_tree, (forall r : nat, (@paths nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r)))))) (fun e => (fun h => (uu_fromempty (forall t : uu_tree, (forall r : nat, (@paths nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r)))) (uu_transportf (sum uu_ppair unit) uu_cmside (inr tt) (inl (tpair q p)) h tt)))) (fun ne => (fun h => (uu_apon_comm p q ne))) (uu_isdeceqnat (uu_pk p) (uu_pk q)))))).
+Definition uu_pvec : (forall n : nat, Type) :=
+  (fun n => (nat_rect (fun q => Type) unit (fun k => (fun r => (total2 (fun h : uu_patch => r)))) n)).
+Definition uu_plist : Type :=
+  (total2 (fun n : nat => (uu_pvec n))).
+Definition uu_pnil : uu_plist :=
+  (tpair 0 tt).
+Definition uu_pcons : (forall x : uu_patch, (forall l : uu_plist, uu_plist)) :=
+  (fun x => (fun l => (tpair (S (pr1 l)) (tpair x (pr2 l))))).
+Definition uu_papp : (forall a : uu_plist, (forall b : uu_plist, uu_plist)) :=
+  (fun a => (fun b => ((nat_rect (fun q => (forall v : (uu_pvec q), uu_plist)) (fun v => b) (fun k => (fun IH => (fun v => (uu_pcons (pr1 v) (IH (pr2 v)))))) (pr1 a)) (pr2 a)))).
+Definition uu_applall : (forall l : uu_plist, (forall t : uu_tree, uu_tree)) :=
+  (fun l => (fun t => ((nat_rect (fun q => (forall v : (uu_pvec q), (forall t2 : uu_tree, uu_tree))) (fun v => (fun t2 => t2)) (fun k => (fun IH => (fun v => (fun t2 => (IH (pr2 v) (uu_apon t2 (pr1 v))))))) (pr1 l)) (pr2 l) t))).
+Definition uu_apon_ext : (forall t1 : uu_tree, (forall t2 : uu_tree, (forall p : uu_patch, (forall hp : (forall k : nat, (@paths nat (t1 k) (t2 k))), (forall r : nat, (@paths nat (uu_apon t1 p r) (uu_apon t2 p r))))))) :=
+  (fun t1 => (fun t2 => (fun p => (fun hp => (fun r => ((sum_rect (fun c => (@paths nat (sum_rect (fun c2 => nat) (fun e2 => (uu_pb p)) (fun ne2 => (t1 r)) c) (sum_rect (fun c2 => nat) (fun e2 => (uu_pb p)) (fun ne2 => (t2 r)) c))) (fun e => (idpath (uu_pb p))) (fun ne => (hp r)) (uu_isdeceqnat r (uu_pk p))))))))).
+Definition uu_applall_ext : (forall l : uu_plist, (forall t1 : uu_tree, (forall t2 : uu_tree, (forall hp : (forall k : nat, (@paths nat (t1 k) (t2 k))), (forall r : nat, (@paths nat (uu_applall l t1 r) (uu_applall l t2 r))))))) :=
+  (fun l => ((nat_rect (fun q => (forall v : (uu_pvec q), (forall t1 : uu_tree, (forall t2 : uu_tree, (forall hp : (forall k : nat, (@paths nat (t1 k) (t2 k))), (forall r : nat, (@paths nat (uu_applall (tpair q v) t1 r) (uu_applall (tpair q v) t2 r)))))))) (fun v => (fun t1 => (fun t2 => (fun hp => (fun r => (hp r)))))) (fun k => (fun IH => (fun v => (fun t1 => (fun t2 => (fun hp => (IH (pr2 v) (uu_apon t1 (pr1 v)) (uu_apon t2 (pr1 v)) (uu_apon_ext t1 t2 (pr1 v) hp)))))))) (pr1 l)) (pr2 l))).
+Definition uu_applall_swap : (forall p : uu_patch, (forall q : uu_patch, (forall ne : (forall e : (@paths nat (uu_pk p) (uu_pk q)), Empty_set), (forall pre : uu_plist, (forall post : uu_plist, (forall t : uu_tree, (forall r : nat, (@paths nat (uu_applall (uu_papp pre (uu_pcons p (uu_pcons q post))) t r) (uu_applall (uu_papp pre (uu_pcons q (uu_pcons p post))) t r))))))))) :=
+  (fun p => (fun q => (fun ne => (fun pre => (fun post => ((nat_rect (fun n => (forall v : (uu_pvec n), (forall t : uu_tree, (forall r : nat, (@paths nat (uu_applall (uu_papp (tpair n v) (uu_pcons p (uu_pcons q post))) t r) (uu_applall (uu_papp (tpair n v) (uu_pcons q (uu_pcons p post))) t r)))))) (fun v => (fun t => (uu_applall_ext post (uu_apon (uu_apon t p) q) (uu_apon (uu_apon t q) p) (uu_apon_comm p q ne t)))) (fun k => (fun IH => (fun v => (fun t => (IH (pr2 v) (uu_apon t (pr1 v))))))) (pr1 pre)) (pr2 pre))))))).
 Definition uu_zrow : (forall z : uu_stk, uu_nlist) :=
   (fun z => (uu_lapp (uu_lrev (uu_zup z)) (uu_ncons (uu_zfoc z) (uu_zdn z)))).
 Definition uu_zrev : (forall z : uu_stk, uu_stk) :=
@@ -575,9 +625,13 @@ Print Assumptions uu_natplusr0.
 Print Assumptions uu_zcountins.
 Print Assumptions uu_zinsane.
 Print Assumptions uu_rtwinsrow.
+Print Assumptions uu_commute_involutive.
+Print Assumptions uu_invert_roundtrip.
+Print Assumptions uu_commute_sound.
+Print Assumptions uu_applall_swap.
 Print Assumptions add_comm_std.
 Print Assumptions add_assoc_std.
 Print Assumptions mul_comm_std.
 
-(* 262 exported / 312 corpus entries swept;
+(* 287 exported / 337 corpus entries swept;
    3 headline laws (add_comm, add_assoc, mul_comm) landed on Coq's Nat.* via the bridge *)

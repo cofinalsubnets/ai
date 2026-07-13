@@ -518,6 +518,56 @@ def uu_rtwinsrow : (forall nm : Nat, (forall fr : uu_nlist, (forall r : Nat, (fo
   (fun nm => (fun fr => (fun r => (fun row => ((@Nat.rec (fun q => (forall v : (uu_nvec q), (@paths uu_nlist (uu_rtwins nm fr r (total2.tpair q v)) (total2.tpair q v)))) (fun v => (uu_pathsinv0 uu_nlist (total2.tpair 0 v) uu_nnil (uu_lnil0 v))) (fun m => (fun u => (fun v => (@Bool.rec (fun b => (@paths uu_nlist (@Bool.rec (fun x => uu_nlist) (uu_lzipl (total2.tpair (Nat.succ m) v) (uu_msplitveq (Nat.succ m) r)) (uu_lapp (uu_lzipl (uu_ltake nm (total2.tpair (Nat.succ m) v)) (uu_msplitveq nm r)) (uu_lzipl (uu_ldrop nm (total2.tpair (Nat.succ m) v)) (uu_msplitvw (uu_mpadfr fr (uu_natminus (Nat.succ m) nm)) r))) b) (total2.tpair (Nat.succ m) v))) (uu_lziplveq (total2.tpair (Nat.succ m) v) r) (let D := (uu_ldrop nm (total2.tpair (Nat.succ m) v)); (let M := (uu_lzipl (uu_ltake nm (total2.tpair (Nat.succ m) v)) (uu_msplitveq nm r)); (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_natminus (Nat.succ m) nm)) r))) (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (total2.tpair (Nat.succ m) v) (uu_maponpaths Nat uu_nlist (fun t => (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr t) r)))) (uu_natminus (Nat.succ m) nm) (uu_nlen D) (uu_pathsinv0 Nat (uu_nlen D) (uu_natminus (Nat.succ m) nm) (uu_ldroplen nm (total2.tpair (Nat.succ m) v)))) (uu_pathscomp0 uu_nlist (uu_lapp M (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r))) (uu_lapp M D) (total2.tpair (Nat.succ m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp M t)) (uu_lzipl D (uu_msplitvw (uu_mpadfr fr (uu_nlen D)) r)) D (uu_lziplpadvw D fr r)) (uu_pathscomp0 uu_nlist (uu_lapp M D) (uu_lapp (uu_ltake nm (total2.tpair (Nat.succ m) v)) D) (total2.tpair (Nat.succ m) v) (uu_maponpaths uu_nlist uu_nlist (fun t => (uu_lapp t D)) M (uu_ltake nm (total2.tpair (Nat.succ m) v)) (uu_lzipltake nm (total2.tpair (Nat.succ m) v) r)) (uu_lapptakedrop nm (total2.tpair (Nat.succ m) v))))))) (uu_natgtb (Nat.succ m) nm))))) (total2.pr1 row)) (total2.pr2 row))))))
 def uu_rtwinsane : (forall nm : Nat, (forall fr : uu_nlist, (forall r : Nat, (forall row : uu_nlist, (forall hs : (@paths Bool (uu_nodupb row) true), (@paths Bool (uu_nodupb (uu_rtwins nm fr r row)) true)))))) :=
   (fun nm => (fun fr => (fun r => (fun row => (fun hs => (uu_pathscomp0 Bool (uu_nodupb (uu_rtwins nm fr r row)) (uu_nodupb row) true (uu_maponpaths uu_nlist Bool (fun t => (uu_nodupb t)) (uu_rtwins nm fr r row) row (uu_rtwinsrow nm fr r row)) hs))))))
+def uu_patch : Type :=
+  (total2 (fun k : Nat => (total2 (fun a : Nat => Nat))))
+def uu_chg : (forall k : Nat, (forall a : Nat, (forall b : Nat, uu_patch))) :=
+  (fun k => (fun a => (fun b => (total2.tpair k (total2.tpair a b)))))
+def uu_pk : (forall p : uu_patch, Nat) :=
+  (fun p => (total2.pr1 p))
+def uu_pa : (forall p : uu_patch, Nat) :=
+  (fun p => (total2.pr1 (total2.pr2 p)))
+def uu_pb : (forall p : uu_patch, Nat) :=
+  (fun p => (total2.pr2 (total2.pr2 p)))
+def uu_tree : Type :=
+  (forall k : Nat, Nat)
+def uu_apon : (forall t : uu_tree, (forall p : uu_patch, uu_tree)) :=
+  (fun t => (fun p => (fun q => (@Sum.rec _ _ (fun c => Nat) (fun e => (uu_pb p)) (fun ne => (t q)) (uu_isdeceqnat q (uu_pk p))))))
+def uu_valid : (forall t : uu_tree, (forall p : uu_patch, Bool)) :=
+  (fun t => (fun p => (@Sum.rec _ _ (fun c => Bool) (fun e => true) (fun ne => false) (uu_isdeceqnat (t (uu_pk p)) (uu_pa p)))))
+def uu_invert : (forall p : uu_patch, uu_patch) :=
+  (fun p => (uu_chg (uu_pk p) (uu_pb p) (uu_pa p)))
+def uu_ppair : Type :=
+  (total2 (fun x : uu_patch => uu_patch))
+def uu_commute : (forall p : uu_patch, (forall q : uu_patch, (Sum uu_ppair PUnit))) :=
+  (fun p => (fun q => (@Sum.rec _ _ (fun c => (Sum uu_ppair PUnit)) (fun e => (Sum.inr PUnit.unit)) (fun ne => (Sum.inl (total2.tpair q p))) (uu_isdeceqnat (uu_pk p) (uu_pk q)))))
+def uu_cmside : (forall c : (Sum uu_ppair PUnit), Type) :=
+  (fun c => (@Sum.rec _ _ (fun x => Type) (fun x => Empty) (fun x => PUnit) c))
+def uu_commute_involutive : (forall p : uu_patch, (forall q : uu_patch, (forall q2 : uu_patch, (forall p2 : uu_patch, (forall h : (@paths (Sum uu_ppair PUnit) (uu_commute p q) (Sum.inl (total2.tpair q2 p2))), (@paths (Sum uu_ppair PUnit) (uu_commute q2 p2) (Sum.inl (total2.tpair p q)))))))) :=
+  (fun p => (fun q => (fun q2 => (fun p2 => ((@Sum.rec _ _ (fun c => (forall h : (@paths (Sum uu_ppair PUnit) (@Sum.rec _ _ (fun c2 => (Sum uu_ppair PUnit)) (fun e2 => (Sum.inr PUnit.unit)) (fun ne2 => (Sum.inl (total2.tpair q p))) c) (Sum.inl (total2.tpair q2 p2))), (@paths (Sum uu_ppair PUnit) (uu_commute q2 p2) (Sum.inl (total2.tpair p q))))) (fun e => (fun h => (uu_fromempty (@paths (Sum uu_ppair PUnit) (uu_commute q2 p2) (Sum.inl (total2.tpair p q))) (uu_transportf (Sum uu_ppair PUnit) uu_cmside (Sum.inr PUnit.unit) (Sum.inl (total2.tpair q2 p2)) h PUnit.unit)))) (fun ne => (fun h => (uu_pathscomp0 (Sum uu_ppair PUnit) (uu_commute q2 p2) (uu_commute q p) (Sum.inl (total2.tpair p q)) (uu_pathsinv0 (Sum uu_ppair PUnit) (uu_commute q p) (uu_commute q2 p2) (uu_maponpaths (Sum uu_ppair PUnit) (Sum uu_ppair PUnit) (fun c => (@Sum.rec _ _ (fun x => (Sum uu_ppair PUnit)) (fun z => (uu_commute (total2.pr1 z) (total2.pr2 z))) (fun u => (Sum.inr PUnit.unit)) c)) (Sum.inl (total2.tpair q p)) (Sum.inl (total2.tpair q2 p2)) h)) ((@Sum.rec _ _ (fun c => (@paths (Sum uu_ppair PUnit) (@Sum.rec _ _ (fun c2 => (Sum uu_ppair PUnit)) (fun e2 => (Sum.inr PUnit.unit)) (fun ne2 => (Sum.inl (total2.tpair p q))) c) (Sum.inl (total2.tpair p q)))) (fun e2 => (uu_fromempty (@paths (Sum uu_ppair PUnit) (Sum.inr PUnit.unit) (Sum.inl (total2.tpair p q))) (ne (uu_pathsinv0 Nat (uu_pk q) (uu_pk p) e2)))) (fun ne2 => ((@paths.idpath _ (Sum.inl ((total2.tpair p q) : uu_ppair))) : (@paths (Sum uu_ppair PUnit) (Sum.inl (total2.tpair p q)) (Sum.inl (total2.tpair p q))))) (uu_isdeceqnat (uu_pk q) (uu_pk p))))))) (uu_isdeceqnat (uu_pk p) (uu_pk q))))))))
+def uu_invert_roundtrip : (forall t : uu_tree, (forall p : uu_patch, (forall hv : (@paths Bool (uu_valid t p) true), (forall q : Nat, (@paths Nat (uu_apon (uu_apon t p) (uu_invert p) q) (t q)))))) :=
+  (fun t => (fun p => ((@Sum.rec _ _ (fun c => (forall hv : (@paths Bool (@Sum.rec _ _ (fun c2 => Bool) (fun e2 => true) (fun ne2 => false) c) true), (forall q : Nat, (@paths Nat (uu_apon (uu_apon t p) (uu_invert p) q) (t q))))) (fun e => (fun hv => (fun q => ((@Sum.rec _ _ (fun c => (@paths Nat (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pa p)) (fun ne2 => (@Sum.rec _ _ (fun c3 => Nat) (fun e3 => (uu_pb p)) (fun ne3 => (t q)) c)) c) (t q))) (fun e1 => (uu_pathscomp0 Nat (uu_pa p) (t (uu_pk p)) (t q) (uu_pathsinv0 Nat (t (uu_pk p)) (uu_pa p) e) (uu_maponpaths Nat Nat t (uu_pk p) q (uu_pathsinv0 Nat q (uu_pk p) e1)))) (fun ne1 => (@paths.idpath _ (t q))) (uu_isdeceqnat q (uu_pk p))))))) (fun ne => (fun hv => (uu_fromempty (forall q : Nat, (@paths Nat (uu_apon (uu_apon t p) (uu_invert p) q) (t q))) (uu_nopathsfalsetotrue hv)))) (uu_isdeceqnat (t (uu_pk p)) (uu_pa p))))))
+def uu_apon_comm : (forall p : uu_patch, (forall q : uu_patch, (forall ne : (forall e : (@paths Nat (uu_pk p) (uu_pk q)), Empty), (forall t : uu_tree, (forall r : Nat, (@paths Nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r))))))) :=
+  (fun p => (fun q => (fun ne => (fun t => (fun r => ((@Sum.rec _ _ (fun c => (@paths Nat (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb q)) (fun ne2 => (@Sum.rec _ _ (fun c3 => Nat) (fun e3 => (uu_pb p)) (fun ne3 => (t r)) (uu_isdeceqnat r (uu_pk p)))) c) (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb p)) (fun ne2 => (@Sum.rec _ _ (fun c3 => Nat) (fun e3 => (uu_pb q)) (fun ne3 => (t r)) c)) (uu_isdeceqnat r (uu_pk p))))) (fun e1 => ((@Sum.rec _ _ (fun c => (@paths Nat (uu_pb q) (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb p)) (fun ne2 => (uu_pb q)) c))) (fun e2 => (uu_fromempty (@paths Nat (uu_pb q) (uu_pb p)) (ne (uu_pathscomp0 Nat (uu_pk p) r (uu_pk q) (uu_pathsinv0 Nat r (uu_pk p) e2) e1)))) (fun ne2 => (@paths.idpath _ (uu_pb q))) (uu_isdeceqnat r (uu_pk p))))) (fun ne1 => ((@Sum.rec _ _ (fun c => (@paths Nat (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb p)) (fun ne2 => (t r)) c) (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb p)) (fun ne2 => (t r)) c))) (fun e2 => (@paths.idpath _ (uu_pb p))) (fun ne2 => (@paths.idpath _ (t r))) (uu_isdeceqnat r (uu_pk p))))) (uu_isdeceqnat r (uu_pk q)))))))))
+def uu_commute_sound : (forall p : uu_patch, (forall q : uu_patch, (forall h : (@paths (Sum uu_ppair PUnit) (uu_commute p q) (Sum.inl (total2.tpair q p))), (forall t : uu_tree, (forall r : Nat, (@paths Nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r))))))) :=
+  (fun p => (fun q => ((@Sum.rec _ _ (fun c => (forall h : (@paths (Sum uu_ppair PUnit) (@Sum.rec _ _ (fun c2 => (Sum uu_ppair PUnit)) (fun e2 => (Sum.inr PUnit.unit)) (fun ne2 => (Sum.inl (total2.tpair q p))) c) (Sum.inl (total2.tpair q p))), (forall t : uu_tree, (forall r : Nat, (@paths Nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r)))))) (fun e => (fun h => (uu_fromempty (forall t : uu_tree, (forall r : Nat, (@paths Nat (uu_apon (uu_apon t p) q r) (uu_apon (uu_apon t q) p r)))) (uu_transportf (Sum uu_ppair PUnit) uu_cmside (Sum.inr PUnit.unit) (Sum.inl (total2.tpair q p)) h PUnit.unit)))) (fun ne => (fun h => (uu_apon_comm p q ne))) (uu_isdeceqnat (uu_pk p) (uu_pk q))))))
+def uu_pvec : (forall n : Nat, Type) :=
+  (fun n => (@Nat.rec (fun q => Type) PUnit (fun k => (fun r => (total2 (fun h : uu_patch => r)))) n))
+def uu_plist : Type :=
+  (total2 (fun n : Nat => (uu_pvec n)))
+def uu_pnil : uu_plist :=
+  (total2.tpair 0 PUnit.unit)
+def uu_pcons : (forall x : uu_patch, (forall l : uu_plist, uu_plist)) :=
+  (fun x => (fun l => (total2.tpair (Nat.succ (total2.pr1 l)) (total2.tpair x (total2.pr2 l)))))
+def uu_papp : (forall a : uu_plist, (forall b : uu_plist, uu_plist)) :=
+  (fun a => (fun b => ((@Nat.rec (fun q => (forall v : (uu_pvec q), uu_plist)) (fun v => b) (fun k => (fun IH => (fun v => (uu_pcons (total2.pr1 v) (IH (total2.pr2 v)))))) (total2.pr1 a)) (total2.pr2 a))))
+def uu_applall : (forall l : uu_plist, (forall t : uu_tree, uu_tree)) :=
+  (fun l => (fun t => ((@Nat.rec (fun q => (forall v : (uu_pvec q), (forall t2 : uu_tree, uu_tree))) (fun v => (fun t2 => t2)) (fun k => (fun IH => (fun v => (fun t2 => (IH (total2.pr2 v) (uu_apon t2 (total2.pr1 v))))))) (total2.pr1 l)) (total2.pr2 l) t)))
+def uu_apon_ext : (forall t1 : uu_tree, (forall t2 : uu_tree, (forall p : uu_patch, (forall hp : (forall k : Nat, (@paths Nat (t1 k) (t2 k))), (forall r : Nat, (@paths Nat (uu_apon t1 p r) (uu_apon t2 p r))))))) :=
+  (fun t1 => (fun t2 => (fun p => (fun hp => (fun r => ((@Sum.rec _ _ (fun c => (@paths Nat (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb p)) (fun ne2 => (t1 r)) c) (@Sum.rec _ _ (fun c2 => Nat) (fun e2 => (uu_pb p)) (fun ne2 => (t2 r)) c))) (fun e => (@paths.idpath _ (uu_pb p))) (fun ne => (hp r)) (uu_isdeceqnat r (uu_pk p)))))))))
+def uu_applall_ext : (forall l : uu_plist, (forall t1 : uu_tree, (forall t2 : uu_tree, (forall hp : (forall k : Nat, (@paths Nat (t1 k) (t2 k))), (forall r : Nat, (@paths Nat (uu_applall l t1 r) (uu_applall l t2 r))))))) :=
+  (fun l => ((@Nat.rec (fun q => (forall v : (uu_pvec q), (forall t1 : uu_tree, (forall t2 : uu_tree, (forall hp : (forall k : Nat, (@paths Nat (t1 k) (t2 k))), (forall r : Nat, (@paths Nat (uu_applall (total2.tpair q v) t1 r) (uu_applall (total2.tpair q v) t2 r)))))))) (fun v => (fun t1 => (fun t2 => (fun hp => (fun r => (hp r)))))) (fun k => (fun IH => (fun v => (fun t1 => (fun t2 => (fun hp => (IH (total2.pr2 v) (uu_apon t1 (total2.pr1 v)) (uu_apon t2 (total2.pr1 v)) (uu_apon_ext t1 t2 (total2.pr1 v) hp)))))))) (total2.pr1 l)) (total2.pr2 l)))
+def uu_applall_swap : (forall p : uu_patch, (forall q : uu_patch, (forall ne : (forall e : (@paths Nat (uu_pk p) (uu_pk q)), Empty), (forall pre : uu_plist, (forall post : uu_plist, (forall t : uu_tree, (forall r : Nat, (@paths Nat (uu_applall (uu_papp pre (uu_pcons p (uu_pcons q post))) t r) (uu_applall (uu_papp pre (uu_pcons q (uu_pcons p post))) t r))))))))) :=
+  (fun p => (fun q => (fun ne => (fun pre => (fun post => ((@Nat.rec (fun n => (forall v : (uu_pvec n), (forall t : uu_tree, (forall r : Nat, (@paths Nat (uu_applall (uu_papp (total2.tpair n v) (uu_pcons p (uu_pcons q post))) t r) (uu_applall (uu_papp (total2.tpair n v) (uu_pcons q (uu_pcons p post))) t r)))))) (fun v => (fun t => (uu_applall_ext post (uu_apon (uu_apon t p) q) (uu_apon (uu_apon t q) p) (uu_apon_comm p q ne t)))) (fun k => (fun IH => (fun v => (fun t => (IH (total2.pr2 v) (uu_apon t (total2.pr1 v))))))) (total2.pr1 pre)) (total2.pr2 pre)))))))
 def uu_zrow : (forall z : uu_stk, uu_nlist) :=
   (fun z => (uu_lapp (uu_lrev (uu_zup z)) (uu_ncons (uu_zfoc z) (uu_zdn z))))
 def uu_zrev : (forall z : uu_stk, uu_stk) :=
@@ -556,11 +606,15 @@ end
 #print axioms uu_zcountins
 #print axioms uu_zinsane
 #print axioms uu_rtwinsrow
+#print axioms uu_commute_involutive
+#print axioms uu_invert_roundtrip
+#print axioms uu_commute_sound
+#print axioms uu_applall_swap
 #print axioms uu_natplusassoc
 #print axioms uu_natmultcomm
 #print axioms uu_total2_paths_f
 #print axioms uu_idisweq
 #print axioms uu_iscontrcoconustot
 
-/- 262 exported / 312 corpus entries swept;
+/- 287 exported / 337 corpus entries swept;
    re-certified by Lean 4 -- a second kernel beside Rocq's uugen.v -/

@@ -45,13 +45,16 @@
 ; classic darcs got these subtly wrong (the exponential / unsound conflict corner).
 ; building this in the one language with the Rocq/Lean harness, DON'T clone darcs
 ; 1.x -- clone the idea on the SOUND substrate (the inverse-semigroup formalization,
-; or pijul's pushout-in-a-category), and let proof/ carry L1..L3. the first slice
-; (the named-slot model) is machine-checked axiom-free in proof/rocq/patch.v -- but
-; that .v is SCAFFOLDING: a hand proof drifts (the wm2uu lesson). the destination is
-; GENERATED like the rest of proof/ -- L1..L3b encoded as uu proof TERMS, emitted to
-; Rocq AND Lean by tools/uu2coq.l + tools/uu2lean.l (the model fits uu's MLTT:
-; pointwise, decidable eqb, list induction -- no funext, no classical). source of
-; truth is an executable ai spec (a test/patch.l), the .v/.lean drift-gated off it.
+; or pijul's pushout-in-a-category), and let proof/ carry L1..L3. the hand .v
+; (proof/rocq/patch.v) is SCAFFOLDING: a hand proof drifts (the wm2uu lesson).
+; the destination is GENERATED like the rest of proof/, and the first slice has
+; ARRIVED: test/uupatch.l encodes the named-slot model's L1..L3b as uu proof
+; TERMS (pointwise, isdeceqnat's evidence-carrying coprod for every case-split
+; -- no funext, no classical), and tools/uu2coq.l + tools/uu2lean.l emit them
+; into proof/rocq/uugen.v AND proof/lean/uugen.lean, audited axiom-free in both
+; kernels; that slice's hand copy is deleted from patch.v. the remaining slices
+; migrate the same way as their models stabilize. source of truth is the
+; executable ai spec (test/patch.l), everything else drift-gated off it.
 ;
 ; --- the ai-native sharpening --- source is .l, so a patch can be a transform over
 ; the FORM TREE, not textual line ranges. then "do p and q commute?" is "do these

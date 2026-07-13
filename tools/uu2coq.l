@@ -19,6 +19,7 @@
 
 (: _ (reads (open "test/uu.l" "r"))
    _ (reads (open "test/uulay.l" "r"))
+   _ (reads (open "test/uupatch.l" "r"))
    _ (reads (open "test/uuwm.l" "r"))
    _ (reads (open "test/uuwmlaw.l" "r"))            ; load + CERTIFY uu's corpus (populates GLOB)
    bs (intern "\\")
@@ -47,7 +48,7 @@
                            (| (deq? F) (axq? F)) (link (entry F) acc) acc)))
                       (rev acc))
    (app2 a b) (? (two? a) (link (cap a) (app2 (cup a) b)) b)   ; NOT `cat` -- the local cat is the STRING fold
-   ents (gather (app2 (forms "test/uu.l") (app2 (forms "test/uulay.l") (app2 (forms "test/uuwm.l") (forms "test/uuwmlaw.l")))) ())
+   ents (gather (app2 (forms "test/uu.l") (app2 (forms "test/uulay.l") (app2 (forms "test/uupatch.l") (app2 (forms "test/uuwm.l") (forms "test/uuwmlaw.l"))))) ())
 
    ; names that exist (corpus-wide) -- for telling a global reference from a bound var
    nt (tablet 0) _ (map (\ e (pin nt (e2 e) 1)) ents)
@@ -191,6 +192,10 @@
 "Print Assumptions uu_zcountins." (string 10)
 "Print Assumptions uu_zinsane." (string 10)
 "Print Assumptions uu_rtwinsrow." (string 10)
+"Print Assumptions uu_commute_involutive." (string 10)
+"Print Assumptions uu_invert_roundtrip." (string 10)
+"Print Assumptions uu_commute_sound." (string 10)
+"Print Assumptions uu_applall_swap." (string 10)
                 "Print Assumptions add_comm_std." (string 10)
                 "Print Assumptions add_assoc_std." (string 10)
                 "Print Assumptions mul_comm_std." (string 10) (string 10)

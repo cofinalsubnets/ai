@@ -2,18 +2,21 @@
 ;
 ; the drift anchor for the whole patch stack: doc/proto/patch.l is the design (the
 ; argument that a distribution / namespace / repo-state are ONE algebra of
-; selectable sets, with COMMUTE the primitive underneath); proof/rocq/patch.v
-; machine-checks the slices axiom-free under `make test_proof` (named slots,
-; positional hunks, the conflictor merge, and the frontier identity in full;
-; the tree lift's commute ALGEBRA -- L1 with the path re-aim -- the
-; content-rewrite lane's L1 at element grain, the clash-segments bubble
+; selectable sets, with COMMUTE the primitive underneath). the proofs run on two
+; legs. the GENERATED leg is the destination and is OPEN: test/uupatch.l encodes
+; the named-slot model below as uu proof TERMS -- the uu kernel certifies L1..L3b,
+; tools/uu2coq.l + tools/uu2lean.l emit them into uugen.v/uugen.lean, and Rocq AND
+; Lean audit them axiom-free (make test_uugen + test_uulean). the HAND leg,
+; proof/rocq/patch.v, scaffolds the slices whose models are still settling, under
+; `make test_proof` (positional hunks, the conflictor merge, and the frontier
+; identity in full; the tree lift's commute ALGEBRA -- L1 with the path re-aim --
+; the content-rewrite lane's L1 at element grain, the clash-segments bubble
 ; at hash grain (creation symmetric, the length law, padding commutes with
 ; rendering -- the widening certificate), and the metavariable lane's two
 ; halves (matching sound, the seat re-aim involutive), with the rose-tree
-; apply laws asserted here and queued for the uu-term rung). the laws asserted HERE are what those
-; are gated to agree with -- the .v today, and the next rung (L1..L3b as uu proof
-; TERMS emitted to rocq + lean by tools/uu2coq.l + tools/uu2lean.l) tomorrow; a
-; hand .v drifts (the wm2uu lesson), so this file is the truth it regenerates off.
+; apply laws asserted here and queued for their own uu migration); a hand proof
+; drifts (the wm2uu lesson), so each slice migrates to the generated leg as its
+; model stabilizes, and this file is the truth they all regenerate off.
 ;
 ; the named-slot model: a tree is a (key . value) assoc, a patch a single
 ; slot-change carrying its CONTEXT (old -> new -- not a bare diff), commute the
@@ -22,8 +25,11 @@
 ;   L2  inverse round-trips (in context)       patches are ORDER-FREE
 ;                                          L3b a FRONTIER is stable under an
 ;                                              adjacent swap of independent patches
-; helpers stay LOCAL (the corpus runs concatenated in one scope); the asserts run
-; inside the body, so the whole spec is one leak-free form.
+; this form's uu TWIN is test/uupatch.l: the same model name for name (chg pk pa
+; pb valid apon invert commute applall), the same four laws as checked proof
+; terms riding to rocq + lean. helpers stay LOCAL (the corpus runs concatenated
+; in one scope); the asserts run inside the body, so the whole spec is one
+; leak-free form.
 
 (:
  ; --- the model (mirror of doc/proto/patch.l) ---
@@ -526,7 +532,8 @@
 ; rewrite core (swal) serves both directions, inverted in and out -- involution
 ; comes from the algebra, not from a second implementation. patch.v proves the
 ; swal involution at element grain (the occurrence/replace algebra); the full
-; rose-tree laws are asserted here and queued for the uu-term rung.
+; rose-tree laws are asserted here and queued for their uu migration (the
+; uu-term route is OPEN -- test/uupatch.l carries the named-slot slice).
 
 (:
  ; --- the tree kit (rung 5, local) ---
