@@ -52,7 +52,7 @@
 
    ; (drain s): read a stream to EOF, collecting its bytes. terminates on the ()
    ; floor -- no -1 sentinel, no "while ch != EOF". the pump's pure shape.
-   (drain s) (? (seof? s) 0 (link (shd s) (drain (stl s))))
+   (drain s) (? (seof? s) () (link (shd s) (drain (stl s))))
 
    ; --- the reader, as a pure stream -> () | (datum . stream') fold ---
    ; a tiny grammar (ws-separated non-negative ints + parenthesized lists) -- enough
