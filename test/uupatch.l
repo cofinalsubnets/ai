@@ -1,11 +1,12 @@
-; test/uupatch.l -- the PATCH GROUPOID's named-slot slice as uu proof TERMS: the
-; uu-term rung of the patch arc. test/patch.l's first form states L1..L3b as
-; executable asserts; proof/rocq/patch.v hand-proved them as scaffolding and
-; PROMISED this file (its provenance note): the laws re-proven inside uu's own
-; kernel, then emitted to Rocq AND Lean by tools/uu2coq.l + tools/uu2lean.l --
-; two independent kernels re-certifying the same terms, the de Bruijn criterion
-; the rest of the proof corpus already rides. Substrate: test/uu.l (this file
-; loads after it by sort order, like test/uulay.l).
+; test/uupatch.l -- the PATCH GROUPOID's named-slot AND positional slices as uu
+; proof TERMS: the generated leg of the patch arc. test/patch.l's first two
+; forms state the laws as executable asserts; proof/rocq/patch.v hand-proved
+; them as scaffolding and PROMISED this file (its provenance note): the laws
+; re-proven inside uu's own kernel, then emitted to Rocq AND Lean by
+; tools/uu2coq.l + tools/uu2lean.l -- two independent kernels re-certifying the
+; same terms, the de Bruijn criterion the rest of the proof corpus already
+; rides. Substrate: test/uu.l + test/uulay.l's list vocabulary (this file
+; loads after both by sort order).
 ;
 ; the model mirrors the .l's first form name for name: a tree is a total map
 ; (key -> value, nats -- the .v's closure of "a missing slot reads 0"), a patch
@@ -297,3 +298,1851 @@
  (2 = (vof 0 '(applall (pcons (chg 3 0 1) (pcons (chg 5 0 2) pnil)) (lam k 0) 5)))
  ((vof 0 '(applall (pcons (chg 3 0 1) (pcons (chg 5 0 2) pnil)) (lam k 0) 3))
   = (vof 0 '(applall (pcons (chg 5 0 2) (pcons (chg 3 0 1) pnil)) (lam k 0) 3))))
+
+; ============================================================================
+; the POSITIONAL slice: hunks over a SEQUENCE, where commute genuinely
+; RE-AIMS -- test/patch.l second form, patch.v hunk slice, migrated. the
+; kit: plus-cancellation as bool/nat EQUATIONS (succ-succ steps are
+; definitional), the take/drop/append fusion laws, then the model and the
+; four laws, each intermediate SEALED as its own defq (a path-valued let
+; poisons every later check in its scope -- the eager-NbE let law).
+; ============================================================================
+; --- the POSITIONAL slice needs an index algebra (plus-cancellation through
+; --- the order and the truncated minus) and a take/drop/append fusion kit.
+; --- every succ-succ step of natgtb and natminus is DEFINITIONAL, so the
+; --- cancellation laws are one induction each, steps landing on their IH ---
+(assert
+ (defq 'natlehnplusnm
+   '(pi a nat (pi b nat (paths bool (natgtb a (add a b)) false)))
+   '(lam a (lam b (nat_rect (lam q (paths bool (natgtb q (add q b)) false))
+      (idpath false)
+      (lam k (lam IH IH))
+      a))))
+ (defq 'natlehmplusnm
+   '(pi a nat (pi b nat (paths bool (natgtb a (add b a)) false)))
+   '(lam a (lam b (nat_rect (lam q (paths bool (natgtb a (add q a)) false))
+      (isreflnatleh a)
+      (lam k (lam IH (natlehsucc a (add k a) IH)))
+      b))))
+ (defq 'natgtbplusl
+   '(pi c nat (pi a nat (pi b nat (paths bool (natgtb (add c a) (add c b)) (natgtb a b)))))
+   '(lam c (lam a (lam b (nat_rect (lam q (paths bool (natgtb (add q a) (add q b)) (natgtb a b)))
+      (idpath (natgtb a b))
+      (lam k (lam IH IH))
+      c)))))
+ (defq 'natgtbplusr
+   '(pi a nat (pi b nat (pi c nat (paths bool (natgtb (add a c) (add b c)) (natgtb a b)))))
+   '(lam a (lam b (lam c
+      (pathscomp0 bool (natgtb (add a c) (add b c)) (natgtb (add c a) (add c b)) (natgtb a b)
+        (pathscomp0 bool (natgtb (add a c) (add b c)) (natgtb (add c a) (add b c)) (natgtb (add c a) (add c b))
+          (maponpaths nat bool (lam w (natgtb w (add b c))) (add a c) (add c a) (natpluscomm a c))
+          (maponpaths nat bool (lam w (natgtb (add c a) w)) (add b c) (add c b) (natpluscomm b c)))
+        (natgtbplusl c a b))))))
+ (defq 'natpluscancelminus
+   '(pi a nat (pi b nat (paths nat (natminus (add a b) b) a)))
+   '(lam a (lam b (nat_rect (lam q (paths nat (natminus (add a q) q) a))
+      (pathscomp0 nat (natminus (add a 0) 0) (add a 0) a (natminusn0 (add a 0)) (natplusr0 a))
+      (lam k (lam IH
+        (pathscomp0 nat (natminus (add a (succ k)) (succ k)) (natminus (add (succ a) k) (succ k)) a
+          (maponpaths nat nat (lam w (natminus w (succ k))) (add a (succ k)) (add (succ a) k) (natplusnsm a k))
+          IH)))
+      b))))
+ (defq 'natpluslcancelminus
+   '(pi c nat (pi x nat (paths nat (natminus (add c x) c) x)))
+   '(lam c (lam x
+      (pathscomp0 nat (natminus (add c x) c) (natminus (add x c) c) x
+        (maponpaths nat nat (lam w (natminus w c)) (add c x) (add x c) (natpluscomm c x))
+        (natpluscancelminus x c)))))
+ (defq 'natplusswap
+   '(pi a nat (pi b nat (pi c nat (paths nat (add (add a b) c) (add (add a c) b)))))
+   '(lam a (lam b (lam c
+      (pathscomp0 nat (add (add a b) c) (add a (add b c)) (add (add a c) b)
+        (natplusassoc a b c)
+        (pathscomp0 nat (add a (add b c)) (add a (add c b)) (add (add a c) b)
+          (maponpaths nat nat (lam w (add a w)) (add b c) (add c b) (natpluscomm b c))
+          (pathsinv0 nat (add (add a c) b) (add a (add c b)) (natplusassoc a c b))))))))
+ ; the computed face
+ (id? (vof 0 'false) (vof 0 '(natgtb 4 (add 4 3))))
+ (id? (vof 0 '5) (vof 0 '(natminus (add 5 3) 3))))
+
+; --- the list kit: how take, drop and append fuse. all at nlist, uulay.l's
+; --- vocabulary (ltake/ldrop/lapp/lapptakedrop/ldroplen/lnil0 load before
+; --- this file by sort order); every induction walks the vector like uulay's ---
+(assert
+ (defq 'ldropnil
+   '(pi k nat (paths nlist (ldrop k nnil) nnil))
+   '(lam k (nat_rect (lam q (paths nlist (ldrop q nnil) nnil))
+      (idpath nnil)
+      (lam j (lam IH (idpath nnil)))
+      k)))
+ (defq 'lapplen
+   '(pi a nlist (pi b nlist (paths nat (nlen (lapp a b)) (add (nlen a) (nlen b)))))
+   '(lam a (lam b ((nat_rect
+      (lam q (pi v (nvec q) (paths nat (nlen (lapp (tpair q v) b)) (add q (nlen b)))))
+      (lam v (idpath (nlen b)))
+      (lam k (lam IH (lam v
+        (maponpaths nat nat (lam w (succ w))
+          (nlen (lapp (tpair k (pr2 v)) b)) (add k (nlen b)) (IH (pr2 v))))))
+      (pr1 a))
+     (pr2 a)))))
+ (defq 'lappassoc
+   '(pi a nlist (pi b nlist (pi c nlist (paths nlist (lapp (lapp a b) c) (lapp a (lapp b c))))))
+   '(lam a (lam b (lam c ((nat_rect
+      (lam q (pi v (nvec q) (paths nlist (lapp (lapp (tpair q v) b) c) (lapp (tpair q v) (lapp b c)))))
+      (lam v (idpath (lapp b c)))
+      (lam k (lam IH (lam v
+        (maponpaths nlist nlist (lam t (ncons (pr1 v) t))
+          (lapp (lapp (tpair k (pr2 v)) b) c) (lapp (tpair k (pr2 v)) (lapp b c)) (IH (pr2 v))))))
+      (pr1 a))
+     (pr2 a))))))
+ (defq 'ltakelenapp
+   '(pi a nlist (pi b nlist (paths nlist (ltake (nlen a) (lapp a b)) a)))
+   '(lam a (lam b ((nat_rect
+      (lam q (pi v (nvec q) (paths nlist (ltake q (lapp (tpair q v) b)) (tpair q v))))
+      (lam v (pathsinv0 nlist (tpair 0 v) nnil (lnil0 v)))
+      (lam k (lam IH (lam v
+        (maponpaths nlist nlist (lam t (ncons (pr1 v) t))
+          (ltake k (lapp (tpair k (pr2 v)) b)) (tpair k (pr2 v)) (IH (pr2 v))))))
+      (pr1 a))
+     (pr2 a)))))
+ (defq 'ldroplenapp
+   '(pi a nlist (pi b nlist (paths nlist (ldrop (nlen a) (lapp a b)) b)))
+   '(lam a (lam b ((nat_rect
+      (lam q (pi v (nvec q) (paths nlist (ldrop q (lapp (tpair q v) b)) b)))
+      (lam v (idpath b))
+      (lam k (lam IH (lam v (IH (pr2 v)))))
+      (pr1 a))
+     (pr2 a)))))
+ (defq 'ldropplusapp
+   '(pi a nlist (pi m nat (pi b nlist (paths nlist (ldrop (add (nlen a) m) (lapp a b)) (ldrop m b)))))
+   '(lam a (lam m (lam b ((nat_rect
+      (lam q (pi v (nvec q) (paths nlist (ldrop (add q m) (lapp (tpair q v) b)) (ldrop m b))))
+      (lam v (idpath (ldrop m b)))
+      (lam k (lam IH (lam v (IH (pr2 v)))))
+      (pr1 a))
+     (pr2 a))))))
+ (defq 'ltakeplusapp
+   '(pi a nlist (pi m nat (pi b nlist (paths nlist (ltake (add (nlen a) m) (lapp a b)) (lapp a (ltake m b))))))
+   '(lam a (lam m (lam b ((nat_rect
+      (lam q (pi v (nvec q) (paths nlist (ltake (add q m) (lapp (tpair q v) b)) (lapp (tpair q v) (ltake m b)))))
+      (lam v (idpath (ltake m b)))
+      (lam k (lam IH (lam v
+        (maponpaths nlist nlist (lam t (ncons (pr1 v) t))
+          (ltake (add k m) (lapp (tpair k (pr2 v)) b)) (lapp (tpair k (pr2 v)) (ltake m b)) (IH (pr2 v))))))
+      (pr1 a))
+     (pr2 a))))))
+ (defq 'ltakeprefix
+   '(pi j nat (pi a nlist (pi b nlist (pi h (paths bool (natgtb j (nlen a)) false)
+      (paths nlist (ltake j (lapp a b)) (ltake j a))))))
+   '(lam j ((nat_rect
+      (lam q (pi a nlist (pi b nlist (pi h (paths bool (natgtb q (nlen a)) false)
+               (paths nlist (ltake q (lapp a b)) (ltake q a))))))
+      (lam a (lam b (lam h (idpath nnil))))
+      (lam j2 (lam IH
+        (lam a (lam b ((nat_rect
+           (lam r (pi v (nvec r) (pi h (paths bool (natgtb (succ j2) r) false)
+                    (paths nlist (ltake (succ j2) (lapp (tpair r v) b)) (ltake (succ j2) (tpair r v))))))
+           (lam v (lam h (fromempty
+              (paths nlist (ltake (succ j2) (lapp (tpair 0 v) b)) (ltake (succ j2) (tpair 0 v)))
+              (nopathstruetofalse h))))
+           (lam k (lam u (lam v (lam h
+              (maponpaths nlist nlist (lam t (ncons (pr1 v) t))
+                (ltake j2 (lapp (tpair k (pr2 v)) b)) (ltake j2 (tpair k (pr2 v)))
+                (IH (tpair k (pr2 v)) b h))))))
+           (pr1 a))
+          (pr2 a))))))
+      j))))
+ (defq 'ldropprefix
+   '(pi j nat (pi a nlist (pi b nlist (pi h (paths bool (natgtb j (nlen a)) false)
+      (paths nlist (ldrop j (lapp a b)) (lapp (ldrop j a) b))))))
+   '(lam j ((nat_rect
+      (lam q (pi a nlist (pi b nlist (pi h (paths bool (natgtb q (nlen a)) false)
+               (paths nlist (ldrop q (lapp a b)) (lapp (ldrop q a) b))))))
+      (lam a (lam b (lam h (idpath (lapp a b)))))
+      (lam j2 (lam IH
+        (lam a (lam b ((nat_rect
+           (lam r (pi v (nvec r) (pi h (paths bool (natgtb (succ j2) r) false)
+                    (paths nlist (ldrop (succ j2) (lapp (tpair r v) b)) (lapp (ldrop (succ j2) (tpair r v)) b)))))
+           (lam v (lam h (fromempty
+              (paths nlist (ldrop (succ j2) (lapp (tpair 0 v) b)) (lapp (ldrop (succ j2) (tpair 0 v)) b))
+              (nopathstruetofalse h))))
+           (lam k (lam u (lam v (lam h
+              (IH (tpair k (pr2 v)) b h)))))
+           (pr1 a))
+          (pr2 a))))))
+      j))))
+ (defq 'ldropdrop
+   '(pi i nat (pi c nat (pi s nlist (paths nlist (ldrop c (ldrop i s)) (ldrop (add i c) s)))))
+   '(lam i (lam c ((nat_rect
+      (lam q (pi s nlist (paths nlist (ldrop c (ldrop q s)) (ldrop (add q c) s))))
+      (lam s (idpath (ldrop c s)))
+      (lam i2 (lam IH
+        (lam s ((nat_rect
+           (lam r (pi v (nvec r) (paths nlist (ldrop c (ldrop (succ i2) (tpair r v))) (ldrop (succ (add i2 c)) (tpair r v)))))
+           (lam v (ldropnil c))
+           (lam k (lam u (lam v (IH (tpair k (pr2 v))))))
+           (pr1 s))
+          (pr2 s)))))
+      i)))))
+ (defq 'ltakelen
+   '(pi i nat (pi s nlist (pi h (paths bool (natgtb i (nlen s)) false)
+      (paths nat (nlen (ltake i s)) i))))
+   '(lam i ((nat_rect
+      (lam q (pi s nlist (pi h (paths bool (natgtb q (nlen s)) false)
+               (paths nat (nlen (ltake q s)) q))))
+      (lam s (lam h (idpath 0)))
+      (lam i2 (lam IH
+        (lam s ((nat_rect
+           (lam r (pi v (nvec r) (pi h (paths bool (natgtb (succ i2) r) false)
+                    (paths nat (nlen (ltake (succ i2) (tpair r v))) (succ i2)))))
+           (lam v (lam h (fromempty
+              (paths nat (nlen (ltake (succ i2) (tpair 0 v))) (succ i2))
+              (nopathstruetofalse h))))
+           (lam k (lam u (lam v (lam h
+              (maponpaths nat nat (lam w (succ w))
+                (nlen (ltake i2 (tpair k (pr2 v)))) i2
+                (IH (tpair k (pr2 v)) h))))))
+           (pr1 s))
+          (pr2 s)))))
+      i))))
+ ; the fused faces compute
+ ((vof 0 '(ncons 7 (ncons 9 nnil)))
+  = (vof 0 '(ltake (nlen (ncons 7 (ncons 9 nnil))) (lapp (ncons 7 (ncons 9 nnil)) (ncons 4 nnil)))))
+ ((vof 0 '(ncons 4 nnil))
+  = (vof 0 '(ldrop 2 (lapp (ncons 7 (ncons 9 nnil)) (ncons 4 nnil))))))
+
+; --- the POSITIONAL model: a state is an nlist, a hunk (mkh i o n) aims o->n
+; --- at index i; splice is take/append/drop, so hap's first layer is
+; --- DEFINITIONAL over the seams. commute's tests ride natgthorleh -- the
+; --- dichotomy carries the bool-path evidence into every branch, the same
+; --- convoy the named-slot slice built on isdeceqnat. refusal (overlap OR
+; --- touch: strict, the darcs seam) is the unit summand ---
+(assert
+ (defn 'hunk 'UU '(total2 i nat (total2 o nlist nlist)))
+ (defn 'mkh '(pi i nat (pi o nlist (pi n nlist hunk)))
+   '(lam i (lam o (lam n (tpair i (tpair o n))))))
+ (defn 'hi '(pi p hunk nat) '(lam p (pr1 p)))
+ (defn 'ho '(pi p hunk nlist) '(lam p (pr1 (pr2 p))))
+ (defn 'hn '(pi p hunk nlist) '(lam p (pr2 (pr2 p))))
+ (defn 'splice '(pi s nlist (pi i nat (pi c nat (pi n nlist nlist))))
+   '(lam s (lam i (lam c (lam n (lapp (ltake i s) (lapp n (ldrop (add i c) s))))))))
+ (defn 'hap '(pi s nlist (pi p hunk nlist))
+   '(lam s (lam p (splice s (hi p) (nlen (ho p)) (hn p)))))
+ (defn 'hinv '(pi p hunk hunk)
+   '(lam p (mkh (hi p) (hn p) (ho p))))
+ (defn 'hpair 'UU '(total2 x hunk hunk))
+ (defn 'hcommute '(pi p hunk (pi q hunk (coprod hpair unit)))
+   '(lam p (lam q
+      (coprod_rect (lam c (coprod hpair unit))
+        (lam g (ii1 (tpair (mkh (natminus (add (hi q) (nlen (ho p))) (nlen (hn p))) (ho q) (hn q)) p)))
+        (lam g (coprod_rect (lam c2 (coprod hpair unit))
+                 (lam g2 (ii1 (tpair q (mkh (natminus (add (hi p) (nlen (hn q))) (nlen (ho q))) (ho p) (hn p)))))
+                 (lam g2 (ii2 tt))
+                 (natgthorleh (hi p) (add (hi q) (nlen (ho q))))))
+        (natgthorleh (hi q) (add (hi p) (nlen (hn p))))))))
+ ; the model COMPUTES: splice replaces the middle, hap lays a hunk, commute
+ ; re-aims past unequal lengths and refuses a touching seam
+ ((vof 0 '(ncons 1 (ncons 7 (ncons 8 (ncons 3 nnil)))))
+  = (vof 0 '(splice (ncons 1 (ncons 2 (ncons 3 nnil))) 1 1 (ncons 7 (ncons 8 nnil)))))
+ ((vof 0 '(ncons 7 (ncons 8 (ncons 2 (ncons 3 nnil)))))
+  = (vof 0 '(hap (ncons 1 (ncons 2 (ncons 3 nnil))) (mkh 0 (ncons 1 nnil) (ncons 7 (ncons 8 nnil))))))
+ ((vof 0 '(hcommute (mkh 0 (ncons 1 nnil) (ncons 7 (ncons 8 nnil))) (mkh 3 (ncons 4 nnil) nnil)))
+  = (vof 0 '(ii1 (tpair (mkh 2 (ncons 4 nnil) nnil) (mkh 0 (ncons 1 nnil) (ncons 7 (ncons 8 nnil)))))))
+ ((vof 0 '(hcommute (mkh 0 (ncons 1 nnil) (ncons 7 (ncons 8 nnil))) (mkh 2 (ncons 3 nnil) nnil)))
+  = (vof 0 '(ii2 tt))))
+
+; --- (L1) hcommute is INVOLUTIVE, with the genuine index re-aim: the slid
+; --- index slides home. the carried pair rides the same maponpaths trick as
+; --- the named-slot slice; the arithmetic is the natgtbplusr cancellation
+; --- through natminusplusnmm's recomposition, once per branch ---
+(assert
+ (defn 'hcmside '(pi c (coprod hpair unit) UU)
+   '(lam c (coprod_rect (lam x UU) (lam x empty) (lam x unit) c)))
+ (defq 'hcommute-involutive
+   '(pi p hunk (pi q hunk (pi q2 hunk (pi p2 hunk
+      (pi h (paths (coprod hpair unit) (hcommute p q) (ii1 (tpair q2 p2)))
+        (paths (coprod hpair unit) (hcommute q2 p2) (ii1 (tpair p q))))))))
+   '(lam p (lam q (lam q2 (lam p2
+      (coprod_rect
+        (lam c (pi h (paths (coprod hpair unit)
+                 (coprod_rect (lam cc (coprod hpair unit))
+                   (lam g9 (ii1 (tpair (mkh (natminus (add (hi q) (nlen (ho p))) (nlen (hn p))) (ho q) (hn q)) p)))
+                   (lam g9 (coprod_rect (lam cd (coprod hpair unit))
+                            (lam g8 (ii1 (tpair q (mkh (natminus (add (hi p) (nlen (hn q))) (nlen (ho q))) (ho p) (hn p)))))
+                            (lam g8 (ii2 tt))
+                            (natgthorleh (hi p) (add (hi q) (nlen (ho q))))))
+                   c)
+                 (ii1 (tpair q2 p2)))
+               (paths (coprod hpair unit) (hcommute q2 p2) (ii1 (tpair p q)))))
+        (lam g (lam h
+          (let j2 (natminus (add (hi q) (nlen (ho p))) (nlen (hn p)))
+          (let rr (natminusplusnmm (add (hi q) (nlen (ho p))) (nlen (hn p))
+                    (istransnatleh (nlen (hn p)) (add (hi p) (nlen (hn p))) (add (hi q) (nlen (ho p)))
+                      (natlehmplusnm (nlen (hn p)) (hi p))
+                      (istransnatleh (add (hi p) (nlen (hn p))) (hi q) (add (hi q) (nlen (ho p)))
+                        (natlthtoleh (add (hi p) (nlen (hn p))) (hi q) g)
+                        (natlehnplusnm (hi q) (nlen (ho p))))))
+          (let bfact (pathscomp0 bool
+                       (natgtb j2 (add (hi p) (nlen (ho p))))
+                       (natgtb (add j2 (nlen (hn p))) (add (add (hi p) (nlen (ho p))) (nlen (hn p))))
+                       true
+                       (pathsinv0 bool
+                         (natgtb (add j2 (nlen (hn p))) (add (add (hi p) (nlen (ho p))) (nlen (hn p))))
+                         (natgtb j2 (add (hi p) (nlen (ho p))))
+                         (natgtbplusr j2 (add (hi p) (nlen (ho p))) (nlen (hn p))))
+                       (pathscomp0 bool
+                         (natgtb (add j2 (nlen (hn p))) (add (add (hi p) (nlen (ho p))) (nlen (hn p))))
+                         (natgtb (add j2 (nlen (hn p))) (add (add (hi p) (nlen (hn p))) (nlen (ho p))))
+                         true
+                         (maponpaths nat bool (lam w (natgtb (add j2 (nlen (hn p))) w))
+                           (add (add (hi p) (nlen (ho p))) (nlen (hn p))) (add (add (hi p) (nlen (hn p))) (nlen (ho p)))
+                           (natplusswap (hi p) (nlen (ho p)) (nlen (hn p))))
+                         (pathscomp0 bool
+                           (natgtb (add j2 (nlen (hn p))) (add (add (hi p) (nlen (hn p))) (nlen (ho p))))
+                           (natgtb (add (hi q) (nlen (ho p))) (add (add (hi p) (nlen (hn p))) (nlen (ho p))))
+                           true
+                           (maponpaths nat bool (lam w (natgtb w (add (add (hi p) (nlen (hn p))) (nlen (ho p)))))
+                             (add j2 (nlen (hn p))) (add (hi q) (nlen (ho p))) rr)
+                           (pathscomp0 bool
+                             (natgtb (add (hi q) (nlen (ho p))) (add (add (hi p) (nlen (hn p))) (nlen (ho p))))
+                             (natgtb (hi q) (add (hi p) (nlen (hn p))))
+                             true
+                             (natgtbplusr (hi q) (add (hi p) (nlen (hn p))) (nlen (ho p)))
+                             g))))
+          (let afact (istransnatleh (hi p) j2 (add j2 (nlen (hn q)))
+                       (istransnatleh (hi p) (add (hi p) (nlen (ho p))) j2
+                         (natlehnplusnm (hi p) (nlen (ho p)))
+                         (natlthtoleh (add (hi p) (nlen (ho p))) j2 bfact))
+                       (natlehnplusnm j2 (nlen (hn q))))
+          (let cfact (pathscomp0 nat
+                       (natminus (add j2 (nlen (hn p))) (nlen (ho p)))
+                       (natminus (add (hi q) (nlen (ho p))) (nlen (ho p)))
+                       (hi q)
+                       (maponpaths nat nat (lam w (natminus w (nlen (ho p))))
+                         (add j2 (nlen (hn p))) (add (hi q) (nlen (ho p))) rr)
+                       (natpluscancelminus (hi q) (nlen (ho p))))
+          (pathscomp0 (coprod hpair unit)
+            (hcommute q2 p2)
+            (hcommute (mkh j2 (ho q) (hn q)) p)
+            (ii1 (tpair p q))
+            (pathsinv0 (coprod hpair unit)
+              (hcommute (mkh j2 (ho q) (hn q)) p)
+              (hcommute q2 p2)
+              (maponpaths (coprod hpair unit) (coprod hpair unit)
+                (lam cz (coprod_rect (lam cy (coprod hpair unit)) (lam z (hcommute (pr1 z) (pr2 z))) (lam uz (ii2 tt)) cz))
+                (ii1 (tpair (mkh j2 (ho q) (hn q)) p)) (ii1 (tpair q2 p2)) h))
+            (coprod_rect
+              (lam c3 (paths (coprod hpair unit)
+                        (coprod_rect (lam cc (coprod hpair unit))
+                          (lam g7 (ii1 (tpair (mkh (natminus (add (hi p) (nlen (ho q))) (nlen (hn q))) (ho p) (hn p)) (mkh j2 (ho q) (hn q)))))
+                          (lam g7 (coprod_rect (lam c4 (coprod hpair unit))
+                                   (lam g6 (ii1 (tpair p (mkh (natminus (add j2 (nlen (hn p))) (nlen (ho p))) (ho q) (hn q)))))
+                                   (lam g6 (ii2 tt))
+                                   (natgthorleh j2 (add (hi p) (nlen (ho p))))))
+                          c3)
+                        (ii1 (tpair p q))))
+              (lam g7 (fromempty
+                (paths (coprod hpair unit)
+                  (ii1 (tpair (mkh (natminus (add (hi p) (nlen (ho q))) (nlen (hn q))) (ho p) (hn p)) (mkh j2 (ho q) (hn q))))
+                  (ii1 (tpair p q)))
+                (natlehtonegnatgth (hi p) (add j2 (nlen (hn q))) afact g7)))
+              (lam g7
+                (coprod_rect
+                  (lam c4 (paths (coprod hpair unit)
+                            (coprod_rect (lam cc (coprod hpair unit))
+                              (lam g6 (ii1 (tpair p (mkh (natminus (add j2 (nlen (hn p))) (nlen (ho p))) (ho q) (hn q)))))
+                              (lam g6 (ii2 tt))
+                              c4)
+                            (ii1 (tpair p q))))
+                  (lam g6 (maponpaths nat (coprod hpair unit)
+                            (lam w (ii1 (tpair p (mkh w (ho q) (hn q)))))
+                            (natminus (add j2 (nlen (hn p))) (nlen (ho p))) (hi q) cfact))
+                  (lam g6 (fromempty
+                    (paths (coprod hpair unit) (ii2 tt) (ii1 (tpair p q)))
+                    (natlehtonegnatgth j2 (add (hi p) (nlen (ho p))) g6 bfact)))
+                  (natgthorleh j2 (add (hi p) (nlen (ho p))))))
+              (natgthorleh (hi p) (add j2 (nlen (hn q)))))))))))))
+        (lam g (lam h
+          ((coprod_rect
+             (lam c2 (pi h2 (paths (coprod hpair unit)
+                       (coprod_rect (lam cc (coprod hpair unit))
+                         (lam g8 (ii1 (tpair q (mkh (natminus (add (hi p) (nlen (hn q))) (nlen (ho q))) (ho p) (hn p)))))
+                         (lam g8 (ii2 tt))
+                         c2)
+                       (ii1 (tpair q2 p2)))
+                     (paths (coprod hpair unit) (hcommute q2 p2) (ii1 (tpair p q)))))
+             (lam g2 (lam h2
+               (let i2 (natminus (add (hi p) (nlen (hn q))) (nlen (ho q)))
+               (let rr2 (natminusplusnmm (add (hi p) (nlen (hn q))) (nlen (ho q))
+                          (istransnatleh (nlen (ho q)) (add (hi q) (nlen (ho q))) (add (hi p) (nlen (hn q)))
+                            (natlehmplusnm (nlen (ho q)) (hi q))
+                            (istransnatleh (add (hi q) (nlen (ho q))) (hi p) (add (hi p) (nlen (hn q)))
+                              (natlthtoleh (add (hi q) (nlen (ho q))) (hi p) g2)
+                              (natlehnplusnm (hi p) (nlen (hn q))))))
+               (let b2fact (pathscomp0 bool
+                             (natgtb i2 (add (hi q) (nlen (hn q))))
+                             (natgtb (add i2 (nlen (ho q))) (add (add (hi q) (nlen (hn q))) (nlen (ho q))))
+                             true
+                             (pathsinv0 bool
+                               (natgtb (add i2 (nlen (ho q))) (add (add (hi q) (nlen (hn q))) (nlen (ho q))))
+                               (natgtb i2 (add (hi q) (nlen (hn q))))
+                               (natgtbplusr i2 (add (hi q) (nlen (hn q))) (nlen (ho q))))
+                             (pathscomp0 bool
+                               (natgtb (add i2 (nlen (ho q))) (add (add (hi q) (nlen (hn q))) (nlen (ho q))))
+                               (natgtb (add i2 (nlen (ho q))) (add (add (hi q) (nlen (ho q))) (nlen (hn q))))
+                               true
+                               (maponpaths nat bool (lam w (natgtb (add i2 (nlen (ho q))) w))
+                                 (add (add (hi q) (nlen (hn q))) (nlen (ho q))) (add (add (hi q) (nlen (ho q))) (nlen (hn q)))
+                                 (natplusswap (hi q) (nlen (hn q)) (nlen (ho q))))
+                               (pathscomp0 bool
+                                 (natgtb (add i2 (nlen (ho q))) (add (add (hi q) (nlen (ho q))) (nlen (hn q))))
+                                 (natgtb (add (hi p) (nlen (hn q))) (add (add (hi q) (nlen (ho q))) (nlen (hn q))))
+                                 true
+                                 (maponpaths nat bool (lam w (natgtb w (add (add (hi q) (nlen (ho q))) (nlen (hn q)))))
+                                   (add i2 (nlen (ho q))) (add (hi p) (nlen (hn q))) rr2)
+                                 (pathscomp0 bool
+                                   (natgtb (add (hi p) (nlen (hn q))) (add (add (hi q) (nlen (ho q))) (nlen (hn q))))
+                                   (natgtb (hi p) (add (hi q) (nlen (ho q))))
+                                   true
+                                   (natgtbplusr (hi p) (add (hi q) (nlen (ho q))) (nlen (hn q)))
+                                   g2))))
+               (let c2fact (pathscomp0 nat
+                             (natminus (add i2 (nlen (ho q))) (nlen (hn q)))
+                             (natminus (add (hi p) (nlen (hn q))) (nlen (hn q)))
+                             (hi p)
+                             (maponpaths nat nat (lam w (natminus w (nlen (hn q))))
+                               (add i2 (nlen (ho q))) (add (hi p) (nlen (hn q))) rr2)
+                             (natpluscancelminus (hi p) (nlen (hn q))))
+               (pathscomp0 (coprod hpair unit)
+                 (hcommute q2 p2)
+                 (hcommute q (mkh i2 (ho p) (hn p)))
+                 (ii1 (tpair p q))
+                 (pathsinv0 (coprod hpair unit)
+                   (hcommute q (mkh i2 (ho p) (hn p)))
+                   (hcommute q2 p2)
+                   (maponpaths (coprod hpair unit) (coprod hpair unit)
+                     (lam cz (coprod_rect (lam cy (coprod hpair unit)) (lam z (hcommute (pr1 z) (pr2 z))) (lam uz (ii2 tt)) cz))
+                     (ii1 (tpair q (mkh i2 (ho p) (hn p)))) (ii1 (tpair q2 p2)) h2))
+                 (coprod_rect
+                   (lam c3 (paths (coprod hpair unit)
+                             (coprod_rect (lam cc (coprod hpair unit))
+                               (lam g7 (ii1 (tpair (mkh (natminus (add i2 (nlen (ho q))) (nlen (hn q))) (ho p) (hn p)) q)))
+                               (lam g7 (coprod_rect (lam c4 (coprod hpair unit))
+                                        (lam g6 (ii1 (tpair (mkh i2 (ho p) (hn p)) (mkh (natminus (add (hi q) (nlen (hn p))) (nlen (ho p))) (ho q) (hn q)))))
+                                        (lam g6 (ii2 tt))
+                                        (natgthorleh (hi q) (add i2 (nlen (ho p))))))
+                               c3)
+                             (ii1 (tpair p q))))
+                   (lam g7 (maponpaths nat (coprod hpair unit)
+                             (lam w (ii1 (tpair (mkh w (ho p) (hn p)) q)))
+                             (natminus (add i2 (nlen (ho q))) (nlen (hn q))) (hi p) c2fact))
+                   (lam g7 (fromempty
+                     (paths (coprod hpair unit)
+                       (coprod_rect (lam cc (coprod hpair unit))
+                         (lam g6 (ii1 (tpair (mkh i2 (ho p) (hn p)) (mkh (natminus (add (hi q) (nlen (hn p))) (nlen (ho p))) (ho q) (hn q)))))
+                         (lam g6 (ii2 tt))
+                         (natgthorleh (hi q) (add i2 (nlen (ho p)))))
+                       (ii1 (tpair p q)))
+                     (natlehtonegnatgth i2 (add (hi q) (nlen (hn q))) g7 b2fact)))
+                   (natgthorleh i2 (add (hi q) (nlen (hn q))))))))))))
+             (lam g2 (lam h2 (fromempty
+               (paths (coprod hpair unit) (hcommute q2 p2) (ii1 (tpair p q)))
+               (transportf (coprod hpair unit) hcmside (ii2 tt) (ii1 (tpair q2 p2)) h2 tt))))
+             (natgthorleh (hi p) (add (hi q) (nlen (ho q)))))
+           h)))
+        (natgthorleh (hi q) (add (hi p) (nlen (hn p)))))))))))
+
+; --- (L2) the INVERSE round-trips IN CONTEXT: in range (the bound is what
+; --- keeps an out-of-range insert honest -- its inverse would aim past the
+; --- end) and matching, apply-then-unpull is the identity. splice is
+; --- DEFINITIONALLY take/append/drop, so the whole proof is the seams
+; --- decomposition s = A ++ o ++ W laid twice through the fusion kit ---
+(assert
+ (defq 'hinv-roundtrip
+   '(pi s nlist (pi p hunk
+      (pi hb (paths bool (natgtb (add (hi p) (nlen (ho p))) (nlen s)) false)
+        (pi hc (paths nlist (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p))
+          (paths nlist (hap (hap s p) (hinv p)) s)))))
+   '(lam s (lam p (lam hb (lam hc
+      (let A (ltake (hi p) s)
+      (let W (ldrop (add (hi p) (nlen (ho p))) s)
+      (let HA (ltakelen (hi p) s
+                (istransnatleh (hi p) (add (hi p) (nlen (ho p))) (nlen s)
+                  (natlehnplusnm (hi p) (nlen (ho p))) hb))
+      (let Hs (pathscomp0 nlist s (lapp A (ldrop (hi p) s)) (lapp A (lapp (ho p) W))
+                (pathsinv0 nlist (lapp A (ldrop (hi p) s)) s (lapptakedrop (hi p) s))
+                (maponpaths nlist nlist (lam t (lapp A t)) (ldrop (hi p) s) (lapp (ho p) W)
+                  (pathscomp0 nlist (ldrop (hi p) s)
+                    (lapp (ltake (nlen (ho p)) (ldrop (hi p) s)) (ldrop (nlen (ho p)) (ldrop (hi p) s)))
+                    (lapp (ho p) W)
+                    (pathsinv0 nlist
+                      (lapp (ltake (nlen (ho p)) (ldrop (hi p) s)) (ldrop (nlen (ho p)) (ldrop (hi p) s)))
+                      (ldrop (hi p) s)
+                      (lapptakedrop (nlen (ho p)) (ldrop (hi p) s)))
+                    (pathscomp0 nlist
+                      (lapp (ltake (nlen (ho p)) (ldrop (hi p) s)) (ldrop (nlen (ho p)) (ldrop (hi p) s)))
+                      (lapp (ho p) (ldrop (nlen (ho p)) (ldrop (hi p) s)))
+                      (lapp (ho p) W)
+                      (maponpaths nlist nlist (lam t (lapp t (ldrop (nlen (ho p)) (ldrop (hi p) s))))
+                        (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p) hc)
+                      (maponpaths nlist nlist (lam t (lapp (ho p) t))
+                        (ldrop (nlen (ho p)) (ldrop (hi p) s)) W (ldropdrop (hi p) (nlen (ho p)) s))))))
+      (let T1 (pathscomp0 nlist
+                (ltake (hi p) (lapp A (lapp (hn p) W)))
+                (ltake (nlen A) (lapp A (lapp (hn p) W)))
+                A
+                (maponpaths nat nlist (lam w (ltake w (lapp A (lapp (hn p) W))))
+                  (hi p) (nlen A) (pathsinv0 nat (nlen A) (hi p) HA))
+                (ltakelenapp A (lapp (hn p) W)))
+      (let T2 (pathscomp0 nlist
+                (ldrop (add (hi p) (nlen (hn p))) (lapp A (lapp (hn p) W)))
+                (ldrop (add (nlen A) (nlen (hn p))) (lapp A (lapp (hn p) W)))
+                W
+                (maponpaths nat nlist (lam w (ldrop (add w (nlen (hn p))) (lapp A (lapp (hn p) W))))
+                  (hi p) (nlen A) (pathsinv0 nat (nlen A) (hi p) HA))
+                (pathscomp0 nlist
+                  (ldrop (add (nlen A) (nlen (hn p))) (lapp A (lapp (hn p) W)))
+                  (ldrop (nlen (hn p)) (lapp (hn p) W))
+                  W
+                  (ldropplusapp A (nlen (hn p)) (lapp (hn p) W))
+                  (ldroplenapp (hn p) W)))
+      (pathscomp0 nlist
+        (hap (hap s p) (hinv p))
+        (lapp A (lapp (ho p) W))
+        s
+        (pathscomp0 nlist
+          (lapp (ltake (hi p) (lapp A (lapp (hn p) W)))
+                (lapp (ho p) (ldrop (add (hi p) (nlen (hn p))) (lapp A (lapp (hn p) W)))))
+          (lapp A (lapp (ho p) (ldrop (add (hi p) (nlen (hn p))) (lapp A (lapp (hn p) W)))))
+          (lapp A (lapp (ho p) W))
+          (maponpaths nlist nlist
+            (lam t (lapp t (lapp (ho p) (ldrop (add (hi p) (nlen (hn p))) (lapp A (lapp (hn p) W))))))
+            (ltake (hi p) (lapp A (lapp (hn p) W))) A T1)
+          (maponpaths nlist nlist (lam t (lapp A (lapp (ho p) t)))
+            (ldrop (add (hi p) (nlen (hn p))) (lapp A (lapp (hn p) W))) W T2))
+        (pathsinv0 nlist s (lapp A (lapp (ho p) W)) Hs)))))))))))))
+ ; and it computes: lay a hunk, unpull it, the state is home
+ ((vof 0 '(ncons 1 (ncons 2 (ncons 3 nnil))))
+  = (vof 0 '(hap (hap (ncons 1 (ncons 2 (ncons 3 nnil))) (mkh 1 (ncons 2 nnil) (ncons 7 (ncons 8 nnil))))
+                 (hinv (mkh 1 (ncons 2 nnil) (ncons 7 (ncons 8 nnil))))))))
+
+; --- (L3a) the machinery, SEALED RUNG BY RUNG: a path-valued let poisons every
+; --- later check in its scope (the eager NbE re-walks it superadditively --
+; --- exactly why defq seals), so each intermediate path is its OWN defq and
+; --- every use is a stuck neutral. seams is the one decomposition law all the
+; --- slices lean on: a valid (i, o) window splits s as A ++ o ++ W ---
+(assert
+ (defq 'seams
+   '(pi s nlist (pi i nat (pi o nlist
+      (pi hb (paths bool (natgtb (add i (nlen o)) (nlen s)) false)
+      (pi hc (paths nlist (ltake (nlen o) (ldrop i s)) o)
+        (paths nlist s (lapp (ltake i s) (lapp o (ldrop (add i (nlen o)) s)))))))))
+   '(lam s (lam i (lam o (lam hb (lam hc
+      (pathscomp0 nlist s (lapp (ltake i s) (ldrop i s)) (lapp (ltake i s) (lapp o (ldrop (add i (nlen o)) s)))
+        (pathsinv0 nlist (lapp (ltake i s) (ldrop i s)) s (lapptakedrop i s))
+        (maponpaths nlist nlist (lam t (lapp (ltake i s) t)) (ldrop i s) (lapp o (ldrop (add i (nlen o)) s))
+          (pathscomp0 nlist (ldrop i s)
+            (lapp (ltake (nlen o) (ldrop i s)) (ldrop (nlen o) (ldrop i s)))
+            (lapp o (ldrop (add i (nlen o)) s))
+            (pathsinv0 nlist
+              (lapp (ltake (nlen o) (ldrop i s)) (ldrop (nlen o) (ldrop i s)))
+              (ldrop i s)
+              (lapptakedrop (nlen o) (ldrop i s)))
+            (pathscomp0 nlist
+              (lapp (ltake (nlen o) (ldrop i s)) (ldrop (nlen o) (ldrop i s)))
+              (lapp o (ldrop (nlen o) (ldrop i s)))
+              (lapp o (ldrop (add i (nlen o)) s))
+              (maponpaths nlist nlist (lam t (lapp t (ldrop (nlen o) (ldrop i s))))
+                (ltake (nlen o) (ldrop i s)) o hc)
+              (maponpaths nlist nlist (lam t (lapp o t))
+                (ldrop (nlen o) (ldrop i s)) (ldrop (add i (nlen o)) s) (ldropdrop i (nlen o) s))))))))))))
+ ; the AFTER branch's index ledger: with i + |n1| < j and the window in range,
+ ; j sits |A| + (|n1| + kk) in from the patched state's seams (kk the gap)
+ (defq 'after-j
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths nat j (add (nlen (ltake i s)) (add (nlen n1) (natminus j (add i (nlen n1)))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam g (lam hb1
+      (let A (ltake i s)
+      (let kk (natminus j (add i (nlen n1)))
+      (pathscomp0 nat j (add i (add (nlen n1) kk)) (add (nlen A) (add (nlen n1) kk))
+        (pathsinv0 nat (add i (add (nlen n1) kk)) j
+          (pathscomp0 nat (add i (add (nlen n1) kk)) (add (add i (nlen n1)) kk) j
+            (pathsinv0 nat (add (add i (nlen n1)) kk) (add i (add (nlen n1) kk))
+              (natplusassoc i (nlen n1) kk))
+            (pathscomp0 nat (add (add i (nlen n1)) kk) (add kk (add i (nlen n1))) j
+              (natpluscomm (add i (nlen n1)) kk)
+              (natminusplusnmm j (add i (nlen n1)) (natlthtoleh (add i (nlen n1)) j g)))))
+        (maponpaths nat nat (lam w (add w (add (nlen n1) kk))) i (nlen A)
+          (pathsinv0 nat (nlen A) i
+            (ltakelen i s
+              (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1)))))))))))))))
+ ; dropping j off the patched state is dropping the gap off W
+ (defq 'after-drop
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths nlist
+          (ldrop j (lapp (ltake i s) (lapp n1 (ldrop (add i (nlen o1)) s))))
+          (ldrop (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam g (lam hb1
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (pathscomp0 nlist
+        (ldrop j (lapp A (lapp n1 W)))
+        (ldrop (add (nlen A) (add (nlen n1) kk)) (lapp A (lapp n1 W)))
+        (ldrop kk W)
+        (maponpaths nat nlist (lam w (ldrop w (lapp A (lapp n1 W))))
+          j (add (nlen A) (add (nlen n1) kk)) (after-j s i o1 n1 j g hb1))
+        (pathscomp0 nlist
+          (ldrop (add (nlen A) (add (nlen n1) kk)) (lapp A (lapp n1 W)))
+          (ldrop (add (nlen n1) kk) (lapp n1 W))
+          (ldrop kk W)
+          (ldropplusapp A (add (nlen n1) kk) (lapp n1 W))
+          (ldropplusapp n1 kk W))))))))))))))
+ ; q's context, re-read at the gap
+ (defq 'after-c2
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ltake (nlen o2) (ldrop (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s)))
+          o2))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam g (lam hb1 (lam hc2
+      (pathscomp0 nlist
+        (ltake (nlen o2) (ldrop (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s)))
+        (ltake (nlen o2) (ldrop j (lapp (ltake i s) (lapp n1 (ldrop (add i (nlen o1)) s)))))
+        o2
+        (maponpaths nlist nlist (lam t (ltake (nlen o2) t))
+          (ldrop (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))
+          (ldrop j (lapp (ltake i s) (lapp n1 (ldrop (add i (nlen o1)) s))))
+          (pathsinv0 nlist
+            (ldrop j (lapp (ltake i s) (lapp n1 (ldrop (add i (nlen o1)) s))))
+            (ldrop (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))
+            (after-drop s i o1 n1 j g hb1)))
+        hc2)))))))))))
+ ; q's window, in range past the gap
+ (defq 'after-bk
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+        (paths bool
+          (natgtb (add (natminus j (add i (nlen n1))) (nlen o2)) (nlen (ldrop (add i (nlen o1)) s)))
+          false))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam g (lam hb1 (lam hb2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let HA (ltakelen i s
+                (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1))
+      (pathscomp0 bool
+        (natgtb (add kk (nlen o2)) (nlen W))
+        (natgtb (add (add i (nlen n1)) (add kk (nlen o2))) (add (add i (nlen n1)) (nlen W)))
+        false
+        (pathsinv0 bool
+          (natgtb (add (add i (nlen n1)) (add kk (nlen o2))) (add (add i (nlen n1)) (nlen W)))
+          (natgtb (add kk (nlen o2)) (nlen W))
+          (natgtbplusl (add i (nlen n1)) (add kk (nlen o2)) (nlen W)))
+        (pathscomp0 bool
+          (natgtb (add (add i (nlen n1)) (add kk (nlen o2))) (add (add i (nlen n1)) (nlen W)))
+          (natgtb (add j (nlen o2)) (add (add i (nlen n1)) (nlen W)))
+          false
+          (maponpaths nat bool (lam w (natgtb w (add (add i (nlen n1)) (nlen W))))
+            (add (add i (nlen n1)) (add kk (nlen o2))) (add j (nlen o2))
+            (pathscomp0 nat
+              (add (add i (nlen n1)) (add kk (nlen o2)))
+              (add (add (add i (nlen n1)) kk) (nlen o2))
+              (add j (nlen o2))
+              (pathsinv0 nat
+                (add (add (add i (nlen n1)) kk) (nlen o2))
+                (add (add i (nlen n1)) (add kk (nlen o2)))
+                (natplusassoc (add i (nlen n1)) kk (nlen o2)))
+              (maponpaths nat nat (lam w (add w (nlen o2)))
+                (add (add i (nlen n1)) kk) j
+                (pathscomp0 nat (add (add i (nlen n1)) kk) (add kk (add i (nlen n1))) j
+                  (natpluscomm (add i (nlen n1)) kk)
+                  (natminusplusnmm j (add i (nlen n1)) (natlthtoleh (add i (nlen n1)) j g))))))
+          (pathscomp0 bool
+            (natgtb (add j (nlen o2)) (add (add i (nlen n1)) (nlen W)))
+            (natgtb (add j (nlen o2)) (nlen (lapp A (lapp n1 W))))
+            false
+            (maponpaths nat bool (lam w (natgtb (add j (nlen o2)) w))
+              (add (add i (nlen n1)) (nlen W)) (nlen (lapp A (lapp n1 W)))
+              (pathscomp0 nat
+                (add (add i (nlen n1)) (nlen W))
+                (add i (add (nlen n1) (nlen W)))
+                (nlen (lapp A (lapp n1 W)))
+                (natplusassoc i (nlen n1) (nlen W))
+                (pathscomp0 nat
+                  (add i (add (nlen n1) (nlen W)))
+                  (add (nlen A) (add (nlen n1) (nlen W)))
+                  (nlen (lapp A (lapp n1 W)))
+                  (maponpaths nat nat (lam w (add w (add (nlen n1) (nlen W)))) i (nlen A)
+                    (pathsinv0 nat (nlen A) i HA))
+                  (pathsinv0 nat (nlen (lapp A (lapp n1 W))) (add (nlen A) (add (nlen n1) (nlen W)))
+                    (pathscomp0 nat
+                      (nlen (lapp A (lapp n1 W)))
+                      (add (nlen A) (nlen (lapp n1 W)))
+                      (add (nlen A) (add (nlen n1) (nlen W)))
+                      (lapplen A (lapp n1 W))
+                      (maponpaths nat nat (lam w (add (nlen A) w))
+                        (nlen (lapp n1 W)) (add (nlen n1) (nlen W)) (lapplen n1 W)))))))
+            hb2))))))))))))))))))
+
+; --- the re-aimed index, located on the seams; then the four take/drop reads
+; --- (the ORIGINAL order's two, the RE-AIMED order's two), the re-aimed
+; --- state's normal form, and the assembly ---
+(assert
+ (defq 'after-j2v
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths nat
+          (natminus (add j (nlen o1)) (nlen n1))
+          (add (nlen (ltake i s)) (add (nlen o1) (natminus j (add i (nlen n1)))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam g (lam hb1
+      (let A (ltake i s)
+      (let kk (natminus j (add i (nlen n1)))
+      (pathscomp0 nat
+        (natminus (add j (nlen o1)) (nlen n1))
+        (natminus (add (add (nlen A) (add (nlen o1) kk)) (nlen n1)) (nlen n1))
+        (add (nlen A) (add (nlen o1) kk))
+        (maponpaths nat nat (lam w (natminus w (nlen n1)))
+          (add j (nlen o1)) (add (add (nlen A) (add (nlen o1) kk)) (nlen n1))
+          (pathsinv0 nat (add (add (nlen A) (add (nlen o1) kk)) (nlen n1)) (add j (nlen o1))
+            (pathscomp0 nat
+              (add (add (nlen A) (add (nlen o1) kk)) (nlen n1))
+              (add (add (add (nlen A) (nlen o1)) kk) (nlen n1))
+              (add j (nlen o1))
+              (maponpaths nat nat (lam w (add w (nlen n1)))
+                (add (nlen A) (add (nlen o1) kk)) (add (add (nlen A) (nlen o1)) kk)
+                (pathsinv0 nat (add (add (nlen A) (nlen o1)) kk) (add (nlen A) (add (nlen o1) kk))
+                  (natplusassoc (nlen A) (nlen o1) kk)))
+              (pathscomp0 nat
+                (add (add (add (nlen A) (nlen o1)) kk) (nlen n1))
+                (add (add (add (nlen A) (nlen o1)) (nlen n1)) kk)
+                (add j (nlen o1))
+                (natplusswap (add (nlen A) (nlen o1)) kk (nlen n1))
+                (pathscomp0 nat
+                  (add (add (add (nlen A) (nlen o1)) (nlen n1)) kk)
+                  (add (add (add (nlen A) (nlen n1)) (nlen o1)) kk)
+                  (add j (nlen o1))
+                  (maponpaths nat nat (lam w (add w kk))
+                    (add (add (nlen A) (nlen o1)) (nlen n1)) (add (add (nlen A) (nlen n1)) (nlen o1))
+                    (natplusswap (nlen A) (nlen o1) (nlen n1)))
+                  (pathscomp0 nat
+                    (add (add (add (nlen A) (nlen n1)) (nlen o1)) kk)
+                    (add (add (add (nlen A) (nlen n1)) kk) (nlen o1))
+                    (add j (nlen o1))
+                    (natplusswap (add (nlen A) (nlen n1)) (nlen o1) kk)
+                    (pathscomp0 nat
+                      (add (add (add (nlen A) (nlen n1)) kk) (nlen o1))
+                      (add (add (nlen A) (add (nlen n1) kk)) (nlen o1))
+                      (add j (nlen o1))
+                      (maponpaths nat nat (lam w (add w (nlen o1)))
+                        (add (add (nlen A) (nlen n1)) kk) (add (nlen A) (add (nlen n1) kk))
+                        (natplusassoc (nlen A) (nlen n1) kk))
+                      (maponpaths nat nat (lam w (add w (nlen o1)))
+                        (add (nlen A) (add (nlen n1) kk)) j
+                        (pathsinv0 nat j (add (nlen A) (add (nlen n1) kk))
+                          (after-j s i o1 n1 j g hb1))))))))))
+        (natpluscancelminus (add (nlen A) (add (nlen o1) kk)) (nlen n1)))))))))))))
+ (defq 'after-u1
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ltake (natminus (add j (nlen o1)) (nlen n1)) s)
+          (lapp (ltake i s) (lapp o1 (ltake (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam g (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let M (ltake kk W)
+      (let Z (ldrop (add kk (nlen o2)) W)
+      (pathscomp0 nlist
+        (ltake (natminus (add j (nlen o1)) (nlen n1)) s)
+        (ltake (add (nlen A) (add (nlen o1) kk)) s)
+        (lapp A (lapp o1 M))
+        (maponpaths nat nlist (lam w (ltake w s))
+          (natminus (add j (nlen o1)) (nlen n1)) (add (nlen A) (add (nlen o1) kk))
+          (after-j2v s i o1 n1 j g hb1))
+        (pathscomp0 nlist
+          (ltake (add (nlen A) (add (nlen o1) kk)) s)
+          (ltake (add (nlen A) (add (nlen o1) kk)) (lapp A (lapp o1 (lapp M (lapp o2 Z)))))
+          (lapp A (lapp o1 M))
+          (maponpaths nlist nlist (lam t (ltake (add (nlen A) (add (nlen o1) kk)) t))
+            s (lapp A (lapp o1 (lapp M (lapp o2 Z))))
+            (pathscomp0 nlist s (lapp A (lapp o1 W)) (lapp A (lapp o1 (lapp M (lapp o2 Z))))
+              (seams s i o1 hb1 hc1)
+              (maponpaths nlist nlist (lam t (lapp A (lapp o1 t))) W (lapp M (lapp o2 Z))
+                (seams W kk o2
+                  (after-bk s i o1 n1 j o2 g hb1 hb2)
+                  (after-c2 s i o1 n1 j o2 g hb1 hc2)))))
+          (pathscomp0 nlist
+            (ltake (add (nlen A) (add (nlen o1) kk)) (lapp A (lapp o1 (lapp M (lapp o2 Z)))))
+            (lapp A (ltake (add (nlen o1) kk) (lapp o1 (lapp M (lapp o2 Z)))))
+            (lapp A (lapp o1 M))
+            (ltakeplusapp A (add (nlen o1) kk) (lapp o1 (lapp M (lapp o2 Z))))
+            (pathscomp0 nlist
+              (lapp A (ltake (add (nlen o1) kk) (lapp o1 (lapp M (lapp o2 Z)))))
+              (lapp A (lapp o1 (ltake kk (lapp M (lapp o2 Z)))))
+              (lapp A (lapp o1 M))
+              (maponpaths nlist nlist (lam t (lapp A t))
+                (ltake (add (nlen o1) kk) (lapp o1 (lapp M (lapp o2 Z))))
+                (lapp o1 (ltake kk (lapp M (lapp o2 Z))))
+                (ltakeplusapp o1 kk (lapp M (lapp o2 Z))))
+              (pathscomp0 nlist
+                (lapp A (lapp o1 (ltake kk (lapp M (lapp o2 Z)))))
+                (lapp A (lapp o1 (ltake (nlen M) (lapp M (lapp o2 Z)))))
+                (lapp A (lapp o1 M))
+                (maponpaths nat nlist (lam w (lapp A (lapp o1 (ltake w (lapp M (lapp o2 Z))))))
+                  kk (nlen M)
+                  (pathsinv0 nat (nlen M) kk
+                    (ltakelen kk W
+                      (istransnatleh kk (add kk (nlen o2)) (nlen W) (natlehnplusnm kk (nlen o2))
+                        (after-bk s i o1 n1 j o2 g hb1 hb2)))))
+                (maponpaths nlist nlist (lam t (lapp A (lapp o1 t)))
+                  (ltake (nlen M) (lapp M (lapp o2 Z))) M
+                  (ltakelenapp M (lapp o2 Z)))))))))))))))))))))))))
+ (defq 'after-u2
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ldrop (add (natminus (add j (nlen o1)) (nlen n1)) (nlen o2)) s)
+          (ldrop (add (natminus j (add i (nlen n1))) (nlen o2)) (ldrop (add i (nlen o1)) s))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam g (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let M (ltake kk W)
+      (let Z (ldrop (add kk (nlen o2)) W)
+      (pathscomp0 nlist
+        (ldrop (add (natminus (add j (nlen o1)) (nlen n1)) (nlen o2)) s)
+        (ldrop (add (nlen A) (add (nlen o1) (add kk (nlen o2)))) s)
+        Z
+        (maponpaths nat nlist (lam w (ldrop w s))
+          (add (natminus (add j (nlen o1)) (nlen n1)) (nlen o2))
+          (add (nlen A) (add (nlen o1) (add kk (nlen o2))))
+          (pathscomp0 nat
+            (add (natminus (add j (nlen o1)) (nlen n1)) (nlen o2))
+            (add (add (nlen A) (add (nlen o1) kk)) (nlen o2))
+            (add (nlen A) (add (nlen o1) (add kk (nlen o2))))
+            (maponpaths nat nat (lam w (add w (nlen o2)))
+              (natminus (add j (nlen o1)) (nlen n1)) (add (nlen A) (add (nlen o1) kk))
+              (after-j2v s i o1 n1 j g hb1))
+            (pathscomp0 nat
+              (add (add (nlen A) (add (nlen o1) kk)) (nlen o2))
+              (add (nlen A) (add (add (nlen o1) kk) (nlen o2)))
+              (add (nlen A) (add (nlen o1) (add kk (nlen o2))))
+              (natplusassoc (nlen A) (add (nlen o1) kk) (nlen o2))
+              (maponpaths nat nat (lam w (add (nlen A) w))
+                (add (add (nlen o1) kk) (nlen o2)) (add (nlen o1) (add kk (nlen o2)))
+                (natplusassoc (nlen o1) kk (nlen o2))))))
+        (pathscomp0 nlist
+          (ldrop (add (nlen A) (add (nlen o1) (add kk (nlen o2)))) s)
+          (ldrop (add (nlen A) (add (nlen o1) (add kk (nlen o2)))) (lapp A (lapp o1 (lapp M (lapp o2 Z)))))
+          Z
+          (maponpaths nlist nlist (lam t (ldrop (add (nlen A) (add (nlen o1) (add kk (nlen o2)))) t))
+            s (lapp A (lapp o1 (lapp M (lapp o2 Z))))
+            (pathscomp0 nlist s (lapp A (lapp o1 W)) (lapp A (lapp o1 (lapp M (lapp o2 Z))))
+              (seams s i o1 hb1 hc1)
+              (maponpaths nlist nlist (lam t (lapp A (lapp o1 t))) W (lapp M (lapp o2 Z))
+                (seams W kk o2
+                  (after-bk s i o1 n1 j o2 g hb1 hb2)
+                  (after-c2 s i o1 n1 j o2 g hb1 hc2)))))
+          (pathscomp0 nlist
+            (ldrop (add (nlen A) (add (nlen o1) (add kk (nlen o2)))) (lapp A (lapp o1 (lapp M (lapp o2 Z)))))
+            (ldrop (add (nlen o1) (add kk (nlen o2))) (lapp o1 (lapp M (lapp o2 Z))))
+            Z
+            (ldropplusapp A (add (nlen o1) (add kk (nlen o2))) (lapp o1 (lapp M (lapp o2 Z))))
+            (pathscomp0 nlist
+              (ldrop (add (nlen o1) (add kk (nlen o2))) (lapp o1 (lapp M (lapp o2 Z))))
+              (ldrop (add kk (nlen o2)) (lapp M (lapp o2 Z)))
+              Z
+              (ldropplusapp o1 (add kk (nlen o2)) (lapp M (lapp o2 Z)))
+              (pathscomp0 nlist
+                (ldrop (add kk (nlen o2)) (lapp M (lapp o2 Z)))
+                (ldrop (add (nlen M) (nlen o2)) (lapp M (lapp o2 Z)))
+                Z
+                (maponpaths nat nlist (lam w (ldrop (add w (nlen o2)) (lapp M (lapp o2 Z))))
+                  kk (nlen M)
+                  (pathsinv0 nat (nlen M) kk
+                    (ltakelen kk W
+                      (istransnatleh kk (add kk (nlen o2)) (nlen W) (natlehnplusnm kk (nlen o2))
+                        (after-bk s i o1 n1 j o2 g hb1 hb2)))))
+                (pathscomp0 nlist
+                  (ldrop (add (nlen M) (nlen o2)) (lapp M (lapp o2 Z)))
+                  (ldrop (nlen o2) (lapp o2 Z))
+                  Z
+                  (ldropplusapp M (nlen o2) (lapp o2 Z))
+                  (ldroplenapp o2 Z))))))))))))))))))))))))
+ (defq 'after-l1p
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths nlist
+          (ltake j (lapp (ltake i s) (lapp n1 (ldrop (add i (nlen o1)) s))))
+          (lapp (ltake i s) (lapp n1 (ltake (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam g (lam hb1
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (pathscomp0 nlist
+        (ltake j (lapp A (lapp n1 W)))
+        (ltake (add (nlen A) (add (nlen n1) kk)) (lapp A (lapp n1 W)))
+        (lapp A (lapp n1 (ltake kk W)))
+        (maponpaths nat nlist (lam w (ltake w (lapp A (lapp n1 W))))
+          j (add (nlen A) (add (nlen n1) kk)) (after-j s i o1 n1 j g hb1))
+        (pathscomp0 nlist
+          (ltake (add (nlen A) (add (nlen n1) kk)) (lapp A (lapp n1 W)))
+          (lapp A (ltake (add (nlen n1) kk) (lapp n1 W)))
+          (lapp A (lapp n1 (ltake kk W)))
+          (ltakeplusapp A (add (nlen n1) kk) (lapp n1 W))
+          (maponpaths nlist nlist (lam t (lapp A t))
+            (ltake (add (nlen n1) kk) (lapp n1 W)) (lapp n1 (ltake kk W))
+            (ltakeplusapp n1 kk W)))))))))))))))
+ (defq 'after-l2p
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths nlist
+          (ldrop (add j (nlen o2)) (lapp (ltake i s) (lapp n1 (ldrop (add i (nlen o1)) s))))
+          (ldrop (add (natminus j (add i (nlen n1))) (nlen o2)) (ldrop (add i (nlen o1)) s)))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam g (lam hb1
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (pathscomp0 nlist
+        (ldrop (add j (nlen o2)) (lapp A (lapp n1 W)))
+        (ldrop (add (nlen A) (add (nlen n1) (add kk (nlen o2)))) (lapp A (lapp n1 W)))
+        (ldrop (add kk (nlen o2)) W)
+        (maponpaths nat nlist (lam w (ldrop w (lapp A (lapp n1 W))))
+          (add j (nlen o2))
+          (add (nlen A) (add (nlen n1) (add kk (nlen o2))))
+          (pathscomp0 nat
+            (add j (nlen o2))
+            (add (add (nlen A) (add (nlen n1) kk)) (nlen o2))
+            (add (nlen A) (add (nlen n1) (add kk (nlen o2))))
+            (maponpaths nat nat (lam w (add w (nlen o2)))
+              j (add (nlen A) (add (nlen n1) kk)) (after-j s i o1 n1 j g hb1))
+            (pathscomp0 nat
+              (add (add (nlen A) (add (nlen n1) kk)) (nlen o2))
+              (add (nlen A) (add (add (nlen n1) kk) (nlen o2)))
+              (add (nlen A) (add (nlen n1) (add kk (nlen o2))))
+              (natplusassoc (nlen A) (add (nlen n1) kk) (nlen o2))
+              (maponpaths nat nat (lam w (add (nlen A) w))
+                (add (add (nlen n1) kk) (nlen o2)) (add (nlen n1) (add kk (nlen o2)))
+                (natplusassoc (nlen n1) kk (nlen o2))))))
+        (pathscomp0 nlist
+          (ldrop (add (nlen A) (add (nlen n1) (add kk (nlen o2)))) (lapp A (lapp n1 W)))
+          (ldrop (add (nlen n1) (add kk (nlen o2))) (lapp n1 W))
+          (ldrop (add kk (nlen o2)) W)
+          (ldropplusapp A (add (nlen n1) (add kk (nlen o2))) (lapp n1 W))
+          (ldropplusapp n1 (add kk (nlen o2)) W))))))))))))))))
+
+; --- the re-aimed state's normal form, its two reads at p's window, and the
+; --- assembly: both orders land A ++ n1 ++ M ++ n2 ++ Z ---
+(assert
+ (defq 'after-nf2
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (splice s (natminus (add j (nlen o1)) (nlen n1)) (nlen o2) n2)
+          (lapp (ltake i s)
+                (lapp o1 (lapp (ltake (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))
+                              (lapp n2 (ldrop (add (natminus j (add i (nlen n1))) (nlen o2)) (ldrop (add i (nlen o1)) s)))))))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let M (ltake kk W)
+      (let Z (ldrop (add kk (nlen o2)) W)
+      (let j2 (natminus (add j (nlen o1)) (nlen n1))
+      (pathscomp0 nlist
+        (splice s j2 (nlen o2) n2)
+        (lapp (lapp A (lapp o1 M)) (lapp n2 Z))
+        (lapp A (lapp o1 (lapp M (lapp n2 Z))))
+        (pathscomp0 nlist
+          (lapp (ltake j2 s) (lapp n2 (ldrop (add j2 (nlen o2)) s)))
+          (lapp (lapp A (lapp o1 M)) (lapp n2 (ldrop (add j2 (nlen o2)) s)))
+          (lapp (lapp A (lapp o1 M)) (lapp n2 Z))
+          (maponpaths nlist nlist (lam t (lapp t (lapp n2 (ldrop (add j2 (nlen o2)) s))))
+            (ltake j2 s) (lapp A (lapp o1 M))
+            (after-u1 s i o1 n1 j o2 g hb1 hc1 hb2 hc2))
+          (maponpaths nlist nlist (lam t (lapp (lapp A (lapp o1 M)) (lapp n2 t)))
+            (ldrop (add j2 (nlen o2)) s) Z
+            (after-u2 s i o1 n1 j o2 g hb1 hc1 hb2 hc2)))
+        (pathscomp0 nlist
+          (lapp (lapp A (lapp o1 M)) (lapp n2 Z))
+          (lapp A (lapp (lapp o1 M) (lapp n2 Z)))
+          (lapp A (lapp o1 (lapp M (lapp n2 Z))))
+          (lappassoc A (lapp o1 M) (lapp n2 Z))
+          (maponpaths nlist nlist (lam t (lapp A t))
+            (lapp (lapp o1 M) (lapp n2 Z)) (lapp o1 (lapp M (lapp n2 Z)))
+            (lappassoc o1 M (lapp n2 Z))))))))))))))))))))))))
+ (defq 'after-v1
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ltake i (splice s (natminus (add j (nlen o1)) (nlen n1)) (nlen o2) n2))
+          (ltake i s))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let M (ltake kk W)
+      (let Z (ldrop (add kk (nlen o2)) W)
+      (let j2 (natminus (add j (nlen o1)) (nlen n1))
+      (pathscomp0 nlist
+        (ltake i (splice s j2 (nlen o2) n2))
+        (ltake (nlen A) (splice s j2 (nlen o2) n2))
+        A
+        (maponpaths nat nlist (lam w (ltake w (splice s j2 (nlen o2) n2)))
+          i (nlen A)
+          (pathsinv0 nat (nlen A) i
+            (ltakelen i s
+              (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1))))
+        (pathscomp0 nlist
+          (ltake (nlen A) (splice s j2 (nlen o2) n2))
+          (ltake (nlen A) (lapp A (lapp o1 (lapp M (lapp n2 Z)))))
+          A
+          (maponpaths nlist nlist (lam t (ltake (nlen A) t))
+            (splice s j2 (nlen o2) n2) (lapp A (lapp o1 (lapp M (lapp n2 Z))))
+            (after-nf2 s i o1 n1 j o2 n2 g hb1 hc1 hb2 hc2))
+          (ltakelenapp A (lapp o1 (lapp M (lapp n2 Z)))))))))))))))))))))))))
+ (defq 'after-v2
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ldrop (add i (nlen o1)) (splice s (natminus (add j (nlen o1)) (nlen n1)) (nlen o2) n2))
+          (lapp (ltake (natminus j (add i (nlen n1))) (ldrop (add i (nlen o1)) s))
+                (lapp n2 (ldrop (add (natminus j (add i (nlen n1))) (nlen o2)) (ldrop (add i (nlen o1)) s)))))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let M (ltake kk W)
+      (let Z (ldrop (add kk (nlen o2)) W)
+      (let j2 (natminus (add j (nlen o1)) (nlen n1))
+      (pathscomp0 nlist
+        (ldrop (add i (nlen o1)) (splice s j2 (nlen o2) n2))
+        (ldrop (add (nlen A) (nlen o1)) (splice s j2 (nlen o2) n2))
+        (lapp M (lapp n2 Z))
+        (maponpaths nat nlist (lam w (ldrop (add w (nlen o1)) (splice s j2 (nlen o2) n2)))
+          i (nlen A)
+          (pathsinv0 nat (nlen A) i
+            (ltakelen i s
+              (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1))))
+        (pathscomp0 nlist
+          (ldrop (add (nlen A) (nlen o1)) (splice s j2 (nlen o2) n2))
+          (ldrop (add (nlen A) (nlen o1)) (lapp A (lapp o1 (lapp M (lapp n2 Z)))))
+          (lapp M (lapp n2 Z))
+          (maponpaths nlist nlist (lam t (ldrop (add (nlen A) (nlen o1)) t))
+            (splice s j2 (nlen o2) n2) (lapp A (lapp o1 (lapp M (lapp n2 Z))))
+            (after-nf2 s i o1 n1 j o2 n2 g hb1 hc1 hb2 hc2))
+          (pathscomp0 nlist
+            (ldrop (add (nlen A) (nlen o1)) (lapp A (lapp o1 (lapp M (lapp n2 Z)))))
+            (ldrop (nlen o1) (lapp o1 (lapp M (lapp n2 Z))))
+            (lapp M (lapp n2 Z))
+            (ldropplusapp A (nlen o1) (lapp o1 (lapp M (lapp n2 Z))))
+            (ldroplenapp o1 (lapp M (lapp n2 Z)))))))))))))))))))))))))
+ (defq 'splice-after-comm
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g (paths bool (natgtb j (add i (nlen n1))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hb2 (paths bool (natgtb (add j (nlen o2)) (nlen (splice s i (nlen o1) n1))) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (splice (splice s i (nlen o1) n1) j (nlen o2) n2)
+          (splice (splice s (natminus (add j (nlen o1)) (nlen n1)) (nlen o2) n2) i (nlen o1) n1))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let kk (natminus j (add i (nlen n1)))
+      (let M (ltake kk W)
+      (let Z (ldrop (add kk (nlen o2)) W)
+      (let j2 (natminus (add j (nlen o1)) (nlen n1))
+      (pathscomp0 nlist
+        (splice (splice s i (nlen o1) n1) j (nlen o2) n2)
+        (lapp A (lapp n1 (lapp M (lapp n2 Z))))
+        (splice (splice s j2 (nlen o2) n2) i (nlen o1) n1)
+        (pathscomp0 nlist
+          (splice (splice s i (nlen o1) n1) j (nlen o2) n2)
+          (lapp (lapp A (lapp n1 M)) (lapp n2 Z))
+          (lapp A (lapp n1 (lapp M (lapp n2 Z))))
+          (pathscomp0 nlist
+            (lapp (ltake j (lapp A (lapp n1 W))) (lapp n2 (ldrop (add j (nlen o2)) (lapp A (lapp n1 W)))))
+            (lapp (lapp A (lapp n1 M)) (lapp n2 (ldrop (add j (nlen o2)) (lapp A (lapp n1 W)))))
+            (lapp (lapp A (lapp n1 M)) (lapp n2 Z))
+            (maponpaths nlist nlist
+              (lam t (lapp t (lapp n2 (ldrop (add j (nlen o2)) (lapp A (lapp n1 W))))))
+              (ltake j (lapp A (lapp n1 W))) (lapp A (lapp n1 M))
+              (after-l1p s i o1 n1 j g hb1))
+            (maponpaths nlist nlist (lam t (lapp (lapp A (lapp n1 M)) (lapp n2 t)))
+              (ldrop (add j (nlen o2)) (lapp A (lapp n1 W))) Z
+              (after-l2p s i o1 n1 j o2 g hb1)))
+          (pathscomp0 nlist
+            (lapp (lapp A (lapp n1 M)) (lapp n2 Z))
+            (lapp A (lapp (lapp n1 M) (lapp n2 Z)))
+            (lapp A (lapp n1 (lapp M (lapp n2 Z))))
+            (lappassoc A (lapp n1 M) (lapp n2 Z))
+            (maponpaths nlist nlist (lam t (lapp A t))
+              (lapp (lapp n1 M) (lapp n2 Z)) (lapp n1 (lapp M (lapp n2 Z)))
+              (lappassoc n1 M (lapp n2 Z)))))
+        (pathsinv0 nlist
+          (splice (splice s j2 (nlen o2) n2) i (nlen o1) n1)
+          (lapp A (lapp n1 (lapp M (lapp n2 Z))))
+          (pathscomp0 nlist
+            (lapp (ltake i (splice s j2 (nlen o2) n2)) (lapp n1 (ldrop (add i (nlen o1)) (splice s j2 (nlen o2) n2))))
+            (lapp A (lapp n1 (ldrop (add i (nlen o1)) (splice s j2 (nlen o2) n2))))
+            (lapp A (lapp n1 (lapp M (lapp n2 Z))))
+            (maponpaths nlist nlist
+              (lam t (lapp t (lapp n1 (ldrop (add i (nlen o1)) (splice s j2 (nlen o2) n2)))))
+              (ltake i (splice s j2 (nlen o2) n2)) A
+              (after-v1 s i o1 n1 j o2 n2 g hb1 hc1 hb2 hc2))
+            (maponpaths nlist nlist (lam t (lapp A (lapp n1 t)))
+              (ldrop (add i (nlen o1)) (splice s j2 (nlen o2) n2)) (lapp M (lapp n2 Z))
+              (after-v2 s i o1 n1 j o2 n2 g hb1 hc1 hb2 hc2)))))))))))))))))))))))))
+
+; --- the BEFORE branch: q aims strictly ahead of p, so p slides FORWARD by
+; --- q's delta. the state decomposes B ++ o2 ++ C ++ o1 ++ W; the same sealed
+; --- ladder, with A's own seams carrying the front half ---
+(assert
+ (defq 'before-leh-ja
+   '(pi s nlist (pi i nat (pi o1 nlist (pi j nat (pi o2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths bool (natgtb j (nlen (ltake i s))) false))))))))
+   '(lam s (lam i (lam o1 (lam j (lam o2 (lam g2 (lam hb1
+      (pathscomp0 bool
+        (natgtb j (nlen (ltake i s)))
+        (natgtb j i)
+        false
+        (maponpaths nat bool (lam w (natgtb j w)) (nlen (ltake i s)) i
+          (ltakelen i s
+            (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1)))
+        (istransnatleh j (add j (nlen o2)) i
+          (natlehnplusnm j (nlen o2))
+          (natlthtoleh (add j (nlen o2)) i g2)))))))))))
+ (defq 'before-leh-jo
+   '(pi s nlist (pi i nat (pi o1 nlist (pi j nat (pi o2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths bool (natgtb (add j (nlen o2)) (nlen (ltake i s))) false))))))))
+   '(lam s (lam i (lam o1 (lam j (lam o2 (lam g2 (lam hb1
+      (pathscomp0 bool
+        (natgtb (add j (nlen o2)) (nlen (ltake i s)))
+        (natgtb (add j (nlen o2)) i)
+        false
+        (maponpaths nat bool (lam w (natgtb (add j (nlen o2)) w)) (nlen (ltake i s)) i
+          (ltakelen i s
+            (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1)))
+        (natlthtoleh (add j (nlen o2)) i g2))))))))))
+ ; q's context re-read on A's front: peel the appended tail twice
+ (defq 'before-hca
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist (ltake (nlen o2) (ldrop j (ltake i s))) o2))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam g2 (lam hb1 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (pathscomp0 nlist
+        (ltake (nlen o2) (ldrop j A))
+        (ltake (nlen o2) (lapp (ldrop j A) (lapp n1 W)))
+        o2
+        (pathsinv0 nlist
+          (ltake (nlen o2) (lapp (ldrop j A) (lapp n1 W)))
+          (ltake (nlen o2) (ldrop j A))
+          (ltakeprefix (nlen o2) (ldrop j A) (lapp n1 W)
+            (pathscomp0 bool
+              (natgtb (nlen o2) (nlen (ldrop j A)))
+              (natgtb (nlen o2) (natminus i j))
+              false
+              (maponpaths nat bool (lam w (natgtb (nlen o2) w))
+                (nlen (ldrop j A)) (natminus i j)
+                (pathscomp0 nat (nlen (ldrop j A)) (natminus (nlen A) j) (natminus i j)
+                  (ldroplen j A)
+                  (maponpaths nat nat (lam w (natminus w j)) (nlen A) i
+                    (ltakelen i s
+                      (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1)))))
+              (pathscomp0 bool
+                (natgtb (nlen o2) (natminus i j))
+                (natgtb (natminus (add j (nlen o2)) j) (natminus i j))
+                false
+                (maponpaths nat bool (lam w (natgtb w (natminus i j)))
+                  (nlen o2) (natminus (add j (nlen o2)) j)
+                  (pathsinv0 nat (natminus (add j (nlen o2)) j) (nlen o2)
+                    (natpluslcancelminus j (nlen o2))))
+                (natlehandminusl (add j (nlen o2)) i j
+                  (natlthtoleh (add j (nlen o2)) i g2))))))
+        (pathscomp0 nlist
+          (ltake (nlen o2) (lapp (ldrop j A) (lapp n1 W)))
+          (ltake (nlen o2) (ldrop j (lapp A (lapp n1 W))))
+          o2
+          (maponpaths nlist nlist (lam t (ltake (nlen o2) t))
+            (lapp (ldrop j A) (lapp n1 W))
+            (ldrop j (lapp A (lapp n1 W)))
+            (pathsinv0 nlist
+              (ldrop j (lapp A (lapp n1 W)))
+              (lapp (ldrop j A) (lapp n1 W))
+              (ldropprefix j A (lapp n1 W)
+                (before-leh-ja s i o1 j o2 g2 hb1))))
+          hc2))))))))))))))
+)
+
+; --- the slid index, ALL NAT (tower lengths named by the guards' arithmetic,
+; --- so conv never re-walks a take/drop tower); then the re-aimed state's
+; --- normal form, its two reads, and the assembly ---
+(assert
+ (defq 'before-i2v
+   '(pi i nat (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+        (paths nat
+          (natminus (add i (nlen n2)) (nlen o2))
+          (add j (add (nlen n2) (natminus i (add j (nlen o2)))))))))))
+   '(lam i (lam j (lam o2 (lam n2 (lam g2
+      (let cc (natminus i (add j (nlen o2)))
+      (pathscomp0 nat
+        (natminus (add i (nlen n2)) (nlen o2))
+        (natminus (add (add j (add (nlen n2) cc)) (nlen o2)) (nlen o2))
+        (add j (add (nlen n2) cc))
+        (maponpaths nat nat (lam w (natminus w (nlen o2)))
+          (add i (nlen n2)) (add (add j (add (nlen n2) cc)) (nlen o2))
+          (pathsinv0 nat (add (add j (add (nlen n2) cc)) (nlen o2)) (add i (nlen n2))
+            (pathscomp0 nat
+              (add (add j (add (nlen n2) cc)) (nlen o2))
+              (add (add (add j (nlen n2)) cc) (nlen o2))
+              (add i (nlen n2))
+              (maponpaths nat nat (lam w (add w (nlen o2)))
+                (add j (add (nlen n2) cc)) (add (add j (nlen n2)) cc)
+                (pathsinv0 nat (add (add j (nlen n2)) cc) (add j (add (nlen n2) cc))
+                  (natplusassoc j (nlen n2) cc)))
+              (pathscomp0 nat
+                (add (add (add j (nlen n2)) cc) (nlen o2))
+                (add (add (add j (nlen n2)) (nlen o2)) cc)
+                (add i (nlen n2))
+                (natplusswap (add j (nlen n2)) cc (nlen o2))
+                (pathscomp0 nat
+                  (add (add (add j (nlen n2)) (nlen o2)) cc)
+                  (add (add (add j (nlen o2)) (nlen n2)) cc)
+                  (add i (nlen n2))
+                  (maponpaths nat nat (lam w (add w cc))
+                    (add (add j (nlen n2)) (nlen o2)) (add (add j (nlen o2)) (nlen n2))
+                    (natplusswap j (nlen n2) (nlen o2)))
+                  (pathscomp0 nat
+                    (add (add (add j (nlen o2)) (nlen n2)) cc)
+                    (add (add (add j (nlen o2)) cc) (nlen n2))
+                    (add i (nlen n2))
+                    (natplusswap (add j (nlen o2)) (nlen n2) cc)
+                    (maponpaths nat nat (lam w (add w (nlen n2)))
+                      (add (add j (nlen o2)) cc) i
+                      (pathscomp0 nat (add (add j (nlen o2)) cc) (add cc (add j (nlen o2))) i
+                        (natpluscomm (add j (nlen o2)) cc)
+                        (natminusplusnmm i (add j (nlen o2))
+                          (natlthtoleh (add j (nlen o2)) i g2))))))))))
+        (natpluscancelminus (add j (add (nlen n2) cc)) (nlen o2))))))))))
+ (defq 'before-nfs2
+   '(pi s nlist (pi i nat (pi o1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+        (paths nlist
+          (splice s j (nlen o2) n2)
+          (lapp (ltake j (ltake i s))
+                (lapp n2 (lapp (ldrop (add j (nlen o2)) (ltake i s))
+                              (lapp o1 (ldrop (add i (nlen o1)) s)))))))))))))))
+   '(lam s (lam i (lam o1 (lam j (lam o2 (lam n2 (lam g2 (lam hb1 (lam hc1
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let B (ltake j A)
+      (let C (ldrop (add j (nlen o2)) A)
+      (pathscomp0 nlist
+        (lapp (ltake j s) (lapp n2 (ldrop (add j (nlen o2)) s)))
+        (lapp B (lapp n2 (ldrop (add j (nlen o2)) s)))
+        (lapp B (lapp n2 (lapp C (lapp o1 W))))
+        (maponpaths nlist nlist (lam t (lapp t (lapp n2 (ldrop (add j (nlen o2)) s))))
+          (ltake j s) B
+          (pathscomp0 nlist (ltake j s) (ltake j (lapp A (lapp o1 W))) B
+            (maponpaths nlist nlist (lam t (ltake j t)) s (lapp A (lapp o1 W))
+              (seams s i o1 hb1 hc1))
+            (ltakeprefix j A (lapp o1 W)
+              (before-leh-ja s i o1 j o2 g2 hb1))))
+        (maponpaths nlist nlist (lam t (lapp B (lapp n2 t)))
+          (ldrop (add j (nlen o2)) s) (lapp C (lapp o1 W))
+          (pathscomp0 nlist
+            (ldrop (add j (nlen o2)) s)
+            (ldrop (add j (nlen o2)) (lapp A (lapp o1 W)))
+            (lapp C (lapp o1 W))
+            (maponpaths nlist nlist (lam t (ldrop (add j (nlen o2)) t)) s (lapp A (lapp o1 W))
+              (seams s i o1 hb1 hc1))
+            (ldropprefix (add j (nlen o2)) A (lapp o1 W)
+              (before-leh-jo s i o1 j o2 g2 hb1)))))))))))))))))))
+ (defq 'before-clen
+   '(pi s nlist (pi i nat (pi o1 nlist (pi j nat (pi o2 nlist
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+        (paths nat
+          (nlen (ldrop (add j (nlen o2)) (ltake i s)))
+          (natminus i (add j (nlen o2))))))))))
+   '(lam s (lam i (lam o1 (lam j (lam o2 (lam hb1
+      (pathscomp0 nat
+        (nlen (ldrop (add j (nlen o2)) (ltake i s)))
+        (natminus (nlen (ltake i s)) (add j (nlen o2)))
+        (natminus i (add j (nlen o2)))
+        (ldroplen (add j (nlen o2)) (ltake i s))
+        (maponpaths nat nat (lam w (natminus w (add j (nlen o2)))) (nlen (ltake i s)) i
+          (ltakelen i s
+            (istransnatleh i (add i (nlen o1)) (nlen s) (natlehnplusnm i (nlen o1)) hb1)))))))))))
+ (defq 'before-v1
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ltake (natminus (add i (nlen n2)) (nlen o2)) (splice s j (nlen o2) n2))
+          (lapp (ltake j (ltake i s))
+                (lapp n2 (ldrop (add j (nlen o2)) (ltake i s))))))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g2 (lam hb1 (lam hc1 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let B (ltake j A)
+      (let C (ldrop (add j (nlen o2)) A)
+      (let cc (natminus i (add j (nlen o2)))
+      (pathscomp0 nlist
+        (ltake (natminus (add i (nlen n2)) (nlen o2)) (splice s j (nlen o2) n2))
+        (ltake (add j (add (nlen n2) cc)) (splice s j (nlen o2) n2))
+        (lapp B (lapp n2 C))
+        (maponpaths nat nlist (lam w (ltake w (splice s j (nlen o2) n2)))
+          (natminus (add i (nlen n2)) (nlen o2)) (add j (add (nlen n2) cc))
+          (before-i2v i j o2 n2 g2))
+        (pathscomp0 nlist
+          (ltake (add j (add (nlen n2) cc)) (splice s j (nlen o2) n2))
+          (ltake (add (nlen B) (add (nlen n2) (nlen C))) (splice s j (nlen o2) n2))
+          (lapp B (lapp n2 C))
+          (pathscomp0 nlist
+            (ltake (add j (add (nlen n2) cc)) (splice s j (nlen o2) n2))
+            (ltake (add (nlen B) (add (nlen n2) cc)) (splice s j (nlen o2) n2))
+            (ltake (add (nlen B) (add (nlen n2) (nlen C))) (splice s j (nlen o2) n2))
+            (maponpaths nat nlist (lam w (ltake (add w (add (nlen n2) cc)) (splice s j (nlen o2) n2)))
+              j (nlen B)
+              (pathsinv0 nat (nlen B) j
+                (ltakelen j A (before-leh-ja s i o1 j o2 g2 hb1))))
+            (maponpaths nat nlist (lam w (ltake (add (nlen B) (add (nlen n2) w)) (splice s j (nlen o2) n2)))
+              cc (nlen C)
+              (pathsinv0 nat (nlen C) cc
+                (before-clen s i o1 j o2 hb1))))
+          (pathscomp0 nlist
+            (ltake (add (nlen B) (add (nlen n2) (nlen C))) (splice s j (nlen o2) n2))
+            (ltake (add (nlen B) (add (nlen n2) (nlen C))) (lapp B (lapp n2 (lapp C (lapp o1 W)))))
+            (lapp B (lapp n2 C))
+            (maponpaths nlist nlist (lam t (ltake (add (nlen B) (add (nlen n2) (nlen C))) t))
+              (splice s j (nlen o2) n2) (lapp B (lapp n2 (lapp C (lapp o1 W))))
+              (before-nfs2 s i o1 j o2 n2 g2 hb1 hc1))
+            (pathscomp0 nlist
+              (ltake (add (nlen B) (add (nlen n2) (nlen C))) (lapp B (lapp n2 (lapp C (lapp o1 W)))))
+              (lapp B (ltake (add (nlen n2) (nlen C)) (lapp n2 (lapp C (lapp o1 W)))))
+              (lapp B (lapp n2 C))
+              (ltakeplusapp B (add (nlen n2) (nlen C)) (lapp n2 (lapp C (lapp o1 W))))
+              (pathscomp0 nlist
+                (lapp B (ltake (add (nlen n2) (nlen C)) (lapp n2 (lapp C (lapp o1 W)))))
+                (lapp B (lapp n2 (ltake (nlen C) (lapp C (lapp o1 W)))))
+                (lapp B (lapp n2 C))
+                (maponpaths nlist nlist (lam t (lapp B t))
+                  (ltake (add (nlen n2) (nlen C)) (lapp n2 (lapp C (lapp o1 W))))
+                  (lapp n2 (ltake (nlen C) (lapp C (lapp o1 W))))
+                  (ltakeplusapp n2 (nlen C) (lapp C (lapp o1 W))))
+                (maponpaths nlist nlist (lam t (lapp B (lapp n2 t)))
+                  (ltake (nlen C) (lapp C (lapp o1 W))) C
+                  (ltakelenapp C (lapp o1 W)))))))))))))))))))))))))
+ (defq 'before-v2
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (ldrop (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1)) (splice s j (nlen o2) n2))
+          (ldrop (add i (nlen o1)) s)))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g2 (lam hb1 (lam hc1 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let B (ltake j A)
+      (let C (ldrop (add j (nlen o2)) A)
+      (let cc (natminus i (add j (nlen o2)))
+      (pathscomp0 nlist
+        (ldrop (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1)) (splice s j (nlen o2) n2))
+        (ldrop (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1)))) (splice s j (nlen o2) n2))
+        W
+        (maponpaths nat nlist (lam w (ldrop w (splice s j (nlen o2) n2)))
+          (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1))
+          (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1))))
+          (pathscomp0 nat
+            (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1))
+            (add (add j (add (nlen n2) cc)) (nlen o1))
+            (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1))))
+            (maponpaths nat nat (lam w (add w (nlen o1)))
+              (natminus (add i (nlen n2)) (nlen o2)) (add j (add (nlen n2) cc))
+              (before-i2v i j o2 n2 g2))
+            (pathscomp0 nat
+              (add (add j (add (nlen n2) cc)) (nlen o1))
+              (add j (add (add (nlen n2) cc) (nlen o1)))
+              (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1))))
+              (natplusassoc j (add (nlen n2) cc) (nlen o1))
+              (pathscomp0 nat
+                (add j (add (add (nlen n2) cc) (nlen o1)))
+                (add j (add (nlen n2) (add cc (nlen o1))))
+                (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1))))
+                (maponpaths nat nat (lam w (add j w))
+                  (add (add (nlen n2) cc) (nlen o1)) (add (nlen n2) (add cc (nlen o1)))
+                  (natplusassoc (nlen n2) cc (nlen o1)))
+                (pathscomp0 nat
+                  (add j (add (nlen n2) (add cc (nlen o1))))
+                  (add (nlen B) (add (nlen n2) (add cc (nlen o1))))
+                  (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1))))
+                  (maponpaths nat nat (lam w (add w (add (nlen n2) (add cc (nlen o1)))))
+                    j (nlen B)
+                    (pathsinv0 nat (nlen B) j
+                      (ltakelen j A (before-leh-ja s i o1 j o2 g2 hb1))))
+                  (maponpaths nat nat (lam w (add (nlen B) (add (nlen n2) (add w (nlen o1)))))
+                    cc (nlen C)
+                    (pathsinv0 nat (nlen C) cc
+                      (before-clen s i o1 j o2 hb1))))))))
+        (pathscomp0 nlist
+          (ldrop (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1)))) (splice s j (nlen o2) n2))
+          (ldrop (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1)))) (lapp B (lapp n2 (lapp C (lapp o1 W)))))
+          W
+          (maponpaths nlist nlist (lam t (ldrop (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1)))) t))
+            (splice s j (nlen o2) n2) (lapp B (lapp n2 (lapp C (lapp o1 W))))
+            (before-nfs2 s i o1 j o2 n2 g2 hb1 hc1))
+          (pathscomp0 nlist
+            (ldrop (add (nlen B) (add (nlen n2) (add (nlen C) (nlen o1)))) (lapp B (lapp n2 (lapp C (lapp o1 W)))))
+            (ldrop (add (nlen n2) (add (nlen C) (nlen o1))) (lapp n2 (lapp C (lapp o1 W))))
+            W
+            (ldropplusapp B (add (nlen n2) (add (nlen C) (nlen o1))) (lapp n2 (lapp C (lapp o1 W))))
+            (pathscomp0 nlist
+              (ldrop (add (nlen n2) (add (nlen C) (nlen o1))) (lapp n2 (lapp C (lapp o1 W))))
+              (ldrop (add (nlen C) (nlen o1)) (lapp C (lapp o1 W)))
+              W
+              (ldropplusapp n2 (add (nlen C) (nlen o1)) (lapp C (lapp o1 W)))
+              (pathscomp0 nlist
+                (ldrop (add (nlen C) (nlen o1)) (lapp C (lapp o1 W)))
+                (ldrop (nlen o1) (lapp o1 W))
+                W
+                (ldropplusapp C (nlen o1) (lapp o1 W))
+                (ldroplenapp o1 W)))))))))))))))))))))))
+ (defq 'splice-before-comm
+   '(pi s nlist (pi i nat (pi o1 nlist (pi n1 nlist (pi j nat (pi o2 nlist (pi n2 nlist
+      (pi g2 (paths bool (natgtb i (add j (nlen o2))) true)
+      (pi hb1 (paths bool (natgtb (add i (nlen o1)) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen o1) (ldrop i s)) o1)
+      (pi hc2 (paths nlist (ltake (nlen o2) (ldrop j (splice s i (nlen o1) n1))) o2)
+        (paths nlist
+          (splice (splice s i (nlen o1) n1) j (nlen o2) n2)
+          (splice (splice s j (nlen o2) n2) (natminus (add i (nlen n2)) (nlen o2)) (nlen o1) n1)))))))))))))
+   '(lam s (lam i (lam o1 (lam n1 (lam j (lam o2 (lam n2 (lam g2 (lam hb1 (lam hc1 (lam hc2
+      (let A (ltake i s)
+      (let W (ldrop (add i (nlen o1)) s)
+      (let B (ltake j A)
+      (let C (ldrop (add j (nlen o2)) A)
+      (pathscomp0 nlist
+        (splice (splice s i (nlen o1) n1) j (nlen o2) n2)
+        (lapp B (lapp n2 (lapp C (lapp n1 W))))
+        (splice (splice s j (nlen o2) n2) (natminus (add i (nlen n2)) (nlen o2)) (nlen o1) n1)
+        (pathscomp0 nlist
+          (lapp (ltake j (lapp A (lapp n1 W))) (lapp n2 (ldrop (add j (nlen o2)) (lapp A (lapp n1 W)))))
+          (lapp B (lapp n2 (ldrop (add j (nlen o2)) (lapp A (lapp n1 W)))))
+          (lapp B (lapp n2 (lapp C (lapp n1 W))))
+          (maponpaths nlist nlist
+            (lam t (lapp t (lapp n2 (ldrop (add j (nlen o2)) (lapp A (lapp n1 W))))))
+            (ltake j (lapp A (lapp n1 W))) B
+            (ltakeprefix j A (lapp n1 W)
+              (before-leh-ja s i o1 j o2 g2 hb1)))
+          (maponpaths nlist nlist (lam t (lapp B (lapp n2 t)))
+            (ldrop (add j (nlen o2)) (lapp A (lapp n1 W))) (lapp C (lapp n1 W))
+            (ldropprefix (add j (nlen o2)) A (lapp n1 W)
+              (before-leh-jo s i o1 j o2 g2 hb1))))
+        (pathsinv0 nlist
+          (splice (splice s j (nlen o2) n2) (natminus (add i (nlen n2)) (nlen o2)) (nlen o1) n1)
+          (lapp B (lapp n2 (lapp C (lapp n1 W))))
+          (pathscomp0 nlist
+            (splice (splice s j (nlen o2) n2) (natminus (add i (nlen n2)) (nlen o2)) (nlen o1) n1)
+            (lapp (lapp B (lapp n2 C)) (lapp n1 W))
+            (lapp B (lapp n2 (lapp C (lapp n1 W))))
+            (pathscomp0 nlist
+              (lapp (ltake (natminus (add i (nlen n2)) (nlen o2)) (splice s j (nlen o2) n2))
+                    (lapp n1 (ldrop (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1)) (splice s j (nlen o2) n2))))
+              (lapp (lapp B (lapp n2 C))
+                    (lapp n1 (ldrop (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1)) (splice s j (nlen o2) n2))))
+              (lapp (lapp B (lapp n2 C)) (lapp n1 W))
+              (maponpaths nlist nlist
+                (lam t (lapp t (lapp n1 (ldrop (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1)) (splice s j (nlen o2) n2)))))
+                (ltake (natminus (add i (nlen n2)) (nlen o2)) (splice s j (nlen o2) n2))
+                (lapp B (lapp n2 C))
+                (before-v1 s i o1 n1 j o2 n2 g2 hb1 hc1 hc2))
+              (maponpaths nlist nlist (lam t (lapp (lapp B (lapp n2 C)) (lapp n1 t)))
+                (ldrop (add (natminus (add i (nlen n2)) (nlen o2)) (nlen o1)) (splice s j (nlen o2) n2))
+                W
+                (before-v2 s i o1 n1 j o2 n2 g2 hb1 hc1 hc2)))
+            (pathscomp0 nlist
+              (lapp (lapp B (lapp n2 C)) (lapp n1 W))
+              (lapp B (lapp (lapp n2 C) (lapp n1 W)))
+              (lapp B (lapp n2 (lapp C (lapp n1 W))))
+              (lappassoc B (lapp n2 C) (lapp n1 W))
+              (maponpaths nlist nlist (lam t (lapp B t))
+                (lapp (lapp n2 C) (lapp n1 W)) (lapp n2 (lapp C (lapp n1 W)))
+                (lappassoc n2 C (lapp n1 W))))))))))))))))))))))))
+
+; --- (L3a) tied to the primitive: a successful hcommute WITNESSES order-
+; --- freedom, in the honest contexts (p belongs on s, q belongs after p).
+; --- the convoy reads the branch off natgthorleh's evidence and hands the
+; --- carried pair through the same maponpaths as L1; each branch closes by
+; --- its splice lemma. then (L3b): states are DATA, so the frontier is one
+; --- maponpaths -- the fold's tail rides the two-patch agreement ---
+(assert
+ (defn 'hvec '(pi n nat UU)
+   '(lam n (nat_rect (lam q UU) unit (lam k (lam r (total2 x hunk r))) n)))
+ (defn 'hlist 'UU '(total2 n nat (hvec n)))
+ (defn 'hnil 'hlist '(tpair 0 tt))
+ (defn 'hcons '(pi x hunk (pi l hlist hlist))
+   '(lam x (lam l (tpair (succ (pr1 l)) (tpair x (pr2 l))))))
+ (defn 'happl '(pi l hlist (pi s nlist nlist))
+   '(lam l (lam s ((nat_rect (lam q (pi v (hvec q) (pi s2 nlist nlist)))
+                     (lam v (lam s2 s2))
+                     (lam k (lam IH (lam v (lam s2 (IH (pr2 v) (hap s2 (pr1 v)))))))
+                     (pr1 l))
+                   (pr2 l) s))))
+ ; the fold COMPUTES: two hunks land left to right
+ ((vof 0 '(happl (hcons (mkh 0 (ncons 1 nnil) (ncons 7 (ncons 8 nnil)))
+                        (hcons (mkh 3 (ncons 3 nnil) (ncons 9 nnil)) hnil))
+                 (ncons 1 (ncons 2 (ncons 3 (ncons 4 nnil))))))
+  = (vof 0 '(ncons 7 (ncons 8 (ncons 2 (ncons 9 (ncons 4 nnil))))))))
+(assert
+ (defq 'hcommute-sound
+   '(pi
+     p
+     hunk
+     (pi
+       q
+       hunk
+       (pi
+         q2
+         hunk
+         (pi
+           p2
+           hunk
+           (pi
+             s
+             nlist
+             (pi
+               h
+               (paths (coprod hpair unit) (hcommute p q) (ii1 (tpair q2 p2)))
+               (pi
+                 hb1
+                 (paths bool (natgtb (add (hi p) (nlen (ho p))) (nlen s)) false)
+                 (pi
+                   hc1
+                   (paths nlist (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p))
+                   (pi
+                     hb2
+                     (paths bool (natgtb (add (hi q) (nlen (ho q))) (nlen (hap s p))) false)
+                     (pi
+                       hc2
+                       (paths nlist (ltake (nlen (ho q)) (ldrop (hi q) (hap s p))) (ho q))
+                       (paths nlist (hap (hap s p) q) (hap (hap s q2) p2))))))))))))
+   '(lam
+     p
+     (lam
+       q
+       (lam
+         q2
+         (lam
+           p2
+           (lam
+             s
+             (coprod_rect
+               (lam
+                 c
+                 (pi
+                   h
+                   (paths
+                     (coprod hpair unit)
+                     (coprod_rect
+                       (lam cc (coprod hpair unit))
+                       (lam
+                         g9
+                         (ii1
+                           (tpair
+                             (mkh (natminus (add (hi q) (nlen (ho p))) (nlen (hn p))) (ho q) (hn q))
+                             p)))
+                       (lam
+                         g9
+                         (coprod_rect
+                           (lam cc (coprod hpair unit))
+                           (lam
+                             g8
+                             (ii1
+                               (tpair
+                                 q
+                                 (mkh
+                                   (natminus (add (hi p) (nlen (hn q))) (nlen (ho q)))
+                                   (ho p)
+                                   (hn p)))))
+                           (lam g8 (ii2 tt))
+                           (natgthorleh (hi p) (add (hi q) (nlen (ho q))))))
+                       c)
+                     (ii1 (tpair q2 p2)))
+                   (pi
+                     hb1
+                     (paths bool (natgtb (add (hi p) (nlen (ho p))) (nlen s)) false)
+                     (pi
+                       hc1
+                       (paths nlist (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p))
+                       (pi
+                         hb2
+                         (paths bool (natgtb (add (hi q) (nlen (ho q))) (nlen (hap s p))) false)
+                         (pi
+                           hc2
+                           (paths nlist (ltake (nlen (ho q)) (ldrop (hi q) (hap s p))) (ho q))
+                           (paths nlist (hap (hap s p) q) (hap (hap s q2) p2))))))))
+               (lam
+                 g
+                 (lam
+                   h
+                   (lam
+                     hb1
+                     (lam
+                       hc1
+                       (lam
+                         hb2
+                         (lam
+                           hc2
+                           (pathscomp0
+                             nlist
+                             (hap (hap s p) q)
+                             (hap
+                               (hap
+                                 s
+                                 (mkh
+                                   (natminus (add (hi q) (nlen (ho p))) (nlen (hn p)))
+                                   (ho q)
+                                   (hn q)))
+                               p)
+                             (hap (hap s q2) p2)
+                             (splice-after-comm
+                               s
+                               (hi p)
+                               (ho p)
+                               (hn p)
+                               (hi q)
+                               (ho q)
+                               (hn q)
+                               g
+                               hb1
+                               hc1
+                               hb2
+                               hc2)
+                             (maponpaths
+                               (coprod hpair unit)
+                               nlist
+                               (lam
+                                 cz
+                                 (coprod_rect
+                                   (lam cy nlist)
+                                   (lam z (hap (hap s (pr1 z)) (pr2 z)))
+                                   (lam uz nnil)
+                                   cz))
+                               (ii1
+                                 (tpair
+                                   (mkh
+                                     (natminus (add (hi q) (nlen (ho p))) (nlen (hn p)))
+                                     (ho q)
+                                     (hn q))
+                                   p))
+                               (ii1 (tpair q2 p2))
+                               h))))))))
+               (lam
+                 g
+                 (lam
+                   h
+                   ((coprod_rect
+                       (lam
+                         c2
+                         (pi
+                           h2
+                           (paths
+                             (coprod hpair unit)
+                             (coprod_rect
+                               (lam cc (coprod hpair unit))
+                               (lam
+                                 g8
+                                 (ii1
+                                   (tpair
+                                     q
+                                     (mkh
+                                       (natminus (add (hi p) (nlen (hn q))) (nlen (ho q)))
+                                       (ho p)
+                                       (hn p)))))
+                               (lam g8 (ii2 tt))
+                               c2)
+                             (ii1 (tpair q2 p2)))
+                           (pi
+                             hb1
+                             (paths bool (natgtb (add (hi p) (nlen (ho p))) (nlen s)) false)
+                             (pi
+                               hc1
+                               (paths nlist (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p))
+                               (pi
+                                 hb2
+                                 (paths
+                                   bool
+                                   (natgtb (add (hi q) (nlen (ho q))) (nlen (hap s p)))
+                                   false)
+                                 (pi
+                                   hc2
+                                   (paths
+                                     nlist
+                                     (ltake (nlen (ho q)) (ldrop (hi q) (hap s p)))
+                                     (ho q))
+                                   (paths nlist (hap (hap s p) q) (hap (hap s q2) p2))))))))
+                       (lam
+                         g2
+                         (lam
+                           h2
+                           (lam
+                             hb1
+                             (lam
+                               hc1
+                               (lam
+                                 hb2
+                                 (lam
+                                   hc2
+                                   (pathscomp0
+                                     nlist
+                                     (hap (hap s p) q)
+                                     (hap
+                                       (hap s q)
+                                       (mkh
+                                         (natminus (add (hi p) (nlen (hn q))) (nlen (ho q)))
+                                         (ho p)
+                                         (hn p)))
+                                     (hap (hap s q2) p2)
+                                     (splice-before-comm
+                                       s
+                                       (hi p)
+                                       (ho p)
+                                       (hn p)
+                                       (hi q)
+                                       (ho q)
+                                       (hn q)
+                                       g2
+                                       hb1
+                                       hc1
+                                       hc2)
+                                     (maponpaths
+                                       (coprod hpair unit)
+                                       nlist
+                                       (lam
+                                         cz
+                                         (coprod_rect
+                                           (lam cy nlist)
+                                           (lam z (hap (hap s (pr1 z)) (pr2 z)))
+                                           (lam uz nnil)
+                                           cz))
+                                       (ii1
+                                         (tpair
+                                           q
+                                           (mkh
+                                             (natminus (add (hi p) (nlen (hn q))) (nlen (ho q)))
+                                             (ho p)
+                                             (hn p))))
+                                       (ii1 (tpair q2 p2))
+                                       h2))))))))
+                       (lam
+                         g2
+                         (lam
+                           h2
+                           (fromempty
+                             (pi
+                               hb1
+                               (paths bool (natgtb (add (hi p) (nlen (ho p))) (nlen s)) false)
+                               (pi
+                                 hc1
+                                 (paths nlist (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p))
+                                 (pi
+                                   hb2
+                                   (paths
+                                     bool
+                                     (natgtb (add (hi q) (nlen (ho q))) (nlen (hap s p)))
+                                     false)
+                                   (pi
+                                     hc2
+                                     (paths
+                                       nlist
+                                       (ltake (nlen (ho q)) (ldrop (hi q) (hap s p)))
+                                       (ho q))
+                                     (paths nlist (hap (hap s p) q) (hap (hap s q2) p2))))))
+                             (transportf
+                               (coprod hpair unit)
+                               hcmside
+                               (ii2 tt)
+                               (ii1 (tpair q2 p2))
+                               h2
+                               tt))))
+                       (natgthorleh (hi p) (add (hi q) (nlen (ho q)))))
+                     h)))
+               (natgthorleh (hi q) (add (hi p) (nlen (hn p))))))))))))
+(assert
+ (defq 'hfold-swap
+   '(pi p hunk (pi q hunk (pi q2 hunk (pi p2 hunk (pi s nlist (pi post hlist
+      (pi h (paths (coprod hpair unit) (hcommute p q) (ii1 (tpair q2 p2)))
+      (pi hb1 (paths bool (natgtb (add (hi p) (nlen (ho p))) (nlen s)) false)
+      (pi hc1 (paths nlist (ltake (nlen (ho p)) (ldrop (hi p) s)) (ho p))
+      (pi hb2 (paths bool (natgtb (add (hi q) (nlen (ho q))) (nlen (hap s p))) false)
+      (pi hc2 (paths nlist (ltake (nlen (ho q)) (ldrop (hi q) (hap s p))) (ho q))
+        (paths nlist
+          (happl (hcons p (hcons q post)) s)
+          (happl (hcons q2 (hcons p2 post)) s)))))))))))))
+   '(lam p (lam q (lam q2 (lam p2 (lam s (lam post (lam h (lam hb1 (lam hc1 (lam hb2 (lam hc2
+      (maponpaths nlist nlist (lam t (happl post t))
+        (hap (hap s p) q) (hap (hap s q2) p2)
+        (hcommute-sound p q q2 p2 s h hb1 hc1 hb2 hc2)))))))))))))))
+(:
+ ; --- the L3a witness COMPUTES: the after-pair agrees in both orders ---
+ (heq a b) (? (&& (atom? a) (atom? b)) (id? a b)
+              (|| (atom? a) (atom? b)) 0
+              (&& (heq (cap a) (cap b)) (heq (cup a) (cup b))))
+ s0 '(ncons 1 (ncons 2 (ncons 3 (ncons 4 nnil))))
+ p0 '(mkh 0 (ncons 1 nnil) (ncons 7 (ncons 8 nnil)))
+ q0 '(mkh 3 (ncons 3 nnil) (ncons 9 nnil))
+ q0p '(mkh 2 (ncons 3 nnil) (ncons 9 nnil))
+ _ (assert
+    ((vof 0 (L 'hap (L 'hap s0 p0) q0)) = (vof 0 (L 'hap (L 'hap s0 q0p) p0)))
+    ((vof 0 (L 'hcommute p0 q0)) = (vof 0 (L 'ii1 (L 'tpair q0p p0)))))
+ 0)

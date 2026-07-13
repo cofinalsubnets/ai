@@ -4,11 +4,12 @@
 ; argument that a distribution / namespace / repo-state are ONE algebra of
 ; selectable sets, with COMMUTE the primitive underneath). the proofs run on two
 ; legs. the GENERATED leg is the destination and is OPEN: test/uupatch.l encodes
-; the named-slot model below as uu proof TERMS -- the uu kernel certifies L1..L3b,
+; the named-slot AND positional models below as uu proof TERMS -- the uu kernel
+; certifies all eight laws (L1..L3b at both grains, the hunk re-aim included),
 ; tools/uu2coq.l + tools/uu2lean.l emit them into uugen.v/uugen.lean, and Rocq AND
 ; Lean audit them axiom-free (make test_uugen + test_uulean). the HAND leg,
 ; proof/rocq/patch.v, scaffolds the slices whose models are still settling, under
-; `make test_proof` (positional hunks, the conflictor merge, and the frontier
+; `make test_proof` (the conflictor merge and the frontier
 ; identity in full; the tree lift's commute ALGEBRA -- L1 with the path re-aim --
 ; the content-rewrite lane's L1 at element grain, the clash-segments bubble
 ; at hash grain (creation symmetric, the length law, padding commutes with
@@ -103,7 +104,10 @@
 ; on one seam have no canonical order; classic darcs's ambiguity corner), and
 ; valid carries a BOUND (an out-of-range insert still splices -- at the end -- but
 ; its inverse aims past the end, so the round-trip would lie; the bound keeps L2
-; honest). same helpers-local discipline; a second leak-free form.
+; honest). this form's uu TWIN is test/uupatch.l's positional slice: the same
+; model (mkh hi ho hn splice hap hinv hcommute happl), the same four laws as
+; checked proof terms riding to rocq + lean, the re-aim's index algebra sealed
+; lemma by lemma. same helpers-local discipline; a second leak-free form.
 
 (:
  ; --- the model: sequences and hunks ---

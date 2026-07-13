@@ -23,7 +23,7 @@
    _ (reads (open "test/uulay.l" "r"))
    _ (reads (open "test/uupatch.l" "r"))
    _ (reads (open "test/uuwm.l" "r"))
-   _ (reads (open "test/uuwmlaw.l" "r"))            ; load + CERTIFY uu's corpus (populates GLOB)
+   _ (reads (open "test/uuwmlaw.l" "r"))          ; load + CERTIFY uu's corpus (populates GLOB)
    bs (intern "\\")
    nl (string 10)
    b8 "⟨"  b9 "⟩"   ; Lean's anonymous-constructor angle brackets
@@ -68,7 +68,7 @@
    ; and the universe strands at every downstream use (uu_zrow found it). ground
    ; the StackSet model's types at Type 0 and the whole tower's universes solve.
    mono (tablet 0)
-   _ (map (\ n (pin mono n 1)) '(nvec nlist stk mstk patch tree ppair pvec plist cmside))
+   _ (map (\ n (pin mono n 1)) '(nvec nlist stk mstk patch tree ppair pvec plist cmside hunk hpair hvec hlist hcmside))
 
    ; transparent type-former/identity combinators: Lean checks a paths.rec minor premise
    ; at REDUCIBLE transparency and won't unfold a plain `def`, so an equivalence proof
@@ -213,6 +213,10 @@
 "#print axioms uu_invert_roundtrip"
 "#print axioms uu_commute_sound"
 "#print axioms uu_applall_swap"
+"#print axioms uu_hcommute_involutive"
+"#print axioms uu_hinv_roundtrip"
+"#print axioms uu_hcommute_sound"
+"#print axioms uu_hfold_swap"
        "#print axioms uu_natplusassoc"
        "#print axioms uu_natmultcomm"
        "#print axioms uu_total2_paths_f"
