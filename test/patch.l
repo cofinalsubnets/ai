@@ -3,8 +3,8 @@
 ; the drift anchor for the whole patch stack: doc/proto/patch.l is the design (the
 ; argument that a distribution / namespace / repo-state are ONE algebra of
 ; selectable sets, with COMMUTE the primitive underneath); proof/rocq/patch.v
-; machine-checks both slices axiom-free (named slots AND the positional hunks
-; below, under `make test_proof`). the laws asserted HERE are what those
+; machine-checks all three slices axiom-free (named slots, the positional hunks,
+; and the conflictor merge below, under `make test_proof`). the laws asserted HERE are what those
 ; are gated to agree with -- the .v today, and the next rung (L1..L3b as uu proof
 ; TERMS emitted to rocq + lean by tools/uu2coq.l + tools/uu2lean.l) tomorrow; a
 ; hand .v drifts (the wm2uu lesson), so this file is the truth it regenerates off.
@@ -188,4 +188,104 @@
       f1 (applall s0 (link (hunk 0 '(a) '(aa)) (link p (link q ()))))
       f2 (applall s0 (link (hunk 0 '(a) '(aa)) c))
       (assert (heq f1 f2) (heq f1 '(aa x y c z e))))
+ 0)
+
+; --- the CONFLICTOR rung: a real merge RECORDS, and the state enlarges ---
+;
+; commute REFUSES a dependency; merge may not. the sound move (pijul's, read
+; through our habit -- classic darcs 1.x made conflicts exotic patch algebra and
+; got the exponential/unsound corner): ENLARGE THE STATE until merge is total. a
+; conflicted slot holds a CLASH cell -- the shared base plus a canonically-ordered
+; set of RIVALS -- so merge is SYMMETRIC and ASSOCIATIVE by construction (a set
+; has no pull order), neither side silently wins, and RESOLUTION needs no new
+; machinery: a clash cell is a first-class VALUE, so resolving is an ordinary chg
+; whose old value is the cell -- invertible like any patch (unpull a resolution
+; and the clash returns). `pull` is MERGE machinery, not honest application: it
+; trusts the co-valid discipline (every pulled patch reads the shared base or a
+; rival of it -- what two branches of one repo guarantee); `valid` stays the gate
+; for a lone patch. rivals here are charms, so < is the canon; a general value
+; order is the tree lift's business. named-slot model (the clean case first,
+; as ever); clash SEGMENTS in the hunk model ride a later rung.
+
+(:
+ ; --- the model: rung 1's trees and patches, plus the clash cell ---
+ (chg k a b) (link 'chg (link k (link a (link b ()))))
+ (pk p) (cap (cup p)) (pa p) (cap (cup (cup p))) (pb p) (cap (cup (cup (cup p))))
+ (tget t k) (? (atom? t) 0 (: c (cap t) (? (id? k (cap c)) (cup c) (tget (cup t) k))))
+ (tset t k v) (link (link k v) t)
+ (invert p) (chg (pk p) (pb p) (pa p))
+ (heq a b) (? (&& (atom? a) (atom? b)) (id? a b)
+              (|| (atom? a) (atom? b)) 0
+              (&& (heq (cap a) (cap b)) (heq (cup a) (cup b))))
+ (teq a b ks) (? (atom? ks) 1 (&& (heq (tget a (cap ks)) (tget b (cap ks)))
+                                  (teq a b (cup ks))))
+ (clash a rs) (link 'clash (link a (link rs ())))          ; base a, rivals rs (sorted)
+ (clash? v) (? (atom? v) 0 (id? (cap v) 'clash))
+ (cbase c) (cap (cup c))
+ (rivals c) (cap (cup (cup c)))
+ (cins x rs) (? (atom? rs) (link x ())                     ; canonical insert, dedup --
+                (: h (cap rs)                              ; the set that makes merge
+                   (? (= x h) rs                           ; order-free
+                      (< x h) (link x rs)
+                      (link h (cins x (cup rs))))))
+
+ ; --- pull: total merge-application. five lanes; the LAST is the discipline
+ ;     backstop (a cell-shaped mismatch no-ops rather than inventing a story). ---
+ (pull t p)
+   (: k (pk p) a (pa p) b (pb p) v (tget t k)
+      (? (heq v a) (tset t k b)                            ; the plain lane: context matches
+         (heq v b) t                                       ; the same edit again: settled
+         (&& (clash? v) (&& (heq (cbase v) a) (! (clash? b))))
+           (tset t k (clash a (cins b (rivals v))))        ; join the rivals
+         (&& (! (clash? v)) (! (clash? a)) (! (clash? b)))
+           (tset t k (clash a (cins b (cins v ()))))       ; a rival landed first
+         t))                                               ; discipline breach: no-op
+ (applall t ps) (foldl pull t ps)
+ (cat2 a b) (? (atom? a) b (link (cap a) (cat2 (cup a) b)))
+
+ ; --- witnesses: three rivals for x over base 1, and an independent bystander ---
+ t0 (tset 0 'x 1)
+ p (chg 'x 1 2) q (chg 'x 1 3) r (chg 'x 1 4)
+ w (chg 'y 0 9)
+
+ ; (M1) merge is TOTAL and SYMMETRIC: rivals or bystanders, both pull orders
+ ;      land the same tree -- the pushout apex, unique.
+ _ (assert
+    (teq (pull (pull t0 p) q) (pull (pull t0 q) p) '(x y))
+    (teq (pull (pull t0 p) w) (pull (pull t0 w) p) '(x y)))
+
+ ; (M2) the plain lane IS rung 1: a matching context applies as ever, and the
+ ;      same edit arriving twice settles (idempotent).
+ _ (assert
+    (= 2 (tget (pull t0 p) 'x))
+    (teq (pull (pull t0 p) p) (pull t0 p) '(x y)))
+
+ ; (M3) a conflict is HONEST: the slot carries the base AND both rivals,
+ ;      canonically ordered -- neither side silently won.
+ _ (: m (pull (pull t0 q) p) c (tget m 'x)
+      (assert (clash? c) (= 1 (cbase c)) (heq (rivals c) '(2 3))))
+
+ ; (M4) three rivals, ANY order: one cell, one set -- the associativity that
+ ;      broke classic darcs, answered by a set instead of patch algebra.
+ _ (: m1 (pull (pull (pull t0 p) q) r)
+      m2 (pull (pull (pull t0 r) q) p)
+      m3 (pull (pull (pull t0 q) r) p)
+      (assert (teq m1 m2 '(x)) (teq m2 m3 '(x))
+              (heq (rivals (tget m1 'x)) '(2 3 4))))
+
+ ; (M5) RESOLUTION is just a patch: old value = the cell, new = the choice --
+ ;      the plain lane applies it, invert UNPULLS it and the clash returns.
+ _ (: m (pull (pull t0 p) q) cell (tget m 'x)
+      res (chg 'x cell 5)
+      m2 (pull m res)
+      (assert
+       (= 5 (tget m2 'x)) (! (clash? (tget m2 'x)))
+       (teq (pull m2 (invert res)) m '(x y))))
+
+ ; and the distribution face: two components pinning ONE name differently
+ ;      install to the same recorded clash whichever is pulled first.
+ _ (: holo (link (chg 'font 0 1) ()) glaze (link (chg 'font 0 2) ())
+      fa (applall 0 (cat2 holo glaze))
+      fb (applall 0 (cat2 glaze holo))
+      (assert (teq fa fb '(font)) (clash? (tget fa 'font))))
  0)

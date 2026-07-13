@@ -34,12 +34,23 @@
    Sequences are lists, so equality here is PLAIN list equality -- the pointwise
    discipline below is only for the tree (function) model.
 
-   Still deliberately out (the next rungs): the TREE lift (a path per hunk), and
-   CONFLICTORS -- the `None` branch of commute already models the partial merge,
-   but the pushout/confluence law for the general structural case wants the
-   rewrite/unifier machinery (wev, boxfix, kanren) and its own file. The full
-   merge-as-pushout (L3 in the .l header) is that slice; the semantic core it
-   rests on is proven below.
+   The THIRD slice (the conflictor rung, same day) closes commute's refusal
+   gap: a real merge RECORDS instead of refusing. The state enlarges (pijul's
+   move, not darcs 1.x's exotic patch algebra) -- a conflicted slot holds a
+   CLASH, the shared base plus a canonically-ordered rival set -- and merge
+   (pull, factoring through merge1) is total. Its laws, same axiom-free rule:
+     (M1) pull_merge_comm   rivals land the same cell either order, from ANY
+                            starting slot (so three-way convergence is M1 twice)
+     (M2) pull_idem         pulling a patch again settles
+     (M3) pull_records      the cell keeps the base AND both rivals
+     (M4) pull_fold_swap    a frontier is stable under ANY adjacent swap --
+                            independent OR conflicting: pull order is dead
+     (M5) resolve_roundtrip a resolution is an ordinary patch off the cell,
+                            and unpulling it returns the clash
+   Still deliberately out (the next rungs): content hashing (the frontier
+   identity), and the TREE lift -- a path per hunk plus clash SEGMENTS in the
+   positional model, where the rewrite/unifier machinery (wev, boxfix, kanren)
+   earns its keep.
 
    Method note, matching gc.v / spec.v house rule: NO Axiom, NO Admitted, NO
    classical / funext escape hatch. Trees are functions, so equality of trees is
@@ -454,6 +465,319 @@ Proof.
   now apply hcommute_sound.
 Qed.
 
+(* ============================================================ *)
+(* the CONFLICTOR slice: merge RECORDS, and the state enlarges  *)
+(* ============================================================ *)
+
+(* Mirror of test/patch.l's third form, on the lawful region (the .l's pull is
+   value-generic; here values are nat -- the models agree wherever the co-valid
+   discipline holds, and both no-op on cell-shaped breaches). commute REFUSES a
+   dependency; merge may not, so the STATE enlarges (pijul's move, not darcs
+   1.x's exotic patch algebra): a conflicted slot holds a CLASH -- the shared
+   base plus a canonically-ordered SET of rivals -- making merge total,
+   symmetric, and associative by construction. A clash is a first-class VALUE,
+   so a resolution is an ordinary patch whose old value is the cell, and the
+   groupoid laws ride along (resolve_roundtrip). *)
+
+Inductive slot :=
+  | Plain (v : nat)
+  | Clash (base : nat) (rivals : list nat).
+
+Definition stree := nat -> slot.
+
+Record spatch := mks { sk : nat ; sa : slot ; sb : slot }.
+
+(* the canonical rival set: sorted insert with dedup. cins_comm is what makes
+   merge order-free; cins_absorb is what lets a settled edit rejoin harmlessly. *)
+Fixpoint cins (x : nat) (l : list nat) : list nat :=
+  match l with
+  | [] => [x]
+  | h :: t => if x =? h then l else if x <? h then x :: l else h :: cins x t
+  end.
+
+Fixpoint eqb_list (a b : list nat) : bool :=
+  match a, b with
+  | [], [] => true
+  | x :: xs, y :: ys => (x =? y) && eqb_list xs ys
+  | _, _ => false
+  end.
+
+Definition slot_eqb (a b : slot) : bool :=
+  match a, b with
+  | Plain u, Plain v => u =? v
+  | Clash u us, Clash v vs => (u =? v) && eqb_list us vs
+  | _, _ => false
+  end.
+
+Lemma eqb_list_refl : forall l, eqb_list l l = true.
+Proof. induction l; simpl; auto. rewrite Nat.eqb_refl. auto. Qed.
+
+Lemma eqb_list_true : forall a b, eqb_list a b = true -> a = b.
+Proof.
+  induction a as [|x xs IH]; destruct b; simpl; try discriminate; auto.
+  intros H. apply andb_prop in H as [H1 H2]. apply Nat.eqb_eq in H1.
+  f_equal; auto.
+Qed.
+
+Lemma slot_eqb_refl : forall s, slot_eqb s s = true.
+Proof.
+  destruct s; simpl; [apply Nat.eqb_refl|].
+  rewrite Nat.eqb_refl, eqb_list_refl. reflexivity.
+Qed.
+
+Lemma slot_eqb_true : forall a b, slot_eqb a b = true -> a = b.
+Proof.
+  destruct a, b; simpl; try discriminate; intros H.
+  - apply Nat.eqb_eq in H. now subst.
+  - apply andb_prop in H as [H1 H2]. apply Nat.eqb_eq in H1.
+    apply eqb_list_true in H2. now subst.
+Qed.
+
+Ltac creduce :=
+  repeat (first
+    [ rewrite Nat.eqb_refl
+    | match goal with
+      | H : ?a <> ?b |- context [?a =? ?b] =>
+          rewrite (proj2 (Nat.eqb_neq a b) H)
+      | H : ?b <> ?a |- context [?a =? ?b] =>
+          rewrite (proj2 (Nat.eqb_neq a b) (not_eq_sym H))
+      | |- context [?a =? ?b] => rewrite (proj2 (Nat.eqb_neq a b)) by lia
+      | |- context [?a <? ?b] => rewrite (proj2 (Nat.ltb_lt a b)) by lia
+      | |- context [?a <? ?b] => rewrite (proj2 (Nat.ltb_ge a b)) by lia
+      end
+    | progress simpl ]).
+
+Lemma cins_comm : forall x y l, cins x (cins y l) = cins y (cins x l).
+Proof.
+  intros x y l. induction l as [|h t IH]; simpl.
+  - destruct (Nat.eqb_spec x y) as [->|N]; [now rewrite Nat.eqb_refl|].
+    destruct (Nat.ltb_spec x y); destruct (Nat.ltb_spec y x);
+      try lia; creduce; reflexivity.
+  - destruct (Nat.eqb_spec y h) as [->|Nyh]; destruct (Nat.eqb_spec x h) as [->|Nxh].
+    + reflexivity.
+    + destruct (Nat.ltb_spec x h); creduce; reflexivity.
+    + destruct (Nat.ltb_spec y h); creduce; reflexivity.
+    + destruct (Nat.ltb_spec y h) as [Ly|Ly]; destruct (Nat.ltb_spec x h) as [Lx|Lx].
+      * destruct (Nat.eqb_spec x y) as [->|Nxy]; [creduce; reflexivity|].
+        destruct (Nat.ltb_spec x y); creduce; reflexivity.
+      * creduce; reflexivity.
+      * creduce; reflexivity.
+      * creduce. now rewrite IH.
+Qed.
+
+(* a settled rival rejoins harmlessly: insert dedups. *)
+Lemma cins_absorb : forall x l, cins x (cins x l) = cins x l.
+Proof.
+  intros x l. induction l as [|h t IH]; simpl.
+  - now rewrite Nat.eqb_refl.
+  - destruct (Nat.eqb_spec x h) as [->|N].
+    + simpl. now rewrite Nat.eqb_refl.
+    + destruct (Nat.ltb_spec x h); creduce; [reflexivity|now rewrite IH].
+Qed.
+
+(* merge1: the one-slot merge -- pull factors through it. Lane order mirrors
+   the .l: context matches / same edit settles / join the rivals / a rival
+   landed first / breach no-ops. *)
+Definition merge1 (v old new : slot) : slot :=
+  if slot_eqb v old then new
+  else if slot_eqb v new then v
+  else match v, old, new with
+       | Clash base rs, Plain a, Plain b =>
+           if base =? a then Clash a (cins b rs) else v
+       | Plain w, Plain a, Plain b => Clash a (cins b [w])
+       | _, _, _ => v
+       end.
+
+(* pull: TOTAL merge-application (the .l's pull). It trusts the co-valid
+   discipline -- every pulled patch reads the shared base or a rival of it;
+   `valid`-style honesty stays with a lone patch's application. *)
+Definition pull (t : stree) (p : spatch) : stree :=
+  fun k => if k =? sk p then merge1 (t (sk p)) (sa p) (sb p) else t k.
+
+Definition sinv (p : spatch) : spatch := mks (sk p) (sb p) (sa p).
+
+Lemma pull_other : forall t p k, k <> sk p -> pull t p k = t k.
+Proof.
+  intros t p k H. unfold pull.
+  destruct (Nat.eqb_spec k (sk p)); congruence.
+Qed.
+
+Lemma pull_at : forall t p, pull t p (sk p) = merge1 (t (sk p)) (sa p) (sb p).
+Proof. intros. unfold pull. now rewrite Nat.eqb_refl. Qed.
+
+(* different slots never interact: the rung-1 independence face, on pull. *)
+Lemma pull_indep_comm : forall t p q, sk p <> sk q ->
+  forall k, pull (pull t p) q k = pull (pull t q) p k.
+Proof.
+  intros t p q H k.
+  destruct (Nat.eqb_spec k (sk p)) as [->|Np].
+  - rewrite (pull_other _ q) by congruence.
+    rewrite !pull_at. f_equal. now rewrite pull_other by congruence.
+  - destruct (Nat.eqb_spec k (sk q)) as [->|Nq].
+    + rewrite (pull_other _ p (sk q)) by congruence.
+      rewrite !pull_at. f_equal. now rewrite pull_other by congruence.
+    + rewrite !pull_other by congruence. reflexivity.
+Qed.
+
+(* ============================================================ *)
+(* (M1) merge is SYMMETRIC -- for ANY starting slot             *)
+(* ============================================================ *)
+
+(* The heart of the rung: two rivals off one base land the same cell whichever
+   is pulled first -- for an ARBITRARY slot value v (the shared base, a rival
+   already landed, a clash already open, or a breach that no-ops). No
+   hypothesis on v means three-way convergence is just this law twice. *)
+(* the leaf grinder: on literal rival lists everything reduces to nat
+   comparisons -- destruct them all, prune by lia, close by reflexivity. *)
+Ltac cfin :=
+  repeat (first
+    [ reflexivity | lia | congruence
+    | progress simpl
+    | progress subst
+    | rewrite Nat.eqb_refl
+    | match goal with
+      | |- context [?a =? ?b] => destruct (Nat.eqb_spec a b)
+      | |- context [?a <? ?b] => destruct (Nat.ltb_spec a b)
+      end ]).
+
+Lemma merge1_comm : forall v a b c, b <> a -> c <> a ->
+  merge1 (merge1 v (Plain a) (Plain b)) (Plain a) (Plain c)
+  = merge1 (merge1 v (Plain a) (Plain c)) (Plain a) (Plain b).
+Proof.
+  intros v a b c Hba Hca.
+  destruct (Nat.eqb_spec b c) as [->|Nbc]; [reflexivity|].
+  destruct v as [w|base rs]; unfold merge1; simpl.
+  - (* a plain slot: the base, a rival already landed, or one of the two
+       edits (settled on one side, deduped on the other) -- on literal lists
+       it all grinds down to comparisons *)
+    destruct (Nat.eqb_spec w a) as [->|Nwa]; creduce; [cfin|].
+    destruct (Nat.eqb_spec w b) as [->|Nwb]; creduce; [cfin|].
+    destruct (Nat.eqb_spec w c) as [->|Nwc]; creduce; cfin.
+  - (* a clash already open: join twice, either order -- or a breach no-op *)
+    destruct (Nat.eqb_spec base a) as [->|Nba2]; creduce.
+    + now rewrite cins_comm.
+    + reflexivity.
+Qed.
+
+Theorem pull_merge_comm : forall t p q a b c, sk p = sk q ->
+  sa p = Plain a -> sb p = Plain b -> sa q = Plain a -> sb q = Plain c ->
+  b <> a -> c <> a ->
+  forall k, pull (pull t p) q k = pull (pull t q) p k.
+Proof.
+  intros t p q a b c Hk Hap Hbp Haq Hbq Hba Hca k.
+  destruct (Nat.eqb_spec k (sk p)) as [->|N].
+  - rewrite Hk, !pull_at, <- Hk, !pull_at, Hk, !pull_at.
+    rewrite Hap, Hbp, Haq, Hbq. now apply merge1_comm.
+  - rewrite !pull_other by congruence. reflexivity.
+Qed.
+
+(* ============================================================ *)
+(* (M2) the settled lanes: pulling is idempotent                *)
+(* ============================================================ *)
+
+Lemma merge1_idem : forall v o n, merge1 (merge1 v o n) o n = merge1 v o n.
+Proof.
+  intros v o n. unfold merge1 at 2 3.
+  destruct (slot_eqb v o) eqn:Evo.
+  - (* context matched: pulling again settles on the new value *)
+    unfold merge1. destruct (slot_eqb n o) eqn:Eno; [reflexivity|].
+    now rewrite slot_eqb_refl.
+  - destruct (slot_eqb v n) eqn:Evn.
+    + (* already settled: unchanged *)
+      unfold merge1. now rewrite Evo, Evn.
+    + destruct v as [w|base rs]; destruct o as [a|oa ors]; destruct n as [b|na nrs];
+        simpl in Evo, Evn; unfold merge1; simpl; rewrite ?Evo, ?Evn;
+        try reflexivity.
+      * (* plain/plain/plain: the freshly opened cell re-absorbs b *)
+        cfin.
+      * (* clash/plain/plain: a joined set absorbs the repeat; a breach no-ops *)
+        destruct (Nat.eqb_spec base a) as [->|Nba]; simpl;
+          rewrite ?Nat.eqb_refl, ?Evo, ?Evn; simpl.
+        -- f_equal. apply cins_absorb.
+        -- creduce. reflexivity.
+Qed.
+
+Theorem pull_idem : forall t p k, pull (pull t p) p k = pull t p k.
+Proof.
+  intros t p k. destruct (Nat.eqb_spec k (sk p)) as [->|N].
+  - rewrite !pull_at. apply merge1_idem.
+  - rewrite !pull_other by congruence. reflexivity.
+Qed.
+
+(* ============================================================ *)
+(* (M3) a conflict is HONEST: base + both rivals, recorded      *)
+(* ============================================================ *)
+
+Theorem pull_records : forall t p q a b c, sk p = sk q ->
+  sa p = Plain a -> sb p = Plain b -> sa q = Plain a -> sb q = Plain c ->
+  t (sk p) = Plain a -> b <> a -> c <> b ->
+  pull (pull t p) q (sk q) = Clash a (cins c [b]).
+Proof.
+  intros t p q a b c Hk Hap Hbp Haq Hbq Ht Hba Hcb.
+  rewrite pull_at, <- Hk, pull_at, Ht, Hap, Hbp, Haq, Hbq.
+  unfold merge1; simpl. rewrite Nat.eqb_refl. simpl. creduce. reflexivity.
+Qed.
+
+(* ============================================================ *)
+(* (M5) RESOLUTION is just a patch: the groupoid rides along    *)
+(* ============================================================ *)
+
+Lemma merge1_resolve : forall o n, merge1 (merge1 o o n) n o = o.
+Proof.
+  intros. unfold merge1. rewrite slot_eqb_refl. cbn.
+  now rewrite slot_eqb_refl.
+Qed.
+
+Theorem resolve_roundtrip : forall t p, t (sk p) = sa p ->
+  forall k, pull (pull t p) (sinv p) k = t k.
+Proof.
+  intros t p Ht k. destruct (Nat.eqb_spec k (sk p)) as [->|N].
+  - unfold sinv, pull; simpl. rewrite Nat.eqb_refl, Ht.
+    apply merge1_resolve.
+  - rewrite !pull_other by (simpl; congruence). reflexivity.
+Qed.
+
+(* ============================================================ *)
+(* (M4) a frontier is stable under ANY adjacent swap --         *)
+(* independent OR conflicting: merge closed the refusal gap     *)
+(* ============================================================ *)
+
+Lemma pull_ext : forall t1 t2 p, (forall k, t1 k = t2 k) ->
+  forall k, pull t1 p k = pull t2 p k.
+Proof.
+  intros t1 t2 p H k. unfold pull.
+  destruct (k =? sk p); [now rewrite H | apply H].
+Qed.
+
+Lemma fold_pull_ext : forall ps t1 t2, (forall k, t1 k = t2 k) ->
+  forall k, fold_left pull ps t1 k = fold_left pull ps t2 k.
+Proof.
+  induction ps as [|p ps IH]; intros t1 t2 H k; simpl.
+  - apply H.
+  - apply IH. intro k'. now apply pull_ext.
+Qed.
+
+(* THE frontier theorem of this rung: swapping two adjacent patches never
+   changes the merged tree -- different slots commute (rung 1's L3b face), and
+   same-slot RIVALS now converge instead of refusing. Pull order is dead as a
+   semantic input; the (unordered) patch set is the whole story. *)
+Theorem pull_fold_swap : forall pre p q post t,
+  (sk p <> sk q \/
+   exists a b c, sa p = Plain a /\ sb p = Plain b /\ sa q = Plain a /\
+                 sb q = Plain c /\ b <> a /\ c <> a) ->
+  forall k, fold_left pull (pre ++ p :: q :: post) t k
+          = fold_left pull (pre ++ q :: p :: post) t k.
+Proof.
+  intros pre p q post t H k.
+  rewrite !fold_left_app. cbn [fold_left].
+  apply fold_pull_ext. intro k'.
+  destruct H as [H | (a & b & c & Hap & Hbp & Haq & Hbq & Hba & Hca)].
+  - now apply pull_indep_comm.
+  - destruct (Nat.eqb_spec (sk p) (sk q)) as [E|E].
+    + now apply (pull_merge_comm _ _ _ a b c).
+    + now apply pull_indep_comm.
+Qed.
+
 (* the axiom audit: every law closed under the global context -- no Axiom, no
    Admitted, no classical/funext escape hatch, in EITHER slice. *)
 Print Assumptions commute_involutive.  (* L1, named slots *)
@@ -464,3 +788,8 @@ Print Assumptions hcommute_involutive. (* L1, hunks -- the re-aim swaps home *)
 Print Assumptions hinv_roundtrip.      (* L2, hunks -- in range, in context *)
 Print Assumptions hcommute_sound.      (* L3a, hunks -- the shifted orders agree *)
 Print Assumptions hfold_swap.          (* L3b, hunks -- the frontier tie *)
+Print Assumptions pull_merge_comm.     (* M1, clash -- rivals land one cell *)
+Print Assumptions pull_idem.           (* M2, clash -- pulling settles *)
+Print Assumptions pull_records.        (* M3, clash -- base + both rivals kept *)
+Print Assumptions pull_fold_swap.      (* M4, clash -- pull order is dead *)
+Print Assumptions resolve_roundtrip.   (* M5, clash -- resolution unpulls *)

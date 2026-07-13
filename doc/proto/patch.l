@@ -84,11 +84,17 @@
 ; 2026-07-12): hunks over a sequence of forms, where commute genuinely RE-AIMS --
 ; the swapped hunk's index slides by the other's length delta, and TOUCHING hunks
 ; refuse (strict: a seam has no canonical order once inserts land on it; classic
-; darcs's ambiguity corner, closed by fiat). the laws for BOTH layers live in
-; test/patch.l, the source of truth. still deliberately OMITTED: conflictors (a
-; real merge records one), content hashing (the frontier identity), and the TREE
-; lift (a path per hunk -- the sequence law applied at every level, where the
-; unifier earns its keep). those are the next rungs.
+; darcs's ambiguity corner, closed by fiat). then the CONFLICTOR layer (demo F,
+; same day): commute refuses a dependency, but a real MERGE may not -- so the
+; STATE enlarges (pijul's move, not darcs 1.x's exotic patch algebra): a
+; conflicted slot holds a CLASH cell, the shared base + a canonically-ordered SET
+; of rivals, making merge total, symmetric, and associative by construction; and
+; since a cell is a first-class VALUE, resolution is an ordinary chg (old = the
+; cell) -- invertible, so unpulling a resolution returns the clash. the laws for
+; ALL layers live in test/patch.l, the source of truth. still deliberately
+; OMITTED: content hashing (the frontier identity), and the TREE lift (a path per
+; hunk + clash SEGMENTS in the positional model -- where the unifier earns its
+; keep). those are the next rungs.
 
 (:
  ; --- the patch: a groupoid element. (chg slot old new) carries its context
@@ -177,4 +183,26 @@
       _ (line "     order p;q   -> " (hpon (hpon s0 p) q))
       _ (line "     order q';p' -> " (hpon (hpon s0 (cap c)) (cap (cup c))))
       (line "     the seam refuses: " (hcom p (hunk 3 '(c) '(w)))))
+
+ ; ---- demo F: the conflictor layer -- merge is TOTAL: a dependency that commute
+ ;      refuses becomes a recorded CLASH (base + rivals, a canonical set), and
+ ;      resolving it is just another patch ----
+ _ (: (clash a rs) (link 'clash (link a (link rs ())))
+      (cins x rs) (? (atom? rs) (link x ())
+                     (: h (cap rs) (? (= x h) rs (< x h) (link x rs)
+                                      (link h (cins x (cup rs))))))
+      (clash? v) (? (atom? v) 0 (id? (cap v) 'clash))
+      (pull t p)                                            ; total merge-application
+        (: k (pk p) a (pa p) b (pb p) v (tget t k)
+           (? (id? v a) (tset t k b)                        ; context matches: plain
+              (id? v b) t                                   ; same edit again: settled
+              (clash? v) (tset t k (clash a (cins b (cap (cup (cup v)))))) ; join
+              (tset t k (clash a (cins b (cins v ()))))))   ; a rival landed first
+      mp (chg 'x 1 2) mq (chg 'x 1 3)                       ; two branches, one base
+      m (pull (pull (tset 0 'x 1) mp) mq)
+      _ (puts ";; F. conflictors -- both rivals RECORDED, either pull order, one cell\n")
+      _ (line "     pull p;q -> x = " (tget m 'x))
+      _ (line "     pull q;p -> x = " (tget (pull (pull (tset 0 'x 1) mq) mp) 'x))
+      (line "     resolve (a plain chg off the cell) -> x = "
+            (tget (pull m (chg 'x (tget m 'x) 5)) 'x)))
  0)
