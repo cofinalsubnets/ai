@@ -111,20 +111,22 @@
        (nthr l i) (? (< i 1) (cap l) (nthr (cup l) (- i 1)))
 
        ; -- the symbol table: locals (NULL + 2 section syms) then the globals --
+       ; (each accumulator links 24-byte entries REVERSED and catalls once --
+       ; a cat per entry re-copies the whole table)
        symbytes
-        (: fsyms (: (go fs i acc) (? (! (two? fs)) acc
+        (: fsyms (: (go fs i acc) (? (! (two? fs)) (catall (rev acc))
                                      (go (cup fs) (+ i 1)
-                                         (cat acc (o-sym (nthr stroffs i)
-                                                         (? (member? (cap fs) wknames) 2 1)   ; STB_WEAK: a strong def elsewhere wins
-                                                         2 1 (peep tlabels (intern (cap fs)) 0)))))
+                                         (link (o-sym (nthr stroffs i)
+                                                      (? (member? (cap fs) wknames) 2 1)   ; STB_WEAK: a strong def elsewhere wins
+                                                      2 1 (peep tlabels (intern (cap fs)) 0)) acc)))
                     (go funcnames 0 ()))
-           gsyms (: (go gs i acc) (? (! (two? gs)) acc
+           gsyms (: (go gs i acc) (? (! (two? gs)) (catall (rev acc))
                                      (go (cup gs) (+ i 1)
-                                         (cat acc (o-sym (nthr stroffs (+ nfun i)) 1 1 2 (peep dlabels (intern (cap gs)) 0)))))
+                                         (link (o-sym (nthr stroffs (+ nfun i)) 1 1 2 (peep dlabels (intern (cap gs)) 0)) acc)))
                     (go globnames 0 ()))
-           esyms (: (go es i acc) (? (! (two? es)) acc
+           esyms (: (go es i acc) (? (! (two? es)) (catall (rev acc))
                                      (go (cup es) (+ i 1)
-                                         (cat acc (o-sym (nthr stroffs (+ (+ nfun nglob) i)) 1 0 0 0))))
+                                         (link (o-sym (nthr stroffs (+ (+ nfun nglob) i)) 1 0 0 0) acc)))
                     (go exts 0 ()))
            (catall (L (o-sym 0 0 0 0 0)                 ; the NULL symbol
                       (o-sym 0 0 3 1 0)                  ; .text section symbol (STT_SECTION)
@@ -139,31 +141,31 @@
        ; or an external symbol. --
        reltext
         (: (go rs acc)
-            (? (! (two? rs)) acc
+            (? (! (two? rs)) (catall (rev acc))
                (: r (cap rs) off (cap r) lbl (caup (cup r))
                   (? (o-has? wkset lbl)               ; a weak-defined fn: bind its OWN symbol (overridable)
-                      (go (cup rs) (cat acc (o-rela off (peep fnidx lbl 0) r-plt32 -4)))
+                      (go (cup rs) (link (o-rela off (peep fnidx lbl 0) r-plt32 -4) acc))
                      (o-has? dlabels lbl)
-                      (go (cup rs) (cat acc (o-rela off 2 r-pc32 (- (peep dlabels lbl 0) 4))))
+                      (go (cup rs) (link (o-rela off 2 r-pc32 (- (peep dlabels lbl 0) 4)) acc))
                      (o-has? nlabels lbl)
-                      (go (cup rs) (cat acc (o-rela off 3 r-pc32 (- (peep nlabels lbl 0) 4))))
-                     (go (cup rs) (cat acc (o-rela off (peep extidx lbl 0) r-plt32 -4))))))
+                      (go (cup rs) (link (o-rela off 3 r-pc32 (- (peep nlabels lbl 0) 4)) acc))
+                     (go (cup rs) (link (o-rela off (peep extidx lbl 0) r-plt32 -4) acc)))))
            (go trel ()))
        ; an abs64 pointer out of a DATA-class section (.data or ai_nifs): via the
        ; target's section symbol + its offset, or an external's own symbol
        (reldat1 rs)
         (: (go rs2 acc)
-            (? (! (two? rs2)) acc
+            (? (! (two? rs2)) (catall (rev acc))
                (: r (cap rs2) off (cap r) lbl (caup (cup r)) ad (caup (cuup r))   ; ad = the constant byte offset (&arr[i])
                   (? (o-has? wkset lbl)               ; a weak fn's address in data: via its symbol too
-                      (go (cup rs2) (cat acc (o-rela off (peep fnidx lbl 0) r-64 ad)))
+                      (go (cup rs2) (link (o-rela off (peep fnidx lbl 0) r-64 ad) acc))
                      (o-has? tlabels lbl)
-                      (go (cup rs2) (cat acc (o-rela off 1 r-64 (+ (peep tlabels lbl 0) ad))))
+                      (go (cup rs2) (link (o-rela off 1 r-64 (+ (peep tlabels lbl 0) ad)) acc))
                      (o-has? dlabels lbl)
-                      (go (cup rs2) (cat acc (o-rela off 2 r-64 (+ (peep dlabels lbl 0) ad))))
+                      (go (cup rs2) (link (o-rela off 2 r-64 (+ (peep dlabels lbl 0) ad)) acc))
                      (o-has? nlabels lbl)
-                      (go (cup rs2) (cat acc (o-rela off 3 r-64 (+ (peep nlabels lbl 0) ad))))
-                     (go (cup rs2) (cat acc (o-rela off (peep extidx lbl 0) r-64 ad))))))
+                      (go (cup rs2) (link (o-rela off 3 r-64 (+ (peep nlabels lbl 0) ad)) acc))
+                     (go (cup rs2) (link (o-rela off (peep extidx lbl 0) r-64 ad) acc)))))
            (go rs ()))
        reldata (reldat1 drel)
        relnif  (reldat1 nrel)

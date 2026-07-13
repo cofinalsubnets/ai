@@ -126,3 +126,9 @@
    _ (pin book 'parse pm)
    _ (pin book 'overlay ovm)
    0)
+
+; --- shared list utils, AFTER the sweep so they stay bare globals ---
+; revcat: (rev l) glued onto acc in one pass -- the flush of the
+; reversed-accumulator pattern (a cat per step re-copies the whole
+; accumulation; link + one revcat keeps it linear). cpp/gen ride it.
+(: (revcat l acc) (? (! (two? l)) acc (revcat (cup l) (link (cap l) acc))))

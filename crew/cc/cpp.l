@@ -126,7 +126,6 @@
                         (go (+ i 1) (revcat (expand va macs) acc))))
                  (go (+ i 1) (link t acc)))))
        (paste (go 0 ()) line))
-   (revcat l acc) (? (! (two? l)) acc (revcat (cup l) (link (cap l) acc)))
    (vaargs args params)                             ; the arg token-lists past the named params, comma-joined
     (: np (tally params)
        (skip l k) (? (|| (< k 1) (! (two? l))) l (skip (cup l) (- k 1)))
@@ -270,7 +269,9 @@
    (dirname t) (? (= (kof t) 'kw) (show (vof t)) (vof t))   ; #if/#else lex as keywords -> their text
    (condactive cond) (? (! (two? cond)) 1 (cap (cap cond)))
    (parentactive cond) (? (! (two? cond)) 1 (cap (cap cond)))
-   (flush buf macs out) (revcat (expand buf macs) out)
+   ; buf accumulates REVERSED (a cat per line re-copies the whole run -- ai.c's
+   ; longest directive-free run is ~50k tokens); flush restores source order.
+   (flush buf macs out) (revcat (expand (rev buf) macs) out)
    (cppgo toks macs cond buf out incf)
     (? (! (two? toks)) (? (two? cond) 'unbalanced (rev (flush buf macs out)))
        (: ls (linesplit toks) line (cap ls) rest (caup ls)
@@ -290,7 +291,7 @@
                     (member? dir '("pragma" "line")) (cppgo rest macs cond () out1 incf)   ; ignored
                     (cppgo rest macs cond () out1 incf)))                              ; unknown directive: ignore
              (! (condactive cond)) (cppgo rest macs cond buf out incf)                 ; skipped code: drop
-             (cppgo rest macs cond (cat buf line) out incf))))                          ; active code: accumulate
+             (cppgo rest macs cond (revcat line buf) out incf))))                       ; active code: accumulate (reversed)
 
    ; a directive that manages the conditional stack. dir keyword symbols.
    (docond dir body line macs cond)

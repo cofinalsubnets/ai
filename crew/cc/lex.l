@@ -15,6 +15,8 @@
        p3 '("<<=" ">>=" "...")
        p2 '("==" "!=" "<=" ">=" "&&" "||" "<<" ">>" "+=" "-=" "*=" "/=" "%="
             "&=" "|=" "^=" "->" "++" "--" "##")
+       p32 (cat p3 p2)                              ; joined ONCE (this sat in the per-token path)
+       kwt (: t (tablet 0) (go l) (? (! (two? l)) t (: _ (pin t (cap l) 1) (go (cup l)))) (go kws))
        p1 "()[]{};,.:?~!+-*/%<>=&|^#"
        (ws? c) (|| (= c 32) (|| (= c 9) (= c 13)))
        (dig? c) (&& (<= 48 c) (<= c 57))
@@ -105,9 +107,13 @@
                  (&& (= c 92) (&& (< (+ i 2) n) (&& (= (src (+ i 1)) 13) (= (src (+ i 2)) 10))))  ; \<cr><nl>
                   (go (+ i 3) line acc)
                  (ws? c) (go (+ i 1) line acc)
-                 (at? i "//") (: (eat j) (? (|| (<= n j) (= (src j) 10)) j (eat (+ j 1)))
-                                (go (eat i) line acc))
-                 (at? i "/*") (: (eat j l2) (? (<= n (+ j 1)) (L () l2)   ; unterminated
+                 ; both comment probes sit behind ONE (= c 47) gate (two at? calls
+                 ; per character otherwise)
+                 (&& (= c 47) (at? i "//"))
+                  (: (eat j) (? (|| (<= n j) (= (src j) 10)) j (eat (+ j 1)))
+                     (go (eat i) line acc))
+                 (&& (= c 47) (at? i "/*"))
+                  (: (eat j l2) (? (<= n (+ j 1)) (L () l2)   ; unterminated
                                               (at? j "*/") (L (+ j 2) l2)
                                               (eat (+ j 1) (? (= (src j) 10) (+ l2 1) l2)))
                                 r (eat (+ i 2) line)
@@ -145,8 +151,8 @@
                              j (idr i)
                              t (snip src i j)
                              s (intern t)
-                             (go j line (link (? (member? s kws) (L 'kw s line) (L 'id t line)) acc)))
-                 (: hit (firstat i (cat p3 p2))
+                             (go j line (link (? (peep kwt s ()) (L 'kw s line) (L 'id t line)) acc)))
+                 (: hit (firstat i p32)
                     (? hit (go (+ i (tally hit)) line (link (L 'p hit line) acc))
                        (in1? c)                        ; a '(' GLUED to a preceding id (no space) carries a 4th field: the function-macro paren
                         (: gl (&& (= c 40) (&& (< 0 i) (idc? (src (- i 1)))))

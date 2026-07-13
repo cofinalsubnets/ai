@@ -2467,14 +2467,16 @@
        ok (rec (caup ast))
        ; always emit text + data (a library TU has no main); `saw` rides out so
        ; the EXECUTABLE path can insist on one.
+       ; acc rides REVERSED (a cat per fn re-copies every prior fn's forms --
+       ; quadratic over ai.c's 611 fns); the tail restores emission order.
        (gfns fs acc saw)
         (? (! (two? fs))
-           (: dat (cgdata g) (? (bad? dat) () (L g acc dat saw)))
+           (: dat (cgdata g) (? (bad? dat) () (L g (rev acc) dat saw)))
            (: f (cap fs)
               (? (member? (cap f) '(proto gdecl xdecl tdef)) (gfns (cup fs) acc saw)
                  (: r (cgfn g f)
                     (? (bad? r) (: _ (puts (+ ";; cgfn refuses " (+ (caup f) "\n"))) ())
-                       (gfns (cup fs) (cat acc r)
+                       (gfns (cup fs) (revcat r acc)
                              (|| saw (= (caup f) "main"))))))))
        (? ok (gfns (caup ast) () ()) ()))
    (cgen ast stbl sigs weaks xtra)                  ; the STATIC EXECUTABLE: _start (crt0) + text + data -> (1 forms) | () -- needs main
