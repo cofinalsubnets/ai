@@ -81,7 +81,7 @@
    ; and the universe strands at every downstream use (uu_zrow found it). ground
    ; the StackSet model's types at Type 0 and the whole tower's universes solve.
    mono (tablet 0)
-   _ (map (\ n (pin mono n 1)) '(nvec nlist stk mstk patch tree ppair pvec plist cmside hunk hpair hvec hlist hcmside duo etree epatch spair scmside cell tmleaf tm svec slist sqside mvside))
+   _ (map (\ n (pin mono n 1)) '(nvec nlist stk mstk patch tree ppair pvec plist cmside hunk hpair hvec hlist hcmside duo etree epatch spair scmside cell tmleaf tm svec slist sqside mvside store))
 
    ; transparent type-former/identity combinators: Lean checks a paths.rec minor premise
    ; at REDUCIBLE transparency and won't unfold a plain `def`, so an equivalence proof
@@ -113,7 +113,10 @@
    un (tablet 0)
    bases (tablet 0)
    _ (pin bases 'nat "Nat") _ (pin bases 'UU "(Type _)") _ (pin bases 'bool "Bool")
-   _ (pin bases 'unit "PUnit") _ (pin bases 'empty "Empty")
+   ; unit rides at the CONCRETE universe (PUnit.{1} = Unit): lean >= 4.32 refuses to
+   ; infer a polymorphic PUnit's level at a def's USE site (uu_sasq's Sum Nat PUnit
+   ; auto-bound a level param, and every Sum.rec on its result stranded a metavar)
+   _ (pin bases 'unit "PUnit.{1}") _ (pin bases 'empty "Empty")
    _ (pin bases 'true "true") _ (pin bases 'false "false") _ (pin bases 'tt "PUnit.unit")
    (atom-l t) (peep bases t (? (corpus? t) (leann t) (string t)))   ; base type / global / bound var
 
@@ -239,6 +242,9 @@
 "#print axioms uu_bubble_len"
 "#print axioms uu_mtch_sound"
 "#print axioms uu_reaim_involutive"
+"#print axioms uu_fid_swap"
+"#print axioms uu_repo_found"
+"#print axioms uu_repo_faithful"
        "#print axioms uu_natplusassoc"
        "#print axioms uu_natmultcomm"
        "#print axioms uu_total2_paths_f"

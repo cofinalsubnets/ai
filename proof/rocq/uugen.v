@@ -948,6 +948,40 @@ Definition uu_reaim : (forall a : uu_nlist, (forall b : uu_nlist, (forall p : uu
   (fun a => (fun b => (fun p => (uu_lapp b (uu_ldrop (uu_nlen a) p))))).
 Definition uu_reaim_involutive : (forall a : uu_nlist, (forall b : uu_nlist, (forall w : uu_nlist, (@paths uu_nlist (uu_reaim b a (uu_reaim a b (uu_lapp a w))) (uu_lapp a w))))) :=
   (fun a => (fun b => (fun w => (uu_pathscomp0 uu_nlist (uu_lapp a (uu_ldrop (uu_nlen b) (uu_lapp b (uu_ldrop (uu_nlen a) (uu_lapp a w))))) (uu_lapp a (uu_ldrop (uu_nlen b) (uu_lapp b w))) (uu_lapp a w) (uu_maponpaths uu_nlist uu_nlist (fun y => (uu_lapp a (uu_ldrop (uu_nlen b) (uu_lapp b y)))) (uu_ldrop (uu_nlen a) (uu_lapp a w)) w (uu_ldroplenapp a w)) (uu_maponpaths uu_nlist uu_nlist (fun y => (uu_lapp a y)) (uu_ldrop (uu_nlen b) (uu_lapp b w)) w (uu_ldroplenapp b w)))))).
+Definition uu_foldc : (forall hs : uu_nlist, (forall acc : uu_nlist, uu_nlist)) :=
+  (fun hs => (fun acc => ((nat_rect (fun q => (forall v : (uu_nvec q), (forall s : uu_nlist, uu_nlist))) (fun v => (fun s => s)) (fun k => (fun IH => (fun v => (fun s => (IH (pr2 v) (uu_cins (pr1 v) s)))))) (pr1 hs)) (pr2 hs) acc))).
+Definition uu_fid : (forall hs : uu_nlist, uu_nlist) :=
+  (fun hs => (uu_foldc hs uu_nnil)).
+Definition uu_foldcapp : (forall a : uu_nlist, (forall b : uu_nlist, (forall s : uu_nlist, (@paths uu_nlist (uu_foldc (uu_lapp a b) s) (uu_foldc b (uu_foldc a s)))))) :=
+  (fun a => (fun b => ((nat_rect (fun q => (forall v : (uu_nvec q), (forall s : uu_nlist, (@paths uu_nlist (uu_foldc (uu_lapp (tpair q v) b) s) (uu_foldc b (uu_foldc (tpair q v) s)))))) (fun v => (fun s => (idpath (uu_foldc b s)))) (fun k => (fun IH => (fun v => (fun s => (IH (pr2 v) (uu_cins (pr1 v) s)))))) (pr1 a)) (pr2 a)))).
+Definition uu_fid_swap : (forall pre : uu_nlist, (forall x : nat, (forall y : nat, (forall post : uu_nlist, (@paths uu_nlist (uu_fid (uu_lapp pre (uu_ncons x (uu_ncons y post)))) (uu_fid (uu_lapp pre (uu_ncons y (uu_ncons x post))))))))) :=
+  (fun pre => (fun x => (fun y => (fun post => (uu_pathscomp0 uu_nlist (uu_fid (uu_lapp pre (uu_ncons x (uu_ncons y post)))) (uu_foldc post (uu_cins y (uu_cins x (uu_foldc pre uu_nnil)))) (uu_fid (uu_lapp pre (uu_ncons y (uu_ncons x post)))) (uu_foldcapp pre (uu_ncons x (uu_ncons y post)) uu_nnil) (uu_pathscomp0 uu_nlist (uu_foldc post (uu_cins y (uu_cins x (uu_foldc pre uu_nnil)))) (uu_foldc post (uu_cins x (uu_cins y (uu_foldc pre uu_nnil)))) (uu_fid (uu_lapp pre (uu_ncons y (uu_ncons x post)))) (uu_maponpaths uu_nlist uu_nlist (fun w => (uu_foldc post w)) (uu_cins y (uu_cins x (uu_foldc pre uu_nnil))) (uu_cins x (uu_cins y (uu_foldc pre uu_nnil))) (uu_cinscomm y x (uu_foldc pre uu_nnil))) (uu_pathsinv0 uu_nlist (uu_fid (uu_lapp pre (uu_ncons y (uu_ncons x post)))) (uu_foldc post (uu_cins x (uu_cins y (uu_foldc pre uu_nnil)))) (uu_foldcapp pre (uu_ncons y (uu_ncons x post)) uu_nnil)))))))).
+Definition uu_fid_dup : (forall pre : uu_nlist, (forall x : nat, (forall post : uu_nlist, (@paths uu_nlist (uu_fid (uu_lapp pre (uu_ncons x (uu_ncons x post)))) (uu_fid (uu_lapp pre (uu_ncons x post))))))) :=
+  (fun pre => (fun x => (fun post => (uu_pathscomp0 uu_nlist (uu_fid (uu_lapp pre (uu_ncons x (uu_ncons x post)))) (uu_foldc post (uu_cins x (uu_cins x (uu_foldc pre uu_nnil)))) (uu_fid (uu_lapp pre (uu_ncons x post))) (uu_foldcapp pre (uu_ncons x (uu_ncons x post)) uu_nnil) (uu_pathscomp0 uu_nlist (uu_foldc post (uu_cins x (uu_cins x (uu_foldc pre uu_nnil)))) (uu_foldc post (uu_cins x (uu_foldc pre uu_nnil))) (uu_fid (uu_lapp pre (uu_ncons x post))) (uu_maponpaths uu_nlist uu_nlist (fun w => (uu_foldc post w)) (uu_cins x (uu_cins x (uu_foldc pre uu_nnil))) (uu_cins x (uu_foldc pre uu_nnil)) (uu_cinsabsorb x (uu_foldc pre uu_nnil))) (uu_pathsinv0 uu_nlist (uu_fid (uu_lapp pre (uu_ncons x post))) (uu_foldc post (uu_cins x (uu_foldc pre uu_nnil))) (uu_foldcapp pre (uu_ncons x post) uu_nnil))))))).
+Definition uu_natgtbnn : (forall n : nat, (@paths bool (uu_natgtb n n) false)) :=
+  (fun n => (nat_rect (fun q => (@paths bool (uu_natgtb q q) false)) (idpath false) (fun k => (fun IH => IH)) n)).
+Definition uu_lcode_inj : (forall x : uu_nlist, (forall y : uu_nlist, (forall e : (@paths nat (uu_lcode x) (uu_lcode y)), (@paths uu_nlist x y)))) :=
+  (fun x => (fun y => (fun e => (uu_pathscomp0 uu_nlist x (uu_ldec (uu_lcode x) (uu_lcode x)) y (uu_pathsinv0 uu_nlist (uu_ldec (uu_lcode x) (uu_lcode x)) x (uu_ldeccode x (uu_lcode x) (uu_natgtbnn (uu_lcode x)))) (uu_pathscomp0 uu_nlist (uu_ldec (uu_lcode x) (uu_lcode x)) (uu_ldec (uu_lcode x) (uu_lcode y)) y (uu_maponpaths nat uu_nlist (fun m => (uu_ldec (uu_lcode x) m)) (uu_lcode x) (uu_lcode y) e) (uu_ldeccode y (uu_lcode x) (uu_transportf nat (fun w => (@paths bool (uu_natgtb w (uu_lcode x)) false)) (uu_lcode x) (uu_lcode y) e (uu_natgtbnn (uu_lcode x))))))))).
+Definition uu_store : Type :=
+  (forall k : nat, (sum nat unit)).
+Definition uu_repo0 : uu_store :=
+  (fun q => (inr tt)).
+Definition uu_skey : (forall hs : uu_nlist, nat) :=
+  (fun hs => (uu_lcode (uu_fid hs))).
+Definition uu_sput : (forall r : uu_store, (forall k : nat, (forall u : nat, uu_store))) :=
+  (fun r => (fun k => (fun u => (fun q => (bool_rect (fun c => (sum nat unit)) (inl u) (r q) (uu_nateqb q k)))))).
+Definition uu_sget : (forall r : uu_store, (forall hs : uu_nlist, (sum nat unit))) :=
+  (fun r => (fun hs => (r (uu_skey hs)))).
+Definition uu_repo_found : (forall r : uu_store, (forall u : nat, (forall k1 : uu_nlist, (forall k2 : uu_nlist, (forall e : (@paths uu_nlist (uu_fid k1) (uu_fid k2)), (@paths (sum nat unit) (uu_sget (uu_sput r (uu_skey k1) u) k2) (inl u))))))) :=
+  (fun r => (fun u => (fun k1 => (fun k2 => (fun e => (uu_maponpaths bool (sum nat unit) (fun c => (bool_rect (fun c2 => (sum nat unit)) (inl u) (r (uu_skey k2)) c)) (uu_nateqb (uu_skey k2) (uu_skey k1)) true (uu_transportf nat (fun w => (@paths bool (uu_nateqb w (uu_skey k1)) true)) (uu_skey k1) (uu_skey k2) (uu_maponpaths uu_nlist nat (fun w2 => (uu_lcode w2)) (uu_fid k1) (uu_fid k2) e) (uu_nateqbrefl (uu_skey k1))))))))).
+Definition uu_repo_miss : (forall r : uu_store, (forall u : nat, (forall k1 : nat, (forall k2 : uu_nlist, (forall h : (@paths bool (uu_nateqb (uu_skey k2) k1) false), (@paths (sum nat unit) (uu_sget (uu_sput r k1 u) k2) (uu_sget r k2))))))) :=
+  (fun r => (fun u => (fun k1 => (fun k2 => (fun h => (uu_maponpaths bool (sum nat unit) (fun c => (bool_rect (fun c2 => (sum nat unit)) (inl u) (r (uu_skey k2)) c)) (uu_nateqb (uu_skey k2) k1) false h)))))).
+Definition uu_repo_swap : (forall r : uu_store, (forall u : nat, (forall pre : uu_nlist, (forall x : nat, (forall y : nat, (forall post : uu_nlist, (@paths (sum nat unit) (uu_sget (uu_sput r (uu_skey (uu_lapp pre (uu_ncons x (uu_ncons y post)))) u) (uu_lapp pre (uu_ncons y (uu_ncons x post)))) (inl u)))))))) :=
+  (fun r => (fun u => (fun pre => (fun x => (fun y => (fun post => (uu_repo_found r u (uu_lapp pre (uu_ncons x (uu_ncons y post))) (uu_lapp pre (uu_ncons y (uu_ncons x post))) (uu_fid_swap pre x y post)))))))).
+Definition uu_repo_dup : (forall r : uu_store, (forall u : nat, (forall pre : uu_nlist, (forall x : nat, (forall post : uu_nlist, (@paths (sum nat unit) (uu_sget (uu_sput r (uu_skey (uu_lapp pre (uu_ncons x (uu_ncons x post)))) u) (uu_lapp pre (uu_ncons x post))) (inl u))))))) :=
+  (fun r => (fun u => (fun pre => (fun x => (fun post => (uu_repo_found r u (uu_lapp pre (uu_ncons x (uu_ncons x post))) (uu_lapp pre (uu_ncons x post)) (uu_fid_dup pre x post))))))).
+Definition uu_repo_faithful : (forall k1 : uu_nlist, (forall k2 : uu_nlist, (forall e : (@paths nat (uu_skey k1) (uu_skey k2)), (@paths uu_nlist (uu_fid k1) (uu_fid k2))))) :=
+  (fun k1 => (fun k2 => (fun e => (uu_lcode_inj (uu_fid k1) (uu_fid k2) e)))).
 Definition uu_zrow : (forall z : uu_stk, uu_nlist) :=
   (fun z => (uu_lapp (uu_lrev (uu_zup z)) (uu_ncons (uu_zfoc z) (uu_zdn z)))).
 Definition uu_zrev : (forall z : uu_stk, uu_stk) :=
@@ -1032,9 +1066,12 @@ Print Assumptions uu_splice_pad.
 Print Assumptions uu_bubble_len.
 Print Assumptions uu_mtch_sound.
 Print Assumptions uu_reaim_involutive.
+Print Assumptions uu_fid_swap.
+Print Assumptions uu_repo_found.
+Print Assumptions uu_repo_faithful.
 Print Assumptions add_comm_std.
 Print Assumptions add_assoc_std.
 Print Assumptions mul_comm_std.
 
-(* 482 exported / 532 corpus entries swept;
+(* 499 exported / 549 corpus entries swept;
    3 headline laws (add_comm, add_assoc, mul_comm) landed on Coq's Nat.* via the bridge *)

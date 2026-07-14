@@ -6747,3 +6747,229 @@
             (reaim (ncons 1 nnil) (ncons 5 (ncons 6 nnil)) (ncons 1 (ncons 9 nnil)))))
   = (vof 0 '(ncons 1 (ncons 9 nnil)))))
 
+
+; ============================================================================
+; the STORE/REPO slice: a version IS its patch set, and the repo is keyed
+; on that identity -- patch.v's identity slice (fid_swap / fid_dup) lands,
+; then the store patch.v only promised. fid folds a frontier's hashes
+; through cins, the SAME canonical set that carries a clash's rivals, so
+; order-freedom IS cins-commutativity and dup-freedom IS cins-absorption.
+; the key is lcode of the canonical list -- and lcode has a proven decoder
+; (ldeccode), so the digest is INJECTIVE: patch.v's "a real digest when
+; the store lands" parenthetical lands as a theorem (lcode-inj /
+; repo-faithful), collision-freedom a law, not engineering. the repo
+; speaks PRESENTATIONS: sget hashes canonically before it looks, so the
+; store cannot even ask about replay order -- stored under one
+; presentation, found under any other spelling the same set (repo-found;
+; repo-swap / repo-dup the adjacent-swap and stutter corollaries), and
+; distinct sets stay distinct.
+; ============================================================================
+; --- the canonical identity: fold the frontier through cins; an adjacent
+; --- swap and a stutter vanish before the fold even lands (H1 / H2) ---
+(assert
+ (defn 'foldc
+   '(pi hs nlist (pi acc nlist nlist))
+   '(lam hs
+      (lam acc
+        ((nat_rect (lam q (pi v (nvec q) (pi s nlist nlist))) (lam v (lam s s))
+           (lam k (lam IH (lam v (lam s (IH (pr2 v) (cins (pr1 v) s))))))
+           (pr1 hs))
+          (pr2 hs)
+          acc))))
+ (defn 'fid
+   '(pi hs nlist nlist)
+   '(lam hs (foldc hs nnil)))
+ (defq 'foldcapp
+   '(pi a nlist
+      (pi b nlist (pi s nlist (paths nlist (foldc (lapp a b) s) (foldc b (foldc a s))))))
+   '(lam a
+      (lam b
+        ((nat_rect
+           (lam q
+             (pi v (nvec q)
+               (pi s nlist
+                 (paths nlist (foldc (lapp (tpair q v) b) s) (foldc b (foldc (tpair q v) s))))))
+           (lam v (lam s (idpath (foldc b s))))
+           (lam k (lam IH (lam v (lam s (IH (pr2 v) (cins (pr1 v) s))))))
+           (pr1 a))
+          (pr2 a)))))
+ (defq 'fid-swap
+   '(pi pre nlist
+      (pi x nat
+        (pi y nat
+          (pi post nlist
+            (paths nlist (fid (lapp pre (ncons x (ncons y post))))
+              (fid (lapp pre (ncons y (ncons x post)))))))))
+   '(lam pre
+      (lam x
+        (lam y
+          (lam post
+            (pathscomp0 nlist (fid (lapp pre (ncons x (ncons y post))))
+              (foldc post (cins y (cins x (foldc pre nnil))))
+              (fid (lapp pre (ncons y (ncons x post))))
+              (foldcapp pre (ncons x (ncons y post)) nnil)
+              (pathscomp0 nlist (foldc post (cins y (cins x (foldc pre nnil))))
+                (foldc post (cins x (cins y (foldc pre nnil))))
+                (fid (lapp pre (ncons y (ncons x post))))
+                (maponpaths nlist nlist (lam w (foldc post w))
+                  (cins y (cins x (foldc pre nnil)))
+                  (cins x (cins y (foldc pre nnil)))
+                  (cinscomm y x (foldc pre nnil)))
+                (pathsinv0 nlist (fid (lapp pre (ncons y (ncons x post))))
+                  (foldc post (cins x (cins y (foldc pre nnil))))
+                  (foldcapp pre (ncons y (ncons x post)) nnil)))))))))
+ (defq 'fid-dup
+   '(pi pre nlist
+      (pi x nat
+        (pi post nlist
+          (paths nlist (fid (lapp pre (ncons x (ncons x post)))) (fid (lapp pre (ncons x post)))))))
+   '(lam pre
+      (lam x
+        (lam post
+          (pathscomp0 nlist (fid (lapp pre (ncons x (ncons x post))))
+            (foldc post (cins x (cins x (foldc pre nnil))))
+            (fid (lapp pre (ncons x post)))
+            (foldcapp pre (ncons x (ncons x post)) nnil)
+            (pathscomp0 nlist (foldc post (cins x (cins x (foldc pre nnil))))
+              (foldc post (cins x (foldc pre nnil)))
+              (fid (lapp pre (ncons x post)))
+              (maponpaths nlist nlist (lam w (foldc post w)) (cins x (cins x (foldc pre nnil)))
+                (cins x (foldc pre nnil))
+                (cinsabsorb x (foldc pre nnil)))
+              (pathsinv0 nlist (fid (lapp pre (ncons x post)))
+                (foldc post (cins x (foldc pre nnil)))
+                (foldcapp pre (ncons x post) nnil))))))))
+ ; the canonical identity computes: order and repetition forgotten
+ ((vof 0 '(fid (ncons 2 (ncons 1 (ncons 2 nnil))))) = (vof 0 '(ncons 1 (ncons 2 nnil)))))
+
+; --- the digest is faithful: natgtb closes its own diagonal, so a code
+; --- decodes on its own fuel -- lcode is injective, the real digest ---
+(assert
+ (defq 'natgtbnn
+   '(pi n nat (paths bool (natgtb n n) false))
+   '(lam n
+      (nat_rect (lam q (paths bool (natgtb q q) false)) (idpath false) (lam k (lam IH IH)) n)))
+ (defq 'lcode-inj
+   '(pi x nlist (pi y nlist (pi e (paths nat (lcode x) (lcode y)) (paths nlist x y))))
+   '(lam x
+      (lam y
+        (lam e
+          (pathscomp0 nlist x (ldec (lcode x) (lcode x)) y
+            (pathsinv0 nlist (ldec (lcode x) (lcode x)) x
+              (ldeccode x (lcode x) (natgtbnn (lcode x))))
+            (pathscomp0 nlist (ldec (lcode x) (lcode x)) (ldec (lcode x) (lcode y)) y
+              (maponpaths nat nlist (lam m (ldec (lcode x) m)) (lcode x) (lcode y) e)
+              (ldeccode y (lcode x)
+                (transportf nat (lam w (paths bool (natgtb w (lcode x)) false)) (lcode x)
+                  (lcode y)
+                  e
+                  (natgtbnn (lcode x)))))))))))
+
+; --- the repo: a store from digests, put at raw-key grain, get through the
+; --- identity -- a version stored once is found under every presentation
+; --- of its set, and a miss rides through to the older book ---
+(assert
+ (defn 'store
+   'UU
+   '(pi k nat (coprod nat unit)))
+ (defn 'repo0
+   'store
+   '(lam q (ii2 tt)))
+ (defn 'skey
+   '(pi hs nlist nat)
+   '(lam hs (lcode (fid hs))))
+ (defn 'sput
+   '(pi r store (pi k nat (pi u nat store)))
+   '(lam r
+      (lam k (lam u (lam q (bool_rect (lam c (coprod nat unit)) (ii1 u) (r q) (nateqb q k)))))))
+ (defn 'sget
+   '(pi r store (pi hs nlist (coprod nat unit)))
+   '(lam r (lam hs (r (skey hs)))))
+ (defq 'repo-found
+   '(pi r store
+      (pi u nat
+        (pi k1 nlist
+          (pi k2 nlist
+            (pi e (paths nlist (fid k1) (fid k2))
+              (paths (coprod nat unit) (sget (sput r (skey k1) u) k2) (ii1 u)))))))
+   '(lam r
+      (lam u
+        (lam k1
+          (lam k2
+            (lam e
+              (maponpaths bool (coprod nat unit)
+                (lam c (bool_rect (lam c2 (coprod nat unit)) (ii1 u) (r (skey k2)) c))
+                (nateqb (skey k2) (skey k1))
+                true
+                (transportf nat (lam w (paths bool (nateqb w (skey k1)) true)) (skey k1)
+                  (skey k2)
+                  (maponpaths nlist nat (lam w2 (lcode w2)) (fid k1) (fid k2) e)
+                  (nateqbrefl (skey k1))))))))))
+ (defq 'repo-miss
+   '(pi r store
+      (pi u nat
+        (pi k1 nat
+          (pi k2 nlist
+            (pi h (paths bool (nateqb (skey k2) k1) false)
+              (paths (coprod nat unit) (sget (sput r k1 u) k2) (sget r k2)))))))
+   '(lam r
+      (lam u
+        (lam k1
+          (lam k2
+            (lam h
+              (maponpaths bool (coprod nat unit)
+                (lam c (bool_rect (lam c2 (coprod nat unit)) (ii1 u) (r (skey k2)) c))
+                (nateqb (skey k2) k1)
+                false
+                h)))))))
+ (defq 'repo-swap
+   '(pi r store
+      (pi u nat
+        (pi pre nlist
+          (pi x nat
+            (pi y nat
+              (pi post nlist
+                (paths (coprod nat unit)
+                  (sget (sput r (skey (lapp pre (ncons x (ncons y post)))) u)
+                    (lapp pre (ncons y (ncons x post))))
+                  (ii1 u))))))))
+   '(lam r
+      (lam u
+        (lam pre
+          (lam x
+            (lam y
+              (lam post
+                (repo-found r u (lapp pre (ncons x (ncons y post)))
+                  (lapp pre (ncons y (ncons x post)))
+                  (fid-swap pre x y post)))))))))
+ (defq 'repo-dup
+   '(pi r store
+      (pi u nat
+        (pi pre nlist
+          (pi x nat
+            (pi post nlist
+              (paths (coprod nat unit)
+                (sget (sput r (skey (lapp pre (ncons x (ncons x post)))) u)
+                  (lapp pre (ncons x post)))
+                (ii1 u)))))))
+   '(lam r
+      (lam u
+        (lam pre
+          (lam x
+            (lam post
+              (repo-found r u (lapp pre (ncons x (ncons x post))) (lapp pre (ncons x post))
+                (fid-dup pre x post))))))))
+ (defq 'repo-faithful
+   '(pi k1 nlist
+      (pi k2 nlist (pi e (paths nat (skey k1) (skey k2)) (paths nlist (fid k1) (fid k2)))))
+   '(lam k1 (lam k2 (lam e (lcode-inj (fid k1) (fid k2) e)))))
+ ; the repo in the small: stored under one replay, found under its swap
+ ; and its stutter; a different frontier rides through to the empty repo
+ ((vof 0 '(sget (sput repo0 (skey (ncons 2 (ncons 1 nnil))) 7) (ncons 1 (ncons 2 nnil))))
+  = (vof 0 '(ii1 7)))
+ ((vof 0 '(sget (sput repo0 (skey (ncons 2 (ncons 1 nnil))) 7)
+           (ncons 1 (ncons 2 (ncons 1 nnil)))))
+  = (vof 0 '(ii1 7)))
+ ((vof 0 '(sget (sput repo0 (skey (ncons 2 (ncons 1 nnil))) 7) (ncons 3 nnil)))
+  = (vof 0 '(ii2 tt))))
+
