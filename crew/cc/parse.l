@@ -417,7 +417,7 @@
    (punary ps ts)
     (? (! (two? ts)) ()
        (: t <ts
-          (? (&& (tp? t "(") (tkbty? ps (? (two? >ts) <>ts ())))
+          (? (&& (tp? t "(") (tkbty? ps (cap (pquals >ts))))    ; skip quals: (const T*)x is a cast, like the decl sites
               (: tr (pcty ps >ts)
                  rest (? (two? tr) (want <>tr ")") ())
                  (? (! (two? rest)) ()
@@ -428,7 +428,7 @@
                        (? (two? r) `(`('cast <tr <r) <>r) ()))))
              (tkw? t 'sizeof)
               (: r1 >ts
-                 (? (&& (peekp r1 "(") (&& (two? >r1) (tkbty? ps <>r1)))
+                 (? (&& (peekp r1 "(") (tkbty? ps (cap (pquals >r1))))    ; sizeof(const T) too
                      (: tr (pcty ps >r1)           ; sizeof ( type-name ) -- folds to a constant now
                         rest (? (two? tr) (want <>tr ")") ())
                         (? (two? rest) `(`('num (tsz ps <tr)) rest) ()))

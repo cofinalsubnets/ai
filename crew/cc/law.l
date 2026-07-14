@@ -95,6 +95,8 @@
       (= (cexp "*p++") '(deref (post (var "p") 1)))
       (= (cexp "sizeof(int*)") '(num 8))
       (= (cexp "(char*)x") '(cast (ptr char) (var "x")))
+      (= (cexp "(const char*)x") '(cast (ptr char) (var "x")))    ; a qualifier opens the cast type too -- quals drop, like the decl sites
+      (= (cexp "sizeof(const int)") '(num 4))
       (= (cast "int main() { int *p; int a[4]; return 0; }")
          '(prog ((fn "main" () (blk ((decl (("p" (ptr int) ())))
                                      (decl (("a" (arr int 4) ())))
