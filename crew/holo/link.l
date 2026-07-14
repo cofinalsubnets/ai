@@ -8,7 +8,9 @@
 ; is the FIRST object's text -- the driver leads with a crt0 object built by
 ; objelf itself, so `main` resolves through the same reloc path as everything
 ; else. our own objects only: a foreign .o (gcc's .eh_frame / .bss / comdat
-; zoo) scares off honestly, never drops a section. x86-64 only, like obj.l.
+; zoo) scares off honestly, never drops a section. two targets, like obj.l
+; (x86-64 field relocs REPLACE their field; aarch64 ones OR bits into the
+; instruction word the placeholder carries).
 ; loads after crew/holo/obj.l in the aicc cat -- reads elf-base / elf-machines /
 ; elf64-hdr / le32 / le64 bare (asbook.l + elf.l re-leak them). cc.l drives it:
 ; `aicc a.o b.c -o prog`.
@@ -34,10 +36,10 @@
    ;   'syms / 'nsym       symbol index -> (name bind typ shndx value)
    ;   'relas              ((tag (off kind symidx addend)..) ..)
    ; layout pins 'tbase/'dbase/'nbase (the load addresses) on it later.
-   (ld-read id s)
+   (ld-read id s mach)
     (: _ (? (&& ((s 0) = 127) (&& ((s 1) = 69) (&& ((s 2) = 76) ((s 3) = 70)))) 0
             (scare 'link-not-elf id))
-       _ (? (&& ((rle16 s 16) = 1) ((rle16 s 18) = 62)) 0 (scare 'link-not-x64-rel id))
+       _ (? (&& ((rle16 s 16) = 1) ((rle16 s 18) = mach)) 0 (scare 'link-machine id))
        _ (? ((rle16 s 58) = 64) 0 (scare 'link-shentsize id))
        shoff (rle64 s 40) shnum (rle16 s 60) shstrx (rle16 s 62)
        (sh i) (shoff + (* i 64))                       ; the i-th section header
@@ -165,13 +167,26 @@
                        _ (? stag 0 (scare 'link-sym-section (peep ob 'id 0)))
                        (peep ob (ld-key stag) 0))
                     (ldres glo n0 n1 <sy))
-              w (? (kind = 1) 8 4)
-              _ (? (member? kind '(1 2 4)) 0 (scare 'link-reloc kind))
+              w (? (member? kind '(1 257)) 8 4)
+              _ (? (member? kind '(1 2 4 257 275 277 282 283)) 0 (scare 'link-reloc kind))
               _ (? ((ro + w) <= sz) 0 (scare 'link-oob (peep ob 'id 0)))
-              bs (? (kind = 1) (le64 (sv + ad))
-                    (: v ((sv + ad) - (base + ro))     ; PC32/PLT32: S + A - P
-                       _ (? (ld-fits32 v) 0 (scare 'link-range <sy))
-                       (le32 v)))
+              ; the aarch64 field kinds patch BITS of the instruction word the
+              ; placeholder carries -- read it back and OR the field in
+              wd (? (member? kind '(1 257)) 0 (rle32 s (off0 + ro)))
+              bs (? (member? kind '(1 257)) (le64 (sv + ad))   ; R_X86_64_64 / R_AARCH64_ABS64: S + A outright
+                    (member? kind '(2 4))
+                     (: v ((sv + ad) - (base + ro))     ; PC32/PLT32: S + A - P
+                        _ (? (ld-fits32 v) 0 (scare 'link-range <sy))
+                        (le32 v))
+                    (member? kind '(282 283))           ; JUMP26/CALL26: (S+A-P)>>2 into imm26
+                     (: v ((sv + ad) - (base + ro))
+                        _ (? (&& (-134217728 <= v) (v <= 134217727)) 0 (scare 'link-range <sy))
+                        (le32 (| wd (& (// v 4) 67108863))))
+                    (kind = 275)                        ; ADR_PREL_PG_HI21: page(S+A)-page(P) into adrp
+                     (: pg ((// (sv + ad) 4096) - (// (base + ro) 4096))
+                        _ (? (&& (-1048576 <= pg) (pg <= 1048575)) 0 (scare 'link-range <sy))
+                        (le32 (| wd (| (<< (& pg 3) 29) (<< (& (>> pg 2) 524287) 5)))))
+                    (le32 (| wd (<< (% (sv + ad) 4096) 10))))   ; ADD_ABS_LO12_NC: the low 12
               (go (off0 + ro + w) >es
                   (link bs (link (snip s pos (off0 + ro)) acc)))))
        (go off0 (ent (peep ob 'relas ())) ()))
@@ -180,8 +195,9 @@
    ; list (texts + byte lists; ld-write lays them down). entry = the first
    ; object's text. one R+X+W segment maps the whole file, elf.l's shape.
    (ldlink target srcs)
-    (: _ (? (id? target 'x64) 0 (scare 'link-x64-only target))
-       objs (map (\ p (ld-read <p <>p)) srcs)
+    (: mach (peep elf-machines target 0)
+       _ (? (0 < mach) 0 (scare 'link-target target))
+       objs (map (\ p (ld-read <p <>p mach)) srcs)
        lay (ldlay objs elf-base)
        end <lay n0 <>lay
        glo (ldsyms objs)

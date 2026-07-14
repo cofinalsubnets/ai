@@ -321,8 +321,8 @@
       (L "a64.freg.hi"  "500400fd"          '((stsd r2 8 f16)))           ; str d16, [x2, #8] (the narrow scratch)
       (L "a64.cmn"      "1f1c00b1"          '((cmp r0 -7)))               ; cmn x0, #7 (negative imm flips)
       (L "a64.set.np"   "e0679f9a"          '((set np r0)))               ; cset x0, vc (np aliases vc)
-      (L "a64.la"       "400000102700001041424300"
-                        '((la r0 x) (la r7 x) (label x) (raw (65 66 67 0)))))  ; adr x0/x7, x
+      (L "a64.la"       "000000900040009107000090e740009141424300"
+                        '((la r0 x) (la r7 x) (label x) (raw (65 66 67 0)))))  ; adrp+add pair: x at +16, page delta 0, lo12 16
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'arm64 (at t 2))) 0 a64tests)
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --

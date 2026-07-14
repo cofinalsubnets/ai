@@ -7,8 +7,9 @@
 ; (R_X86_64_PC32 via the .data section symbol), a call to a symbol defined
 ; elsewhere (R_X86_64_PLT32), a data pointer to a label (R_X86_64_64). intra-.text
 ; branches and calls stay pc-relative and resolve internally (both ends ride .text
-; and move together). x86-64 only for now (cc emits x64; the arm64 reloc kinds
-; differ). loads after crew/holo/elf.l in the au cat -- reads elf-machines /
+; and move together). aarch64 rides the same walk with its own reloc vocabulary
+; (CALL26/JUMP26, the ADRP/ADD pair, ABS64) -- see the type table and reltext.
+; loads after crew/holo/elf.l in the au cat -- reads elf-machines /
 ; write-bytes / catall / le* bare, and the assembler internals through the `holo`
 ; book. cc.l drives it: `aicc -c foo.c foo.o`.
 (:
@@ -16,32 +17,43 @@
    r-64    1                                        ; R_X86_64_64     S + A   (an abs64 data pointer)
    r-pc32  2                                        ; R_X86_64_PC32   S + A - P (an la into .data)
    r-plt32 4                                        ; R_X86_64_PLT32  L + A - P (a call to an external fn)
+   ; ... and aarch64. field relocs here patch BITS of an instruction word, not a
+   ; whole field -- the placeholder bytes carry the base opcode (the fixup's aux).
+   ra-abs64  257                                    ; R_AARCH64_ABS64           S + A
+   ra-jump26 282                                    ; R_AARCH64_JUMP26          (S+A-P)>>2 into b's imm26
+   ra-call26 283                                    ; R_AARCH64_CALL26          ... into bl's imm26
+   ra-pghi21 275                                    ; R_AARCH64_ADR_PREL_PG_HI21  page(S+A)-page(P) into adrp
+   ra-lo12   277                                    ; R_AARCH64_ADD_ABS_LO12_NC   (S+A) & 0xfff into add
 
    (o-has? tab k) (! (id? (peep tab k 'no) 'no))    ; is key k bound in the tablet?
    (o-strbytes s) (: (go i acc) (? (i < 0) acc (go (i - 1) (link (s i) acc)))
                      (go ((tally s) - 1) ()))       ; a string -> its byte list
 
    ; walk an assembled section's items (bytes + fixups) -> (bytes relocs). a fixup
-   ; is resolved in place when the section may (text-internal, pc-relative to a
-   ; label defined here); otherwise it becomes a relocation record (off kind label
-   ; addend) and W zero bytes hold its place (RELA overwrites the field outright).
+   ; is resolved in place when the section may (text-internal, a kind in rset --
+   ; the translation-INVARIANT ones: a pc-relative delta moves with the section;
+   ; an adrp page delta or an abs-lo12 does NOT and always relocates); otherwise
+   ; it becomes a relocation record (off kind label addend) and placeholder bytes
+   ; hold its place -- zeros where RELA overwrites the field outright (x64, abs64),
+   ; the base opcode word where the reloc patches instruction BITS (aarch64).
    ; the addend is the fixup's aux -- a data pointer to &arr[i]/&s.field bakes the
    ; constant byte offset there, and the RELA carries it (added to the section-sym
    ; addend below), so the linker's S+A lands on the element, not the base.
-   (o-walk be items labels wkset internal? off bacc racc)
+   (o-walk be items labels wkset internal? rset off bacc racc)
     (? (! (two? items)) `((rev bacc) (rev racc))
        (: x <items
           (? ((holo 'fix?) x)
               (: lbl ((holo 'fix-l) x) w ((holo 'fix-w) x) k ((holo 'fix-k) x)
-                 (? (&& (&& internal? (id? k 'rel32))
+                 (? (&& (&& internal? (member? k rset))
                         (&& (o-has? labels lbl) (! (o-has? wkset lbl))))   ; a weak target stays a reloc
                      (: tgt (peep labels lbl 0)
                         bs ((holo 'patch-with) be k tgt off w ((holo 'fix-a) x))
-                        (o-walk be >items labels wkset internal? (off + w)
+                        (o-walk be >items labels wkset internal? rset (off + w)
                                 ((rev bs) + bacc) racc))
-                    (o-walk be >items labels wkset internal? (off + w)
-                            ((o-zeros w) + bacc) (link `(off k lbl ((holo 'fix-a) x)) racc))))
-             (o-walk be >items labels wkset internal? (off + 1) (link x bacc) racc))))
+                    (: fill (? (member? k '(b26 b19 adrp21 addlo12)) (le32 ((holo 'fix-a) x)) (o-zeros w))
+                       (o-walk be >items labels wkset internal? rset (off + w)
+                               ((rev fill) + bacc) (link `(off k lbl ((holo 'fix-a) x)) racc)))))
+             (o-walk be >items labels wkset internal? rset (off + 1) (link x bacc) racc))))
    (o-zeros n) (? (n < 1) () (link 0 (o-zeros (n - 1))))
 
    ; the externals: labels referenced by a relocation but defined in NO
@@ -76,7 +88,9 @@
    ; variables (global OBJECT symbols); statics reach neither list and stay
    ; local labels. -> a byte list.
    (objelf target textforms dataforms funcnames globnames wknames nifforms)
-    (: _ (? (id? target 'x64) 0 (scare 'obj-x64-only target))
+    (: a64 (member? target '(arm64 aarch64))
+       _ (? (|| (id? target 'x64) a64) 0 (scare 'obj-target target))
+       rset (? a64 '(b26 b19) '(rel32))              ; the in-place-resolvable kinds (translation-invariant)
        machine (peep elf-machines target 0)
        be (peep (holo 'backends) target ())
        tp ((holo 'lay) textforms be 0 () (tablet 0))  ; assemble each section at org 0
@@ -88,9 +102,9 @@
        ; never redirect to a strong override
        wkset (: t (tablet 0) (go ws) (? (! (two? ws)) t (: _ (pin t (intern <ws) 1) (go >ws)))
                 (go wknames))
-       tw (o-walk be <tp tlabels wkset 1 0 () ())
-       dw (o-walk be <dp dlabels wkset 0 0 () ())
-       nw (o-walk be <np nlabels wkset 0 0 () ())
+       tw (o-walk be <tp tlabels wkset 1 rset 0 () ())
+       dw (o-walk be <dp dlabels wkset 0 rset 0 () ())
+       nw (o-walk be <np nlabels wkset 0 rset 0 () ())
        tbytes <tw trel <>tw
        dbytes <dw drel <>dw
        nbytes <nw nrel <>nw
@@ -135,37 +149,64 @@
                       fsyms gsyms esyms)))
        nsym (4 + nfun + nglob + (tally exts))
 
-       ; -- the relocations. text: an la into .data -> PC32 via the .data section
-       ; symbol (idx 2, addend = data offset - 4); a call to an external -> PLT32.
-       ; data: an abs64 pointer -> R_64 via the target's section symbol + offset,
-       ; or an external symbol. --
+       ; -- the relocations. x64 text: an la into .data -> PC32 via the .data
+       ; section symbol (idx 2, addend = data offset - 4); a call to an external
+       ; -> PLT32. aarch64 text: a b26 that survived the walk is weak or external
+       ; (CALL26/JUMP26 by its opcode, addend 0); an adrp/add pair relocates by
+       ; kind (PG_HI21 / ABS_LO12_NC) via the target's section symbol + offset --
+       ; including .text targets (a page delta never resolves inside a .o).
+       ; data: an abs64 pointer -> the abs64 type via the target's section
+       ; symbol + offset, or an external symbol. --
        reltext
-        (: (go rs acc)
-            (? (! (two? rs)) (catall (rev acc))
-               (: r <rs off <r lbl <>>r
-                  (? (o-has? wkset lbl)               ; a weak-defined fn: bind its OWN symbol (overridable)
-                      (go >rs (link (o-rela off (peep fnidx lbl 0) r-plt32 -4) acc))
-                     (o-has? dlabels lbl)
-                      (go >rs (link (o-rela off 2 r-pc32 ((peep dlabels lbl 0) - 4)) acc))
-                     (o-has? nlabels lbl)
-                      (go >rs (link (o-rela off 3 r-pc32 ((peep nlabels lbl 0) - 4)) acc))
-                     (go >rs (link (o-rela off (peep extidx lbl 0) r-plt32 -4) acc)))))
-           (go trel ()))
+        (? (! a64)
+           (: (go rs acc)
+               (? (! (two? rs)) (catall (rev acc))
+                  (: r <rs off <r lbl <>>r
+                     (? (o-has? wkset lbl)               ; a weak-defined fn: bind its OWN symbol (overridable)
+                         (go >rs (link (o-rela off (peep fnidx lbl 0) r-plt32 -4) acc))
+                        (o-has? dlabels lbl)
+                         (go >rs (link (o-rela off 2 r-pc32 ((peep dlabels lbl 0) - 4)) acc))
+                        (o-has? nlabels lbl)
+                         (go >rs (link (o-rela off 3 r-pc32 ((peep nlabels lbl 0) - 4)) acc))
+                        (go >rs (link (o-rela off (peep extidx lbl 0) r-plt32 -4) acc)))))
+              (go trel ()))
+           (: (go rs acc)
+               (? (! (two? rs)) (catall (rev acc))
+                  (: r <rs off <r k <>r lbl <>>r aux <>>>r
+                     (? (member? k '(adrp21 addlo12))
+                         (: ty (? (id? k 'adrp21) ra-pghi21 ra-lo12)
+                            (? (o-has? wkset lbl)
+                                (go >rs (link (o-rela off (peep fnidx lbl 0) ty 0) acc))
+                               (o-has? tlabels lbl)
+                                (go >rs (link (o-rela off 1 ty (peep tlabels lbl 0)) acc))
+                               (o-has? dlabels lbl)
+                                (go >rs (link (o-rela off 2 ty (peep dlabels lbl 0)) acc))
+                               (o-has? nlabels lbl)
+                                (go >rs (link (o-rela off 3 ty (peep nlabels lbl 0)) acc))
+                               (go >rs (link (o-rela off (peep extidx lbl 0) ty 0) acc))))
+                        (id? k 'b26)
+                         (: ty (? (aux = 2483027968) ra-call26 ra-jump26)   ; 0x94000000 = bl
+                            (? (o-has? wkset lbl)
+                                (go >rs (link (o-rela off (peep fnidx lbl 0) ty 0) acc))
+                               (go >rs (link (o-rela off (peep extidx lbl 0) ty 0) acc))))
+                        (scare 'obj-a64-fix k))))
+              (go trel ())))
        ; an abs64 pointer out of a DATA-class section (.data or ai_nifs): via the
        ; target's section symbol + its offset, or an external's own symbol
+       rabs (? a64 ra-abs64 r-64)
        (reldat1 rs)
         (: (go rs2 acc)
             (? (! (two? rs2)) (catall (rev acc))
                (: r <rs2 off <r lbl <>>r ad <>>>r   ; ad = the constant byte offset (&arr[i])
                   (? (o-has? wkset lbl)               ; a weak fn's address in data: via its symbol too
-                      (go >rs2 (link (o-rela off (peep fnidx lbl 0) r-64 ad) acc))
+                      (go >rs2 (link (o-rela off (peep fnidx lbl 0) rabs ad) acc))
                      (o-has? tlabels lbl)
-                      (go >rs2 (link (o-rela off 1 r-64 ((peep tlabels lbl 0) + ad)) acc))
+                      (go >rs2 (link (o-rela off 1 rabs ((peep tlabels lbl 0) + ad)) acc))
                      (o-has? dlabels lbl)
-                      (go >rs2 (link (o-rela off 2 r-64 ((peep dlabels lbl 0) + ad)) acc))
+                      (go >rs2 (link (o-rela off 2 rabs ((peep dlabels lbl 0) + ad)) acc))
                      (o-has? nlabels lbl)
-                      (go >rs2 (link (o-rela off 3 r-64 ((peep nlabels lbl 0) + ad)) acc))
-                     (go >rs2 (link (o-rela off (peep extidx lbl 0) r-64 ad) acc)))))
+                      (go >rs2 (link (o-rela off 3 rabs ((peep nlabels lbl 0) + ad)) acc))
+                     (go >rs2 (link (o-rela off (peep extidx lbl 0) rabs ad) acc)))))
            (go rs ()))
        reldata (reldat1 drel)
        relnif  (reldat1 nrel)

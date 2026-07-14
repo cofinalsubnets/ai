@@ -174,7 +174,13 @@
    ;; is pc-relative to the instruction's OWN address, in units of 4. the fix is the whole word.
    (arm64-jmp  label)    (L (fix 4 'b26 label 0x14000000))
    (arm64-call label)    (L (fix 4 'b26 label 0x94000000))
-   (arm64-la d label)    (L (fix 4 'adr21 label (| 0x10000000 (rn d))))   ; adr Xd, label (byte-granular, +-1MB)
+   ;; la: ADRP + ADD -- the page-relative pair (+-4GB), one fixup each. ADR alone
+   ;; (+-1MB, and the patch masks silently) can't span ai.c-scale images, and the
+   ;; pair is what the ELF reloc vocabulary speaks (PG_HI21 + ABS_LO12_NC), so the
+   ;; .o path rides the same lowering as the exe/native one.
+   (arm64-la d label)    (: dn (rn d)
+                            (L (fix 4 'adrp21 label (| 0x90000000 dn))
+                               (fix 4 'addlo12 label (| 0x91000000 (| (<< dn 5) dn)))))
    (arm64-br cond label) (: cc (peep arm64-cc cond -1) _ (? (< cc 0) (scare 'badcc cond) 0)
                             (L (fix 4 'b19 label (| 0x54000000 cc))))
    ;; jmpr: BR Xn -- branch to the address held in a register (the glaze's Continue / deopt tail).
@@ -362,8 +368,9 @@
          rel (// rb 4)
          (? (= kind 'b26) (le32 (| aux (& rel 67108863)))             ; 26-bit field, bits[25:0]
             (= kind 'b19) (le32 (| aux (<< (& rel 524287) 5)))        ; 19-bit field, bits[23:5]
-            (= kind 'adr21) (le32 (| aux (| (<< (& rb 3) 29)          ; adr: BYTE offset, immlo[30:29]
-                                            (<< (& (>> rb 2) 524287) 5))))   ; immhi[23:5]
+            (= kind 'adrp21) (: pg (- (// target 4096) (// site 4096))   ; ADRP: PAGE delta, immlo[30:29] immhi[23:5]
+                                (le32 (| aux (| (<< (& pg 3) 29) (<< (& (>> pg 2) 524287) 5)))))
+            (= kind 'addlo12) (le32 (| aux (<< (% target 4096) 10)))  ; ADD #imm12: the target's low 12 (site-free)
             (= kind 'abs64) (le64 (+ target aux))                    ; an 8-byte ABSOLUTE address; aux = the byte ADDEND (&arr[i] = label + offset)
             (scare 'badfix kind)))
 
