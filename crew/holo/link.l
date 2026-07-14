@@ -23,7 +23,7 @@
    (rle64 s i) ((rle32 s i) + (* 4294967296 (rle32 s (i + 4))))
    (sg64 v) (? (v < 9223372036854775808) v (v - 18446744073709551616))
    (ld-cstr s i) (: (go j) (? ((s j) = 0) (snip s i j) (go (j + 1))) (go i))
-   (ld-zeros n) (? (n < 1) () (link 0 (ld-zeros (n - 1))))
+   (ld-zeros n) (? (n < 1) () (>< 0 (ld-zeros (n - 1))))
    (ld-align a v) (? (a < 2) v (: r (% v a) (? (r = 0) v (v + (a - r)))))
    (ld-fits32 v) (&& (-2147483648 <= v) (v <= 2147483647))
    ; a section tag's base key on the object record
@@ -51,7 +51,7 @@
        ; classify: our three PROGBITS by name, symtab/rela by type; anything
        ; else with bytes is a foreign object -- refuse, never drop
        (class i symt rls)
-        (? (shnum <= i) (link symt rls)
+        (? (shnum <= i) (>< symt rls)
            (: h (sh i) ty (rle32 s (h + 4))
               off (rle64 s (h + 24)) sz (rle64 s (h + 32))
               (? (ty = 1)
@@ -63,7 +63,7 @@
                            _ (pin sects tag `(off sz (rle64 s (h + 48))))
                            (class (i + 1) symt rls))))
                  (ty = 2) (class (i + 1) `(off sz (rle32 s (h + 40))) rls)
-                 (ty = 4) (class (i + 1) symt (link `((rle32 s (h + 44)) off sz) rls))
+                 (ty = 4) (class (i + 1) symt (>< `((rle32 s (h + 44)) off sz) rls))
                  (member? ty '(0 3)) (class (i + 1) symt rls)
                  (0 < sz) (scare 'link-section (sname i))
                  (class (i + 1) symt rls))))
@@ -88,10 +88,10 @@
                           (es i acc) (? (i < 0) acc
                                         (: e ((ld-at r 1) + (* i 24))
                                            (es (i - 1)
-                                               (link `((rle64 s e) (rle32 s (e + 8))
+                                               (>< `((rle64 s e) (rle32 s (e + 8))
                                                         (rle32 s (e + 12)) (sg64 (rle64 s (e + 16))))
                                                      acc))))
-                          (link tag (es (n - 1) ()))))
+                          (>< tag (es (n - 1) ()))))
                   >cl)
        _ (pin ob 'relas relas)
        ob)
@@ -155,10 +155,10 @@
     (: s (peep ob 'src 0) se (peep (peep ob 'sects 0) tag ())
        off0 (ld-at se 0) sz (ld-at se 1)
        (ent es) (? (! (two? es)) ()
-                   (id? (cap (cap es)) tag) (cup (cap es))
+                   (id? <<es tag) ><es
                    (ent >es))
        (go pos es acc)
-        (? (! (two? es)) (rev (link (snip s pos (off0 + sz)) acc))
+        (? (! (two? es)) (rev (>< (snip s pos (off0 + sz)) acc))
            (: e <es ro <e kind (ld-at e 1) ad (ld-at e 3)
               _ (? ((pos - off0) <= ro) 0 (scare 'link-unsorted (peep ob 'id 0)))
               sy (peep (peep ob 'syms 0) (ld-at e 2) ())
@@ -188,7 +188,7 @@
                         (le32 (| wd (| (<< (& pg 3) 29) (<< (& (>> pg 2) 524287) 5)))))
                     (le32 (| wd (<< (% (sv + ad) 4096) 10))))   ; ADD_ABS_LO12_NC: the low 12
               (go (off0 + ro + w) >es
-                  (link bs (link (snip s pos (off0 + ro)) acc)))))
+                  (>< bs (>< (snip s pos (off0 + ro)) acc)))))
        (go off0 (ent (peep ob 'relas ())) ()))
 
    ; link a set of objects -- ((id bytes-text)..) -- into a static-exe PIECE
@@ -203,7 +203,7 @@
        glo (ldsyms objs)
        ; emit in layout order, zero-padding up to each section's base
        (emit tag cur os acc)
-        (? (! (two? os)) (link cur acc)
+        (? (! (two? os)) (>< cur acc)
            (: ob <os se (peep (peep ob 'sects 0) tag ())
               (? (! (two? se)) (emit tag cur >os acc)
                  (: b (peep ob (ld-key tag) 0)
@@ -216,7 +216,7 @@
        tail (? (<en < end) `((ld-zeros (end - <en))) ())
        hdr (elf64-hdr elf-base (peep <objs 'tbase 0) (end - elf-base)
                       (peep elf-machines target 0))
-       (link hdr (>en + tail)))
+       (>< hdr (>en + tail)))
 
    ; write a piece list to a file, raw (texts pass through; byte lists pack).
    ; an explicit left walk: map runs its effects right-to-left.

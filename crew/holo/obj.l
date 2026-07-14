@@ -26,7 +26,7 @@
    ra-lo12   277                                    ; R_AARCH64_ADD_ABS_LO12_NC   (S+A) & 0xfff into add
 
    (o-has? tab k) (! (id? (peep tab k 'no) 'no))    ; is key k bound in the tablet?
-   (o-strbytes s) (: (go i acc) (? (i < 0) acc (go (i - 1) (link (s i) acc)))
+   (o-strbytes s) (: (go i acc) (? (i < 0) acc (go (i - 1) (>< (s i) acc)))
                      (go ((tally s) - 1) ()))       ; a string -> its byte list
 
    ; walk an assembled section's items (bytes + fixups) -> (bytes relocs). a fixup
@@ -52,9 +52,9 @@
                                 ((rev bs) + bacc) racc))
                     (: fill (? (member? k '(b26 b19 adrp21 addlo12)) (le32 ((holo 'fix-a) x)) (o-zeros w))
                        (o-walk be >items labels wkset internal? rset (off + w)
-                               ((rev fill) + bacc) (link `(off k lbl ((holo 'fix-a) x)) racc)))))
-             (o-walk be >items labels wkset internal? rset (off + 1) (link x bacc) racc))))
-   (o-zeros n) (? (n < 1) () (link 0 (o-zeros (n - 1))))
+                               ((rev fill) + bacc) (>< `(off k lbl ((holo 'fix-a) x)) racc)))))
+             (o-walk be >items labels wkset internal? rset (off + 1) (>< x bacc) racc))))
+   (o-zeros n) (? (n < 1) () (>< 0 (o-zeros (n - 1))))
 
    ; the externals: labels referenced by a relocation but defined in NO
    ; section -- each needs an UNDEF symbol. unique, first-seen order.
@@ -62,8 +62,8 @@
     (: seen (tablet 0)
        (add lbl acc) (? (|| (o-has? tlabels lbl) (|| (o-has? dlabels lbl) (o-has? nlabels lbl))) acc
                         (o-has? seen lbl) acc
-                        (: _ (pin seen lbl 1) (link lbl acc)))
-       (go rs acc) (? (! (two? rs)) acc (go >rs (add (caup (cup (cap rs))) acc)))   ; reloc = (off kind label)
+                        (: _ (pin seen lbl 1) (>< lbl acc)))
+       (go rs acc) (? (! (two? rs)) acc (go >rs (add <>><rs acc)))   ; reloc = (off kind label); <>><rs = the label field
        (rev (go rels ())))
 
    ; a 24-byte symbol-table entry, and a 24-byte RELA entry.
@@ -78,7 +78,7 @@
     (: (go ns off bacc offs)
         (? (! (two? ns)) `((rev bacc) (rev offs))
            (: bs ((o-strbytes <ns) + `(0))
-              (go >ns (off + (tally bs)) ((rev bs) + bacc) (link off offs))))
+              (go >ns (off + (tally bs)) ((rev bs) + bacc) (>< off offs))))
        (go names 1 `(0) ()))
 
    ; build the whole .o image. textforms/dataforms/nifforms are cgen-obj's split
@@ -130,17 +130,17 @@
        symbytes
         (: fsyms (: (go fs i acc) (? (! (two? fs)) (catall (rev acc))
                                      (go >fs (i + 1)
-                                         (link (o-sym (nthr stroffs i)
+                                         (>< (o-sym (nthr stroffs i)
                                                       (? (member? <fs wknames) 2 1)   ; STB_WEAK: a strong def elsewhere wins
                                                       2 1 (peep tlabels (intern <fs) 0)) acc)))
                     (go funcnames 0 ()))
            gsyms (: (go gs i acc) (? (! (two? gs)) (catall (rev acc))
                                      (go >gs (i + 1)
-                                         (link (o-sym (nthr stroffs (nfun + i)) 1 1 2 (peep dlabels (intern <gs) 0)) acc)))
+                                         (>< (o-sym (nthr stroffs (nfun + i)) 1 1 2 (peep dlabels (intern <gs) 0)) acc)))
                     (go globnames 0 ()))
            esyms (: (go es i acc) (? (! (two? es)) (catall (rev acc))
                                      (go >es (i + 1)
-                                         (link (o-sym (nthr stroffs ((nfun + nglob) + i)) 1 0 0 0) acc)))
+                                         (>< (o-sym (nthr stroffs ((nfun + nglob) + i)) 1 0 0 0) acc)))
                     (go exts 0 ()))
            (catall `((o-sym 0 0 0 0 0)                 ; the NULL symbol
                       (o-sym 0 0 3 1 0)                  ; .text section symbol (STT_SECTION)
@@ -163,12 +163,12 @@
                (? (! (two? rs)) (catall (rev acc))
                   (: r <rs off <r lbl <>>r
                      (? (o-has? wkset lbl)               ; a weak-defined fn: bind its OWN symbol (overridable)
-                         (go >rs (link (o-rela off (peep fnidx lbl 0) r-plt32 -4) acc))
+                         (go >rs (>< (o-rela off (peep fnidx lbl 0) r-plt32 -4) acc))
                         (o-has? dlabels lbl)
-                         (go >rs (link (o-rela off 2 r-pc32 ((peep dlabels lbl 0) - 4)) acc))
+                         (go >rs (>< (o-rela off 2 r-pc32 ((peep dlabels lbl 0) - 4)) acc))
                         (o-has? nlabels lbl)
-                         (go >rs (link (o-rela off 3 r-pc32 ((peep nlabels lbl 0) - 4)) acc))
-                        (go >rs (link (o-rela off (peep extidx lbl 0) r-plt32 -4) acc)))))
+                         (go >rs (>< (o-rela off 3 r-pc32 ((peep nlabels lbl 0) - 4)) acc))
+                        (go >rs (>< (o-rela off (peep extidx lbl 0) r-plt32 -4) acc)))))
               (go trel ()))
            (: (go rs acc)
                (? (! (two? rs)) (catall (rev acc))
@@ -176,19 +176,19 @@
                      (? (member? k '(adrp21 addlo12))
                          (: ty (? (id? k 'adrp21) ra-pghi21 ra-lo12)
                             (? (o-has? wkset lbl)
-                                (go >rs (link (o-rela off (peep fnidx lbl 0) ty 0) acc))
+                                (go >rs (>< (o-rela off (peep fnidx lbl 0) ty 0) acc))
                                (o-has? tlabels lbl)
-                                (go >rs (link (o-rela off 1 ty (peep tlabels lbl 0)) acc))
+                                (go >rs (>< (o-rela off 1 ty (peep tlabels lbl 0)) acc))
                                (o-has? dlabels lbl)
-                                (go >rs (link (o-rela off 2 ty (peep dlabels lbl 0)) acc))
+                                (go >rs (>< (o-rela off 2 ty (peep dlabels lbl 0)) acc))
                                (o-has? nlabels lbl)
-                                (go >rs (link (o-rela off 3 ty (peep nlabels lbl 0)) acc))
-                               (go >rs (link (o-rela off (peep extidx lbl 0) ty 0) acc))))
+                                (go >rs (>< (o-rela off 3 ty (peep nlabels lbl 0)) acc))
+                               (go >rs (>< (o-rela off (peep extidx lbl 0) ty 0) acc))))
                         (id? k 'b26)
                          (: ty (? (aux = 2483027968) ra-call26 ra-jump26)   ; 0x94000000 = bl
                             (? (o-has? wkset lbl)
-                                (go >rs (link (o-rela off (peep fnidx lbl 0) ty 0) acc))
-                               (go >rs (link (o-rela off (peep extidx lbl 0) ty 0) acc))))
+                                (go >rs (>< (o-rela off (peep fnidx lbl 0) ty 0) acc))
+                               (go >rs (>< (o-rela off (peep extidx lbl 0) ty 0) acc))))
                         (scare 'obj-a64-fix k))))
               (go trel ())))
        ; an abs64 pointer out of a DATA-class section (.data or ai_nifs): via the
@@ -199,14 +199,14 @@
             (? (! (two? rs2)) (catall (rev acc))
                (: r <rs2 off <r lbl <>>r ad <>>>r   ; ad = the constant byte offset (&arr[i])
                   (? (o-has? wkset lbl)               ; a weak fn's address in data: via its symbol too
-                      (go >rs2 (link (o-rela off (peep fnidx lbl 0) rabs ad) acc))
+                      (go >rs2 (>< (o-rela off (peep fnidx lbl 0) rabs ad) acc))
                      (o-has? tlabels lbl)
-                      (go >rs2 (link (o-rela off 1 rabs ((peep tlabels lbl 0) + ad)) acc))
+                      (go >rs2 (>< (o-rela off 1 rabs ((peep tlabels lbl 0) + ad)) acc))
                      (o-has? dlabels lbl)
-                      (go >rs2 (link (o-rela off 2 rabs ((peep dlabels lbl 0) + ad)) acc))
+                      (go >rs2 (>< (o-rela off 2 rabs ((peep dlabels lbl 0) + ad)) acc))
                      (o-has? nlabels lbl)
-                      (go >rs2 (link (o-rela off 3 rabs ((peep nlabels lbl 0) + ad)) acc))
-                     (go >rs2 (link (o-rela off (peep extidx lbl 0) rabs ad) acc)))))
+                      (go >rs2 (>< (o-rela off 3 rabs ((peep nlabels lbl 0) + ad)) acc))
+                     (go >rs2 (>< (o-rela off (peep extidx lbl 0) rabs ad) acc)))))
            (go rs ()))
        reldata (reldat1 drel)
        relnif  (reldat1 nrel)

@@ -15,7 +15,7 @@
    elf-hdr  120                                                ; 64-byte ELF header + 56-byte phdr (catall is in holo.l)
    elf-machines (tablet 0)
    _ (foldl (\ _ p (pin elf-machines <p >p)) 0
-        `((link 'x64 62) (link 'amd64 62) (link 'arm64 183) (link 'aarch64 183)))
+        `((>< 'x64 62) (>< 'amd64 62) (>< 'arm64 183) (>< 'aarch64 183)))
 
    ;; the 120-byte header for a single R+X load segment at `base` covering the whole file.
    (elf64-hdr base entry filesz machine)

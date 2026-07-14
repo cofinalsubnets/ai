@@ -22,30 +22,30 @@
    ;; IP0/IP1 scratch (the indexed stores borrow x16) and x18 is platform-reserved. r19..r28 are the
    ;; CALLEE-SAVED bank -- a glaze's args + OVF anchor live here so they survive nested `bl` (call) sites.
    arm64-regs (tablet 0)
-   _ (foldl (\ _ p (pin arm64-regs (cap p) (cup p))) 0
-        (L (link 'sp 31) (link 'fp 29) (link 'lr 30)
-           (link 'r0 0) (link 'r1 1) (link 'r2 2) (link 'r3 3)  (link 'r4 4)
-           (link 'r5 5) (link 'r6 6) (link 'r7 7) (link 'r8 8)  (link 'r9 9)
-           (link 'r10 10) (link 'r11 11) (link 'r12 12) (link 'r13 13) (link 'r14 14) (link 'r15 15)
-           (link 'r19 19) (link 'r20 20) (link 'r21 21) (link 'r22 22) (link 'r23 23) (link 'r24 24)
-           (link 'r25 25) (link 'r26 26) (link 'r27 27) (link 'r28 28)))
+   _ (foldl (\ _ p (pin arm64-regs <p >p)) 0
+        `((>< 'sp 31) (>< 'fp 29) (>< 'lr 30)
+           (>< 'r0 0) (>< 'r1 1) (>< 'r2 2) (>< 'r3 3)  (>< 'r4 4)
+           (>< 'r5 5) (>< 'r6 6) (>< 'r7 7) (>< 'r8 8)  (>< 'r9 9)
+           (>< 'r10 10) (>< 'r11 11) (>< 'r12 12) (>< 'r13 13) (>< 'r14 14) (>< 'r15 15)
+           (>< 'r19 19) (>< 'r20 20) (>< 'r21 21) (>< 'r22 22) (>< 'r23 23) (>< 'r24 24)
+           (>< 'r25 25) (>< 'r26 26) (>< 'r27 27) (>< 'r28 28)))
 
    ;; -- ALU: op -> (reg-reg base word . imm base word | 0 if no immediate form). --
    arm64-alu (tablet 0)
-   _ (foldl (\ _ p (pin arm64-alu (cap p) (cup p))) 0
-        (L (link 'add (L 0x8B000000 0x91000000)) (link 'sub (L 0xCB000000 0xD1000000))
-           (link 'and (L 0x8A000000 0)) (link 'or (L 0xAA000000 0)) (link 'xor (L 0xCA000000 0))
-           (link 'adds (L 0xAB000000 0xB1000000)) (link 'subs (L 0xEB000000 0xF1000000))))   ; the S-variant: set NZCV
+   _ (foldl (\ _ p (pin arm64-alu <p >p)) 0
+        `((>< 'add `(0x8B000000 0x91000000)) (>< 'sub `(0xCB000000 0xD1000000))
+           (>< 'and `(0x8A000000 0)) (>< 'or `(0xAA000000 0)) (>< 'xor `(0xCA000000 0))
+           (>< 'adds `(0xAB000000 0xB1000000)) (>< 'subs `(0xEB000000 0xF1000000))))   ; the S-variant: set NZCV
 
    ;; -- condition codes: IR name -> the A64 cond field (B.cond bits[3:0]). --
    arm64-cc (tablet 0)
-   _ (foldl (\ _ p (pin arm64-cc (cap p) (cup p))) 0
-        (L (link 'eq 0) (link 'ne 1) (link 'ae 2) (link 'below 3) (link 's 4) (link 'ns 5)
-           (link 'vs 6) (link 'vc 7)
+   _ (foldl (\ _ p (pin arm64-cc <p >p)) 0
+        `((>< 'eq 0) (>< 'ne 1) (>< 'ae 2) (>< 'below 3) (>< 's 4) (>< 'ns 5)
+           (>< 'vs 6) (>< 'vc 7)
            ; p/np (x86 parity: ucomisd's unordered bit) alias VS/VC -- FCMP
            ; parks unordered in V, and nothing else here reads p/np
-           (link 'p 6) (link 'np 7)
-           (link 'above 8) (link 'be 9) (link 'ge 10) (link 'lt 11) (link 'gt 12) (link 'le 13)))
+           (>< 'p 6) (>< 'np 7)
+           (>< 'above 8) (>< 'be 9) (>< 'ge 10) (>< 'lt 11) (>< 'gt 12) (>< 'le 13)))
 
    (rn r) (: e (peep arm64-regs r -1) (? (< e 0) (scare 'badreg r) e))
 
@@ -56,7 +56,7 @@
    (arm64-li d imm)
       (: dn (rn d) u (? (< imm 0) (+ imm 18446744073709551616) imm)
          l0 (arm64-lane u 0) l1 (arm64-lane u 1) l2 (arm64-lane u 2) l3 (arm64-lane u 3)
-         (catall (L
+         (catall `(
             (le32 (| 0xD2800000 (| (<< l0 5) dn)))                              ; movz d, l0
             (? (= l1 0) () (le32 (| 0xF2800000 (| (<< 1 21) (| (<< l1 5) dn)))))  ; movk d, l1, lsl 16
             (? (= l2 0) () (le32 (| 0xF2800000 (| (<< 2 21) (| (<< l2 5) dn)))))  ; movk d, l2, lsl 32
@@ -75,7 +75,7 @@
          base (at (peep arm64-alu fop 0) 1)                   ; the (flipped) op's immediate base word (slot 1 of its alu row)
          (? (<= pos 4095) (alu-rri base d a pos)
             (&& (<= pos 16777215) (member? fop '(add sub)))   ; hi12 shifted (LSL #12, bit 22), then the low tail off d
-             (catall (L (alu-rri (| base 0x400000) d a (>> pos 12))                   ; (the S-forms stay single: a split
+             (catall `((alu-rri (| base 0x400000) d a (>> pos 12))                   ; (the S-forms stay single: a split
                         (? (= (% pos 4096) 0) () (alu-rri base d d (% pos 4096)))))   ;  would read the tail's flags)
             (scare 'imm12-range imm)))
    ;; a logical (bitmask) immediate -> the N:immr:imms field packed at bits [22:10]. the full encoding
@@ -103,7 +103,7 @@
 
    (arm64-imul d a b)                                         ; madd d, a, b, xzr  (= mul); no imm form
       (? (reg? b) (: dn (rn d) an (rn a) bn (rn b) (le32 (| 0x9B007C00 (| (<< bn 16) (| (<< an 5) dn)))))
-         (scare 'arm64-mul-imm (L 'imul d a b)))
+         (scare 'arm64-mul-imm `('imul d a b)))
 
    ;; loads/stores: LDR/STR scaled (offset a multiple of 8, unsigned) else LDUR/STUR unscaled (signed
    ;; 9-bit) else the FAR lane -- the offset materializes in x16 (IP0, outside the IR file) and the
@@ -115,7 +115,7 @@
          _ (? (< u 4294967296) 0 (scare 'mem-range off))
          _ (? (= bn 16) (scare 'far-base-x16 off) 0)         ; the base would be clobbered mid-build
          _ (? (= bn 31) (scare 'far-base-sp off) 0)          ; shifted-reg add reads Rn=31 as XZR, not SP
-         (catall (L
+         (catall `(
             (le32 (| 0xD2800000 (| (<< l0 5) 16)))                                   ; movz x16, l0
             (? (= l1 0) () (le32 (| 0xF2A00000 (| (<< l1 5) 16))))                   ; movk x16, l1, lsl 16
             (le32 (| (? (< off 0) 0xCB000000 0x8B000000) (| (<< 16 16) (| (<< bn 5) 16))))   ; add/sub x16, base, x16
@@ -155,8 +155,8 @@
          base (? (= w 1) 0xD3401C00 (= w 2) 0xD3403C00 0xD3407C00)
          (le32 (| base (| (<< dn 5) dn))))
    (arm64-shiftv op d c)                                      ; lslv/lsrv/asrv Xd, Xd, Xc -- count pinned to r1 (the IR contract)
-      (: _ (? (reg-eq c 'r1) 0 (scare 'shiftv-count-not-r1 (L op d c)))
-         _ (? (reg-eq d 'r1) (scare 'shiftv-dst-is-r1 (L op d c)) 0)
+      (: _ (? (reg-eq c 'r1) 0 (scare 'shiftv-count-not-r1 `(op d c)))
+         _ (? (reg-eq d 'r1) (scare 'shiftv-dst-is-r1 `(op d c)) 0)
          dn (rn d) cn (rn c)
          base (? (= op 'shlv) 0x9AC02000 (= op 'shrv) 0x9AC02400 0x9AC02800)
          (le32 (| base (| (<< cn 16) (| (<< dn 5) dn)))))
@@ -172,17 +172,17 @@
 
    ;; control: B/BL carry a 26-bit offset (bits[25:0]); B.cond a 19-bit one (bits[23:5]). the offset
    ;; is pc-relative to the instruction's OWN address, in units of 4. the fix is the whole word.
-   (arm64-jmp  label)    (L (fix 4 'b26 label 0x14000000))
-   (arm64-call label)    (L (fix 4 'b26 label 0x94000000))
+   (arm64-jmp  label)    `((fix 4 'b26 label 0x14000000))
+   (arm64-call label)    `((fix 4 'b26 label 0x94000000))
    ;; la: ADRP + ADD -- the page-relative pair (+-4GB), one fixup each. ADR alone
    ;; (+-1MB, and the patch masks silently) can't span ai.c-scale images, and the
    ;; pair is what the ELF reloc vocabulary speaks (PG_HI21 + ABS_LO12_NC), so the
    ;; .o path rides the same lowering as the exe/native one.
    (arm64-la d label)    (: dn (rn d)
-                            (L (fix 4 'adrp21 label (| 0x90000000 dn))
+                            `((fix 4 'adrp21 label (| 0x90000000 dn))
                                (fix 4 'addlo12 label (| 0x91000000 (| (<< dn 5) dn)))))
    (arm64-br cond label) (: cc (peep arm64-cc cond -1) _ (? (< cc 0) (scare 'badcc cond) 0)
-                            (L (fix 4 'b19 label (| 0x54000000 cc))))
+                            `((fix 4 'b19 label (| 0x54000000 cc))))
    ;; jmpr: BR Xn -- branch to the address held in a register (the glaze's Continue / deopt tail).
    (arm64-jmpr d) (: dn (rn d) (le32 (| 0xD61F0000 (<< dn 5))))
    ;; callr: BLR Xn -- call the address held in a register (a call through a function pointer),
@@ -195,10 +195,10 @@
    ;; the scratch `t` MUST differ from a, b, and d.
    (arm64-mulo d a b t lbl)
       (: dn (rn d) an (rn a) bn (rn b) tn (rn t)
-         (catall (L (le32 (| 0x9B407C00 (| (<< bn 16) (| (<< an 5) tn))))   ; smulh t, a, b   (high 64)
+         (catall `((le32 (| 0x9B407C00 (| (<< bn 16) (| (<< an 5) tn))))   ; smulh t, a, b   (high 64)
                     (le32 (| 0x9B007C00 (| (<< bn 16) (| (<< an 5) dn))))   ; mul   d, a, b   (low 64)
                     (le32 (| 0xEB80FC1F (| (<< dn 16) (<< tn 5))))          ; subs  xzr, t, d, asr #63  (cmp)
-                    (L (fix 4 'b19 lbl 0x54000001)))))                      ; b.ne  lbl
+                    `((fix 4 'b19 lbl 0x54000001)))))                      ; b.ne  lbl
    ;; set: d <- (cond) ? 1 : 0  --  CSET Xd, cond = CSINC Xd, xzr, xzr, invert(cond); inverting a
    ;; cond is XOR 1 (the A64 cond encoding pairs eq/ne, vs/vc, lt/ge, gt/le on bit 0).
    (arm64-set cond d)
@@ -224,12 +224,12 @@
    (arm64-div d a b)   (: dn (rn d) an (rn a) bn (rn b) (le32 (| 0x9AC00C00 (| (<< bn 16) (| (<< an 5) dn)))))   ; sdiv d, a, b
    (arm64-rem d a b t)
       (: dn (rn d) an (rn a) bn (rn b) tn (rn t)
-         (catall (L (le32 (| 0x9AC00C00 (| (<< bn 16) (| (<< an 5) tn))))                   ; sdiv t, a, b
+         (catall `((le32 (| 0x9AC00C00 (| (<< bn 16) (| (<< an 5) tn))))                   ; sdiv t, a, b
                     (le32 (| 0x9B008000 (| (<< bn 16) (| (<< an 10) (| (<< tn 5) dn))))))))  ; msub d, t, b, a  ->  a - t*b
    (arm64-udiv d a b)  (: dn (rn d) an (rn a) bn (rn b) (le32 (| 0x9AC00800 (| (<< bn 16) (| (<< an 5) dn)))))   ; udiv d, a, b
    (arm64-urem d a b t)
       (: dn (rn d) an (rn a) bn (rn b) tn (rn t)
-         (catall (L (le32 (| 0x9AC00800 (| (<< bn 16) (| (<< an 5) tn))))                   ; udiv t, a, b
+         (catall `((le32 (| 0x9AC00800 (| (<< bn 16) (| (<< an 5) tn))))                   ; udiv t, a, b
                     (le32 (| 0x9B008000 (| (<< bn 16) (| (<< an 10) (| (<< tn 5) dn))))))))  ; msub d, t, b, a
    ;; indexed addressing: aarch64 has no [base + ix*scale + disp] single insn, so synthesize. ADD makes
    ;; base + ix*scale (LSL #log2 scale); ldx/leax borrow the dest as the address temp, stx uses x16 (IP0,
@@ -237,20 +237,20 @@
    (arm64-shiftamt scale) (? (= scale 1) 0 (= scale 2) 1 (= scale 4) 2 (= scale 8) 3 (scare 'badscale scale))
    (arm64-addsh dn bn ixn amt) (le32 (| 0x8B000000 (| (<< ixn 16) (| (<< amt 10) (| (<< bn 5) dn)))))   ; add Xdn, Xbn, Xixn, lsl #amt
    (arm64-ldx d base index scale disp)
-      (: dn (rn d) (catall (L (arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale)) (arm64-ld d d disp))))
+      (: dn (rn d) (catall `((arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale)) (arm64-ld d d disp))))
    (arm64-leax d base index scale disp)
-      (: dn (rn d) (catall (L (arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale)) (? (= disp 0) () (arm64-addsub-imm 'add d d disp)))))
+      (: dn (rn d) (catall `((arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale)) (? (= disp 0) () (arm64-addsub-imm 'add d d disp)))))
    (arm64-stx base index scale disp s)
-      (catall (L (arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))               ; add x16, base, index lsl #amt
+      (catall `((arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))               ; add x16, base, index lsl #amt
                  (arm64-mem-r 0xF8000000 0xF9000000 (rn s) 16 disp)))                         ; str s, [x16, #disp]
    ;; byte indexed load/store (the string/cask/map byte lanes). LDRB zero-extends to W (clearing the top
    ;; 32 of X, == x86 movzx); STRB stores the low byte. disp is a raw BYTE offset (no scaling), unsigned
    ;; 12-bit. Same address synthesis as ldx/stx: ldxb borrows the dest as the address temp, stxb uses x16.
    (arm64-ldxb d base index scale disp)                                                       ; d = (byte)[base + index*scale + disp]
-      (: dn (rn d) (catall (L (arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale))    ; add Xd, base, index lsl #amt
+      (: dn (rn d) (catall `((arm64-addsh dn (rn base) (rn index) (arm64-shiftamt scale))    ; add Xd, base, index lsl #amt
                              (le32 (| 0x39400000 (| (<< disp 10) (| (<< dn 5) dn)))))))         ; ldrb Wd, [Xd, #disp]
    (arm64-stxb base index scale disp s)                                                       ; [base + index*scale + disp] = (byte)s
-      (catall (L (arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))                 ; add x16, base, index lsl #amt
+      (catall `((arm64-addsh 16 (rn base) (rn index) (arm64-shiftamt scale))                 ; add x16, base, index lsl #amt
                  (le32 (| 0x39000000 (| (<< disp 10) (| (<< 16 5) (rn s)))))))                 ; strb Ws, [x16, #disp]
 
    ;; -- scalar-double FP (the float glaze lane). f0..f15 -> v0..v15 (d-register view), a SEPARATE file
@@ -262,8 +262,8 @@
                                                                                                ; temps: no arg, no callee-saved half)
    (frn r) (: e (peep arm64-fregs r -1) (? (< e 0) (scare 'badfreg r) e))
    arm64-fp3 (tablet 0)                                                                         ; SSE arith mnemonic -> the scalar-double base word (Dd = Dn OP Dm)
-   _ (foldl (\ _ p (pin arm64-fp3 (cap p) (cup p))) 0
-        (L (link 'addsd 0x1E602800) (link 'subsd 0x1E603800) (link 'mulsd 0x1E600800) (link 'divsd 0x1E601800)))
+   _ (foldl (\ _ p (pin arm64-fp3 <p >p)) 0
+        `((>< 'addsd 0x1E602800) (>< 'subsd 0x1E603800) (>< 'mulsd 0x1E600800) (>< 'divsd 0x1E601800)))
    (arm64-fp3op op d s) (: dn (frn d) sn (frn s) (le32 (| (peep arm64-fp3 op 0) (| (<< sn 16) (| (<< dn 5) dn)))))   ; Dd = Dd OP Ds
    (arm64-fmov  d s) (: dn (frn d) sn (frn s) (le32 (| 0x1E604000 (| (<< sn 5) dn))))           ; FMOV Dd, Ds
    (arm64-fcmp  a b) (: an (frn a) bn (frn b) (le32 (| 0x1E602000 (| (<< bn 16) (<< an 5)))))   ; FCMP Da, Db (sets NZCV; unordered -> VS)
@@ -290,7 +290,7 @@
    (arm64-xorpd d s) (: dn (frn d) sn (frn s) (le32 (| 0x2E201C00 (| (<< sn 16) (| (<< dn 5) dn)))))   ; EOR Vd.8B, Vd.8B, Vs.8B (zero a double when d==s; the grid's fvar-init)
 
    (arm64-lower ins)
-      (: op (cap ins)
+      (: op <ins
          (? (= op 'li)   (arm64-li   (at ins 1) (at ins 2))
             (= op 'mov)  (arm64-mov  (at ins 1) (at ins 2))
             (= op 'cmp)  (arm64-cmp  (at ins 1) (at ins 2))

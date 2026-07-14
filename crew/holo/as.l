@@ -14,20 +14,20 @@
 (: ;; --- the physical register file: name -> (enc width-in-bytes). the low 8 have irregular
    ;; byte/word names, so spell the rows; r8..r15 are uniform (rN / rNd / rNw / rNb). ---
    as-regs (tablet 0)
-   (as-reg! nm e w) (pin as-regs (intern nm) (L e w))
+   (as-reg! nm e w) (pin as-regs (intern nm) `(e w))
    _ (foldl (\ _ row
                (: e (at row 0)
                   _ (as-reg! (at row 1) e 8) _ (as-reg! (at row 2) e 4)
                   _ (as-reg! (at row 3) e 2) _ (as-reg! (at row 4) e 1) 0))
-        0 (L (L 0 "rax" "eax" "ax" "al")  (L 1 "rcx" "ecx" "cx" "cl")
-             (L 2 "rdx" "edx" "dx" "dl")  (L 3 "rbx" "ebx" "bx" "bl")
-             (L 4 "rsp" "esp" "sp" "spl") (L 5 "rbp" "ebp" "bp" "bpl")
-             (L 6 "rsi" "esi" "si" "sil") (L 7 "rdi" "edi" "di" "dil")))
+        0 `(`(0 "rax" "eax" "ax" "al")  `(1 "rcx" "ecx" "cx" "cl")
+             `(2 "rdx" "edx" "dx" "dl")  `(3 "rbx" "ebx" "bx" "bl")
+             `(4 "rsp" "esp" "sp" "spl") `(5 "rbp" "ebp" "bp" "bpl")
+             `(6 "rsi" "esi" "si" "sil") `(7 "rdi" "edi" "di" "dil")))
    _ (foldl (\ _ i
                (: n (+ "r" (show i))
                   _ (as-reg! n i 8) _ (as-reg! (+ n "d") i 4)
                   _ (as-reg! (+ n "w") i 2) _ (as-reg! (+ n "b") i 1) 0))
-        0 (L 8 9 10 11 12 13 14 15))
+        0 `(8 9 10 11 12 13 14 15))
 
    ;; --- byte/number reading: AT&T immediates are decimal, 0x-hex, optionally signed. ---
    (as-hexd c) (? (&& (>= c 48) (<= c 57)) (- c 48)
@@ -53,13 +53,13 @@
    (as-decomment s) (: h (as-idx s 35)                       ; '#' starts a comment to end of line
       (? (< h 0) s (snip s 0 h)))
    (as-lines s) (: n (tally s)                               ; split on newline
-      ((: (g i st acc) (? (>= i n) (rev (link (snip s st n) acc))
-                          (= (s i) 10) (g (+ i 1) (+ i 1) (link (snip s st i) acc))
+      ((: (g i st acc) (? (>= i n) (rev (>< (snip s st n) acc))
+                          (= (s i) 10) (g (+ i 1) (+ i 1) (>< (snip s st i) acc))
                           (g (+ i 1) st acc))) 0 0 ()))
    ;; split a string on a byte, trimming each field (used for the operand list on ',').
    (as-split s c) (: n (tally s)
-      ((: (g i st acc) (? (>= i n) (rev (link (as-trim (snip s st n)) acc))
-                          (= (s i) c) (g (+ i 1) (+ i 1) (link (as-trim (snip s st i)) acc))
+      ((: (g i st acc) (? (>= i n) (rev (>< (as-trim (snip s st n)) acc))
+                          (= (s i) c) (g (+ i 1) (+ i 1) (>< (as-trim (snip s st i)) acc))
                           (g (+ i 1) st acc))) 0 0 ()))
    ;; the head mnemonic and the operand-string of an instruction line.
    (as-mnem s)  (: i (as-idx s 32) j (as-idx s 9)
@@ -75,100 +75,100 @@
       (? (as-has? t 40)                                       ; contains '(' -> a memory operand
          (: op (as-idx t 40) inner (snip t (+ op 1) (- (tally t) 1))   ; strip the ')'
             disp (snip t 0 op)
-            (? (= inner "%rip") (L 'rip (intern disp))        ; sym(%rip)
+            (? (= inner "%rip") `('rip (intern disp))        ; sym(%rip)
                (: r (as-reglook (snip inner 1 (tally inner)))  ; disp(%reg) / (%reg)
-                  (L 'mem (cap r) (? (= 0 (tally disp)) 0 (as-num disp))))))
-         (= (t 0) 37) (link 'rg (as-reglook (snip t 1 (tally t))))    ; %reg
-         (= (t 0) 36) (L 'im (as-num (snip t 1 (tally t))))           ; $imm
-         (as-numish? t) (L 'im (as-num t))                           ; a bare number
-         (L 'lbl (intern t)))                                        ; a symbol (branch/call target)
+                  `('mem <r (? (= 0 (tally disp)) 0 (as-num disp))))))
+         (= (t 0) 37) (>< 'rg (as-reglook (snip t 1 (tally t))))    ; %reg
+         (= (t 0) 36) `('im (as-num (snip t 1 (tally t))))           ; $imm
+         (as-numish? t) `('im (as-num t))                           ; a bare number
+         `('lbl (intern t)))                                        ; a symbol (branch/call target)
    (as-ops rest) (? (= 0 (tally rest)) () (map as-operand (as-split rest 44)))
 
    ;; --- encoder primitives (physical, width-aware; x64.l is the form reference). ---
    (as-hi n) (>> n 3)  (as-lo n) (& n 7)
    (as-rex w r x b) (? (|| (> w 0) (|| (> r 0) (|| (> x 0) (> b 0))))   ; emit REX only when a bit is set
-                       (L (| 64 (| (<< w 3) (| (<< r 2) (| (<< x 1) b))))) ())
+                       `((| 64 (| (<< w 3) (| (<< r 2) (| (<< x 1) b))))) ())
    (as-mrm m r rm) (| (<< m 6) (| (<< (& r 7) 3) (& rm 7)))
    (as-w8? o) (= (at o 2) 8)                                  ; a register operand is 64-bit?
    (as-regn o) (at o 1)                                       ; its encoding number
 
    ;; the ALU group: mnemonic -> (rr-opcode  imm-ext). reg field carries the source (AT&T src,dst).
    as-alu (tablet 0)
-   _ (foldl (\ _ p (pin as-alu (cap p) (cup p))) 0
-        (L (link 'add (L 1 0)) (link 'or (L 9 1)) (link 'and (L 33 4)) (link 'sub (L 41 5))
-           (link 'xor (L 49 6)) (link 'cmp (L 57 7))))
+   _ (foldl (\ _ p (pin as-alu <p >p)) 0
+        `((>< 'add `(1 0)) (>< 'or `(9 1)) (>< 'and `(33 4)) (>< 'sub `(41 5))
+           (>< 'xor `(49 6)) (>< 'cmp `(57 7))))
    ;; the condition codes: jcc mnemonic -> 0F 8x low byte.
    as-cc (tablet 0)
-   _ (foldl (\ _ p (pin as-cc (cap p) (cup p))) 0
-        (L (link 'je 132) (link 'jz 132) (link 'jne 133) (link 'jnz 133) (link 'jl 140) (link 'jge 141)
-           (link 'jle 142) (link 'jg 143) (link 'jb 130) (link 'jc 130) (link 'jae 131) (link 'jnc 131)
-           (link 'jbe 134) (link 'ja 135) (link 'js 136) (link 'jns 137) (link 'jo 128) (link 'jno 129)
-           (link 'jp 138) (link 'jnp 139)))
+   _ (foldl (\ _ p (pin as-cc <p >p)) 0
+        `((>< 'je 132) (>< 'jz 132) (>< 'jne 133) (>< 'jnz 133) (>< 'jl 140) (>< 'jge 141)
+           (>< 'jle 142) (>< 'jg 143) (>< 'jb 130) (>< 'jc 130) (>< 'jae 131) (>< 'jnc 131)
+           (>< 'jbe 134) (>< 'ja 135) (>< 'js 136) (>< 'jns 137) (>< 'jo 128) (>< 'jno 129)
+           (>< 'jp 138) (>< 'jnp 139)))
 
    ;; alu $imm,%d and alu %s,%d.  d is the r/m, s the reg field.
    (as-alu-ri ext d w imm)
-      (? (fits8 imm) (cat (as-rex (? (= w 8) 1 0) 0 0 (as-hi d)) (L 131 (as-mrm 3 ext d) (byte imm)))
-         (catall (L (as-rex (? (= w 8) 1 0) 0 0 (as-hi d)) (L 129 (as-mrm 3 ext d)) (le32 imm))))
+      (? (fits8 imm) (+ (as-rex (? (= w 8) 1 0) 0 0 (as-hi d)) `(131 (as-mrm 3 ext d) (byte imm)))
+         (catall `((as-rex (? (= w 8) 1 0) 0 0 (as-hi d)) `(129 (as-mrm 3 ext d)) (le32 imm))))
    (as-alu-rr rr d w s)
-      (cat (as-rex (? (= w 8) 1 0) (as-hi s) 0 (as-hi d)) (L rr (as-mrm 3 s d)))
+      (+ (as-rex (? (= w 8) 1 0) (as-hi s) 0 (as-hi d)) `(rr (as-mrm 3 s d)))
 
    ;; mov: reg<-reg (89), reg<-imm (b8+rd / c7 /0 / movabs by width and range).
-   (as-mov-rr d w s) (cat (as-rex (? (= w 8) 1 0) (as-hi s) 0 (as-hi d)) (L 137 (as-mrm 3 s d)))
+   (as-mov-rr d w s) (+ (as-rex (? (= w 8) 1 0) (as-hi s) 0 (as-hi d)) `(137 (as-mrm 3 s d)))
    (as-mov-ri d w imm)
       (? (= w 8)
-         (? (fits32 imm) (catall (L (as-rex 1 0 0 (as-hi d)) (L 199 (as-mrm 3 0 d)) (le32 imm)))    ; c7 /0 id
-            (catall (L (as-rex 1 0 0 (as-hi d)) (L (| 184 (as-lo d))) (le64 imm))))                ; movabs
-         (catall (L (as-rex 0 0 0 (as-hi d)) (L (| 184 (as-lo d))) (le32 imm))))                   ; b8+rd id (32-bit)
+         (? (fits32 imm) (catall `((as-rex 1 0 0 (as-hi d)) `(199 (as-mrm 3 0 d)) (le32 imm)))    ; c7 /0 id
+            (catall `((as-rex 1 0 0 (as-hi d)) `((| 184 (as-lo d))) (le64 imm))))                ; movabs
+         (catall `((as-rex 0 0 0 (as-hi d)) `((| 184 (as-lo d))) (le32 imm))))                   ; b8+rd id (32-bit)
 
    ;; --- the per-instruction encoders (each -> a byte/fix item list). ---
    (as-2 mn a b)                                             ; two-operand
-      (: ka (cap a) kb (cap b)
+      (: ka <a kb <b
          (? (= mn 'mov)
-            (? (&& (= ka 'rg) (= kb 'rg)) (as-mov-rr (as-regn b) (at (cup b) 1) (as-regn a))
-               (&& (= ka 'im) (= kb 'rg)) (as-mov-ri (as-regn b) (at (cup b) 1) (at a 1))
+            (? (&& (= ka 'rg) (= kb 'rg)) (as-mov-rr (as-regn b) (at >b 1) (as-regn a))
+               (&& (= ka 'im) (= kb 'rg)) (as-mov-ri (as-regn b) (at >b 1) (at a 1))
                (&& (= ka 'rip) (= kb 'rg)) (as-lea (at a 1) (as-regn b))                     ; lea alias? no -- mov from rip is a load, M2
-               (scare 'as-mov-form (L a b)))
+               (scare 'as-mov-form `(a b)))
             (= mn 'lea)
             (? (&& (= ka 'rip) (= kb 'rg)) (as-lea (at a 1) (as-regn b))
-               (scare 'as-lea-form (L a b)))
+               (scare 'as-lea-form `(a b)))
             (= mn 'test)
             (? (&& (= ka 'rg) (= kb 'rg))
-               (cat (as-rex (? (as-w8? a) 1 0) (as-hi (as-regn a)) 0 (as-hi (as-regn b)))
-                    (L 133 (as-mrm 3 (as-regn a) (as-regn b))))
-               (scare 'as-test-form (L a b)))
+               (+ (as-rex (? (as-w8? a) 1 0) (as-hi (as-regn a)) 0 (as-hi (as-regn b)))
+                    `(133 (as-mrm 3 (as-regn a) (as-regn b))))
+               (scare 'as-test-form `(a b)))
             (: alu (peep as-alu mn ())                       ; the ALU group
                (? (! (two? alu)) (scare 'as-op2 mn)
                   (= kb 'rg)
-                  (: d (as-regn b) w (at (cup b) 1)
+                  (: d (as-regn b) w (at >b 1)
                      (? (= ka 'rg) (as-alu-rr (at alu 0) d w (as-regn a))
                         (= ka 'im) (as-alu-ri (at alu 1) d w (at a 1))
-                        (scare 'as-alu-src (L a b))))
-                  (scare 'as-alu-dst (L a b))))))
-   (as-lea sym d) (catall (L (as-rex 1 (as-hi d) 0 0) (L 141 (as-mrm 0 (as-lo d) 5)) (L (fix 4 'rel32 sym 0))))
+                        (scare 'as-alu-src `(a b))))
+                  (scare 'as-alu-dst `(a b))))))
+   (as-lea sym d) (catall `((as-rex 1 (as-hi d) 0 0) `(141 (as-mrm 0 (as-lo d) 5)) `((fix 4 'rel32 sym 0))))
    (as-1 mn a)                                               ; one-operand
-      (: k (cap a)
-         (? (= mn 'push) (: n (as-regn a) (? (>= n 8) (L 65 (| 80 (as-lo n))) (L (| 80 n))))
-            (= mn 'pop)  (: n (as-regn a) (? (>= n 8) (L 65 (| 88 (as-lo n))) (L (| 88 n))))
+      (: k <a
+         (? (= mn 'push) (: n (as-regn a) (? (>= n 8) `(65 (| 80 (as-lo n))) `((| 80 n))))
+            (= mn 'pop)  (: n (as-regn a) (? (>= n 8) `(65 (| 88 (as-lo n))) `((| 88 n))))
             (member? mn '(neg not inc dec))
             (: n (as-regn a) w (at a 2)
                opc (? (member? mn '(inc dec)) 255 247)
                ext (? (= mn 'neg) 3 (= mn 'not) 2 (= mn 'inc) 0 1)
-               (cat (as-rex (? (= w 8) 1 0) 0 0 (as-hi n)) (L opc (as-mrm 3 ext n))))
+               (+ (as-rex (? (= w 8) 1 0) 0 0 (as-hi n)) `(opc (as-mrm 3 ext n))))
             (member? mn '(call jmp))
-            (: sym (at a 1) (? (= mn 'call) (L 232 (fix 4 'rel32 sym 0)) (L 233 (fix 4 'rel32 sym 0))))
-            (peep as-cc mn ()) (: sym (at a 1) (L 15 (peep as-cc mn 0) (fix 4 'rel32 sym 0)))
+            (: sym (at a 1) (? (= mn 'call) `(232 (fix 4 'rel32 sym 0)) `(233 (fix 4 'rel32 sym 0))))
+            (peep as-cc mn ()) (: sym (at a 1) `(15 (peep as-cc mn 0) (fix 4 'rel32 sym 0)))
             (scare 'as-op1 mn)))
    (as-0 mn)                                                 ; nullary
-      (? (= mn 'ret) (L 195) (= mn 'nop) (L 144) (= mn 'syscall) (L 15 5)
-         (= mn 'leave) (L 201) (member? mn '(cqo cqto)) (L 72 153) (member? mn '(cdq cdqe)) (L 153)
-         (= mn 'hlt) (L 244) (scare 'as-op0 mn))
+      (? (= mn 'ret) `(195) (= mn 'nop) `(144) (= mn 'syscall) `(15 5)
+         (= mn 'leave) `(201) (member? mn '(cqo cqto)) `(72 153) (member? mn '(cdq cdqe)) `(153)
+         (= mn 'hlt) `(244) (scare 'as-op0 mn))
 
    (as-instr mn ops)
       (: n (tally ops)
          (? (= n 0) (as-0 mn)
-            (= n 1) (as-1 mn (cap ops))
-            (= n 2) (as-2 mn (cap ops) (cap (cup ops)))
-            (scare 'as-arity (L mn n))))
+            (= n 1) (as-1 mn <ops)
+            (= n 2) (as-2 mn <ops <>ops)
+            (scare 'as-arity `(mn n))))
 
    ;; --- pass one: walk the lines, encode each, assign addresses, record labels + .globl. returns
    ;;     a tablet { 'items 'labels 'globls }. label defs emit no bytes; directives steer. ---
@@ -177,18 +177,18 @@
          (go lines addr items)
             (? (! (two? lines)) (: _ (pin st 'items (rev items)) _ (pin st 'labels labels)
                                    _ (pin st 'globls globls) st)
-               (: raw (as-trim (as-decomment (cap lines)))
-                  (? (= 0 (tally raw)) (go (cup lines) addr items)
+               (: raw (as-trim (as-decomment <lines))
+                  (? (= 0 (tally raw)) (go >lines addr items)
                      (= (raw (- (tally raw) 1)) 58)                  ; "name:" -> a label
-                     (: _ (pin labels (intern (snip raw 0 (- (tally raw) 1))) addr) (go (cup lines) addr items))
+                     (: _ (pin labels (intern (snip raw 0 (- (tally raw) 1))) addr) (go >lines addr items))
                      (= (raw 0) 46)                                  ; ".directive ..."
                      (: mn (as-mnem raw) rest (as-rest raw)
-                        (? (= mn ".globl") (: _ (pin globls (intern rest) 1) (go (cup lines) addr items))
+                        (? (= mn ".globl") (: _ (pin globls (intern rest) 1) (go >lines addr items))
                            (member? mn '(".text" ".data" ".section" ".p2align" ".align" ".type" ".size" ".file" ".ident"))
-                           (go (cup lines) addr items)                ; M1: single .text section, ignore layout dirs
+                           (go >lines addr items)                ; M1: single .text section, ignore layout dirs
                            (scare 'as-directive mn)))
                      (: mn (intern (as-mnem raw)) chunk (as-instr mn (as-ops (as-rest raw)))
-                        (go (cup lines) (+ addr (chunk-len chunk)) (cat (rev chunk) items))))))
+                        (go >lines (+ addr (chunk-len chunk)) (+ (rev chunk) items))))))
          (go (as-lines src) 0 ()))
 
    ;; --- resolve intra-section fixups (near rel32) to final .text bytes, and the hex for goldens. ---

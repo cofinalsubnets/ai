@@ -32,11 +32,11 @@
    ;; `span`; `+` joins either onto a string via the byte law). --
    (txjoin ss) (foldl (\ a x (+ a x)) "" ss)
    (txint s)   (foldl (\ a i (+ (* a 10) (- (s i) 48))) 0 (jot (tally s)))
-   (txnum p)   (? (= (cap p) "-") (- 0 (txint (txjoin (cup p)))) (txint (txjoin p)))
+   (txnum p)   (? (= <p "-") (- 0 (txint (txjoin >p))) (txint (txjoin p)))
 
    ;; -- the line grammar. a token is at least one char (so `many` can't twirl on the empty match). --
-   txtsym (pmap (\ x (L (intern (txjoin x)))) (seq (one txidc?) (span txidc?)))
-   txtnum (pmap (\ x (L (txnum x))) (seq (opt (lit "-")) (seq (one txdig?) (span txdig?))))
+   txtsym (pmap (\ x `((intern (txjoin x)))) (seq (one txidc?) (span txidc?)))
+   txtnum (pmap (\ x `((txnum x))) (seq (opt (lit "-")) (seq (one txdig?) (span txdig?))))
    txop   (alt txtnum txtsym)                                   ; an operand: number first, else symbol
    txgap  (skip (span txsep?))                                  ; a run of spaces/commas, dropped
    txline (seq txtsym (many (seq txgap txop)))                  ; head symbol then operands -> one form
@@ -50,8 +50,8 @@
       (snip s a b))
    (txsplit s) (: n (tally s)
       ((: (g i start acc)
-          (? (>= i n)     (rev (link (snip s start n) acc))
-             (= (s i) 10) (g (+ i 1) (+ i 1) (link (snip s start i) acc))
+          (? (>= i n)     (rev (>< (snip s start n) acc))
+             (= (s i) 10) (g (+ i 1) (+ i 1) (>< (snip s start i) acc))
              (g (+ i 1) start acc)))
        0 0 ()))
 
@@ -62,7 +62,7 @@
                 (: clean (txtrim (txdecomment ln))
                    (? (= 0 (tally clean)) acc
                       (: form (parse txline clean)
-                         (? (two? form) (link form acc) (scare 'asm-text clean))))))
+                         (? (two? form) (>< form acc) (scare 'asm-text clean))))))
              () (txsplit src))
 
    ;; -- assemble straight from text. --
