@@ -160,7 +160,8 @@
             (scare 'as-op1 mn)))
    (as-0 mn)                                                 ; nullary
       (? (= mn 'ret) `(195) (= mn 'nop) `(144) (= mn 'syscall) `(15 5)
-         (= mn 'leave) `(201) (member? mn '(cqo cqto)) `(72 153) (member? mn '(cdq cdqe)) `(153)
+         (= mn 'leave) `(201) (member? mn '(cqo cqto)) `(72 153)
+         (= mn 'cdq) `(153) (= mn 'cdqe) `(72 152)             ; cdq is 99, cdqe is REX.W+98 (eax->rax) -- NOT the same byte
          (= mn 'hlt) `(244) (scare 'as-op0 mn))
 
    (as-instr mn ops)

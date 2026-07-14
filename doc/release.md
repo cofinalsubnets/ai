@@ -79,7 +79,18 @@ tablet, so a stray `(pin holo …)` can no longer poison a baked service. See [[
   in crew/holo/{obj,arm64,link}.l + crew/cc/ commits, to avoid the collision.
 - **kore-as-`as` dispatch (gwen 2026-07-14):** kore invoked as `as` execs the holo assembler binary —
   same execvp pattern as kore-as-`cc`→mooncc (binary name a small open item, cf. mooncc).
-- [ ] wire the M1 slice into the kore/holo cat + `test_as` gate (byte-diff vs `/usr/bin/as` + link-and-run), test_all
+- [x] **`test_as` byte-diff gate LANDED 2026-07-14** — `crew/holo/astest.l` (33-instr straight-line battery)
+      byte-identical to `/usr/bin/as`, frozen goldens (no shell-out at gate time), same `", 0 failed"` sentinel
+      as `test_holo`; wired into `.PHONY` + `test_all`. Mirrors `test/holo.l`'s `(= golden (as-hex src))` style.
+      Found + fixed an as.l bug along the way: `cdqe` emitted `99` (conflated with `cdq`) — it's REX.W+98 = `4898`.
+      **KNOWN as.l gaps documented in astest.l's header (M2, correctly kept out of the byte-identical battery):**
+      no AT&T size suffixes (base mnemonic + width-from-register only); branch relaxation (jmp/jcc-to-near-label);
+      the accumulator short forms (`add $imm32,%rax` → GAS's `05`); external-symbol call/lea need the reloc path.
+- [ ] **link-and-run + kore/holo cat integration — DEFERRED (blocked, confirmed 2026-07-14).** as.l emits already-
+      lowered `items` (bytes + `(fix ..)`), but `objelf` (obj.l:90) takes holo IR and re-`lay`s it; the `o-walk`
+      seam is internal. Reaching the `.o`→`ldlink`→`ld-write` path needs the `objelf-raw` factoring — which lives
+      in `crew/holo/obj.l`, the arm64-churn collision zone the doc already holds `as` integration behind. So the
+      link-and-run half of gwen's bar waits for the arm64 batch (with `objelf-raw` + the as.l bare→`holo`-book migration)
 
 **reef (vcs)** — the design decisions to make first
 - [x] pick the minimum viable verb set — `record` · `sync` · `log` · `diff` + `hatch` (per reef.md; `sync` in over `apply` — the near-term job is multi-machine tip-union)

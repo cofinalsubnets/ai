@@ -24,7 +24,7 @@ export AI_NO_IMAGE := 1
 
 .PHONY: all install uninstall clean distclean
 .PHONY: host kernel wasm ai0
-.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_uuwm uuwm test_gc test_hostnif test_doc test_glaze test_sat test_holo test_lux test_extract test_arm64 test_wake
+.PHONY: test test_host test_all test_tools test_ai0 test_wasm test_proof test_gen test_uugen test_uuwm uuwm test_gc test_hostnif test_doc test_glaze test_sat test_holo test_as test_lux test_extract test_arm64 test_wake
 .PHONY: valg disasm flame cat cata catav perf repl gdb vmret bench nettest
 # `make test` is the FAST gate: just the two egg self-tests (the host binary `ai`
 # from-source under AI_NO_IMAGE, and ai0 -- c0 + the self-hosted ev, twice). It does
@@ -41,7 +41,7 @@ test:
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_uukind test_gc test_extract test_tools test_hostnif test_doc test_glaze test_sat test_holo test_lux test_kore test_reef test_vi test_cc test_raw nettest test_arm64 test_kernel test_wasm test_wake
+test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_uukind test_gc test_extract test_tools test_hostnif test_doc test_glaze test_sat test_holo test_as test_lux test_kore test_reef test_vi test_cc test_raw nettest test_arm64 test_kernel test_wasm test_wake
 # ai0 bakes prel+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prel (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
@@ -611,6 +611,15 @@ test_holo: host
 	  cat out/host/.test_holo.out; \
 	  { [ $$r -eq 0 ] && grep -q ", 0 failed" out/host/.test_holo.out; } \
 	    || { echo "FAIL holo (exit $$r)"; exit 1; }
+# as.l -- the real AT&T x86-64 front over holo. astest.l's goldens are byte-identical to
+# /usr/bin/as (frozen, no shell-out at gate time). Same sentinel gate as test_holo.
+.PHONY: test_as
+test_as: host
+	@echo "AS crew/holo/astest.l"; \
+	  cat crew/holo/holo.l crew/holo/x64.l crew/holo/as.l crew/holo/astest.l | $m > out/host/.test_as.out 2>&1; r=$$?; \
+	  cat out/host/.test_as.out; \
+	  { [ $$r -eq 0 ] && grep -q ", 0 failed" out/host/.test_as.out; } \
+	    || { echo "FAIL as (exit $$r)"; exit 1; }
 # ain's two-process loopback gate: a server and a client over real TCP on
 # 127.0.0.1, full-duplex, asserting each side received what the other sent (the
 # socket nifs in host/net.c + the pump loops in tools/ain.l). In `test_all`
