@@ -125,7 +125,7 @@
 ; --- the generator: one full golden, and the refusals that guard the seams ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    ir (caup (cgn "int main() { return 42; }"))
    (assert
       ; slot -8 keeps r3 (rbx, SysV callee-saved) in any fn that TOUCHES r3;
@@ -163,7 +163,7 @@
 ; --- stage 4a: aggregates -- layout to the C rules, members, the new statements ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (cexpp pre e) (: ast (cast (+ pre (+ " int main() { return " (+ e "; }"))))
                     (last l) (? (two? (cup l)) (last (cup l)) (cap l))
                     fn (last (caup ast))
@@ -233,7 +233,7 @@
 ; the xmm value path, int<->double conversions, and the calling convention. ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (tn ts k) (? (< k 1) (cap ts) (tn (cup ts) (- k 1)))
    irbits (caup (cgn "int main() { double d = 1.0; return (int)d; }"))
    (has op forms) (: (go l) (? (! (two? l)) () (&& (two? (cap l)) (= (cap (cap l)) op)) 1 (go (cup l))) (go forms))
@@ -280,7 +280,7 @@
 (: (cast src) (caup (cparse (caup (clex src))))
    (csig src name) (: r (cparse (caup (clex src))) (peep (caup (cuup r)) name 'none))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (assert
       ; the `...` leaves the fn node clean; the variadic bit lives in the signature
       (= (cast "int f(int n, ...) { return n; }")
@@ -334,7 +334,7 @@
 ; an unnamed object whose ADDRESS is an lvalue. ---
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (cexp src) (: ast (cast (+ "int main() { return " (+ src "; }")))
                  fn (cap (caup ast))
                  items (caup (caup (cuup fn)))
@@ -368,7 +368,7 @@
 ; relocatable .o (the ELF bytes are gated end-to-end by the make .o link/interop
 ; smoke, which needs the holo book + the system linker). ---
 (: (cob src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen-obj (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen-obj (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (el l i) (? (< i 1) (cap l) (el (cup l) (- i 1)))
    ob (cob "int f(int x) { return x; } int g = 5; int main() { return f(g); }")
    (assert
@@ -526,7 +526,7 @@
 ; struct rep: a two-double struct (SysV: two SSE eightbytes) rides calls as an
 ; xmm pair -- returned, passed, copied; any OTHER by-value struct still refuses.
 (: (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (stg src) (: r (cparse (caup (clex src))) (peep (cauup r) "S" ()))
    (assert
       (= (stg "struct S { double re, im; }; int main(){return 0;}")
@@ -541,7 +541,7 @@
 ; is a function's address exactly like the bare use -- as a value in code and as
 ; a label in a global image. an undeclared &name still refuses.
 (: (cgn src) (: r (cparse (caup (clex src)))
-                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) ()) ()))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
    (assert
       (two? (cgn "int one(int), two(int); int one(int x){return x+1;} int two(int x){return x+2;} int main(){return one(1)+two(2);}"))
       (two? (cgn "int one(int), two(int); int one(int x){return x+1;} int main(){ int (*p)(int) = two; return p != 0; }"))

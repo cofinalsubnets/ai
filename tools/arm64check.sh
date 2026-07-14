@@ -36,11 +36,12 @@ O=out/arm64; mkdir -p $O
 # the sibling-call optimization the threaded loop relies on.
 CF="-std=gnu2x -O2 -Dai_tco=1 -I. -Iout/lib -fomit-frame-pointer -fno-stack-protector -fno-exceptions -w"
 echo "AARCH64 cross-build ($GCC)"
-for f in ai.c host/*.c; do
+# crew/cc/lib/math/am.c is the math floor (fdlibm/-lm retired) -- link it like the host does.
+for f in ai.c host/*.c crew/cc/lib/math/am.c; do
   o=$O/$(basename "$f" .c).o
   $GCC $CF -c "$f" -o "$o"
 done
-$GCC -static -o $O/ai $O/*.o -lm 2>/dev/null || $GCC -static -o $O/ai $O/*.o -lm
+$GCC -static -o $O/ai $O/*.o 2>/dev/null || $GCC -static -o $O/ai $O/*.o
 
 # the corpus (or the files named on the command line), under qemu.
 if [ $# -gt 0 ]; then set -- "$@"; else

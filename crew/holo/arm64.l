@@ -42,6 +42,9 @@
    _ (foldl (\ _ p (pin arm64-cc (cap p) (cup p))) 0
         (L (link 'eq 0) (link 'ne 1) (link 'ae 2) (link 'below 3) (link 's 4) (link 'ns 5)
            (link 'vs 6) (link 'vc 7)
+           ; p/np (x86 parity: ucomisd's unordered bit) alias VS/VC -- FCMP
+           ; parks unordered in V, and nothing else here reads p/np
+           (link 'p 6) (link 'np 7)
            (link 'above 8) (link 'be 9) (link 'ge 10) (link 'lt 11) (link 'gt 12) (link 'le 13)))
 
    (rn r) (: e (peep arm64-regs r -1) (? (< e 0) (scare 'badreg r) e))
@@ -64,12 +67,17 @@
    ;; ALU. register form is the native three-address; immediate is add/sub only.
    (alu-rrr base d a b) (: dn (rn d) an (rn a) bn (rn b) (le32 (| base (| (<< bn 16) (| (<< an 5) dn)))))
    (alu-rri base d a imm) (: dn (rn d) an (rn a) (le32 (| base (| (<< imm 10) (| (<< an 5) dn)))))
+   ;; a 12-bit immediate rides one instruction; up to 24 bits splits into the
+   ;; shifted-by-12 form plus the low half (add/sub only -- a C-sized frame).
    (arm64-addsub-imm op d a imm)                              ; a negative immediate flips the op (add<->sub, adds<->subs)
       (: pos  (? (< imm 0) (- 0 imm) imm)
          fop  (? (< imm 0) (? (= op 'add) 'sub (= op 'sub) 'add (= op 'adds) 'subs 'adds) op)
          base (at (peep arm64-alu fop 0) 1)                   ; the (flipped) op's immediate base word (slot 1 of its alu row)
-         _ (? (<= pos 4095) 0 (scare 'imm12-range imm))
-         (alu-rri base d a pos))
+         (? (<= pos 4095) (alu-rri base d a pos)
+            (&& (<= pos 16777215) (member? fop '(add sub)))   ; hi12 shifted (LSL #12, bit 22), then the low tail off d
+             (catall (L (alu-rri (| base 0x400000) d a (>> pos 12))                   ; (the S-forms stay single: a split
+                        (? (= (% pos 4096) 0) () (alu-rri base d d (% pos 4096)))))   ;  would read the tail's flags)
+            (scare 'imm12-range imm)))
    ;; a logical (bitmask) immediate -> the N:immr:imms field packed at bits [22:10]. the full encoding
    ;; admits any replicated rotated run of ones; we encode the case the glaze emits -- a BOTTOM-ALIGNED
    ;; run (imm = 2^n - 1, the fixnum/gap low-bit masks): N=1, immr=0, imms=n-1. a rotated/replicated
@@ -98,13 +106,26 @@
          (scare 'arm64-mul-imm (L 'imul d a b)))
 
    ;; loads/stores: LDR/STR scaled (offset a multiple of 8, unsigned) else LDUR/STUR unscaled (signed
-   ;; 9-bit). lea is just add-immediate (aarch64 has no lea).
+   ;; 9-bit) else the FAR lane -- the offset materializes in x16 (IP0, outside the IR file) and the
+   ;; access rides [x16, #0]; a C frame's slots run past +-256 routinely. lea is just add-immediate
+   ;; (aarch64 has no lea).
+   (arm64-far ubase dt bn off)                               ; x16 = bn +- |off|, then op Rt, [x16, #0]
+      (: u (? (< off 0) (- 0 off) off)
+         l0 (% u 65536) l1 (// u 65536)
+         _ (? (< u 4294967296) 0 (scare 'mem-range off))
+         _ (? (= bn 16) (scare 'far-base-x16 off) 0)         ; the base would be clobbered mid-build
+         _ (? (= bn 31) (scare 'far-base-sp off) 0)          ; shifted-reg add reads Rn=31 as XZR, not SP
+         (catall (L
+            (le32 (| 0xD2800000 (| (<< l0 5) 16)))                                   ; movz x16, l0
+            (? (= l1 0) () (le32 (| 0xF2A00000 (| (<< l1 5) 16))))                   ; movk x16, l1, lsl 16
+            (le32 (| (? (< off 0) 0xCB000000 0x8B000000) (| (<< 16 16) (| (<< bn 5) 16))))   ; add/sub x16, base, x16
+            (le32 (| ubase (| (<< 16 5) dt))))))                                     ; op Rt, [x16, #0]
    (arm64-mem-r lbase ubase dt bn off)                       ; raw-encoding variant (dt/bn already encodings; for x16-based stores)
       (? (&& (= 0 (% off 8)) (&& (>= off 0) (<= (// off 8) 4095)))
          (le32 (| ubase (| (<< (// off 8) 10) (| (<< bn 5) dt))))
          (? (&& (>= off -256) (<= off 255))
             (le32 (| lbase (| (<< (& off 511) 12) (| (<< bn 5) dt))))
-            (scare 'mem-range off)))
+            (arm64-far ubase dt bn off)))
    (arm64-mem lbase ubase d base off) (arm64-mem-r lbase ubase (rn d) (rn base) off)
    (arm64-ld d base off)   (arm64-mem 0xF8400000 0xF9400000 d base off)
    (arm64-st base off s)   (arm64-mem 0xF8000000 0xF9000000 s base off)
@@ -115,7 +136,7 @@
             (le32 (| ubase (| (<< (// off sc) 10) (| (<< bn 5) dt))))
             (? (&& (>= off -256) (<= off 255))
                (le32 (| lbase (| (<< (& off 511) 12) (| (<< bn 5) dt))))
-               (scare 'mem-range off))))
+               (arm64-far ubase dt bn off))))
    (arm64-ld1 d base off) (arm64-mem-sz 0x38800000 0x39800000 1 d base off)   ; ldrsb/ldursb Xt
    (arm64-ld2 d base off) (arm64-mem-sz 0x78800000 0x79800000 2 d base off)   ; ldrsh/ldursh Xt
    (arm64-ld4 d base off) (arm64-mem-sz 0xB8800000 0xB9800000 4 d base off)   ; ldrsw/ldursw Xt
@@ -231,7 +252,8 @@
    ;;    map each to the arm64 scalar-double form, repeating d as the first source where arm64 is
    ;;    three-address. type=01 (double) throughout; every word was objdump-checked.
    arm64-fregs (tablet 0)
-   _ (foldl (\ _ i (pin arm64-fregs (intern (+ "f" (show i))) i)) 0 (jot 16))                  ; f0..f15 -> 0..15
+   _ (foldl (\ _ i (pin arm64-fregs (intern (+ "f" (show i))) i)) 0 (jot 32))                  ; f0..f31 -> 0..31 (v16+ = the pure
+                                                                                               ; temps: no arg, no callee-saved half)
    (frn r) (: e (peep arm64-fregs r -1) (? (< e 0) (scare 'badfreg r) e))
    arm64-fp3 (tablet 0)                                                                         ; SSE arith mnemonic -> the scalar-double base word (Dd = Dn OP Dm)
    _ (foldl (\ _ p (pin arm64-fp3 (cap p) (cup p))) 0
@@ -243,13 +265,22 @@
    (arm64-fcvtzs g d) (: gn (rn g) dn (frn d) (le32 (| 0x9E780000 (| (<< dn 5) gn))))           ; FCVTZS Xg, Dd  (double -> signed int, toward zero)
    (arm64-fmovxr d g) (: dn (frn d) gn (rn g) (le32 (| 0x9E670000 (| (<< gn 5) dn))))           ; FMOV Dd, Xg   (gpr bits -> fpr)  == movqxr
    (arm64-fmovrx g d) (: gn (rn g) dn (frn d) (le32 (| 0x9E660000 (| (<< dn 5) gn))))           ; FMOV Xg, Dd   (fpr -> gpr bits)  == movqrx
-   (arm64-fst base disp s) (: tn (frn s) bn (rn base) (le32 (| 0xFD000000 (| (<< (// disp 8) 10) (| (<< bn 5) tn)))))   ; STR Ds, [base, #disp]  (disp a multiple of 8)
-   (arm64-fld d base disp) (: dn (frn d) bn (rn base) (le32 (| 0xFD400000 (| (<< (// disp 8) 10) (| (<< bn 5) dn)))))   ; LDR Dd, [base, #disp]
+   ;; fp memory takes the same three lanes as the integer ops: LDR/STR scaled, LDUR/STUR unscaled
+   ;; (a frame slot's negative offset), then the far x16 build (fmem-sz mirrors arm64-mem-sz with
+   ;; the V=1 base words).
+   (arm64-fmem-sz lbase ubase sc tn bn off)
+      (? (&& (= 0 (% off sc)) (&& (>= off 0) (<= (// off sc) 4095)))
+         (le32 (| ubase (| (<< (// off sc) 10) (| (<< bn 5) tn))))
+         (? (&& (>= off -256) (<= off 255))
+            (le32 (| lbase (| (<< (& off 511) 12) (| (<< bn 5) tn))))
+            (arm64-far ubase tn bn off)))
+   (arm64-fst base disp s) (arm64-fmem-sz 0xFC000000 0xFD000000 8 (frn s) (rn base) disp)   ; STR/STUR Ds, [base, #disp]
+   (arm64-fld d base disp) (arm64-fmem-sz 0xFC400000 0xFD400000 8 (frn d) (rn base) disp)   ; LDR/LDUR Dd, [base, #disp]
    ;; the 4-byte single lane (the C `float` slot): widen/narrow via FCVT, load/store an S-register (disp a multiple of 4).
    (arm64-fcvt-widen  d s) (: dn (frn d) sn (frn s) (le32 (| 0x1E22C000 (| (<< sn 5) dn))))            ; FCVT Dd, Ss  (single -> double)  == cvtss2sd
    (arm64-fcvt-narrow d s) (: dn (frn d) sn (frn s) (le32 (| 0x1E624000 (| (<< sn 5) dn))))            ; FCVT Sd, Ds  (double -> single)  == cvtsd2ss
-   (arm64-fsts base disp s) (: tn (frn s) bn (rn base) (le32 (| 0xBD000000 (| (<< (// disp 4) 10) (| (<< bn 5) tn)))))  ; STR Ss, [base, #disp]  (disp a multiple of 4)
-   (arm64-flds d base disp) (: dn (frn d) bn (rn base) (le32 (| 0xBD400000 (| (<< (// disp 4) 10) (| (<< bn 5) dn)))))  ; LDR Sd, [base, #disp]
+   (arm64-fsts base disp s) (arm64-fmem-sz 0xBC000000 0xBD000000 4 (frn s) (rn base) disp)  ; STR/STUR Ss, [base, #disp]
+   (arm64-flds d base disp) (arm64-fmem-sz 0xBC400000 0xBD400000 4 (frn d) (rn base) disp)  ; LDR/LDUR Sd, [base, #disp]
    (arm64-xorpd d s) (: dn (frn d) sn (frn s) (le32 (| 0x2E201C00 (| (<< sn 16) (| (<< dn 5) dn)))))   ; EOR Vd.8B, Vd.8B, Vs.8B (zero a double when d==s; the grid's fvar-init)
 
    (arm64-lower ins)
@@ -277,6 +308,7 @@
             (= op 'zx4)  (arm64-zx 4 (at ins 1))
             (member? op '(shlv shrv sarv)) (arm64-shiftv op (at ins 1) (at ins 2))
             (= op 'lea)  (arm64-lea  (at ins 1) (at ins 2) (at ins 3))
+            (= op 'lean) (arm64-lea  (at ins 1) (at ins 2) (at ins 3))   ; a consumed lea (x64 tells them apart for the escape gate)
             (= op 'push) (arm64-push (at ins 1))
             (= op 'pop)  (arm64-pop  (at ins 1))
             (= op 'neg)  (arm64-neg  (at ins 1))
@@ -332,7 +364,7 @@
             (= kind 'b19) (le32 (| aux (<< (& rel 524287) 5)))        ; 19-bit field, bits[23:5]
             (= kind 'adr21) (le32 (| aux (| (<< (& rb 3) 29)          ; adr: BYTE offset, immlo[30:29]
                                             (<< (& (>> rb 2) 524287) 5))))   ; immhi[23:5]
-            (= kind 'abs64) (le64 target)                            ; an 8-byte ABSOLUTE address (data pointer)
+            (= kind 'abs64) (le64 (+ target aux))                    ; an 8-byte ABSOLUTE address; aux = the byte ADDEND (&arr[i] = label + offset)
             (scare 'badfix kind)))
 
    arm64 (tablet 0)

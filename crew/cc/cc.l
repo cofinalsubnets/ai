@@ -45,16 +45,23 @@
                          (go (i + 1)))
                (go 0))
    (deftext ds) (foldl (\ a d (a + "#define " + (eqsp d) + "\n")) "" ds)
+   ; the target: 'x64 (the default) or 'arm64, picked by -t. the arch predefine
+   ; (__x86_64__ / __aarch64__) rides the -D channel so cpp stays target-blind.
+   (totgt s) (? (|| (s = "x64") (s = "amd64")) 'x64
+                (|| (s = "arm64") (s = "aarch64")) 'arm64
+                (udie 2 ("cc: unknown target " + s + " (x64 | arm64)")))
+   (archdef tgt) (? (id? tgt 'arm64) "__aarch64__" "__x86_64__")
    ; the shared front end: source path (+ -I dirs, -D defines) -> (1 ast stag
    ; sigs ..) | a fatal exit. the -D lines PREPEND to the source text before the
    ; one lex, so the line numbering stays whole (tokens carry lines and a define
    ; body runs to its line's end -- a separately-lexed stream would restart at 1
    ; and the last -D would swallow the file's first line); diagnostics under -D
    ; skew by the define count, the price of the shared stream.
-   (cc-parse src is ds)
-    (: r (uread src)
+   (cc-parse src is ds tgt)
+    (: ds9 (link (archdef tgt) ds)         ; ds9, not ds: a :-local shadows the PARAM over the whole scope (the boxfix cell trap)
+       r (uread src)
        _ (? (two? r) () (udie 1 ("cc: cannot open " + src)))
-       lx (clex ((deftext ds) + <>r))
+       lx (clex ((deftext ds9) + <>r))
        _ (? (two? lx) () (udie 1 ("cc: lex error in " + src)))
        pp (cpp <>lx (\ name sys? (incload is (cdir src) name sys?)))
        _ (? (two? pp) () (udie 1 ("cc: preprocessor error in " + src)))
@@ -64,21 +71,24 @@
    ; the parser's static/section trio, threaded to the gen as one list
    (pxtra ps) `((el ps 5) (el ps 6) (el ps 7))
    ; a standalone static executable (the default): _start + text + data, chmod +x
-   (cc-exe src dst is ds)
-    (: ps (cc-parse src is ds)
-       ir (cgen <>ps <>>ps <>>>ps (el ps 4) (pxtra ps))
+   (cc-exe src dst is ds tgt)
+    (: ps (cc-parse src is ds tgt)
+       ir (cgen <>ps <>>ps <>>>ps (el ps 4) (pxtra ps) tgt)
        _ (? (two? ir) () (udie 1 ("cc: codegen error in " + src)))
-       res (elf64 'x64 (\ _ <>ir) ())
+       res (elf64 tgt (\ _ <>ir) ())
        _ (write-bytes dst (peep res 'bytes 0))
        (chmod dst 493))
    ; a relocatable object: text/data/ai_nifs sections + symbols + relocations
    ; -- the bytes (`-c` writes them; the link path feeds them to ldlink).
-   (cc-objbytes src is ds)
-    (: ps (cc-parse src is ds)
-       ob (cgen-obj <>ps <>>ps <>>>ps (el ps 4) (pxtra ps))
+   ; (the .o/.link seams speak x86-64 relocations only so far -- the arm64
+   ;  ladder rung for obj.l/link.l; the exe path above is both-target.)
+   (cc-objbytes src is ds tgt)
+    (: _ (? (id? tgt 'arm64) (udie 1 "cc: arm64 takes the exe path only (no -c/.o yet)") ())
+       ps (cc-parse src is ds tgt)
+       ob (cgen-obj <>ps <>>ps <>>>ps (el ps 4) (pxtra ps) tgt)
        _ (? (two? ob) () (udie 1 ("cc: codegen error in " + src)))
        (objelf 'x64 (el ob 1) (el ob 2) (el ob 3) (el ob 4) (el ps 4) (el ob 5)))
-   (cc-obj src dst is ds) (write-bytes dst (cc-objbytes src is ds))
+   (cc-obj src dst is ds tgt) (write-bytes dst (cc-objbytes src is ds tgt))
    ; the LINK path (rung 3, crew/holo/link.l): every input lands as object
    ; bytes (a .c compiled here, a .o read off disk), crt0 rides FIRST (its
    ; text is the entry), and ldlink binds the static exe -- no system linker.
@@ -95,8 +105,9 @@
            `('push 'r6)
            `('call 'main)
            `('mov 'r6 'r0) `('li 'r0 60) `('sys))
-   (cc-link ins dst is ds)
-    (: srcs (map (\ f (? (dotc? f) `(f (string (cc-objbytes f is ds)))
+   (cc-link ins dst is ds tgt)
+    (: _ (? (id? tgt 'arm64) (udie 1 "cc: arm64 takes the exe path only (no linking yet)") ())
+       srcs (map (\ f (? (dotc? f) `(f (string (cc-objbytes f is ds tgt)))
                          (doto? f) (: r (uread f)
                                       (? (two? r) `(f <>r)
                                          (udie 1 ("cc: cannot open " + f))))
@@ -105,9 +116,10 @@
        ps (ldlink 'x64 (link `("crt0" (string (objelf 'x64 crt0 () `("__ai_start") () `("__ai_start") ()))) srcs))
        _ (ld-write dst ps)
        (chmod dst 493))
-   usage "usage: aicc [-c] [-I dir] [-D name[=val]] [-o out] in.c|in.o .."
-   ; the flag scan: -c, -I dir / -Idir, -D def / -Ddef, -o out; every other
-   ; bare arg is an input, any other dash arg refuses. -> (c idirs defs out ins).
+   usage "usage: aicc [-c] [-t x64|arm64] [-I dir] [-D name[=val]] [-o out] in.c|in.o .."
+   ; the flag scan: -c, -t tgt / -ttgt, -I dir / -Idir, -D def / -Ddef, -o out;
+   ; every other bare arg is an input, any other dash arg refuses.
+   ; -> (c idirs defs out ins tgt).
    (glu? a ch) (&& (2 < (tally a)) (&& ((a 0) = 45) ((a 1) = ch)))
    (dirn d) (: n (tally d) (? (n = 0) d ((d (n - 1)) = 47) d (d + "/")))
    (dotc? p) (: n (tally p) (&& (2 < n) (&& ((p (n - 2)) = 46) ((p (n - 1)) = 99))))
@@ -117,37 +129,39 @@
    (obase p) (: n (tally p)                        ; dir/x.c -> x.o (in the cwd, gcc-shaped)
                 (go k r) (? (k < n) (go (k + 1) (? ((p k) = 47) (k + 1) r)) (snip p r (n - 1)))
                 ((go 0 0) + "o"))
-   (flags as c is ds o ins)
-    (? (! (two? as)) `(c (rev is) (rev ds) o (rev ins))
+   (flags as c is ds o ins t9)
+    (? (! (two? as)) `(c (rev is) (rev ds) o (rev ins) t9)
        (: a <as r >as
-          (? (a = "-c") (flags r 1 is ds o ins)
-             (a = "-I") (? (two? r) (flags >r c (link <r is) ds o ins) (udie 2 usage))
-             (a = "-D") (? (two? r) (flags >r c is (link <r ds) o ins) (udie 2 usage))
-             (a = "-o") (? (two? r) (flags >r c is ds <r ins) (udie 2 usage))
-             (glu? a 73) (flags r c (link (snip a 2 (tally a)) is) ds o ins)
-             (glu? a 68) (flags r c is (link (snip a 2 (tally a)) ds) o ins)
+          (? (a = "-c") (flags r 1 is ds o ins t9)
+             (a = "-I") (? (two? r) (flags >r c (link <r is) ds o ins t9) (udie 2 usage))
+             (a = "-D") (? (two? r) (flags >r c is (link <r ds) o ins t9) (udie 2 usage))
+             (a = "-o") (? (two? r) (flags >r c is ds <r ins t9) (udie 2 usage))
+             (a = "-t") (? (two? r) (flags >r c is ds o ins (totgt <r)) (udie 2 usage))
+             (glu? a 73) (flags r c (link (snip a 2 (tally a)) is) ds o ins t9)
+             (glu? a 68) (flags r c is (link (snip a 2 (tally a)) ds) o ins t9)
+             (glu? a 116) (flags r c is ds o ins (totgt (snip a 2 (tally a))))
              (&& (0 < (tally a)) ((a 0) = 45)) (udie 2 usage)
-             (flags r c is ds o (link a ins)))))
+             (flags r c is ds o (link a ins) t9))))
    (cc-main as)
-    (: f (flags as () () () () ())
-       c (el f 0) is (map dirn (el f 1)) ds (el f 2) o (el f 3) ins (el f 4)
+    (: f (flags as () () () () () 'x64)
+       c (el f 0) is (map dirn (el f 1)) ds (el f 2) o (el f 3) ins (el f 4) tgt (el f 5)
        (? (! (two? ins)) (udie 2 usage)
           o (? c (? (two? >ins) (udie 2 "cc: -o takes one input")
-                    (: _ (cc-obj <ins o is ds) (quit 0)))
-               (lnky? ins) (: _ (cc-link ins o is ds) (quit 0))
-               (: _ (cc-exe <ins o is ds) (quit 0)))
+                    (: _ (cc-obj <ins o is ds tgt) (quit 0)))
+               (lnky? ins) (: _ (cc-link ins o is ds tgt) (quit 0))
+               (: _ (cc-exe <ins o is ds tgt) (quit 0)))
           ; the legacy pair: exactly two bare args, the second no .c -- IN OUT
           ; (a .c/.o mix is a LINK, never a pair; -c keeps its .o OUT)
           (&& (two? >ins)
               (&& (! (two? >>ins))
                   (&& (! (dotc? <>ins))
                       (|| c (&& (! (doto? <ins)) (! (doto? <>ins)))))))
-           (: _ (? c (cc-obj <ins <>ins is ds) (cc-exe <ins <>ins is ds)) (quit 0))
+           (: _ (? c (cc-obj <ins <>ins is ds tgt) (cc-exe <ins <>ins is ds tgt)) (quit 0))
           c (: (go l) (? (! (two? l)) (quit 0)
                          (! (dotc? <l)) (udie 2 ("cc: not a .c input: " + <l))
-                         (: _ (cc-obj <l (obase <l) is ds) (go >l)))
+                         (: _ (cc-obj <l (obase <l) is ds tgt) (go >l)))
                (go ins))
-          (lnky? ins) (: _ (cc-link ins "a.out" is ds) (quit 0))
+          (lnky? ins) (: _ (cc-link ins "a.out" is ds tgt) (quit 0))
           (udie 2 usage))))
 
 ; the SEAT: fire cc-main iff aicc sits in the program seat of the real command line

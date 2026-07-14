@@ -348,12 +348,13 @@
                ; the whole tco=0 corpus missed it: the glaze is the only arena user
                ; and it's gated off on trampoline builds.
                _ (pin t "__STDC_HOSTED__" `('obj `((tok 'num 1 0))))
-               ; cc emits x86-64, so say so (ai.c's AI_ARCH/IMAGE_ARCH read it --
-               ; a build without it believed its arch was "other" and the glaze
-               ; handed holo an unknown target). __SIZEOF_INT128__ stays UNDEFINED,
-               ; so the bignum limbs stay the portable 32-bit branch and the lone
-               ; `divq` __asm__ (guarded && limb_bits == 64) stays out of reach.
-               _ (pin t "__x86_64__" `('obj `((tok 'num 1 0))))
+               ; the ARCH predefine (__x86_64__ / __aarch64__) is the DRIVER's:
+               ; cc.l prepends it as a -D-style define by target (ai.c's AI_ARCH/
+               ; IMAGE_ARCH read it -- a build without one believed its arch was
+               ; "other" and the glaze handed holo an unknown target).
+               ; __SIZEOF_INT128__ stays UNDEFINED on both, so the bignum limbs
+               ; stay the portable 32-bit branch and the lone `divq` __asm__
+               ; (guarded && limb_bits == 64) stays out of reach.
                ; and Linux is the OS under every cc-built object (raw syscalls,
                ; ELF, the host seam) -- without it host/init.c's signalfd source
                ; silently compiled OUT of the selfhost binary (a rung-2 wart)
