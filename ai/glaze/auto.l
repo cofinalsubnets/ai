@@ -1161,6 +1161,15 @@
          ev)                                                   ; a TRAMPOLINE build (ai-tco 0): glazed code Continues by tail-jump, which only the threaded VM honors -- stay the pure interpreter (the glaze book still installs for probes)
 )
 
+; --- pin the member? kernel (emit.l natmemb) over the prel walker: post-boot streams
+; (the aicc cat, the corpus) fold the NATIVE into their calls; egg-baked consumers keep
+; the interp closure they already folded. Mirrors the ev rebind's gates: a re-load keeps
+; the baked native (its deopt chain already ends at interp -- no double-wrap), and a
+; trampoline (tco=0) build stays interp. Two forms: memb0 must read the GLOBAL member?
+; (one scope would read the rebind before its pin -- the missing condition).
+(: memb0 member?)
+(: member? (? glaze-loaded? memb0 (< 0 ai-tco) (natmemb arch) memb0))
+
 ; the module span closes here (opened by glaze-mark in emit.l): the names bound since
 ; the mark are the glaze; ai/glaze/export.l sweeps them into the `glaze` book.
 (: glaze-load (names ()))

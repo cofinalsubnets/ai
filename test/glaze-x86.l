@@ -623,4 +623,25 @@
       (67305985 = v))                                                                              ; 0x04030201: the two dsr2 calls read in source order
    (say err "ai/glaze/auto: delet keeps _-bound effects + call-binding order ok\n"))
 
+; --- the member? kernel (natmemb): the baked global member? IS the native (the auto.l
+;     tail pinned it), so these ride the kernel's own lanes -- word-compare hits, the
+;     end-of-chain miss, the entry deopt (a string key: structural =), the mid-walk
+;     deopt (a charm key beside a bridgeable car: (= 2 2.0) is TRUE and only interp
+;     knows), and a point key walking heap cars natively (a point equals only itself).
+(: mm (nom 0)
+   _ (assert
+      (1 = (member? 'b '(a b c))) (0 = (member? 'z '(a b c)))                     ; nom key, native walk
+      (1 = (member? 2 '(1 2 3))) (0 = (member? 9 '(1 2 3)))                      ; charm key over charms
+      (1 = (member? 2 '(2.0 4))) (1 = (member? 2 '(4 2.0 2)))                    ; the numeric bridge -> deopt -> interp says true
+      (0 = (member? 5 '(6.0 7.0)))                                              ; deopt lane, false stays false
+      (1 = (member? "ab" '(1 "ab"))) (0 = (member? "zz" '("ab")))                ; string key -> entry deopt, structural =
+      (1 = (member? 'z '(1 "s" (x y) 2.5 z)))                                    ; nom key walks EVERY car kind natively
+      (0 = (member? 'q '("s" 2.5 (a))))                                          ; ... and a miss over heap cars
+      (1 = (member? mm (link 1 (link mm ())))) (0 = (member? mm '(a b)))         ; a mint key rides the guard
+      (0 = (member? () '(1 2))) (1 = (member? () (link () ())))                  ; the zero point is a mint
+      (0 = (member? 'x ())) (0 = (member? 'x 5))                                 ; no chain -> the walk never starts
+      (200000 = ((: (go i a) (? (< i 200000) (go (+ i 1) (+ a (member? 'q '(a b q)))) a)) 0 0))
+      (< 0 (tally (peep (assemble 'arm64 ((glaze 'membir) 'arm64)) 'bytes 0))))        ; arm64: the BAKED kernel assembles (through the book -- re-loaded internals misbind); scratch regs sit off the r9 anchor there
+   (say err "ai/glaze/emit: the member? kernel -- hits, misses, both deopt lanes ok\n"))
+
 (say err "test/glaze-x86: emit + auto + ir native codegen ok\n")

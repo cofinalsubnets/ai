@@ -487,6 +487,51 @@
    (jitir lam tgt)  (jitcore tgt (L (caup lam)) (caup (cup lam)) (deoptir tgt 0) 1 lam)
    (jitnir lam tgt) (: ps (init (cup lam)) body (last (cup lam)) (jitcore tgt ps body (deoptir tgt 1) (tally ps) lam))
 
+   ; --- the member? kernel (natmemb): the one prel walker hot enough to earn a hand lane
+   ; (aicc -c ai.c walks 4.27M calls / 17.5M elements through it; 91% nom keys). member?
+   ; answers 1/0 (any's green floor), so the kernel is INT-typed: walk the chain, word-
+   ; compare each car against the key. SOUND because the key is entry-guarded charm|nom|
+   ; mint: a POINT key equals only itself (word compare is total, any car kind), and a
+   ; CHARM key word-matches charm cars while a point car walks on -- any OTHER heap car
+   ; could bridge numerically ((= 2 2.0) is true) so it DEOPTS. String keys (structural =)
+   ; deopt at entry. Leaf ABI + two per-target scratches picked off the anchor (x64
+   ; anchor r8, arm64 anchor r9); the deopt block is deoptir's, so a mid-walk deopt
+   ; re-runs the whole call on the interp fallback (member? is pure).
+   (membir tgt)
+    (: A (greg tgt 'acc) T (greg tgt 'tmp) S (greg tgt 'sp) AN (greg tgt 'anchor) IP (greg tgt 'ip)
+       XR (? (id? tgt 'x64) 'r9 'r10) KR (? (id? tgt 'x64) 'r10 'r11)
+       nomk (apof 'x) mintk (apof (nom 0))
+       xok (mint 0) lp (mint 0) nx (mint 0) ht (mint 0) ms (mint 0) en (mint 0)
+       (holo
+        (L
+        (L (L 'lea AN 'sp 0)                                        ; anchor (the deopt unwind)
+           (L 'ld XR S 0) (L 'test XR 1) (L 'br 'ne xok)            ; the key: a charm rides
+           (L 'ld T XR 0)
+           (L 'li KR nomk) (L 'cmp T KR) (L 'br 'eq xok)            ; a nom rides
+           (L 'li KR mintk) (L 'cmp T KR) (L 'br 'ne 'deopt)        ; a mint rides; anything else -> interp
+           (L 'label xok) (L 'ld A S 8))                            ; acc walks l
+        (L (L 'label lp)
+           (L 'test A 1) (L 'br 'ne ms)                             ; an odd tail is no chain -> the walk ends
+           (L 'ld T A 0) (L 'li KR chainkind) (L 'cmp T KR) (L 'br 'ne ms)
+           (L 'ld T A 8)                                            ; the car
+           (L 'cmp XR T) (L 'br 'eq ht)                             ; word-equal -> hit
+           (L 'test T 1) (L 'br 'ne nx)                             ; a charm car != key -> walk on
+           (L 'ld T T 0)                                            ; a heap car: its kind
+           (L 'li KR nomk) (L 'cmp T KR) (L 'br 'eq nx)             ; a point car equals only itself -> walk on
+           (L 'li KR mintk) (L 'cmp T KR) (L 'br 'eq nx)
+           (L 'test XR 1) (L 'br 'ne 'deopt)                        ; charm key vs a bridgeable car -> interp
+           (L 'label nx) (L 'ld A A 16) (L 'jmp lp))                ; cup, walk on
+        (L (L 'label ht) (L 'li A 1) (L 'jmp en)
+           (L 'label ms) (L 'li A 0)
+           (L 'label en) (L 'leax A A A 1 1)                        ; putfix (0/1 never overflows)
+           (L 'st S 0 A) (L 'add IP IP 16) (L 'ld T IP 0) (L 'jmpr T))
+        (deoptir tgt 1))))
+   ; the deopt target must be a BYTECODE 2-arg closure (deoptir jumps to value[1]+16, its
+   ; body) -- the prel's member? is a compose partial-app with no such body, so build the
+   ; equivalent lambda fresh; any and = are stable prel globals.
+   (natmemb tgt) (: msrc '(\ x l (any (= x) l))
+      (nif (emit (peep (assemble tgt (membir tgt)) 'bytes 0)) (ev msrc) msrc 2))
+
    ; --- the LOOP-BODY neutral IR (cgvir): the same arith grammar as cgir, but for the loop lanes, whose
    ; state (n/counter/acc) fills r9/r10/r11 leaving NO free reg for an anchor. So the overflow/div-by-0
    ; guard deopts INLINE -- unwind the d pending machine-stack pushes, then tail-apply interp (value[1] to
