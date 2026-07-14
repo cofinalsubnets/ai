@@ -4,8 +4,8 @@ Goal: **boot from a serialized heap image instead of evaluating the corpus.** To
 (host/main.c) hands `ai_evals_` the egg+prel+ev+post+asm+bao SOURCE string and the self-hosted
 compiler MATERIALIZES the whole runtime at startup — measured **~233 ms cold start** (the setup-row
 bench, ai 2nd-worst). The snapshot makes that ~instant: dump the post-boot heap ONCE at build time,
-embed it in the binary, and at startup `mmap`+relocate it in with no eval. (Design doc, like
-galaxy-order.md / serialize.md / stream.md — not yet built.)
+embed it in the binary, and at startup `mmap`+relocate it in with no eval. (LANDED — see the
+Status section below; this stays as the `--bake`/`--wake` design-of-record.)
 
 ## Why — three payoffs, in priority order
 

@@ -968,7 +968,7 @@ $(ho)/.hostcc: force_hostcc
 	@mkdir -p $(ho)
 	@printf '%s\n' '$(host_cc) $(host_ldflags)' > $@.tmp
 	@if cmp -s $@.tmp $@ 2>/dev/null; then rm -f $@.tmp; else mv $@.tmp $@; echo SH $@; fi
-host: $(ho)/ai $(ho)/ai.baked $(if $(STATIC),,$(ho)/libai.so) $(ho)/ai.1
+host: $(ho)/ai $(ho)/ai.baked $(if $(STATIC),,$(ho)/libai.so) $(ho)/ai.1 $(ho)/cook.1
 ai0: $(ai0)
 
 # dock: launch the steering dock (port/inle/serve.l) from a stable COPY out/host/dock,
@@ -1106,6 +1106,12 @@ $(ho)/ai.1: doc/ai.1 out/lib/ai_version.h
 	@mkdir -p $(dir $@)
 	@v=$$(sed -n 's/.*AI_VERSION "\(.*\)"/\1/p' out/lib/ai_version.h); \
 	 sed "s/@VERSION@/$$v/" doc/ai.1 > $@
+
+$(ho)/cook.1: doc/cook.1 out/lib/ai_version.h
+	@echo SED	$@
+	@mkdir -p $(dir $@)
+	@v=$$(sed -n 's/.*AI_VERSION "\(.*\)"/\1/p' out/lib/ai_version.h); \
+	 sed "s/@VERSION@/$$v/" doc/cook.1 > $@
 
 # ====================================================================
 # kernel (freestanding) build -- outputs under out/free. Was free/Makefile.
@@ -1510,6 +1516,7 @@ installs = \
   $d/bin/lux \
   $d/bin/bao \
   $d/share/man/man1/ai.1 \
+  $d/share/man/man1/cook.1 \
   $d/lib/ai/prel.l \
   $d/lib/ai/ev.l \
   $d/lib/ai/bao.l \
@@ -1637,6 +1644,10 @@ $d/bin/bao: Makefile
 	@chmod 755 $@
 
 $d/share/man/man1/ai.1: $(ho)/ai.1
+	@echo CP	$(abspath $@)
+	@install -D -m 644 $< $@
+
+$d/share/man/man1/cook.1: $(ho)/cook.1
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
