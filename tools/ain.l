@@ -15,7 +15,7 @@
 ; book/tray/etc after it hatches, so re-feeding prel.l raises `missing book`):
 ;   out/host/ai tools/ain.l HOST PORT
 ;   out/host/ai tools/ain.l -l PORT
-; or as the `nc` applet of the multi-call `au` (crew/utils/au.l -- the header's old
+; or as the `nc` applet of the multi-call `kore` (crew/kore/kore.l -- the header's old
 ; "until the egg bakes ain into a multi-call binary" note, landed). The socket nifs
 ; (connect/listen/accept/seal) live in host/net.c; prel stays socket-free so the
 ; kernel/wasm frontends are unaffected.
@@ -77,7 +77,7 @@
 ; the SEAT: fire ain-main iff this very file sits in the program seat of the real
 ; command line -- the positional program, or a `-l` preload (the installed shebang) --
 ; taking the args AFTER the seat. `cmdline` is the full C argv, never rebound, so the
-; test reads the same in both load orders; a multi-call cat (au) never matches and the
+; test reads the same in both load orders; a multi-call cat (kore) never matches and the
 ; dispatcher there calls ain-main itself. body-having: nothing leaks.
 (: (bn p) (: n (tally p)
              (go k r) (? (< k n) (go (+ k 1) (? (= (p k) 47) (+ k 1) r)) (snip p r n))

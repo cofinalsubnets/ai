@@ -4,9 +4,9 @@ the plan of record for the chibicc-class C compiler, written in ai, emitting
 through the holo books. drafted 2026-07-06; stage 0 LANDED the same day
 (crew/cc/{lex,parse,gen,cc}.l + law.l, `make test_cc` -- the gcc
 differential is born). trued up as stages land. cc is its OWN app `aicc`
-(a catted `#!/usr/bin/env -S ai -l` script, NOT baked into the au cat -- so a
-cc edit rebuilds only aicc, never au, and no au rebuild in another session can
-tear the compiler mid-run); it was `au cc` through 7c-iii part 1.
+(a catted `#!/usr/bin/env -S ai -l` script, NOT baked into the kore cat -- so a
+cc edit rebuilds only aicc, never kore, and no kore rebuild in another session can
+tear the compiler mid-run); it was `kore cc` through 7c-iii part 1.
 
 ## the goal, and the fence
 
@@ -123,7 +123,7 @@ the subset is not "C11-ish" by taste -- it is measured off the target:
 
 ## the architecture (crew/cc/, every piece pure and lawed)
 
-the aiutils/vi discipline: pure engines with law files, thin drivers, one
+the kore/vi discipline: pure engines with law files, thin drivers, one
 gate per stage. the pipeline, each its own file:
 
 * **lex.l** -- text -> token list (pure). tokens carry file/line for
@@ -150,7 +150,7 @@ gate per stage. the pipeline, each its own file:
   function-like -DF(x)=.. rides the normal macro path, and diagnostics under
   -D skew by the define count). its tail SEAT fires cc-main when `aicc` is the
   program on the command line (the same trick as ain/cook), so aicc stands
-  alone as its own catted script -- it does NOT ride the au multi-call
+  alone as its own catted script -- it does NOT ride the kore multi-call
   dispatcher.
 
 ### the seams to grow (owned by their threads)
@@ -456,7 +456,7 @@ two ideas to keep warm as the stages climb, neither committed yet:
    FEATURE-COMPLETE for ai.c's C subset; stage 7 (the linker + real SysV) is next.
 7. **THE GATE**: cc-built ai.c (+ host/*.c, system ld, ai_tco=0) boots the
    egg and runs `make test` green -- the corpus under a cc-built binary.
-   this is the rung's aiutils-feature-complete moment. a multi-part integration
+   this is the rung's kore-feature-complete moment. a multi-part integration
    gate, landing sub-rung by sub-rung:
    7a THE RELOCATABLE OBJECT (crew/holo/obj.l) LANDED 2026-07-07: `aicc -c IN OUT`
    lays an ELF `.o` the SYSTEM linker consumes, so cc code links against gcc-built
@@ -581,10 +581,10 @@ two ideas to keep warm as the stages climb, neither committed yet:
    dimension may be an ENUM CONSTANT (`int m[KN][KN]`), folded through ps 'enums (the
    `dimval` helper threaded into `adims`/`pdtor` -- ai.h's kind matrices are `[KN][KN]`).
    gate: 75-arr2d.c (row-major layout, `[i][j]` access, nested-brace + `[]`-inferred
-   globals, gcc = cc = 18); law.l goldens the nested + enum-dim types. AND cc SPLIT OUT OF au INTO ITS OWN
+   globals, gcc = cc = 18); law.l goldens the nested + enum-dim types. AND cc SPLIT OUT OF kore INTO ITS OWN
    APP `aicc`: a catted `#!/usr/bin/env -S ai -l` script (u-floor + asbook + elf/obj +
    crew/cc/{lex,cpp,parse,gen,cc}.l) whose tail SEAT in cc.l fires cc-main -- so a cc
-   edit rebuilds only aicc, never the whole au cat, and a parallel au rebuild can no
+   edit rebuilds only aicc, never the whole kore cat, and a parallel kore rebuild can no
    longer tear the compiler mid-run. `make test_cc` and `make install` both target aicc.
    7c-iii PART 3 (THE LAST OF THE PARSE TAIL) LANDED 2026-07-07 -- ai.c NOW PARSES END
    TO END (all 925 top-level forms; localized form by form with a ptop-loop driver over

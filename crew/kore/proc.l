@@ -1,5 +1,5 @@
-; crew/utils/proc.l -- the process tools of aiutils: env, sleep, kill, xargs.
-; a toolbox file, no seat -- au is its door; loads after core.l and rides the
+; crew/kore/proc.l -- the process tools of kore: env, sleep, kill, xargs.
+; a toolbox file, no seat -- kore is its door; loads after core.l and rides the
 ; u-floor. no nifs of its own: environ/getenv/setenv (host/main.c + init.c),
 ; spawn/wait (init.c's posix lane -- spawn answers the pid or a NEGATIVE errno,
 ; a child that cannot exec _exit(127)s), still (pty.c's kill), rest (the core

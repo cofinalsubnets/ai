@@ -1,14 +1,14 @@
-; crew/utils/core.l -- the line tools, the coreutils batch of aiutils: cat, echo, head,
+; crew/kore/core.l -- the line tools, the coreutils batch of kore: cat, echo, head,
 ; tail, wc, sort, uniq, tee, seq, yes, true, false, basename, dirname -- and the field
 ; tools: cut, tr, nl, rev. every tool is a
 ; <name>-main (the args after its name -> conversation on the ports -> quit, the exit
-; door), dispatched by the multi-call `au` (crew/utils/au.l holds the registry). this
-; file is a TOOLBOX, not a tool: no seat of its own, au is its door. it rides text.l's
+; door), dispatched by the multi-call `kore` (crew/kore/kore.l holds the registry). this
+; file is a TOOLBOX, not a tool: no seat of its own, kore is its door. it rides text.l's
 ; lines/unlines and loads right after text.l in the cat, so the capture law folds the
 ; real bridge here before cook.l's later `lines` leak can shadow it. a body-less
 ; top-level `:` -- the u-floor (shared helpers, the unified layer's prefix) and the
 ; mains leak; everything else stays local to its define. the GNU faces we keep exact
-; (the smokes in `make test_utils` hold them to the byte): wc pads every field to the
+; (the smokes in `make test_kore` hold them to the byte): wc pads every field to the
 ; digit width of the byte TOTAL, uniq -c wears width 7, head/tail banner many files
 ; with ==> name <== and a blank line between.
 (:
@@ -18,7 +18,7 @@
     (: n (tally s)
        (go i acc) (? (i < n) (go (i + 1) ((* 10 acc) + ((s i) - 48))) acc)
        (? (&& (0 < n) ((s 0) = 45)) (0 - (go 1 0)) (go 0 0)))
-   ; a path -> (1 text) when it opens, () when it does not (au.l's read-text shape)
+   ; a path -> (1 text) when it opens, () when it does not (kore.l's read-text shape)
    (uread p) (: q (open p "r") (? q (: t (slurp q) _ (close q) `(1 t)) ()))
    ; complain on err and leave through the exit door with code c
    (udie c m) (: _ (say err m) _ (put err 10) (quit c))

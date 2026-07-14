@@ -1,5 +1,5 @@
-; crew/utils/sed.l -- sed-lite over the re.l engine: the stream editor's useful
-; core. a toolbox file, no seat -- au is its door; loads after re.l in the cat.
+; crew/kore/sed.l -- sed-lite over the re.l engine: the stream editor's useful
+; core. a toolbox file, no seat -- kore is its door; loads after re.l in the cat.
 ;
 ;   sed [-n] SCRIPT [FILE..]
 ;
@@ -18,7 +18,7 @@
 ; out of dialect (documented, unsmoked): GNU's empty-s-pattern reuse (an empty
 ; pattern here just matches the empty text), \n in replacements, hold space.
 ;
-; the pure floor (lawed in crew/utils/law.l): (sparse sc) -> (1 cmds) | (),
+; the pure floor (lawed in crew/kore/law.l): (sparse sc) -> (1 cmds) | (),
 ; and (usub nodes repl ln g?) -> (changed text), the one substitution walk.
 (:
    ; -- the substitution: replace matches of nodes in ln by repl (g? = all) --

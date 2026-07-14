@@ -10,7 +10,7 @@
 ; (sqrt stays in C -- crew/cc/lib/math/am.c's am_sqrt, OURS and IEEE-exact; a thing
 ; C CAN say has no place here.) x64 only, like the linker. runs after crew/holo/{elf,obj}.l in a cat (the aicc prefix
 ; layers; the assembler itself rides the baked holo book):
-;   { cat crew/utils/{text,core,asbook}.l crew/holo/{elf,obj}.l crew/cc/lib/mksys.l;
+;   { cat crew/kore/{text,core,asbook}.l crew/holo/{elf,obj}.l crew/cc/lib/mksys.l;
 ;     echo '(mksys "out/.../sys.o")'; } | out/host/ai
 ; register vocabulary is holo's: r0=rax r1=rcx r2=rdx r3=rbx r4=rbp r5=rsi r6=rdi
 ; r7=r8 r8=r9 r9=r10 r10=r11 r11=r12 r12=r13 r13=r14 r14=r15.

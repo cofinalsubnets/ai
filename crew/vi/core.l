@@ -3,7 +3,7 @@
 ; tty, no file io in here -- the face (crew/vi/vi.l) reads keys, performs the
 ; write requests the ex commands leave on the state, and blits frames; the
 ; laws (crew/vi/law.l) drive vstep with byte lists and read the tablet back.
-; search rides crew/utils/re.l (rebre/refind), so re.l loads first in any cat.
+; search rides crew/kore/re.l (rebre/refind), so re.l loads first in any cat.
 ;
 ; the state (a tablet): 'lines (texts, never empty -- the vi invariant),
 ; 'row 'col (0-based), 'goal (the remembered column j/k aim for), 'top (first

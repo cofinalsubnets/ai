@@ -1,8 +1,8 @@
-; crew/utils/re.l -- the regex engine of aiutils (a POSIX-BRE dialect), and grep
-; over it. the engine is pure and lawed (crew/utils/law.l holds hand laws plus a
+; crew/kore/re.l -- the regex engine of kore (a POSIX-BRE dialect), and grep
+; over it. the engine is pure and lawed (crew/kore/law.l holds hand laws plus a
 ; seeded differential fuzz against an independent Brzozowski-derivative oracle);
-; grep is smoked byte-identical against GNU in `make test_utils`. a toolbox file,
-; no seat -- au (crew/utils/au.l) is its door. loads after core.l in the cat and
+; grep is smoked byte-identical against GNU in `make test_kore`. a toolbox file,
+; no seat -- kore (crew/kore/kore.l) is its door. loads after core.l in the cat and
 ; rides the u-floor (uread, udie) and text.l's lines.
 ;
 ; the dialect: literals, `.`, `*`, `^` (anchor at the head only), `$` (anchor at

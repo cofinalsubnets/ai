@@ -1,8 +1,8 @@
-; crew/utils/law.l -- the aiutils laws, held by assertion: the myers/patience projections
+; crew/kore/law.l -- the kore laws, held by assertion: the myers/patience projections
 ; (the script spells both sides), MINIMALITY against an O(nm) LCS oracle, the u-floor and
 ; field/fs floors to their GNU faces, the regex floor (hand BRE laws + a seeded fuzz
 ; against an independent Brzozowski-derivative oracle), and a seeded fuzz over the diffs.
-; reads the leaked globals from the crew/utils/ toolboxes (the `make test_utils` cat).
+; reads the leaked globals from the crew/kore/ toolboxes (the `make test_kore` cat).
 
 ; --- the classic: Myers' own worked example, D = 5 ---
 (: A '(a b c a b b a) B '(c b a b a c) s (myers A B)
@@ -112,7 +112,7 @@
       (= (udiff "a" "b" "" "x\n") "--- a\n+++ b\n@@ -0,0 +1 @@\n+x\n")
       (= (udiff "a" "b" "x\n" "") "--- a\n+++ b\n@@ -1 +0,0 @@\n-x\n")))
 
-; --- the u-floor (crew/utils/core.l): the pure helpers under the line tools, each
+; --- the u-floor (crew/kore/core.l): the pure helpers under the line tools, each
 ; held to its GNU face -- the clips, the counter, the two path clips ---
 (: (assert
       (= (uatoi "42") 42) (= (uatoi "-7") -7) (= (uatoi "0") 0)
@@ -147,11 +147,11 @@
       (= (uset "\\n\\t") '(10 9))                                  ; the escapes
       (= (urev "abc") "cba") (! (urev ""))))
 
-; --- the fs-tool floor (crew/utils/fs.l): uoct reads chmod's octal ---
+; --- the fs-tool floor (crew/kore/fs.l): uoct reads chmod's octal ---
 (: (assert
       (= (uoct "755") 493) (= (uoct "644") 420) (= (uoct "0") 0) (= (uoct "7") 7)))
 
-; --- the regex floor (crew/utils/re.l): the BRE faces, held by hand ---
+; --- the regex floor (crew/kore/re.l): the BRE faces, held by hand ---
 (: (ok p s) (: r (rebre p) (&& (two? r) (rehas (caup r) s)))
    (no p s) (: r (rebre p) (&& (two? r) (! (rehas (caup r) s))))
    (bad p) (! (two? (rebre p)))
@@ -248,7 +248,7 @@
    r (fzr 200 (seed 13))
    (assert (= r 'ok)))
 
-; --- the sed floor (crew/utils/sed.l): the substitution walk to its GNU face,
+; --- the sed floor (crew/kore/sed.l): the substitution walk to its GNU face,
 ; and the script parser's shapes -- what parses, what refuses ---
 (: (sub p r s g?) (: b (rebre p) (caup (usub (caup b) r s g?)))
    (assert
@@ -272,7 +272,7 @@
       (! (sparse "2,3q")) (! (sparse "x")) (! (sparse "s/a/b/x"))   ; q takes one address; unknown verb/flag
       (! (sparse "s/a\\{/b/"))))                                 ; the regex dialect refuses through
 
-; --- the process floor (crew/utils/proc.l): durations to milliseconds, and
+; --- the process floor (crew/kore/proc.l): durations to milliseconds, and
 ; the quote-blind word split under xargs ---
 (: (assert
       (= (udur "2") 2000) (= (udur "0") 0) (= (udur "1s") 1000)
@@ -284,5 +284,5 @@
       (= (uwords "x") '("x"))
       (! (uwords "  \n")) (! (uwords ""))))
 
-(say err "crew/utils/law: myers + patience + lines/unlines + unified hunks + the u-floor + the regex floor -- projections + minimality (lcs oracle) + anchors + seeded fuzz (lcs + brzozowski oracles) ok
+(say err "crew/kore/law: myers + patience + lines/unlines + unified hunks + the u-floor + the regex floor -- projections + minimality (lcs oracle) + anchors + seeded fuzz (lcs + brzozowski oracles) ok
 ")

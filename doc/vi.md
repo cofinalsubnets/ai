@@ -20,9 +20,9 @@ discipline, re.l's regex engine):
   ESC[A-D decode to kjlh with a one-byte pushback so a bare ESC still
   interleaves), frames onto `out`, the alternate screen (?1049) so scrollback
   survives, `raw` for the tty (cooked restores at exit), winsize when there is
-  one (80x24 on a pipe). port EOF quits -- which is what makes `au vi` fully
+  one (80x24 on a pipe). port EOF quits -- which is what makes `kore vi` fully
   drivable from a pipe: the smokes script whole sessions
-  (`printf 'ihello\033:wq\n' | au vi f`).
+  (`printf 'ihello\033:wq\n' | kore vi f`).
 
 ## the dialect
 

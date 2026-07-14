@@ -41,7 +41,7 @@ test:
 # test_kernel + test_wasm are in test_all but NOT the fast `test`: each needs an
 # extra toolchain (qemu + OVMF, x86_64-only; emcc + node) and no-ops when that
 # is absent. See their rules below.
-test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_uukind test_gc test_extract test_tools test_hostnif test_doc test_glaze test_sat test_holo test_lux test_utils test_vi test_cc test_raw nettest test_arm64 test_kernel test_wasm
+test_all: test_host test_ai0 test_proof test_gen test_uugen test_uulean test_uuwm test_uukind test_gc test_extract test_tools test_hostnif test_doc test_glaze test_sat test_holo test_lux test_kore test_vi test_cc test_raw nettest test_arm64 test_kernel test_wasm
 # ai0 bakes prel+ev+repl + the whole test corpus (sed headers) and self-tests
 # BOTH compilers in one run: eval prel (c0), run the corpus, bootstrap ev.l
 # through c0, run the corpus again via the self-hosted ev. Built with -Dai_tco=0,
@@ -174,219 +174,219 @@ test_lux: host
 	  cat out/host/.test_lux.out; \
 	  { [ $$r -eq 0 ] && grep -q "crew/lux/law: StackSet" out/host/.test_lux.out; } \
 	    || { echo "FAIL lux (exit $$r)"; exit 1; }
-# aiutils (crew/utils/): the myers + patience diff engines, the text/tool surface,
-# the line tools (crew/utils/core.l: cat head tail wc sort uniq tee + the trivia),
-# and `au`, the multi-call toolbox (busybox's trick -- one binary, the util picked
-# off the command line or an argv[0] symlink; crew/utils/au.l is the dispatcher).
+# kore (crew/kore/): the myers + patience diff engines, the text/tool surface,
+# the line tools (crew/kore/core.l: cat head tail wc sort uniq tee + the trivia),
+# and `kore`, the multi-call toolbox (busybox's trick -- one binary, the util picked
+# off the command line or an argv[0] symlink; crew/kore/kore.l is the dispatcher).
 # The law file holds the engines to their projections, to an O(nm) LCS oracle
-# (minimality), the u-floor to its GNU faces, and seeded fuzzes; the au smokes then
+# (minimality), the u-floor to its GNU faces, and seeded fuzzes; the kore smokes then
 # drive the BUILT artifact: diff + the line tools byte-identical to GNU (LC_ALL=C
 # for sort), the exit triple, argv[0] dispatch through a `diff` symlink, usage at 2,
-# and (x86_64) `au as` assembling an exit(7) ELF that RUNS. Gate = the law sentinel
+# and (x86_64) `kore as` assembling an exit(7) ELF that RUNS. Gate = the law sentinel
 # AND exit 0 AND the smokes.
-aufiles = crew/utils/text.l crew/utils/core.l crew/utils/fs.l crew/utils/re.l crew/utils/sed.l crew/utils/proc.l crew/vi/core.l crew/vi/vi.l crew/utils/diff.l tools/ain.l crew/cook/cook.l crew/utils/asbook.l crew/holo/elf.l crew/holo/obj.l crew/utils/au.l
-# aicc: the C compiler is its OWN app, NOT baked into the au cat -- a cc edit rebuilds
-# only aicc (never au), so an au rebuild in another session can't tear the compiler.
+korefiles = crew/kore/text.l crew/kore/core.l crew/kore/fs.l crew/kore/re.l crew/kore/sed.l crew/kore/proc.l crew/vi/core.l crew/vi/vi.l crew/kore/diff.l tools/ain.l crew/cook/cook.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/kore/kore.l
+# aicc: the C compiler is its OWN app, NOT baked into the kore cat -- a cc edit rebuilds
+# only aicc (never kore), so an kore rebuild in another session can't tear the compiler.
 # Its own catted `#!/usr/bin/env -S ai -l` script: the u-floor (text+core), the assembler
 # book + elf/obj writers, then crew/cc/{lex,cpp,parse,gen,cc}.l whose tail SEAT fires.
-aiccfiles = crew/utils/text.l crew/utils/core.l crew/utils/asbook.l crew/holo/elf.l crew/holo/obj.l crew/holo/link.l crew/cc/lex.l crew/cc/cpp.l crew/cc/parse.l crew/cc/gen.l crew/cc/cc.l
+aiccfiles = crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/holo/link.l crew/cc/lex.l crew/cc/cpp.l crew/cc/parse.l crew/cc/gen.l crew/cc/cc.l
 # (`ho` is defined further down, after this rule is READ -- target/prereq names
 # expand at parse time, so these two lines spell out/host$(hsuf) themselves.)
-out/host$(hsuf)/au: $(aufiles)
+out/host$(hsuf)/kore: $(korefiles)
 	@echo AI	$(abspath $@)
-	@{ echo '#!/usr/bin/env -S ai'; cat $(aufiles); } > $@
+	@{ echo '#!/usr/bin/env -S ai'; cat $(korefiles); } > $@
 	@chmod 755 $@
 out/host$(hsuf)/aicc: $(aiccfiles)
 	@echo AI	$(abspath $@)
 	@{ echo '#!/usr/bin/env -S ai -l'; cat $(aiccfiles); } > $@
 	@chmod 755 $@
-.PHONY: test_utils
-test_utils: host out/host$(hsuf)/au
-	@echo "UTILS crew/utils/{text,core,fs,re,sed,diff,law}.l"; \
-	  cat test/00-init.l crew/utils/text.l crew/utils/core.l crew/utils/fs.l crew/utils/re.l crew/utils/sed.l crew/utils/proc.l crew/vi/core.l crew/vi/vi.l crew/utils/diff.l crew/utils/law.l | $m > out/host/.test_utils.out 2>&1; r=$$?; \
-	  cat out/host/.test_utils.out; \
-	  { [ $$r -eq 0 ] && grep -q "crew/utils/law: myers" out/host/.test_utils.out; } \
+.PHONY: test_kore
+test_kore: host out/host$(hsuf)/kore
+	@echo "UTILS crew/kore/{text,core,fs,re,sed,diff,law}.l"; \
+	  cat test/00-init.l crew/kore/text.l crew/kore/core.l crew/kore/fs.l crew/kore/re.l crew/kore/sed.l crew/kore/proc.l crew/vi/core.l crew/vi/vi.l crew/kore/diff.l crew/kore/law.l | $m > out/host/.test_kore.out 2>&1; r=$$?; \
+	  cat out/host/.test_kore.out; \
+	  { [ $$r -eq 0 ] && grep -q "crew/kore/law: myers" out/host/.test_kore.out; } \
 	    || { echo "FAIL utils (exit $$r)"; exit 1; }
 	@printf 'a\nb\nc\n' > $(ho)/.au1; printf 'a\nX\nc\n' > $(ho)/.au2; \
-	  $m $(ho)/au diff $(ho)/.au1 $(ho)/.au1 > $(ho)/.au-same.out 2>&1; r=$$?; \
-	  { [ $$r -eq 0 ] && [ ! -s $(ho)/.au-same.out ]; } || { echo "FAIL au diff same (exit $$r)"; exit 1; }; \
-	  $m $(ho)/au diff $(ho)/.au1 $(ho)/.au2 > $(ho)/.au-diff.out 2>&1; r=$$?; \
-	  [ $$r -eq 1 ] || { echo "FAIL au diff differ (exit $$r)"; exit 1; }; \
-	  diff -u $(ho)/.au1 $(ho)/.au2 | tail -n +3 > $(ho)/.au-gnu.out; tail -n +3 $(ho)/.au-diff.out > $(ho)/.au-ours.out; \
-	  cmp -s $(ho)/.au-gnu.out $(ho)/.au-ours.out || { echo "FAIL au diff vs GNU"; exit 1; }; \
-	  ln -sf au $(ho)/diff; \
-	  $m $(ho)/diff $(ho)/.au1 $(ho)/.au2 > $(ho)/.au-sym.out 2>&1; r=$$?; \
-	  { [ $$r -eq 1 ] && cmp -s $(ho)/.au-diff.out $(ho)/.au-sym.out; } || { echo "FAIL au argv0 symlink (exit $$r)"; exit 1; }; \
-	  $m $(ho)/au bogus > /dev/null 2>&1; r=$$?; \
-	  [ $$r -eq 2 ] || { echo "FAIL au usage (exit $$r)"; exit 1; }; \
+	  $m $(ho)/kore diff $(ho)/.au1 $(ho)/.au1 > $(ho)/.kore-same.out 2>&1; r=$$?; \
+	  { [ $$r -eq 0 ] && [ ! -s $(ho)/.kore-same.out ]; } || { echo "FAIL kore diff same (exit $$r)"; exit 1; }; \
+	  $m $(ho)/kore diff $(ho)/.au1 $(ho)/.au2 > $(ho)/.kore-diff.out 2>&1; r=$$?; \
+	  [ $$r -eq 1 ] || { echo "FAIL kore diff differ (exit $$r)"; exit 1; }; \
+	  diff -u $(ho)/.au1 $(ho)/.au2 | tail -n +3 > $(ho)/.kore-gnu.out; tail -n +3 $(ho)/.kore-diff.out > $(ho)/.kore-ours.out; \
+	  cmp -s $(ho)/.kore-gnu.out $(ho)/.kore-ours.out || { echo "FAIL kore diff vs GNU"; exit 1; }; \
+	  ln -sf kore $(ho)/diff; \
+	  $m $(ho)/diff $(ho)/.au1 $(ho)/.au2 > $(ho)/.kore-sym.out 2>&1; r=$$?; \
+	  { [ $$r -eq 1 ] && cmp -s $(ho)/.kore-diff.out $(ho)/.kore-sym.out; } || { echo "FAIL kore argv0 symlink (exit $$r)"; exit 1; }; \
+	  $m $(ho)/kore bogus > /dev/null 2>&1; r=$$?; \
+	  [ $$r -eq 2 ] || { echo "FAIL kore usage (exit $$r)"; exit 1; }; \
 	  if [ "$$(uname -m)" = x86_64 ]; then \
-	    printf '(li r0 60) (li r6 7) (sys)\n' > $(ho)/.au-as.l; \
-	    $m $(ho)/au as x64 $(ho)/.au-as.l $(ho)/.au-as.elf > /dev/null 2>&1 || { echo "FAIL au as"; exit 1; }; \
-	    chmod +x $(ho)/.au-as.elf; $(ho)/.au-as.elf; r=$$?; \
-	    [ $$r -eq 7 ] || { echo "FAIL au as run (exit $$r)"; exit 1; }; \
+	    printf '(li r0 60) (li r6 7) (sys)\n' > $(ho)/.kore-as.l; \
+	    $m $(ho)/kore as x64 $(ho)/.kore-as.l $(ho)/.kore-as.elf > /dev/null 2>&1 || { echo "FAIL kore as"; exit 1; }; \
+	    chmod +x $(ho)/.kore-as.elf; $(ho)/.kore-as.elf; r=$$?; \
+	    [ $$r -eq 7 ] || { echo "FAIL kore as run (exit $$r)"; exit 1; }; \
 	  fi; \
-	  echo "au: diff (GNU-identical) + argv0 symlink + usage + as ok"
+	  echo "kore: diff (GNU-identical) + argv0 symlink + usage + as ok"
 	@printf 'b\na\nc\nb\n' > $(ho)/.cu1; printf 'x y\nz\n' > $(ho)/.cu2; \
-	  LC_ALL=C sort $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/au sort $(ho)/.cu1 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au sort vs GNU"; exit 1; }; \
-	  LC_ALL=C sort -u $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/au sort -u $(ho)/.cu1 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au sort -u vs GNU"; exit 1; }; \
-	  LC_ALL=C sort $(ho)/.cu1 | uniq -c > $(ho)/.cu-g; $m $(ho)/au sort $(ho)/.cu1 | $m $(ho)/au uniq -c > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au uniq -c vs GNU"; exit 1; }; \
-	  head -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au head -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au head vs GNU"; exit 1; }; \
-	  tail -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au tail -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au tail vs GNU"; exit 1; }; \
-	  wc $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au wc $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au wc vs GNU"; exit 1; }; \
-	  wc -l < $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/au wc -l < $(ho)/.cu1 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au wc -l stdin vs GNU"; exit 1; }; \
-	  cat $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/au cat $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au cat vs GNU"; exit 1; }; \
-	  seq 5 > $(ho)/.cu-g; $m $(ho)/au seq 5 > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au seq vs GNU"; exit 1; }; \
-	  echo hi there > $(ho)/.cu-g; $m $(ho)/au echo hi there > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au echo vs GNU"; exit 1; }; \
-	  basename /a/b.txt .txt > $(ho)/.cu-g; $m $(ho)/au basename /a/b.txt .txt > $(ho)/.cu-o; \
-	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL au basename vs GNU"; exit 1; }; \
-	  printf 'q\nq\nr\n' | tee $(ho)/.cu-g2 > $(ho)/.cu-g; printf 'q\nq\nr\n' | $m $(ho)/au tee $(ho)/.cu-o2 > $(ho)/.cu-o; \
-	  { cmp -s $(ho)/.cu-g $(ho)/.cu-o && cmp -s $(ho)/.cu-g2 $(ho)/.cu-o2; } || { echo "FAIL au tee vs GNU"; exit 1; }; \
-	  echo "au: line tools (sort/uniq/head/tail/wc/cat/seq/echo/basename/tee GNU-identical) ok"
+	  LC_ALL=C sort $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/kore sort $(ho)/.cu1 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore sort vs GNU"; exit 1; }; \
+	  LC_ALL=C sort -u $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/kore sort -u $(ho)/.cu1 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore sort -u vs GNU"; exit 1; }; \
+	  LC_ALL=C sort $(ho)/.cu1 | uniq -c > $(ho)/.cu-g; $m $(ho)/kore sort $(ho)/.cu1 | $m $(ho)/kore uniq -c > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore uniq -c vs GNU"; exit 1; }; \
+	  head -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/kore head -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore head vs GNU"; exit 1; }; \
+	  tail -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/kore tail -n 2 $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore tail vs GNU"; exit 1; }; \
+	  wc $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/kore wc $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore wc vs GNU"; exit 1; }; \
+	  wc -l < $(ho)/.cu1 > $(ho)/.cu-g; $m $(ho)/kore wc -l < $(ho)/.cu1 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore wc -l stdin vs GNU"; exit 1; }; \
+	  cat $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-g; $m $(ho)/kore cat $(ho)/.cu1 $(ho)/.cu2 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore cat vs GNU"; exit 1; }; \
+	  seq 5 > $(ho)/.cu-g; $m $(ho)/kore seq 5 > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore seq vs GNU"; exit 1; }; \
+	  echo hi there > $(ho)/.cu-g; $m $(ho)/kore echo hi there > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore echo vs GNU"; exit 1; }; \
+	  basename /a/b.txt .txt > $(ho)/.cu-g; $m $(ho)/kore basename /a/b.txt .txt > $(ho)/.cu-o; \
+	  cmp -s $(ho)/.cu-g $(ho)/.cu-o || { echo "FAIL kore basename vs GNU"; exit 1; }; \
+	  printf 'q\nq\nr\n' | tee $(ho)/.cu-g2 > $(ho)/.cu-g; printf 'q\nq\nr\n' | $m $(ho)/kore tee $(ho)/.cu-o2 > $(ho)/.cu-o; \
+	  { cmp -s $(ho)/.cu-g $(ho)/.cu-o && cmp -s $(ho)/.cu-g2 $(ho)/.cu-o2; } || { echo "FAIL kore tee vs GNU"; exit 1; }; \
+	  echo "kore: line tools (sort/uniq/head/tail/wc/cat/seq/echo/basename/tee GNU-identical) ok"
 	@printf 'a:b:c\nnodelim\nx:y\n' > $(ho)/.fu1; \
-	  cut -d: -f1,3 $(ho)/.fu1 > $(ho)/.fu-g; $m $(ho)/au cut -d: -f1,3 $(ho)/.fu1 > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au cut -f vs GNU"; exit 1; }; \
-	  cut -d: -f1,3 -s $(ho)/.fu1 > $(ho)/.fu-g; $m $(ho)/au cut -d: -f1,3 -s $(ho)/.fu1 > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au cut -s vs GNU"; exit 1; }; \
-	  cut -d: -f2- $(ho)/.fu1 > $(ho)/.fu-g; $m $(ho)/au cut -d: -f2- $(ho)/.fu1 > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au cut -f2- vs GNU"; exit 1; }; \
-	  printf 'hello\nhi\n' | cut -c2-4 > $(ho)/.fu-g; printf 'hello\nhi\n' | $m $(ho)/au cut -c2-4 > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au cut -c vs GNU"; exit 1; }; \
-	  printf 'hi there\n' | tr a-z A-Z > $(ho)/.fu-g; printf 'hi there\n' | $m $(ho)/au tr a-z A-Z > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au tr vs GNU"; exit 1; }; \
-	  printf 'abcd\n' | tr abcd xy > $(ho)/.fu-g; printf 'abcd\n' | $m $(ho)/au tr abcd xy > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au tr pad vs GNU"; exit 1; }; \
-	  printf 'hello world\n' | tr -d aeiou > $(ho)/.fu-g; printf 'hello world\n' | $m $(ho)/au tr -d aeiou > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au tr -d vs GNU"; exit 1; }; \
-	  printf 'aa  bb   cc\n' | tr -s ' ' > $(ho)/.fu-g; printf 'aa  bb   cc\n' | $m $(ho)/au tr -s ' ' > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au tr -s vs GNU"; exit 1; }; \
-	  printf 'a\n\nb\n' | nl > $(ho)/.fu-g; printf 'a\n\nb\n' | $m $(ho)/au nl > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au nl vs GNU"; exit 1; }; \
-	  printf 'abc\nde\n' | rev > $(ho)/.fu-g; printf 'abc\nde\n' | $m $(ho)/au rev > $(ho)/.fu-o; \
-	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL au rev vs GNU"; exit 1; }; \
-	  echo "au: field tools (cut/tr/nl/rev GNU-identical) ok"
+	  cut -d: -f1,3 $(ho)/.fu1 > $(ho)/.fu-g; $m $(ho)/kore cut -d: -f1,3 $(ho)/.fu1 > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore cut -f vs GNU"; exit 1; }; \
+	  cut -d: -f1,3 -s $(ho)/.fu1 > $(ho)/.fu-g; $m $(ho)/kore cut -d: -f1,3 -s $(ho)/.fu1 > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore cut -s vs GNU"; exit 1; }; \
+	  cut -d: -f2- $(ho)/.fu1 > $(ho)/.fu-g; $m $(ho)/kore cut -d: -f2- $(ho)/.fu1 > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore cut -f2- vs GNU"; exit 1; }; \
+	  printf 'hello\nhi\n' | cut -c2-4 > $(ho)/.fu-g; printf 'hello\nhi\n' | $m $(ho)/kore cut -c2-4 > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore cut -c vs GNU"; exit 1; }; \
+	  printf 'hi there\n' | tr a-z A-Z > $(ho)/.fu-g; printf 'hi there\n' | $m $(ho)/kore tr a-z A-Z > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore tr vs GNU"; exit 1; }; \
+	  printf 'abcd\n' | tr abcd xy > $(ho)/.fu-g; printf 'abcd\n' | $m $(ho)/kore tr abcd xy > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore tr pad vs GNU"; exit 1; }; \
+	  printf 'hello world\n' | tr -d aeiou > $(ho)/.fu-g; printf 'hello world\n' | $m $(ho)/kore tr -d aeiou > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore tr -d vs GNU"; exit 1; }; \
+	  printf 'aa  bb   cc\n' | tr -s ' ' > $(ho)/.fu-g; printf 'aa  bb   cc\n' | $m $(ho)/kore tr -s ' ' > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore tr -s vs GNU"; exit 1; }; \
+	  printf 'a\n\nb\n' | nl > $(ho)/.fu-g; printf 'a\n\nb\n' | $m $(ho)/kore nl > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore nl vs GNU"; exit 1; }; \
+	  printf 'abc\nde\n' | rev > $(ho)/.fu-g; printf 'abc\nde\n' | $m $(ho)/kore rev > $(ho)/.fu-o; \
+	  cmp -s $(ho)/.fu-g $(ho)/.fu-o || { echo "FAIL kore rev vs GNU"; exit 1; }; \
+	  echo "kore: field tools (cut/tr/nl/rev GNU-identical) ok"
 	@P=$(ho)/.fsplay; rm -rf $$P; mkdir $$P; \
-	  $m $(ho)/au mkdir -p $$P/a/b/c && [ -d $$P/a/b/c ] || { echo "FAIL au mkdir -p"; exit 1; }; \
+	  $m $(ho)/kore mkdir -p $$P/a/b/c && [ -d $$P/a/b/c ] || { echo "FAIL kore mkdir -p"; exit 1; }; \
 	  printf 'hi there\n' > $$P/f1; \
-	  $m $(ho)/au cp $$P/f1 $$P/f2 && cmp -s $$P/f1 $$P/f2 || { echo "FAIL au cp"; exit 1; }; \
-	  $m $(ho)/au cp $$P/f1 $$P/a && cmp -s $$P/f1 $$P/a/f1 || { echo "FAIL au cp into dir"; exit 1; }; \
-	  $m $(ho)/au mv $$P/f2 $$P/f3 && [ ! -e $$P/f2 ] && cmp -s $$P/f1 $$P/f3 || { echo "FAIL au mv"; exit 1; }; \
-	  $m $(ho)/au ln -s f1 $$P/l1 && [ "$$(readlink $$P/l1)" = f1 ] || { echo "FAIL au ln -s"; exit 1; }; \
-	  $m $(ho)/au ln $$P/f1 $$P/h1 && [ $$P/h1 -ef $$P/f1 ] || { echo "FAIL au ln"; exit 1; }; \
-	  $m $(ho)/au touch $$P/new $$P/.hidden && [ -f $$P/new ] && [ -f $$P/.hidden ] || { echo "FAIL au touch"; exit 1; }; \
-	  $m $(ho)/au chmod 600 $$P/f1 && [ "$$(stat -c %a $$P/f1)" = 600 ] || { echo "FAIL au chmod"; exit 1; }; \
-	  LC_ALL=C ls -1 $$P > $(ho)/.fs-g; $m $(ho)/au ls $$P > $(ho)/.fs-o; \
-	  cmp -s $(ho)/.fs-g $(ho)/.fs-o || { echo "FAIL au ls vs GNU"; exit 1; }; \
-	  LC_ALL=C ls -A -1 $$P > $(ho)/.fs-g; $m $(ho)/au ls -a $$P > $(ho)/.fs-o; \
-	  cmp -s $(ho)/.fs-g $(ho)/.fs-o || { echo "FAIL au ls -a vs GNU -A"; exit 1; }; \
-	  [ "$$($m $(ho)/au pwd)" = "$$(pwd)" ] || { echo "FAIL au pwd"; exit 1; }; \
-	  $m $(ho)/au rm $$P/f3 && [ ! -e $$P/f3 ] || { echo "FAIL au rm"; exit 1; }; \
-	  $m $(ho)/au rm -r $$P/a && [ ! -e $$P/a ] || { echo "FAIL au rm -r"; exit 1; }; \
-	  $m $(ho)/au mkdir $$P/empty && $m $(ho)/au rmdir $$P/empty && [ ! -e $$P/empty ] || { echo "FAIL au rmdir"; exit 1; }; \
-	  $m $(ho)/au rm $$P/nope > /dev/null 2>&1; r=$$?; [ $$r -eq 1 ] || { echo "FAIL au rm miss exit"; exit 1; }; \
-	  $m $(ho)/au rm -f $$P/nope > /dev/null 2>&1; r=$$?; [ $$r -eq 0 ] || { echo "FAIL au rm -f quiet"; exit 1; }; \
-	  echo "au: fs tools (mkdir/cp/mv/ln/touch/chmod/ls/pwd/rm/rmdir) ok"
+	  $m $(ho)/kore cp $$P/f1 $$P/f2 && cmp -s $$P/f1 $$P/f2 || { echo "FAIL kore cp"; exit 1; }; \
+	  $m $(ho)/kore cp $$P/f1 $$P/a && cmp -s $$P/f1 $$P/a/f1 || { echo "FAIL kore cp into dir"; exit 1; }; \
+	  $m $(ho)/kore mv $$P/f2 $$P/f3 && [ ! -e $$P/f2 ] && cmp -s $$P/f1 $$P/f3 || { echo "FAIL kore mv"; exit 1; }; \
+	  $m $(ho)/kore ln -s f1 $$P/l1 && [ "$$(readlink $$P/l1)" = f1 ] || { echo "FAIL kore ln -s"; exit 1; }; \
+	  $m $(ho)/kore ln $$P/f1 $$P/h1 && [ $$P/h1 -ef $$P/f1 ] || { echo "FAIL kore ln"; exit 1; }; \
+	  $m $(ho)/kore touch $$P/new $$P/.hidden && [ -f $$P/new ] && [ -f $$P/.hidden ] || { echo "FAIL kore touch"; exit 1; }; \
+	  $m $(ho)/kore chmod 600 $$P/f1 && [ "$$(stat -c %a $$P/f1)" = 600 ] || { echo "FAIL kore chmod"; exit 1; }; \
+	  LC_ALL=C ls -1 $$P > $(ho)/.fs-g; $m $(ho)/kore ls $$P > $(ho)/.fs-o; \
+	  cmp -s $(ho)/.fs-g $(ho)/.fs-o || { echo "FAIL kore ls vs GNU"; exit 1; }; \
+	  LC_ALL=C ls -A -1 $$P > $(ho)/.fs-g; $m $(ho)/kore ls -a $$P > $(ho)/.fs-o; \
+	  cmp -s $(ho)/.fs-g $(ho)/.fs-o || { echo "FAIL kore ls -a vs GNU -A"; exit 1; }; \
+	  [ "$$($m $(ho)/kore pwd)" = "$$(pwd)" ] || { echo "FAIL kore pwd"; exit 1; }; \
+	  $m $(ho)/kore rm $$P/f3 && [ ! -e $$P/f3 ] || { echo "FAIL kore rm"; exit 1; }; \
+	  $m $(ho)/kore rm -r $$P/a && [ ! -e $$P/a ] || { echo "FAIL kore rm -r"; exit 1; }; \
+	  $m $(ho)/kore mkdir $$P/empty && $m $(ho)/kore rmdir $$P/empty && [ ! -e $$P/empty ] || { echo "FAIL kore rmdir"; exit 1; }; \
+	  $m $(ho)/kore rm $$P/nope > /dev/null 2>&1; r=$$?; [ $$r -eq 1 ] || { echo "FAIL kore rm miss exit"; exit 1; }; \
+	  $m $(ho)/kore rm -f $$P/nope > /dev/null 2>&1; r=$$?; [ $$r -eq 0 ] || { echo "FAIL kore rm -f quiet"; exit 1; }; \
+	  echo "kore: fs tools (mkdir/cp/mv/ln/touch/chmod/ls/pwd/rm/rmdir) ok"
 	@printf 'abc\nxbz\nzzz\n+q\n*r\n' > $(ho)/.gr1; printf 'nope\nbc here\n' > $(ho)/.gr2; \
-	  grep b $(ho)/.gr1 > $(ho)/.gr-g; $m $(ho)/au grep b $(ho)/.gr1 > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep vs GNU"; exit 1; }; \
-	  grep -n b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-g; $m $(ho)/au grep -n b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep -n multi vs GNU"; exit 1; }; \
-	  grep -c b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-g; $m $(ho)/au grep -c b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep -c vs GNU"; exit 1; }; \
-	  grep -v b $(ho)/.gr1 > $(ho)/.gr-g; $m $(ho)/au grep -v b $(ho)/.gr1 > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep -v vs GNU"; exit 1; }; \
-	  grep -l b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-g; $m $(ho)/au grep -l b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep -l vs GNU"; exit 1; }; \
-	  printf 'q\n' | grep -l q > $(ho)/.gr-g; printf 'q\n' | $m $(ho)/au grep -l q > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep -l stdin vs GNU"; exit 1; }; \
-	  grep '' $(ho)/.gr1 > $(ho)/.gr-g; $m $(ho)/au grep '' $(ho)/.gr1 > $(ho)/.gr-o; \
-	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL au grep empty pattern vs GNU"; exit 1; }; \
+	  grep b $(ho)/.gr1 > $(ho)/.gr-g; $m $(ho)/kore grep b $(ho)/.gr1 > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep vs GNU"; exit 1; }; \
+	  grep -n b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-g; $m $(ho)/kore grep -n b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep -n multi vs GNU"; exit 1; }; \
+	  grep -c b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-g; $m $(ho)/kore grep -c b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep -c vs GNU"; exit 1; }; \
+	  grep -v b $(ho)/.gr1 > $(ho)/.gr-g; $m $(ho)/kore grep -v b $(ho)/.gr1 > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep -v vs GNU"; exit 1; }; \
+	  grep -l b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-g; $m $(ho)/kore grep -l b $(ho)/.gr1 $(ho)/.gr2 > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep -l vs GNU"; exit 1; }; \
+	  printf 'q\n' | grep -l q > $(ho)/.gr-g; printf 'q\n' | $m $(ho)/kore grep -l q > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep -l stdin vs GNU"; exit 1; }; \
+	  grep '' $(ho)/.gr1 > $(ho)/.gr-g; $m $(ho)/kore grep '' $(ho)/.gr1 > $(ho)/.gr-o; \
+	  cmp -s $(ho)/.gr-g $(ho)/.gr-o || { echo "FAIL kore grep empty pattern vs GNU"; exit 1; }; \
 	  for p in 'ab*c' '^x' 'z$$' '[abx]b' '[^a]b' 'b\+' 'xb\?z' '\(zz\)*z' '.z' '^\+q' '^*r' 'x[b-z]z'; do \
 	    grep -c "$$p" $(ho)/.gr1 > $(ho)/.gr-g 2>/dev/null; a=$$?; \
-	    $m $(ho)/au grep -c "$$p" $(ho)/.gr1 > $(ho)/.gr-o; b=$$?; \
+	    $m $(ho)/kore grep -c "$$p" $(ho)/.gr1 > $(ho)/.gr-o; b=$$?; \
 	    { cmp -s $(ho)/.gr-g $(ho)/.gr-o && [ $$a -eq $$b ]; } \
-	      || { echo "FAIL au grep BRE '$$p' vs GNU"; exit 1; }; \
+	      || { echo "FAIL kore grep BRE '$$p' vs GNU"; exit 1; }; \
 	  done; \
-	  $m $(ho)/au grep b $(ho)/.gr1 > /dev/null; r=$$?; [ $$r -eq 0 ] || { echo "FAIL au grep hit exit"; exit 1; }; \
-	  $m $(ho)/au grep qqq $(ho)/.gr1 > /dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL au grep miss exit"; exit 1; }; \
-	  grep b $(ho)/.gr-nope 2> $(ho)/.gr-g; a=$$?; $m $(ho)/au grep b $(ho)/.gr-nope 2> $(ho)/.gr-o; b=$$?; \
-	  { cmp -s $(ho)/.gr-g $(ho)/.gr-o && [ $$a -eq 2 ] && [ $$b -eq 2 ]; } || { echo "FAIL au grep missing file vs GNU"; exit 1; }; \
-	  $m $(ho)/au grep b $(ho)/.gr1 $(ho)/.gr-nope > /dev/null 2>&1; r=$$?; \
-	  [ $$r -eq 2 ] || { echo "FAIL au grep err beats match exit"; exit 1; }; \
-	  echo "au: grep (plain/-n/-c/-v/-l + BRE battery GNU-identical, the exit triple) ok"
+	  $m $(ho)/kore grep b $(ho)/.gr1 > /dev/null; r=$$?; [ $$r -eq 0 ] || { echo "FAIL kore grep hit exit"; exit 1; }; \
+	  $m $(ho)/kore grep qqq $(ho)/.gr1 > /dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL kore grep miss exit"; exit 1; }; \
+	  grep b $(ho)/.gr-nope 2> $(ho)/.gr-g; a=$$?; $m $(ho)/kore grep b $(ho)/.gr-nope 2> $(ho)/.gr-o; b=$$?; \
+	  { cmp -s $(ho)/.gr-g $(ho)/.gr-o && [ $$a -eq 2 ] && [ $$b -eq 2 ]; } || { echo "FAIL kore grep missing file vs GNU"; exit 1; }; \
+	  $m $(ho)/kore grep b $(ho)/.gr1 $(ho)/.gr-nope > /dev/null 2>&1; r=$$?; \
+	  [ $$r -eq 2 ] || { echo "FAIL kore grep err beats match exit"; exit 1; }; \
+	  echo "kore: grep (plain/-n/-c/-v/-l + BRE battery GNU-identical, the exit triple) ok"
 	@printf 'abc\nxbz\nzzz\nq4\nw5\n' > $(ho)/.sd1; \
 	  for sc in 's/b/X/' 's/z/Q/g' '2d' '/x/,/q/d' '$$d' '2q' 's/x*/-/g' 's/\(b*\)z/[\1]/' 's/b/[&]/' 's|z|_|g' 's/a/1/; s/b/2/' 's/q\(.\)/<\1>/'; do \
 	    sed "$$sc" $(ho)/.sd1 > $(ho)/.sd-g; a=$$?; \
-	    $m $(ho)/au sed "$$sc" $(ho)/.sd1 > $(ho)/.sd-o; b=$$?; \
+	    $m $(ho)/kore sed "$$sc" $(ho)/.sd1 > $(ho)/.sd-o; b=$$?; \
 	    { cmp -s $(ho)/.sd-g $(ho)/.sd-o && [ $$a -eq $$b ]; } \
-	      || { echo "FAIL au sed '$$sc' vs GNU"; exit 1; }; \
+	      || { echo "FAIL kore sed '$$sc' vs GNU"; exit 1; }; \
 	  done; \
 	  for sc in '2,4p' '/z/p' 's/b/X/p' '/x/,/q/p'; do \
 	    sed -n "$$sc" $(ho)/.sd1 > $(ho)/.sd-g; \
-	    $m $(ho)/au sed -n "$$sc" $(ho)/.sd1 > $(ho)/.sd-o; \
-	    cmp -s $(ho)/.sd-g $(ho)/.sd-o || { echo "FAIL au sed -n '$$sc' vs GNU"; exit 1; }; \
+	    $m $(ho)/kore sed -n "$$sc" $(ho)/.sd1 > $(ho)/.sd-o; \
+	    cmp -s $(ho)/.sd-g $(ho)/.sd-o || { echo "FAIL kore sed -n '$$sc' vs GNU"; exit 1; }; \
 	  done; \
-	  printf 'ab\n' | sed 's/a/1/' > $(ho)/.sd-g; printf 'ab\n' | $m $(ho)/au sed 's/a/1/' > $(ho)/.sd-o; \
-	  cmp -s $(ho)/.sd-g $(ho)/.sd-o || { echo "FAIL au sed stdin vs GNU"; exit 1; }; \
-	  printf 'a\n' | sed 's/a' > /dev/null 2>&1; a=$$?; printf 'a\n' | $m $(ho)/au sed 's/a' > /dev/null 2>&1; b=$$?; \
-	  { [ $$a -eq 1 ] && [ $$b -eq 1 ]; } || { echo "FAIL au sed bad-script exit (gnu $$a ours $$b)"; exit 1; }; \
+	  printf 'ab\n' | sed 's/a/1/' > $(ho)/.sd-g; printf 'ab\n' | $m $(ho)/kore sed 's/a/1/' > $(ho)/.sd-o; \
+	  cmp -s $(ho)/.sd-g $(ho)/.sd-o || { echo "FAIL kore sed stdin vs GNU"; exit 1; }; \
+	  printf 'a\n' | sed 's/a' > /dev/null 2>&1; a=$$?; printf 'a\n' | $m $(ho)/kore sed 's/a' > /dev/null 2>&1; b=$$?; \
+	  { [ $$a -eq 1 ] && [ $$b -eq 1 ]; } || { echo "FAIL kore sed bad-script exit (gnu $$a ours $$b)"; exit 1; }; \
 	  sed p $(ho)/.sd-nope $(ho)/.sd1 > $(ho)/.sd-g 2>&1; a=$$?; \
-	  $m $(ho)/au sed p $(ho)/.sd-nope $(ho)/.sd1 > $(ho)/.sd-o 2>&1; b=$$?; \
+	  $m $(ho)/kore sed p $(ho)/.sd-nope $(ho)/.sd1 > $(ho)/.sd-o 2>&1; b=$$?; \
 	  { cmp -s $(ho)/.sd-g $(ho)/.sd-o && [ $$a -eq 2 ] && [ $$b -eq 2 ]; } \
-	    || { echo "FAIL au sed missing file vs GNU"; exit 1; }; \
-	  echo "au: sed (s///gp + d/p/q + number/\$$/regex/range addresses GNU-identical, exits 1/2) ok"
-	@printf 'a b\nc\n' | xargs > $(ho)/.pc-g; printf 'a b\nc\n' | $m $(ho)/au xargs > $(ho)/.pc-o; \
-	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL au xargs vs GNU"; exit 1; }; \
-	  printf '1\n2\n3\n4\n5\n' | xargs -n 2 echo > $(ho)/.pc-g; printf '1\n2\n3\n4\n5\n' | $m $(ho)/au xargs -n 2 echo > $(ho)/.pc-o; \
-	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL au xargs -n 2 vs GNU"; exit 1; }; \
-	  printf '' | xargs echo > $(ho)/.pc-g; printf '' | $m $(ho)/au xargs echo > $(ho)/.pc-o; \
-	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL au xargs empty vs GNU"; exit 1; }; \
-	  printf 'x\n' | $m $(ho)/au xargs false; r=$$?; [ $$r -eq 123 ] || { echo "FAIL au xargs fail exit (rc $$r)"; exit 1; }; \
-	  printf 'x\n' | $m $(ho)/au xargs /no/such/cmd 2>/dev/null; r=$$?; [ $$r -eq 127 ] || { echo "FAIL au xargs 127 (rc $$r)"; exit 1; }; \
-	  env AUP=44 sh -c 'printf %s "$$AUP"' > $(ho)/.pc-g; $m $(ho)/au env AUP=44 sh -c 'printf %s "$$AUP"' > $(ho)/.pc-o; \
-	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL au env assign vs GNU"; exit 1; }; \
-	  env | grep -v '^_=' | LC_ALL=C sort > $(ho)/.pc-g; $m $(ho)/au env | grep -v '^_=' | LC_ALL=C sort > $(ho)/.pc-o; \
-	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL au env print vs GNU"; exit 1; }; \
-	  $m $(ho)/au env sh -c 'exit 3'; r=$$?; [ $$r -eq 3 ] || { echo "FAIL au env child exit (rc $$r)"; exit 1; }; \
-	  $m $(ho)/au sleep 0.1 || { echo "FAIL au sleep"; exit 1; }; \
-	  $m $(ho)/au sleep xx 2>/dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL au sleep bad exit (rc $$r)"; exit 1; }; \
-	  sleep 3 & sp=$$!; $m $(ho)/au kill -9 $$sp || { echo "FAIL au kill send"; exit 1; }; \
-	  wait $$sp; r=$$?; [ $$r -eq 137 ] || { echo "FAIL au kill effect (rc $$r)"; exit 1; }; \
-	  $m $(ho)/au kill -0 999999 2>/dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL au kill dead pid (rc $$r)"; exit 1; }; \
-	  echo "au: process tools (env/sleep/kill/xargs -- GNU-identical output, the exit faces) ok"
+	    || { echo "FAIL kore sed missing file vs GNU"; exit 1; }; \
+	  echo "kore: sed (s///gp + d/p/q + number/\$$/regex/range addresses GNU-identical, exits 1/2) ok"
+	@printf 'a b\nc\n' | xargs > $(ho)/.pc-g; printf 'a b\nc\n' | $m $(ho)/kore xargs > $(ho)/.pc-o; \
+	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL kore xargs vs GNU"; exit 1; }; \
+	  printf '1\n2\n3\n4\n5\n' | xargs -n 2 echo > $(ho)/.pc-g; printf '1\n2\n3\n4\n5\n' | $m $(ho)/kore xargs -n 2 echo > $(ho)/.pc-o; \
+	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL kore xargs -n 2 vs GNU"; exit 1; }; \
+	  printf '' | xargs echo > $(ho)/.pc-g; printf '' | $m $(ho)/kore xargs echo > $(ho)/.pc-o; \
+	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL kore xargs empty vs GNU"; exit 1; }; \
+	  printf 'x\n' | $m $(ho)/kore xargs false; r=$$?; [ $$r -eq 123 ] || { echo "FAIL kore xargs fail exit (rc $$r)"; exit 1; }; \
+	  printf 'x\n' | $m $(ho)/kore xargs /no/such/cmd 2>/dev/null; r=$$?; [ $$r -eq 127 ] || { echo "FAIL kore xargs 127 (rc $$r)"; exit 1; }; \
+	  env AUP=44 sh -c 'printf %s "$$AUP"' > $(ho)/.pc-g; $m $(ho)/kore env AUP=44 sh -c 'printf %s "$$AUP"' > $(ho)/.pc-o; \
+	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL kore env assign vs GNU"; exit 1; }; \
+	  env | grep -v '^_=' | LC_ALL=C sort > $(ho)/.pc-g; $m $(ho)/kore env | grep -v '^_=' | LC_ALL=C sort > $(ho)/.pc-o; \
+	  cmp -s $(ho)/.pc-g $(ho)/.pc-o || { echo "FAIL kore env print vs GNU"; exit 1; }; \
+	  $m $(ho)/kore env sh -c 'exit 3'; r=$$?; [ $$r -eq 3 ] || { echo "FAIL kore env child exit (rc $$r)"; exit 1; }; \
+	  $m $(ho)/kore sleep 0.1 || { echo "FAIL kore sleep"; exit 1; }; \
+	  $m $(ho)/kore sleep xx 2>/dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL kore sleep bad exit (rc $$r)"; exit 1; }; \
+	  sleep 3 & sp=$$!; $m $(ho)/kore kill -9 $$sp || { echo "FAIL kore kill send"; exit 1; }; \
+	  wait $$sp; r=$$?; [ $$r -eq 137 ] || { echo "FAIL kore kill effect (rc $$r)"; exit 1; }; \
+	  $m $(ho)/kore kill -0 999999 2>/dev/null; r=$$?; [ $$r -eq 1 ] || { echo "FAIL kore kill dead pid (rc $$r)"; exit 1; }; \
+	  echo "kore: process tools (env/sleep/kill/xargs -- GNU-identical output, the exit faces) ok"
 # The editor (crew/vi/): the pure modal engine's laws (no tty -- vstep driven
-# byte by byte), then one scripted end-to-end pass through the real `au vi`
+# byte by byte), then one scripted end-to-end pass through the real `kore vi`
 # face over a pipe (keys off stdin, frames onto a captured stdout, :wq writes).
 .PHONY: test_vi
-test_vi: host out/host$(hsuf)/au
+test_vi: host out/host$(hsuf)/kore
 	@echo "VI crew/vi/{core,law}.l"; \
-	  cat test/00-init.l crew/utils/text.l crew/utils/core.l crew/utils/re.l crew/vi/core.l crew/vi/law.l | $m > out/host/.test_vi.out 2>&1; r=$$?; \
+	  cat test/00-init.l crew/kore/text.l crew/kore/core.l crew/kore/re.l crew/vi/core.l crew/vi/law.l | $m > out/host/.test_vi.out 2>&1; r=$$?; \
 	  cat out/host/.test_vi.out; \
 	  { [ $$r -eq 0 ] && grep -q "crew/vi/law:" out/host/.test_vi.out; } \
 	    || { echo "FAIL vi laws (exit $$r)"; exit 1; }
 	@rm -f $(ho)/.vi1; \
-	  printf 'ihello world\033:wq\n' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	  printf 'ihello world\033:wq\n' | $m $(ho)/kore vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
 	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "hello world" ]; } \
-	    || { echo "FAIL au vi create+write (exit $$r)"; exit 1; }; \
-	  printf 'ddZZ' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	    || { echo "FAIL kore vi create+write (exit $$r)"; exit 1; }; \
+	  printf 'ddZZ' | $m $(ho)/kore vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
 	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "" ]; } \
-	    || { echo "FAIL au vi dd+ZZ (exit $$r)"; exit 1; }; \
-	  printf 'ix\033:q!\n' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	    || { echo "FAIL kore vi dd+ZZ (exit $$r)"; exit 1; }; \
+	  printf 'ix\033:q!\n' | $m $(ho)/kore vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
 	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "" ]; } \
-	    || { echo "FAIL au vi q! holds fire (exit $$r)"; exit 1; }; \
-	  printf 'AX\033u:wq\n' | $m $(ho)/au vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
+	    || { echo "FAIL kore vi q! holds fire (exit $$r)"; exit 1; }; \
+	  printf 'AX\033u:wq\n' | $m $(ho)/kore vi $(ho)/.vi1 > /dev/null 2>&1; r=$$?; \
 	  { [ $$r -eq 0 ] && [ "$$(cat $(ho)/.vi1)" = "" ]; } \
-	    || { echo "FAIL au vi undo (exit $$r)"; exit 1; }; \
-	  echo "au: vi (laws + piped create/dd/q!/undo end-to-end) ok"
+	    || { echo "FAIL kore vi undo (exit $$r)"; exit 1; }; \
+	  echo "kore: vi (laws + piped create/dd/q!/undo end-to-end) ok"
 # The C compiler (crew/cc/, rung 3 -- doc/cc.md): the pure pipeline's laws
 # (lexer/parser/gen goldens), then the stage-0 end to end through the real
 # `aicc`: compile, run, exit 42 -- and the gcc -O0 differential is born
@@ -540,7 +540,7 @@ test_raw: host out/host$(hsuf)/aicc
 	  for f in crew/cc/lib/math/*.c; do b=`basename $$f .c`; \
 	    $m $(ho)/aicc -Icrew/cc/lib/math -Icrew/cc/include -c $$f $$d/m_$$b.o \
 	      || { echo "FAIL aicc -c $$f"; exit 1; }; done; \
-	  { cat crew/utils/text.l crew/utils/core.l crew/utils/asbook.l crew/holo/elf.l crew/holo/obj.l crew/cc/lib/mksys.l; \
+	  { cat crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/cc/lib/mksys.l; \
 	    echo "(mksys \"$$d/sys.o\")"; } | $m \
 	    || { echo "FAIL mksys sys.o"; exit 1; }; \
 	  $m $(ho)/aicc $$d/*.o -o $(ho)/ai-raw \
@@ -1438,7 +1438,7 @@ d = $(DESTDIR)/$(PREFIX)
 v = $(DESTDIR)/$(VIMPREFIX)
 installs = \
   $d/bin/ai \
-  $d/bin/au \
+  $d/bin/kore \
   $d/bin/aicc \
   $d/bin/cook \
   $d/bin/ain \
@@ -1511,16 +1511,16 @@ $d/bin/ain: tools/ain.l
 	@echo CP	$(abspath $@)
 	@install -D -m 755 $< $@
 
-# au: the multi-call toolbox -- ONE catted script (busybox's trick), the util
-# picked off the command line (`au diff A B`, `au nc H P`, `au make`, `au as ..`)
+# kore: the multi-call toolbox -- ONE catted script (busybox's trick), the util
+# picked off the command line (`kore diff A B`, `kore nc H P`, `kore make`, `kore as ..`)
 # or off argv[0] through a tool-named symlink. Shadows nothing on the host: only
-# `au` lands on PATH; the distro symlinks the tool names when shadowing is the
+# `kore` lands on PATH; the distro symlinks the tool names when shadowing is the
 # point. The tool files' SEATs stay quiet inside the cat (no file of theirs sits
-# in the program seat), so crew/utils/au.l's dispatcher is the one thing firing.
-$d/bin/au: $(aufiles)
+# in the program seat), so crew/kore/kore.l's dispatcher is the one thing firing.
+$d/bin/kore: $(korefiles)
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
-	@{ echo '#!/usr/bin/env -S ai'; cat $(aufiles); } > $@
+	@{ echo '#!/usr/bin/env -S ai'; cat $(korefiles); } > $@
 	@chmod 755 $@
 
 # aicc: the C compiler, ITS OWN app (doc/cc.md). The installed bin is a WAKE SHIM:
@@ -1529,7 +1529,7 @@ $d/bin/au: $(aufiles)
 # The image is baked by the build binary against the build cat (below); strip
 # keeps .text/.rodata vaddrs, so the stripped installed ai wakes it fine -- but
 # it IS binary-specific (anchor-checked), so image and binary always install
-# from the same build. Kept OUT of the au cat so a cc edit never forces an au
+# from the same build. Kept OUT of the kore cat so a cc edit never forces an kore
 # rebuild and vice versa.
 $d/bin/aicc: Makefile
 	@echo AI	$(abspath $@)

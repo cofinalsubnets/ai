@@ -1,28 +1,28 @@
-# aiutils -- the busybox rung of the distro
+# kore -- the busybox rung of the distro
 
-the state of crew/utils/ and the road ahead. this ORIENTS; the laws live in
-crew/utils/law.l, the GNU-identical smokes in `make test_utils`, and every doubt
-settles by probing the built `au`. last trued up 2026-07-06.
+the state of crew/kore/ and the road ahead. this ORIENTS; the laws live in
+crew/kore/law.l, the GNU-identical smokes in `make test_kore`, and every doubt
+settles by probing the built `kore`. last trued up 2026-07-06.
 
 ## the arc
 
 the distro plan (the ai-native POSIX environment over the Linux kernel) climbs
-three rungs, each independently shippable: **aiutils** (this one -- the busybox
+three rungs, each independently shippable: **kore** (this one -- the busybox
 clone), a **vim clone** over cb + bao's edln/edraw seeds, and a **chibicc-class
 C compiler** last, scoped to *compiles ai.c*, never the kernel. the pieces that
 already existed -- cook (make), sh.l/bao (shell), holo (assembler), the terminal
-stack, init.l (pid 1) -- mean aiutils is the gap between the posix-pid1
+stack, init.l (pid 1) -- mean kore is the gap between the posix-pid1
 container and a livable system. the distro shape: kernel + static `ai` + .l
 files, busybox's multi-call trick natively.
 
-## au, the multi-call toolbox
+## kore, the multi-call toolbox
 
-ONE catted script (`out/host/au`, `bin/au` installs): the Makefile cats
+ONE catted script (`out/host/kore`, `bin/kore` installs): the Makefile cats
 
-    text.l core.l fs.l re.l sed.l proc.l diff.l ain.l cook.l asbook.l elf.l au.l   (aufiles)
+    text.l core.l fs.l re.l sed.l proc.l diff.l ain.l cook.l asbook.l elf.l kore.l   (korefiles)
 
-behind a `#!/usr/bin/env -S ai` shebang. au.l loads LAST and dispatches off the
-program seat of `cmdline` -- `au TOOL ARGS..`, or symlink a tool's name to au
+behind a `#!/usr/bin/env -S ai` shebang. kore.l loads LAST and dispatches off the
+program seat of `cmdline` -- `kore TOOL ARGS..`, or symlink a tool's name to kore
 and argv[0] picks it (how the distro will shadow at will). the registry is a
 tablet, so tool names never collide with the globals they call (the `mkdir`
 applet CALLS the `mkdir` nif; different namespaces).
@@ -33,13 +33,13 @@ the file discipline, two shapes:
   one `<tool>-main`; a body-having tail fires it iff the file's own basename
   sits in the program seat -- so the same file is a standalone tool AND a quiet
   cat member.
-* **a toolbox** (core.l, fs.l): many mains, NO seat -- au is its door.
+* **a toolbox** (core.l, fs.l): many mains, NO seat -- kore is its door.
 
 ## the inventory (38 tools, 40 names)
 
 | where | tools |
 | --- | --- |
-| au.l (thin mains) | diff (the patience/myers engines), as (elf64 over the holo book) |
+| kore.l (thin mains) | diff (the patience/myers engines), as (elf64 over the holo book) |
 | tools/ain.l | nc / ain |
 | crew/cook/cook.l | make / cook |
 | core.l, the line tools | cat echo head tail wc sort uniq tee |
@@ -53,7 +53,7 @@ the file discipline, two shapes:
 ## the discipline (why this stays trustworthy)
 
 * **GNU to the byte.** every tool with printable output is smoked
-  byte-identical against the real GNU tool in `make test_utils` (LC_ALL=C for
+  byte-identical against the real GNU tool in `make test_kore` (LC_ALL=C for
   sort/ls). the fussy faces are pinned deliberately: wc pads every field to the
   digit width of the byte TOTAL; uniq -c wears width 7; nl is pad-6 + tab and a
   blank line is seven bare spaces; head/tail banner many files with
@@ -91,7 +91,7 @@ the file discipline, two shapes:
   BLUE (falsy): give it uread's (1 ..) success shape. and never name a local
   `err` or `out`; they are the PORTS, and the shadow says into a charm.
 
-## the regex engine (crew/utils/re.l)
+## the regex engine (crew/kore/re.l)
 
 landed. a POSIX-BRE dialect -- literals, `.`, `*`, head-`^`/tail-`$`, [..]
 classes with ranges/negation (first-] and edge-- literal), \-escapes, \( \)
@@ -107,7 +107,7 @@ rides it: -n -v -c -l, GNU-byte-identical smokes + the 0/1/2 exit triple
 \( order, a repeated group reading as its LAST iteration, GNU's \1) -- sed's
 food.
 
-## sed-lite (crew/utils/sed.l)
+## sed-lite (crew/kore/sed.l)
 
 landed, over re.l. `sed [-n] SCRIPT [FILE..]`: ;/newline-separated commands,
 each [ADDR[,ADDR]] VERB; addresses number/$/(BRE)/re/, ranges open-at-first
@@ -122,7 +122,7 @@ smoked byte-identical vs GNU (a 12-script battery + -n + stdin + the error
 faces). out of dialect, documented: GNU's empty-pattern reuse, \n in
 replacements, hold space.
 
-## the process tools (crew/utils/proc.l)
+## the process tools (crew/kore/proc.l)
 
 landed, no new nifs -- environ/getenv/setenv, spawn (pid | negative errno; a
 child that cannot exec _exit(127)s) + wait, still (pty.c's kill), rest (core
@@ -140,5 +140,5 @@ whitespace-splits stdin (quote-blind, documented) onto the command's tail
    tr [:class:] and -ds, echo -e, seq over gems, grep -i/-o/-E, sed -i/y/N.
    none block the distro; add them when a real script wants them.
 
-after aiutils: the vim clone (rung 2), then the C compiler (rung 3) -- see the
-ai-distro arc. the multi-call `au` is already the shape the distro boots with.
+after kore: the vim clone (rung 2), then the C compiler (rung 3) -- see the
+ai-distro arc. the multi-call `kore` is already the shape the distro boots with.

@@ -232,7 +232,7 @@
 ; names leak to the global scope. The form reads outer globals (the post.l
 ; combinators, recipe, cook, ticket, the prel) freely; its body ANSWERS cook-main
 ; (args -> the whole job, exiting via quit). The outer `_`-holder form (cli.l's own
-; trick) leaks cook-main as the ONE public -- the multi-call `au` (crew/utils/au.l)
+; trick) leaks cook-main as the ONE public -- the multi-call `kore` (crew/kore/kore.l)
 ; calls it as `make` -- and the SEAT at the bottom fires it only when this very
 ; file was invoked (the installed `cook` symlink, a -l preload, or positional).
 (: _ (:
@@ -783,7 +783,7 @@
    ; installed `cook` symlink -- sits in the program seat of the real command line
    ; (positional program or a -l preload), taking the args AFTER the seat. cmdline
    ; is the full C argv, never rebound, so the read is the same in both load
-   ; orders; inside the multi-call `au` nothing matches and au's dispatcher calls
+   ; orders; inside the multi-call `kore` nothing matches and kore's dispatcher calls
    ; cook-main itself. body-having: the seat machinery leaks nothing.
    _ (: (bn p) (: n (tally p)
                   (go k r) (? (k < n) (go (k + 1) (? ((p k) = 47) (k + 1) r)) (snip p r n))

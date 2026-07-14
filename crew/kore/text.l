@@ -1,4 +1,4 @@
-; crew/utils/text.l -- the shared text layer: lines/unlines, the list<->text bridge every
+; crew/kore/text.l -- the shared text layer: lines/unlines, the list<->text bridge every
 ; line tool rides (diff's udiff, the coming wc/head/tail). the convention: a line is a
 ; string WITHOUT its newline; `unlines` terminates every line, so the round trip is exact
 ; on newline-terminated texts (a final unterminated line gains its newline -- the tool

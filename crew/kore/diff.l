@@ -1,11 +1,11 @@
-; crew/utils/diff.l -- myers diff: the shortest edit script between two lists (Myers 1986,
-; the greedy O(ND) forward pass with a trace, then the backtrack). the seed of aiutils --
+; crew/kore/diff.l -- myers diff: the shortest edit script between two lists (Myers 1986,
+; the greedy O(ND) forward pass with a trace, then the backtrack). the seed of kore --
 ; the coming `diff` tool reads it, the vcs records it. pure ai (no nif); element equality
 ; is the generic `=`, so it diffs lines, symbols, charms, whole trees alike.
 ;
 ; the script is a list of (op x) 2-lists, op one of 'keep 'del 'add, in order: the
 ; keep+del column spells the OLD list, keep+add the NEW, and the del+add count is
-; MINIMAL -- the three laws crew/utils/law.l holds it to (an O(nm) LCS oracle for the
+; MINIMAL -- the three laws crew/kore/law.l holds it to (an O(nm) LCS oracle for the
 ; third). a body-less top-level `:` (the wm's app shape): `myers` the entry,
 ; dold/dnew/dcost the script readers, d* the machinery. indexes and rounds ride TABLETS
 ; (charm keys, negatives fine) for O(1) reads; every loop is a tail call.
