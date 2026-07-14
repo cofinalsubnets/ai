@@ -55,10 +55,13 @@
    (dojr P r ev) (? (id? (tagv ev) 'refl) r `('njr P r ev))
 
    (vof-sym en x)
+   ; found-tests are STRUCTURAL (two?): a `?` on the (name value) pair NETS
+   ; the value -- a DAG-shared value walks as a TREE, and one lookup of a
+   ; big bound value costs seconds (the gka tower: 4.5s -> 0ms).
    (: e (assoc x en)
-      (? e (e2 e)
+      (? (two? e) (e2 e)
          (: g (peep GLOB x 0)
-            (? g (e2 g) (scare 'uu-unbound x)))))
+            (? (two? g) (e2 g) (scare 'uu-unbound x)))))
 
    (vof en t)
    (? (charm? t) t
@@ -126,9 +129,9 @@
       (id? x 'tt) 'unit
       (member? x '(true false)) 'bool
       (: e (assoc x cx)
-         (? e (e2 e)
+         (? (two? e) (e2 e)
             (: g (peep GLOB x 0)
-               (? g (cap g) (scare 'uu-unbound x))))))
+               (? (two? g) (cap g) (scare 'uu-unbound x))))))
 
    (inf-spine cx en d f as)
    (? !(two? as) f
@@ -332,11 +335,11 @@
 
    (uglo nm)
    (: c (peep CMEM nm 0)
-      (? c (e2 c)
+      (? (two? c) (e2 c)
          (: b (peep BRIDGE nm 0)
-            (? b (e2 b)
+            (? (two? b) (e2 b)
                (: sc (peep SRC nm 0)
-                  (? sc (: v (ev (u2 (cap sc) ()))
+                  (? (two? sc) (: v (ev (u2 (cap sc) ()))
                            _ (pin CMEM nm `('hit v))
                            v)
                      `('nv nm)))))))
