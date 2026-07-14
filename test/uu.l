@@ -16,6 +16,16 @@
    capp (uu 'capp) conv (uu 'conv)
    defn (uu 'defn) defq (uu 'defq) axm (uu 'axm) rejects (uu 'rejects))
 
+; the book must ANSWER, not ride the zero point: with `uu` missing (a broken
+; boot bake -- e.g. a mid-edit prel.l snapshot stranding the layers behind it)
+; every defn/defq below is a truthy no-op and the whole corpus paints FAKE
+; GREEN under a shell help; only a value demo would catch it. one loud probe:
+; a defn must land in GLOB and compute.
+(assert
+ (: _ (defn 'uu-alive '(pi n nat nat) '(lam n (succ n)))
+    (two? (peep GLOB 'uu-alive 0)))
+ (= 3 (vof 0 '(uu-alive 2))))
+
 ; --- UniMath Foundations PartA, the core snip: every name is the original.
 ; --- The definitions and theorem statements from here down are ported from
 ; --- UniMath (https://github.com/UniMath/UniMath, Foundations/PartA.v et al),
