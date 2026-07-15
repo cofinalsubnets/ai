@@ -64,7 +64,7 @@ lanes today; only the group/grid/cask fall-through remains with auto-ev:
 | counted loop    | loopinfo→njit-loop | ✅ njit-loop with `e` as deopt   |
 | float leaf      | qualfr→jitfr       | ✅ qualfr gate → jitfrx with `e` as deopt |
 | n-var loop      | loopinfo-n→njit-loop-n | ✅ loopinfo-n gate → njit-loop-n with `e` threaded through cf-deopt |
-| group/grid/cask | autogroup(autonat(twolow(castbuild))) | ❌ OPEN — a measured 14× gap on reusable group-closures auto-ev can't reach; see §3 |
+| group/grid/cask | autogroup(autonat(twolow(castbuild))) | 🔶 flag-gated prototype (`AI_GROUP_GLAZE`): flat direct-tail groups, ~8.8×; full port open — see §3 |
 
 Flag-gated alongside: the **partial-glaze bridge** (`AI_PARTIAL_GLAZE`) — when
 the grammar has no recognizer for an op, splice an in-convention CALL to its C
@@ -101,7 +101,7 @@ interpreter-over-source. The C-finite matrix-power closure `(\ n (cf-dot …))` 
 itself bytecode under the hook — its body isn't leaf/loop grammar, so it never
 re-enters `ala`, and needs no special handling.
 
-### 3. groups / grids / casks — OPEN: a real 14× gap, natjit-shaped
+### 3. groups / grids / casks — PROTOTYPE LANDED (flag-gated), full port open
 
 The fall-through lane: mutually-recursive arith GROUP (fib/tak/primes), float
 GRID nest (autonat/jitfgridn, x86-only SSE2), string-builder CASK (castbuild,
@@ -151,12 +151,43 @@ and float lanes already took, applied to the group rewrite's output.
   lowers everything reducible to the integer group, so fib/tak/primes still glaze
   there.
 
-**Status: OPEN, worth doing.** Not "leave it to auto-ev" — auto-ev provably can't
-reach the reusable-closure case. The port is real work (the `e`-deopt seam through
-the rewrite chain), and it's gated on confirming reusable recursive closures are a
-shape worth 14×-ing in real code — but the gap is measured and the mechanism is
-understood. natjit owns the leaf, captured-leaf, counted-loop, float-leaf and
-n-var-loop lanes today; the group lane is the last one, and it is not closed.
+**Status: PROTOTYPE LANDED, flag-gated (`f9b0f573`).** A first cut of the lane is in,
+behind `AI_GROUP_GLAZE` (off by default → byte-identical). It native-backs a reusable
+group closure at ala-build and measures **~8.8×** on fib (114ms→13ms), correct,
+id-distinct; full gate green flag-off.
+
+Two things the port took — both worth remembering:
+
+* **The group machinery re-enters the evaluator.** Not just `base-ev`: `jitgroupir`
+  ITSELF calls `(ev ..)` (emit.l) to build its deopt fallback `fb`. Calling any of
+  them from inside the `natjit` hook re-enters `ala` mid-build and **segfaults** —
+  the existing lanes never do (emit/assemble/nif are pure). Fix (the
+  `njit-loop`/`jitfrx` precedent): a PURE, deopt-parameterized **`jitgroupirx`** that
+  takes `e` directly; `jitgroupir` is now an identical wrapper. This is the real shape
+  of "the `e`-deopt seam through the rewrite chain."
+* **At `ala` the body is post-`feel`** — define-sugar `(fib n) B` is desugared to
+  `fib (\ n B)`, so `anat-defs` yields `(name . lambda)`, not jitgroupir's
+  `((name p..) . body)`. The lane converts it. (A top-level sim on the *sugared* form
+  passes but the hook won't fire — the mismatch that cost a debugging round.)
+
+What the prototype does NOT yet do (the increments to a full port):
+
+* **Flat groups only** — no `autogroup` front-half (dechurch/dehof/lift/loopclose).
+  fib fits; church/HOF/lifted groups fail `jgir-ok?` and fall to bytecode (sound).
+* **Tail must be `(entry frame-params-in-order)`** so the outer closure IS the entry.
+  fib fits; tak (`(tak q 12 6)` — literal args) does not. The general fix is a
+  synthetic `__outer` group entry `((__outer frame..) . TAIL)` compiled as the entry,
+  so any group-expressible tail rides jitgroupirx.
+* **Transparency partial** — the native cell's src is the ENTRY lambda `(\ n …)`, not
+  the outer `(\ m …)`; two group-glazed instances are mutually `=`, but `=` against a
+  bytecode outer may differ. A full port keeps the outer `s` as the native src.
+* **arch note (informational, not a gap):** grids and casks are x86-only regardless;
+  on arm64 this lane falls to the interpreter, except `autogroup` lowers everything
+  reducible to the integer group, so fib/tak/primes still glaze there.
+
+natjit owns the leaf, captured-leaf, counted-loop, float-leaf and n-var-loop lanes
+outright; the group lane is now in as a flag-gated prototype, with the three increments
+above (front-half, general tails, full transparency) the path to enabling it by default.
 
 ## the cache — MEASURED, decided NO (`fires`-probe, host x86, baked image)
 
@@ -200,12 +231,12 @@ nothing in the current corpus or the microbenches exhibits it.
 2. ~~**n-var loop**~~ — LANDED (`b172c80e`): `e` threaded through cf-deopt, ported.
 3. ~~**measure the cache**~~ — MEASURED, decided NO (nothing to dedupe; hoisting +
    auto-ev memo already cover it; spec.l:117 stays intact). See "the cache" above.
-4. **groups/grids/casks** — OPEN, the real remaining lane. A measured 14× gap on
-   reusable group-bearing closures (`(\ m … (fib m))`) that auto-ev structurally
-   can't reach — only natjit, which sees the closure at `ala`-build, can. The port
-   is the hardest (thread an `e`-deopt seam through the autogroup rewrite chain,
-   which currently ends in `(base-ev <rewritten>)`). Gated on confirming reusable
-   recursive closures are hot in real code. See section 3.
+4. **groups/grids/casks** — PROTOTYPE LANDED, flag-gated `AI_GROUP_GLAZE` (`f9b0f573`):
+   the pure `jitgroupirx` (`e`-deopt, no internal `ev`) + a hook lane for flat
+   direct-tail groups, ~8.8× on fib. Full port open in three increments: (i) the
+   `autogroup` front-half (dechurch/dehof/lift) for church/HOF groups; (ii) a synthetic
+   `__outer` group entry for general tails (tak); (iii) full transparency (keep the
+   outer `s` as the native src). Enable by default once those land. See section 3.
 5. **retire auto-ev's redundant coverage** (optional, after 4) — once natjit
    matches a lane, the ev-rebind no longer NEEDS to carry it. Keep `base-ev` in the
    module book (the pure interpreter, and the AI_NO_GLAZE fallback); the redundant
