@@ -212,13 +212,21 @@ What the prototype does NOT yet do (the increments to a full port):
   synthetic `(\ frame.. TAIL)` general), not the whole outer `(\ m (: … ))`; two group-glazed
   instances are mutually `=`, but `=` against a bytecode outer may differ. A full port keeps the
   outer `s` as the native src.
+* **Capture-safety (default-on blocker, found 2026-07-15)** — welow's `dsimp` betas via naive `dsub`,
+  which CAPTURES on a shadowing HOF form: `(\ q (: adder (\ i (\ q (+ i q))) ((adder q) 5)))` evals 8
+  (interp) but 10 (welow-lowered). Fine while flag-gated (opt-in prototype); a HARD blocker for default-on
+  (welow feeds bytecode too — no deopt catches it). Fix designed + validated: a capture-avoiding `csub`
+  that α-renames BOTH the `\` binder case and `:` group-names. (The separately-suspected "core `:` is
+  naive" was a real core bug in the inliner's `bsub`, now fixed — `d21e3a0e`; core eval is lexical, so
+  welow's csub matches it and there's no naive-`:` carve-out.) Validated code lives in memory (welow-default-on).
 * **arch note (informational, not a gap):** grids and casks are x86-only regardless;
   on arm64 this lane falls to the interpreter, except `autogroup` lowers everything
   reducible to the integer group, so fib/tak/primes still glaze there.
 
 natjit owns the leaf, captured-leaf, counted-loop, float-leaf and n-var-loop lanes
 outright; the group lane is in as a flag-gated prototype covering flat AND general tails, with
-the remaining increments above (front-half, full transparency) the path to enabling it by default.
+the remaining increments above (front-half, full transparency, capture-safety) the path to enabling it by
+default; capture-safety must land before the `AI_GROUP_GLAZE` gate is removed.
 
 ## the cache — MEASURED, decided NO (`fires`-probe, host x86, baked image)
 
