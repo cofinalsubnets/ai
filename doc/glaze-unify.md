@@ -64,7 +64,7 @@ lanes today; only the group/grid/cask fall-through remains with auto-ev:
 | counted loop    | loopinfo→njit-loop | ✅ njit-loop with `e` as deopt   |
 | float leaf      | qualfr→jitfr       | ✅ qualfr gate → jitfrx with `e` as deopt |
 | n-var loop      | loopinfo-n→njit-loop-n | ✅ loopinfo-n gate → njit-loop-n with `e` threaded through cf-deopt |
-| group/grid/cask | autogroup(autonat(twolow(castbuild))) | 🔶 flag-gated prototype (`AI_GROUP_GLAZE`): flat direct-tail groups, ~8.8×; full port open — see §3 |
+| group/grid/cask | autogroup(autonat(twolow(castbuild))) | 🔶 flag-gated prototype (`AI_GROUP_GLAZE`): first-order groups, flat AND general tails (synthetic `__outer`), ~9×; full port open — see §3 |
 
 Flag-gated alongside: the **partial-glaze bridge** (`AI_PARTIAL_GLAZE`) — when
 the grammar has no recognizer for an op, splice an in-convention CALL to its C
@@ -170,24 +170,33 @@ Two things the port took — both worth remembering:
   `((name p..) . body)`. The lane converts it. (A top-level sim on the *sugared* form
   passes but the hook won't fire — the mismatch that cost a debugging round.)
 
+**General tails landed** (extends the prototype). The tail no longer has to be
+`(entry frame-params-in-order)`. Any tail expressible in the group grammar — `(+ 1 (fib m))`,
+a computed/reordered arg `(fib (* m 2))`, tree recursion `(+ (fib (- m 1)) (fib (- m 2)))` —
+rides through a **synthetic `__outer` entry** `((__outer . frame) . TAIL)` appended to the
+group; `__outer` becomes the jitgroupirx entry, so the outer closure evaluates the tail then
+dispatches. A flat tail still takes the direct path (entry = the real group fn, zero
+indirection). Two guards make it sound: `opnd-ok?` rejects a tail with an operand-position leaf
+that isn't a frame slot (a global read jgir can't compile → bytecode); `jgir-ok?` gates ops over
+the augmented defs. Captured frees are frame IMPORTS (`ps = imports++args`), so a tail reading a
+capture compiles fine; only a genuine global falls out. Measured **~9×** on `(+ 1 (fib m))`
+(36ms→4ms at fib(30)), == interp through the 25! bignum deopt, id-distinct.
+
 What the prototype does NOT yet do (the increments to a full port):
 
-* **Flat groups only** — no `autogroup` front-half (dechurch/dehof/lift/loopclose).
-  fib fits; church/HOF/lifted groups fail `jgir-ok?` and fall to bytecode (sound).
-* **Tail must be `(entry frame-params-in-order)`** so the outer closure IS the entry.
-  fib fits; tak (`(tak q 12 6)` — literal args) does not. The general fix is a
-  synthetic `__outer` group entry `((__outer frame..) . TAIL)` compiled as the entry,
-  so any group-expressible tail rides jitgroupirx.
-* **Transparency partial** — the native cell's src is the ENTRY lambda `(\ n …)`, not
-  the outer `(\ m …)`; two group-glazed instances are mutually `=`, but `=` against a
-  bytecode outer may differ. A full port keeps the outer `s` as the native src.
+* **Flat/first-order groups only** — no `autogroup` front-half (dechurch/dehof/lift/loopclose).
+  fib/tak fit; church/HOF/lifted groups fail `jgir-ok?` and fall to bytecode (sound).
+* **Transparency partial** — the native cell's src is the entry lambda (`(\ n …)` flat, or the
+  synthetic `(\ frame.. TAIL)` general), not the whole outer `(\ m (: … ))`; two group-glazed
+  instances are mutually `=`, but `=` against a bytecode outer may differ. A full port keeps the
+  outer `s` as the native src.
 * **arch note (informational, not a gap):** grids and casks are x86-only regardless;
   on arm64 this lane falls to the interpreter, except `autogroup` lowers everything
   reducible to the integer group, so fib/tak/primes still glaze there.
 
 natjit owns the leaf, captured-leaf, counted-loop, float-leaf and n-var-loop lanes
-outright; the group lane is now in as a flag-gated prototype, with the three increments
-above (front-half, general tails, full transparency) the path to enabling it by default.
+outright; the group lane is in as a flag-gated prototype covering flat AND general tails, with
+the remaining increments above (front-half, full transparency) the path to enabling it by default.
 
 ## the cache — MEASURED, decided NO (`fires`-probe, host x86, baked image)
 
@@ -233,10 +242,12 @@ nothing in the current corpus or the microbenches exhibits it.
    auto-ev memo already cover it; spec.l:117 stays intact). See "the cache" above.
 4. **groups/grids/casks** — PROTOTYPE LANDED, flag-gated `AI_GROUP_GLAZE` (`f9b0f573`):
    the pure `jitgroupirx` (`e`-deopt, no internal `ev`) + a hook lane for flat
-   direct-tail groups, ~8.8× on fib. Full port open in three increments: (i) the
-   `autogroup` front-half (dechurch/dehof/lift) for church/HOF groups; (ii) a synthetic
-   `__outer` group entry for general tails (tak); (iii) full transparency (keep the
-   outer `s` as the native src). Enable by default once those land. See section 3.
+   direct-tail groups, ~8.8× on fib. **General tails LANDED** (synthetic `__outer`
+   entry): `(+ 1 (fib m))`, computed/reordered args, tree recursion all glaze now
+   (~9×), guarded by `opnd-ok?` + `jgir-ok?`, == interp through bignum deopt. Full port
+   open in two remaining increments: (i) the `autogroup` front-half (dechurch/dehof/lift)
+   for church/HOF groups; (ii) full transparency (keep the outer `s` as the native src).
+   Enable by default once those land. See section 3.
 5. **retire auto-ev's redundant coverage** (optional, after 4) — once natjit
    matches a lane, the ev-rebind no longer NEEDS to carry it. Keep `base-ev` in the
    module book (the pure interpreter, and the AI_NO_GLAZE fallback); the redundant
