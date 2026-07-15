@@ -64,7 +64,7 @@ lanes today; only the group/grid/cask fall-through remains with auto-ev:
 | counted loop    | loopinfo→njit-loop | ✅ njit-loop with `e` as deopt   |
 | float leaf      | qualfr→jitfr       | ✅ qualfr gate → jitfrx with `e` as deopt |
 | n-var loop      | loopinfo-n→njit-loop-n | ✅ loopinfo-n gate → njit-loop-n with `e` threaded through cf-deopt |
-| group/grid/cask | autogroup(autonat(twolow(castbuild))) | 🔶 flag-gated prototype (`AI_GROUP_GLAZE`): first-order groups, flat AND general tails (synthetic `__outer`), ~9×; full port open — see §3 |
+| group/grid/cask | autogroup(autonat(twolow(castbuild))) | 🔶 flag-gated prototype (`AI_GROUP_GLAZE`): groups w/ flat + general tails (synthetic `__outer`) + church/HOF (via the `welow` feel-hook), ~4–9×; lift/fold-close + grids/casks open — see §3 |
 
 Flag-gated alongside: the **partial-glaze bridge** (`AI_PARTIAL_GLAZE`) — when
 the grammar has no recognizer for an op, splice an in-convention CALL to its C
@@ -182,10 +182,27 @@ the augmented defs. Captured frees are frame IMPORTS (`ps = imports++args`), so 
 capture compiles fine; only a genuine global falls out. Measured **~9×** on `(+ 1 (fib m))`
 (36ms→4ms at fib(30)), == interp through the 25! bignum deopt, id-distinct.
 
+**Front-half landed (church + HOF) — as a SHARED `feel`-time lowering hook, not in the hook.**
+The autogroup front-half is a source→source rewrite chain; running it *inside* the natjit hook
+would re-enter the evaluator (`autospec`/`loopclose` call `base-ev`; `rewrite-bindings` calls
+`jitgroupir`→`ev`). So instead the lowering lives one stage EARLIER and shared: ev.l's `:-`
+(the per-form compile entry) reads a `book['welow]` hook before `opfix`, exactly like `ala`
+reads `book['natjit]`. The glaze installs `welow` = `dehof-deep ∘ dechurch` — so a church-bearing
+group (`(2 (+ 1) 0)` → `(+ 1 (+ 1 0))`) or a curried-HOF group (`dbl = (\ f (\ x (f (f x))))`
+inlined) arrives at `ala` already FIRST-ORDER, and the existing group lane native-backs it. It's
+installed **post-egg**, so the bootstrap self-compile is untouched (Phase 2 = bake it in). Measured
+~4× (HOF g(200000): 16→4ms), == interp, id-distinct. Two corpus-safety guards were needed and the
+whole corpus passes flag-on (3451): `dehof-deep` fires ONLY inside a **lambda-body group `:`** (never
+a top-level `:` — those hold operator defs like infixop's `**`, which opfix must factor, and body-less
+global-leak helpers); `dechurch` is whole-tree and universally safe. `lift`/`loopclose`/`autospec`
+(deep-nest lifting, fold-closing, static-fold) are NOT ported — the last two call `base-ev`.
+
 What the prototype does NOT yet do (the increments to a full port):
 
-* **Flat/first-order groups only** — no `autogroup` front-half (dechurch/dehof/lift/loopclose).
-  fib/tak fit; church/HOF/lifted groups fail `jgir-ok?` and fall to bytecode (sound).
+* **No lift / static-fold** — `dechurch`/`dehof` are ported (above); `lift`/`plift` (deep named-let
+  lifting), `loopclose`, `autospec` are not. A group nested deeper than a lambda-body `:`, or one
+  needing a static fold, still falls to bytecode (sound). `autospec`/`loopclose` call `base-ev`, so
+  they can't ride even the `feel` hook without a pure re-parameterization.
 * **Transparency partial** — the native cell's src is the entry lambda (`(\ n …)` flat, or the
   synthetic `(\ frame.. TAIL)` general), not the whole outer `(\ m (: … ))`; two group-glazed
   instances are mutually `=`, but `=` against a bytecode outer may differ. A full port keeps the
@@ -244,10 +261,15 @@ nothing in the current corpus or the microbenches exhibits it.
    the pure `jitgroupirx` (`e`-deopt, no internal `ev`) + a hook lane for flat
    direct-tail groups, ~8.8× on fib. **General tails LANDED** (synthetic `__outer`
    entry): `(+ 1 (fib m))`, computed/reordered args, tree recursion all glaze now
-   (~9×), guarded by `opnd-ok?` + `jgir-ok?`, == interp through bignum deopt. Full port
-   open in two remaining increments: (i) the `autogroup` front-half (dechurch/dehof/lift)
-   for church/HOF groups; (ii) full transparency (keep the outer `s` as the native src).
-   Enable by default once those land. See section 3.
+   (~9×), guarded by `opnd-ok?` + `jgir-ok?`, == interp through bignum deopt.
+   **Front-half (church/HOF) LANDED** — but as a SHARED `feel`-time lowering hook
+   (`book['welow]`, read by ev.l's `:-` before opfix, like `ala` reads `book['natjit]`),
+   NOT in-hook (autospec/loopclose/rewrite-bindings re-enter the evaluator). `welow` =
+   `dehof-deep ∘ dechurch`, installed post-egg so the bootstrap is untouched; church + curried-HOF
+   groups arrive first-order and native-back, ~4×, whole corpus green flag-on (guards: `dehof-deep`
+   only inside a lambda-body group `:`; body-less-`:` skip). Remaining: (i) lift/plift/fold-close
+   (deep-nest + static-fold; autospec/loopclose need pure re-parameterization); (ii) full
+   transparency; (iii) Phase 2 — bake `welow` pre-egg so the bootstrap lowers too. See section 3.
 5. **retire auto-ev's redundant coverage** (optional, after 4) — once natjit
    matches a lane, the ev-rebind no longer NEEDS to carry it. Keep `base-ev` in the
    module book (the pure interpreter, and the AI_NO_GLAZE fallback); the redundant
