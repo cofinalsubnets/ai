@@ -22,7 +22,7 @@
    loopinfo (glaze 'loopinfo)  njit-loop (glaze 'njit-loop)                 ;   post-boot, so nothing folded for it. loop lane
    loopinfo-n (glaze 'loopinfo-n)  njit-loop-n (glaze 'njit-loop-n)         ;   (unify with auto-ev): the counted + N-VAR back-edges
    qualfr (glaze 'qualfr)  jitfrx (glaze 'jitfrx)                           ;   plus the float-RESULT leaf, all owned natively at
-   anat-defs (glaze 'anat-defs)  jgir-ok? (glaze 'jgir-ok?)  jitgroupirx (glaze 'jitgroupirx)  ; creation. + the flag-gated GROUP
+   anat-defs (glaze 'anat-defs)  jgir-ok? (glaze 'jgir-ok?)  jitgroupirx (glaze 'jitgroupirx)  ; creation. + the (always-on) GROUP
    ; lane: parse defs (anat-defs), op-cover (jgir-ok?), compile PURE (jitgroupirx, e deopt). The pre-analysis
    ; LOWERING hook (book['welow], church + HOF) now lives PRE-EGG in ai/ev.l -- the sole welow, no shadow here.
    (exprn ps e) (? (member? e ps) 1  (whole? e) 1                          ; var in frame | int literal
@@ -62,7 +62,7 @@
                 (: ln (loopinfo-n s)
                    (? ln (: _ (pin fires () (+ 1 (peep fires () 0)))
                             (njit-loop-n s (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))) e))
-                      ; GROUP prototype (flag AI_GROUP_GLAZE, off by default) -- a reusable closure
+                      ; GROUP lane (always-on) -- a reusable closure
                       ; (\ frame.. <first-order mutually-recursive arith group>) whose tail calls the group.
                       ; auto-ev can't reach this (never gets the closure body as a callable-later unit); natjit
                       ; does, at ala-build. PURE path: parse the defs (anat-defs), op-cover (jgir-ok?), compile
@@ -76,7 +76,7 @@
                       ; /computed-arg call, tree recursion) -- synthesize an entry ((__outer . frame) . tail) and
                       ; make IT the group entry, so the outer closure evaluates the tail then dispatches. opnd-ok?
                       ; rejects a tail that reads a captured var (jgir binds only the frame); jgir-ok? gates ops.
-                      (: pd (? (&& (getenv "AI_GROUP_GLAZE") (two? body) (id? (cap body) ':)) (anat-defs (cup body)) ())
+                      (: pd (? (&& (two? body) (id? (cap body) ':)) (anat-defs (cup body)) ())
                          dds (? pd (cap pd) ())  tail (? pd (caup pd) ())
                          okshape (&& pd (two? tail) (all (\ dd (&& (two? dd) (name? (cap dd)) (two? (cup dd)) (id? (cap (cup dd)) '\) (two? (cup (cup dd))))) dds))   ; every def is name (\ p.. B)
                          gdefs (? okshape (map (\ dd (: lam (cup dd) (link (cat (L (cap dd)) (init (cup lam))) (last (cup lam))))) dds) ())   ; ((name p..) . B)

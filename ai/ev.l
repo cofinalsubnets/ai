@@ -87,7 +87,8 @@
 ;    LAMBDA-BODY group `:`, then dsimp beta-collapses, so a higher-order recurrence ((twice (adder i)) i)
 ;    reduces to first-order arithmetic. NOT a top-level `:` (those hold operator defs opfix must still see).
 ;    Needs the ho-* higher-order fixpoint + anat-defs/subst-sym/unpair/dehead/dcount, all below.
-; FLAG-GATED (AI_GROUP_GLAZE): unset (the default, every normal build) -> identity -> the egg is byte-identical.
+; ALWAYS-ON: lowers every form (no gate), so the egg itself bakes church/HOF lowered and EVERY frontend --
+; incl. the glaze-less kernel/wasm -- native-backs group code. Sound (capture-safe dsubx) + transparent.
 ; The helpers live INSIDE welow's closure (captured, never on the book), so only `welow` leaks -- no mop-list
 ; entry, no names() growth. dechurch/dsimp/dehof + the ho-* bundle are the pre-egg twin of ai/glaze/auto.l's
 ; (auto.l keeps its own for the autospec pipeline) -- keep them in step (ai's fixed church + HOF semantics).
@@ -186,12 +187,12 @@
                        (: bod (last e)  dbod (? (grp:? bod) (dehof bod) bod)
                           (link '\ (cat (init (cup e)) (L (dehof-deep dbod)))))
                      (map dehof-deep e))                                                                  ; any other node: just recurse
-   (\ x (? (getenv "AI_GROUP_GLAZE") (dehof-deep (dechurch x)) x))))                                      ; flag-gated; default = identity -> egg byte-identical
+   (\ x (dehof-deep (dechurch x)))))                                                                       ; ALWAYS-ON: church + HOF lowering on every form
 
 (:- (\ x (:
  c (sco 0 (list 0) 0)
  wl (gv 'welow 0)        ; the pre-analysis lowering hook (book['welow]): church + HOF lowering, baked pre-egg (above),
-                         ; the sole welow. flag-gated -- unset AI_GROUP_GLAZE -> welow is identity -> the form is untouched.
+                         ; the sole welow, always-on. 0 only pre-egg (before welow installs) -> the form is untouched.
  y (feel c (opfix (? wl (wl x) x)))    ; lower (if hooked), opfix (factor sigils), feel (desugar) -- ev = the deserialized-data lane
  (ana c y (k0 c) 0 0)))
   lvm_cur (peek 0 (+))

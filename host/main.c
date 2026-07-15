@@ -569,6 +569,11 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "arm64.h"                                       //   execute), so every target is arch-neutral. the glaze (x86 client) executes x64
 #include "bao.h"
   );
+  // welow (church+HOF lowering, book['welow]) is a USER-code pass. A JIT must NOT lower its own
+  // source during self-bake: the glaze REASONS about the very church/HOF forms welow rewrites, so
+  // lowering its source changes its behavior (a group's __outer tail miscompiles -> wrong capture).
+  // Turn welow off across the toolchain's own post-egg load, restore it below so user code still lowers.
+  g = ai_evals_(g, "(: wsave welow welow 0)");
 #if defined(__x86_64__) || defined(__aarch64__)
   g = ai_evals_(g, glaze_emit);                          // load the native JIT post-egg -> ev = auto-ev, glaze always-on
   g = ai_evals_(g, glaze_auto);                          // (no fragile stale image; base-ev captures the hatched ev).
@@ -580,6 +585,7 @@ static struct ai *boot(struct ai *g, bool argp) {
 #if defined(__x86_64__)
   g = ai_evals_(g, glaze_hook);                          // install natjit: glaze embedded closures at creation, not just (ev '(\..))
 #endif
+  g = ai_evals_(g, "(: welow wsave)");                   // toolchain baked -> welow back on for USER code
 #if defined(__x86_64__) || defined(__aarch64__)
   // AI_NO_GLAZE: a pure-interpreter session -- ev back to base-ev (kept in the
   // glaze module book) and the natjit creation hook cleared. The forensics twin

@@ -732,7 +732,7 @@
    jgir-supported '(+ - * // % & | ^ < <= > >= = ? link peep tally pin mpeep mpin two? cap cup)   ; the full op set cggir/cggvir handle
    (jgir-ops-ok? syms e) (? (two? e)                                            ; every op head in e is a group call or a supported op; recurse into every operand
       (: op (cap e) (&& (|| (member? op syms) (member? op jgir-supported)) (all (\ x (jgir-ops-ok? syms x)) (cup e))))
-      1)
+      (? (|| (gem? e) (twin? e)) 0 1))                                          ; a SMOOTH-numeric leaf (float/complex) is out of the integer group lane -> deopt (auto.l's recognizer already excludes these; this backstops the natjit path, which has no recognizer)
    (jgir-ok? defs) (: syms (map (\ d (cap (cap d))) defs)
       (all (\ d (jgir-ops-ok? syms (cup d))) defs))
    ; jgir-lrf -- the ((mpeep..)(peep..)(mpin..)(pin..) def..) tail the deopt fallback re-evaluates.
