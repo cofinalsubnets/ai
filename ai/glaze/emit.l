@@ -735,8 +735,21 @@
       1)
    (jgir-ok? defs) (: syms (map (\ d (cap (cap d))) defs)
       (all (\ d (jgir-ops-ok? syms (cup d))) defs))
+   ; jgir-lrf -- the ((mpeep..)(peep..)(mpin..)(pin..) def..) tail the deopt fallback re-evaluates.
+   (jgir-lrf entry ds) (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (jgir-lrf entry (cup ds))))))
    ; (jitgroupir defs entry tgt) -- defs = ((nameform . body) ..); compile the group, entry as the value.
+   ; deopt fallback = (ev <the WHOLE group>): post-rebind `ev` is the glaze, so this RE-GLAZES the group
+   ; (harmless: a never-deopting native re-build) -- which is why the mpeep/mpin->peep/pin byte-lane aliases
+   ; (ldxb/stxb) MUST assemble on EVERY target (arm64 included). mpeep/mpin are GLAZE-internal (not real
+   ; fns), aliased to the core peep/pin (the body reads the PREVIOUS=global binding by the sequence law --
+   ; not recursion); harmless for non-map lanes (peep/pin stay the core accessors).
    (jitgroupir defs entry tgt)
+    (jitgroupirx defs entry tgt (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (link '(mpin mc mk mv) (link '(pin mc mk mv) (jgir-lrf entry defs))))))))
+   ; (jitgroupirx defs entry tgt deopt) -- like jitgroupir but the caller supplies the DEOPT target directly
+   ; (the njit-loop/jitfrx precedent). The natjit hook passes `e` (the bytecode twin) so a group-bearing
+   ; closure native-backs WITHOUT re-entering the evaluator mid-ala (jitgroupir's (ev ..) fallback would).
+   ; PURE otherwise -- holo/emit/assemble only, no ev.
+   (jitgroupirx defs entry tgt deopt)
     (: parse (map (\ d (: nf (cap d) (L (cap nf) (cup nf) (cup d)))) defs)            ; (name params body) per fn
        syms (map cap parse)                                                            ; the fn names (call targets)
        efn (gfind (\ f (id? (cap f) entry)) parse)  k (tally (nthl efn 1))  eps (nthl efn 1) eb (nthl efn 2)
@@ -751,8 +764,6 @@
        pmask (filter (\ j (&& (nuse? eb (nthl eps j)) (! (member? j cmask)))) (rangeL 0 k))   ; entry POINT keys ((= P (cap ..))) -> raw, nom|mint-guarded; a chain-used param is never a point
        outer (mkouterir tgt k entry k valt smask mmask bufmask cmask pmask)
        Hs (foldl (\ a f (holo (L a (mkhir tgt syms (cap f) (nthl f 1) (nthl f 2))))) () ord)
-       lrf (\ ds (? (atom? ds) (L entry) (: d (cap ds) (link (cap d) (link (cup d) (lrf (cup ds)))))))
-       fb (ev (link ': (link '(mpeep mc mk md) (link '(peep mc mk md) (link '(mpin mc mk mv) (link '(pin mc mk mv) (lrf defs)))))))   ; the WHOLE group re-evaluated as the deopt fallback. Post-rebind `ev` is the glaze, so this RE-GLAZES the group (harmless: a never-deopting native re-build) -- which is why the mpeep/mpin->peep/pin byte-lane aliases (ldxb/stxb) MUST assemble on EVERY target (arm64 included). mpeep/mpin are GLAZE-internal (not real fns), aliased to the core peep/pin (the body reads the PREVIOUS=global binding by the sequence law -- not recursion); harmless for non-map lanes (peep/pin stay the core accessors)
        elam (link '\ (cat (nthl efn 1) (L (nthl efn 2))))                              ; the entry's source lambda (=/show)
-       (nif (emit (peep (assemble tgt (holo (L outer Hs))) 'bytes 0)) fb elam k))
+       (nif (emit (peep (assemble tgt (holo (L outer Hs))) 'bytes 0)) deopt elam k))
 )

@@ -22,7 +22,8 @@
    loopinfo (glaze 'loopinfo)  njit-loop (glaze 'njit-loop)                 ;   post-boot, so nothing folded for it. loop lane
    loopinfo-n (glaze 'loopinfo-n)  njit-loop-n (glaze 'njit-loop-n)         ;   (unify with auto-ev): the counted + N-VAR back-edges
    qualfr (glaze 'qualfr)  jitfrx (glaze 'jitfrx)                           ;   plus the float-RESULT leaf, all owned natively at
-                                                                            ;   creation, deopting to the bytecode twin `e`.
+   anat-defs (glaze 'anat-defs)  jgir-ok? (glaze 'jgir-ok?)  jitgroupirx (glaze 'jitgroupirx)  ; creation. + the flag-gated GROUP prototype:
+                                                                            ;   parse defs, op-cover, compile PURE (jitgroupirx, e deopt).
    (exprn ps e) (? (member? e ps) 1  (whole? e) 1                          ; var in frame | int literal
                    (two? e) (: op (cap e)
                                (? (member? op (cat '(+ - * // % & | ^ < <= > >= =) (? (getenv "AI_PARTIAL_GLAZE") '(<< >>) ()))) (&& (exprn ps (caup e)) (exprn ps (caup (cup e))))
@@ -55,7 +56,24 @@
                 (: ln (loopinfo-n s)
                    (? ln (: _ (pin fires () (+ 1 (peep fires () 0)))
                             (njit-loop-n s (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))) e))
-                      e))))))
+                      ; GROUP prototype (flag AI_GROUP_GLAZE, off by default) -- a reusable closure
+                      ; (\ frame.. <flat mutually-recursive arith group>) whose tail is (entry frame..),
+                      ; so the outer closure IS the group entry. auto-ev can't reach this (never gets the
+                      ; closure body as a callable-later unit); natjit does, at ala-build. PURE path: parse
+                      ; the defs (anat-defs), op-cover (jgir-ok?), compile with jitgroupirx and `e` as deopt
+                      ; -- NO ev/base-ev/autogroup (all re-enter ala mid-build -> crash). Prototype scope:
+                      ; a FLAT group (no church/hof lifting) with the tail = entry applied to the frame in
+                      ; order; anything else falls to bytecode. jgir-ok? is the soundness gate.
+                      ; at ala the body is post-feel: define-sugar `(fib n) B` is DESUGARED to `fib (\ n B)`,
+                      ; so anat-defs yields dds = ((name . (\ p.. B))..). Convert to jitgroupir's ((name p..) . B).
+                      (: pd (? (&& (getenv "AI_GROUP_GLAZE") (two? body) (id? (cap body) ':)) (anat-defs (cup body)) ())
+                         dds (? pd (cap pd) ())  tail (? pd (caup pd) ())
+                         okshape (&& pd (two? tail) (all (\ dd (&& (two? dd) (name? (cap dd)) (two? (cup dd)) (id? (cap (cup dd)) '\) (two? (cup (cup dd))))) dds))   ; every def is name (\ p.. B)
+                         gdefs (? okshape (map (\ dd (: lam (cup dd) (link (cat (L (cap dd)) (init (cup lam))) (last (cup lam))))) dds) ())   ; ((name p..) . B)
+                         gnames (map (\ d (cap (cap d))) gdefs)
+                         (? (&& okshape (member? (cap tail) gnames) (= (cup tail) ps) (jgir-ok? gdefs))     ; tail = (entry frame..), ops covered
+                            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx gdefs (cap tail) 'x64 e))
+                            e))))))))
    (fired? n) (< n (peep fires () 0))                 ; did the hook fire since count n?
  _ (assert
     ; --- embedded leaves get native-backed at creation, and compute correctly ---
