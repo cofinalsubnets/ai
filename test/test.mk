@@ -16,13 +16,19 @@
 # exits 0 without ever reaching zz-fin -- exit code alone green-lights a run
 # that only executed a prefix of the corpus. ai0 must print TWO summaries
 # (the corpus runs under both c0 and the self-hosted ev).
+# Both gates STREAM through `tee` (the dots appear live -- ai flushes per write, so
+# you watch progress and a stall marks a slow test) while still capturing the run for
+# the sentinel grep. The exit status rides a `.rc` file, not `$?` (the pipe's exit is
+# tee's, and /bin/sh has no pipefail), so the exit-0 AND sentinel checks both hold.
 test_ai0: $(ai0)
 	@echo TEST $(ai0)
-	@$(ai0) </dev/null > out/host/.test_ai0.out; s=$$?; cat out/host/.test_ai0.out; \
+	@{ $(ai0) </dev/null; echo $$? > out/host/.test_ai0.rc; } | tee out/host/.test_ai0.out; \
+	  s=$$(cat out/host/.test_ai0.rc); \
 	  [ $$s -eq 0 ] && [ `grep -c "tests pass" out/host/.test_ai0.out` -eq 2 ]
 test_host: $m
 	@echo TEST $m
-	@cat $t | $m > out/host/.test_host.out; s=$$?; cat out/host/.test_host.out; \
+	@{ cat $t | $m; echo $$? > out/host/.test_host.rc; } | tee out/host/.test_host.out; \
+	  s=$$(cat out/host/.test_host.rc); \
 	  [ $$s -eq 0 ] && grep -q "tests pass" out/host/.test_host.out
 # Host-nif smoke tests: nifs defined in host/*.c link into `ai` but NOT ai0
 # (which bakes the test/*.l corpus), so they cannot sit DIRECTLY in test/ -- ai0
