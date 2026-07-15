@@ -54,7 +54,8 @@ one lane serves both callers.
 
 ## where we are
 
-natjit covers two lanes today:
+natjit covers the leaf, captured-leaf, counted-loop, float-leaf and n-var-loop
+lanes today; only the group/grid/cask fall-through remains with auto-ev:
 
 | lane            | auto-ev            | natjit (hook)                    |
 |-----------------|--------------------|----------------------------------|
@@ -62,7 +63,7 @@ natjit covers two lanes today:
 | captured leaf   | qualc→jitnir(flatc)| ✅ (compiles over the frame `ps = (init (cup s))`, imps included) |
 | counted loop    | loopinfo→njit-loop | ✅ njit-loop with `e` as deopt   |
 | float leaf      | qualfr→jitfr       | ✅ qualfr gate → jitfrx with `e` as deopt |
-| n-var loop      | loopinfo-n→njit-loop-n | ❌ pending                    |
+| n-var loop      | loopinfo-n→njit-loop-n | ✅ loopinfo-n gate → njit-loop-n with `e` threaded through cf-deopt |
 | group/grid/cask | autogroup(autonat(twolow(castbuild))) | ❌ pending          |
 
 Flag-gated alongside: the **partial-glaze bridge** (`AI_PARTIAL_GLAZE`) — when
@@ -87,16 +88,18 @@ param only (qualfr's shape) so a captured float leaf falls through to bytecode
 for now. Only natjit's path is new (x86-host-only); auto-ev's float lane, incl.
 arm64, rides the unchanged 2-arg jitfr.
 
-### 2. n-var loop (`loopinfo-n` → `njit-loop-n`)
+### 2. n-var loop (`loopinfo-n` → `njit-loop-n`) — LANDED (`b172c80e`)
 
 The `(\ n ((: (go v0..vk) (? T (go U..) R)) I0..Ik))` shape — up to 3 loop vars
 with arbitrary update exprs (iterative fib/tak: i,a,b with updates b and a+b).
-`njit-loop-n` already exists and is called by auto-ev; the port mirrors the
-counted-loop lane already on the hook. **The tax:** `njit-loop-n`'s cf-deopt
-closure currently falls to `(base-ev lam)` on the post-overflow / non-canonical
-path (auto.l ~line 145). To ride the hook it needs the same deopt-target
-parameterization `njit-loop` got — thread `e` through cf-deopt so the overflow
-path re-enters the bytecode twin, not the interpreter-over-source.
+`njit-loop-n` already existed and was called by auto-ev; the port mirrors the
+counted-loop lane. **The tax paid:** `cf-deopt` + `njit-loop-n` gained an
+`interp` param (the `njit-loop` precedent); the internal else-branch `(base-ev
+lam)` became `interp`. auto-ev's two call sites pass `(base-ev l)`; the hook
+passes `e`, so the overflow path re-enters the bytecode twin, never
+interpreter-over-source. The C-finite matrix-power closure `(\ n (cf-dot …))` is
+itself bytecode under the hook — its body isn't leaf/loop grammar, so it never
+re-enters `ala`, and needs no special handling.
 
 ### 3. groups / grids / casks (`autogroup(autonat(twolow(castbuild)))`)
 
@@ -151,7 +154,7 @@ cache is the only thing it blocks.** So the cache step is:
 ## sequence
 
 1. ~~**float leaf**~~ — LANDED (`8a88dfb9`).
-2. **n-var loop** — thread `e` through cf-deopt, then port (mirrors counted loop).
+2. ~~**n-var loop**~~ — LANDED (`b172c80e`): `e` threaded through cf-deopt, ported.
 3. **measure the cache** — number first; add + relax spec only if it pays.
 4. **groups/grids/casks** — ship option (a) (leave to auto-ev) as the design;
    port (option b) only if embedded groups profile hot.
