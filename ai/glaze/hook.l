@@ -20,7 +20,8 @@
 (: assemble (holo 'assemble)                                                 ; through the module books (crew/holo/export.l,
    emit (glaze 'emit)  coreir (glaze 'coreir)  deoptir (glaze 'deoptir)     ;   ai/glaze/export.l) -- this stream cat-loads
    loopinfo (glaze 'loopinfo)  njit-loop (glaze 'njit-loop)                 ;   post-boot, so nothing folded for it. loop lane
-                                                                            ;   (unify with auto-ev): owning the back-edge natively
+   qualfr (glaze 'qualfr)  jitfrx (glaze 'jitfrx)                           ;   (unify with auto-ev): the back-edge + the
+                                                                            ;   float-RESULT leaf, both owned natively at creation
    (exprn ps e) (? (member? e ps) 1  (whole? e) 1                          ; var in frame | int literal
                    (two? e) (: op (cap e)
                                (? (member? op (cat '(+ - * // % & | ^ < <= > >= =) (? (getenv "AI_PARTIAL_GLAZE") '(<< >>) ()))) (&& (exprn ps (caup e)) (exprn ps (caup (cup e))))
@@ -37,6 +38,11 @@
        (? (&& (two? s) (two? (cup (cup s))) (exprn ps body))         ; >=1 param, a body, leaf grammar
           (: _ (pin fires () (+ 1 (peep fires () 0)))                  ; compile via the neutral-IR lane (coreir); deopt target = e
              (nif (emit (peep (assemble 'x64 (coreir 'x64 ps body (deoptir 'x64 (? (= a 1) 0 1)))) 'bytes 0)) e s a))
+          ; FLOAT-RESULT leaf -- (\ x <fexpr>) that BOXES a gem (auto-ev's qualfr/jitfr lane).
+          ; one param only (qualfr's shape), so a captured float leaf falls through for now. deopt -> e,
+          ; not (ev s): jitfr bakes (ev lam), which under the hook would re-enter ala -> so jitfrx takes e.
+          (qualfr s)
+            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitfrx s 'x64 e))
           ; NOT a leaf -- try the counted-loop lane (auto-ev's njit-loop, but deopting to `e`, the
           ; bytecode ala already built, NOT (base-ev s): re-interpreting s here would re-enter ala ->
           ; natjit -> ... So natjit passes e; owning the loop's back-edge is the big win over the leaf.
@@ -52,6 +58,10 @@
            (fired? n)))                                             ; ... the hook fired on it
     (9000000000000000000 = (ev '((\ x (* x x)) 3000000000)))        ; embedded leaf, applied inline -> deopt -> bignum
     (3 = (ev '(: g (\ x (cap x)) (g '(3 4)))))                      ; non-arith body -> stays bytecode, still right
+    ; --- an embedded FLOAT-RESULT leaf: native gem box at creation, == interp, deopts on a non-float arg ---
+    (: n (peep fires () 0)  fr (ev '(: f (\ x (+ (* x 1.5) 2.0)) f))   ; f built by ala -> the float lane fires
+       (&& (gem? (fr 4)) (8.0 = (fr 4)) (= (fr 4) ((\ x (+ (* x 1.5) 2.0)) 4))   ; boxes a gem, == the interpreter
+           (fired? n) (= (fr 'nope) ((\ x (+ (* x 1.5) 2.0)) 'nope))))   ; ... the hook fired, and a non-float arg deopts == interp
     ; --- an embedded CAPTURING closure: native captured closure, transparent ---
     (: mk (ev '(\ y (\ x (+ x y))))  a5 (mk 5)                      ; inner (\ x (+ x y)) is the embedded one
        (&& (15 = (a5 10)) ('(6 7 8) = (map a5 '(1 2 3)))            ; native captured closure, composes

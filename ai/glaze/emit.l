@@ -213,7 +213,11 @@
    (nanc tgt) (? (id? tgt 'x64) `(`('raw '(102 15 46 192  123 4  102 15 87 192)))
                  (: A (greg tgt 'acc) ok (mint 0)
                     (`('(ucomisd f0 f0) `('br 'vc ok)) + `(`('li A 0) `('movqxr 'f0 A)) + `(`('label ok)))))
-   (jitfr lam tgt)
+   (jitfr lam tgt) (jitfrx lam tgt (ev lam))                        ; 2-arg public: bakes the interpreter deopt (auto-ev + the glaze-x86 tests)
+   ; jitfrx: the deopt-parameterized core. auto-ev/tests reach it through jitfr ((ev lam)); the natjit
+   ; creation hook (ai/glaze/hook.l) calls it DIRECTLY with `e`, the bytecode twin ala already built --
+   ; re-interpreting lam there would re-enter ala -> natjit -> ... (the leaf lane's `e`-deopt law).
+   (jitfrx lam tgt interp)
     (: v (caup lam)  kind (apof 1.5)                                 ; lvm_flo's address, captured now (code never moves)
        A (greg tgt 'acc) S (greg tgt 'sp) HP (greg tgt 'hp) IP (greg tgt 'ip) T (greg tgt 'tmp) ok (mint 0)
        ; neutral crew/holo/ IR (both targets): the room-guard skips the deopt by LABEL; the box store is `stsd`;
@@ -225,7 +229,7 @@
               `('stsd HP 8 'f0)                                           ; [Hp+8] = the double
               `('mov A HP) `('add HP HP 16)                               ; acc = Hp (the gem ptr) ; Hp += 16
               `('st S 0 A) `('add IP IP 16) `('ld T IP 0) `('jmpr T)))))   ; [Sp] = gem ; Continue (NO putfix: acc IS the gem)
-        (ev lam) lam 1))
+        interp lam 1))
    (clook k ce) (? (atom? ce) () (= k (caap ce)) (cap ce) (clook k (cup ce)))   ; counter env: name -> (name regbytes; cgFd/rgof read it)
    ; --- CONSTANT HOISTING: peek is mopped so a float constant costs a movabs+movq to materialize;
    ;     re-emitting that inside a loop body is the dominant cost. so collect the DISTINCT float
