@@ -1004,8 +1004,36 @@
        mn (filter (\ p (&& (atom? (cap p)) (two? (cup p)) (member? (cap (cup p)) '(tablet hash)))) ps)   ; names bound to a tablet/hash
        (! (atom? (filter (\ p (&& (two? (cap p))                                                    ; a fn binding whose body ...
           (! (atom? (filter (\ m (&& (occurs? (cap m) (cup p)) (! (member? (cap m) (cup (cap p)))))) mn))))) ps))))   ; ... references a mapname that is NOT its param
+   ; --- GROUP SWALLOW (flag-gated, AI_GROUP_SWALLOW) ---------------------------------------------
+   ;     A group member calling an EXTERNAL global int fn currently REJECTS (the callee isn't a
+   ;     `:`-local candidate -> the whole group falls to interp). srcrec records every top-level
+   ;     GLOBAL fn define's source (a body-less `:` leaks its bindings globally -- that parity is the
+   ;     "this is a real global" test, so srcreg only ever holds genuine globals, never a bench's
+   ;     local fn). swgather then pulls a called global's recorded source INTO the candidate set as a
+   ;     synthetic member, to a fixpoint (a swallowed fn may call further globals). jitgroupir emits
+   ;     it as an in-blob `(label g)` sibling under the group's ONE shared OVF/deopt -- so NO
+   ;     cross-blob call, no split deopt. SOUND: the recorded source == the live global (autogroup
+   ;     sees every define), so the native agrees with the interp twin (which calls the global); a
+   ;     swallowed body over any free var / unknown call is rejected by groupok?'s existing grammar
+   ;     -> the swallow declines, never miscompiles. (Staleness: a global redefined AFTER a caller
+   ;     was glazed+memoized keeps the caller's cached native, as any memoized glaze does; the raw
+   ;     recorded source is un-lowered, so a callee needing church/&& lowering just declines here.)
+   srcreg (tablet 0)
+   (swfnpair? pr) (: nf (cap pr) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))
+   (srcrec form0) (? (&& (getenv "AI_GROUP_SWALLOW") (two? form0) (id? (cap form0) ':) (! (atom? (cup form0)))
+                       (= 0 (% (tally (cup form0)) 2)))                                   ; body-less `:` only -> a GLOBAL-leaking define
+      (foldl (\ _ pr (? (swfnpair? pr) (pin srcreg (caap pr) (link (cup (cap pr)) (cup pr))) ())) () (cap (anat-defs (cup form0)))) ())
+   (swuniq l) (? (atom? l) () (member? (cap l) (cup l)) (swuniq (cup l)) (link (cap l) (swuniq (cup l))))
+   (swheads e acc) (? (atom? e) acc  (&& (two? e) (id? (cap e) '\)) acc                   ; collect call heads (symbols); skip quoted/lambda subforms
+      (: h (cap e) acc2 (? (name? h) (link h acc) acc) (foldl (\ a x (swheads x a)) acc2 (cup e))))
+   (swgather fns) (: names (map caap fns)                                                 ; enlarge fns with recorded globals reachable from the bodies (to fixpoint)
+      heads (foldl (\ a p (swheads (cup p) a)) () fns)
+      new (swuniq (filter (\ h (&& (! (member? h names)) (! (id? (peep srcreg h 0) 0)))) heads))
+      (? (atom? new) fns
+         (swgather (foldr (\ h a (: d (peep srcreg h 0) (link (link (link h (cap d)) (cup d)) a))) fns new))))
    (autogroup form0)
-    (? (! (two? form0)) form0
+    (: _ (srcrec form0)                                                                  ; record global fn sources (flag-gated inside srcrec) BEFORE any decline
+     (? (! (two? form0)) form0
        (! (id? (cap form0) ':)) form0
        (atom? (cup form0)) form0
        ; DECLINE a BODY-LESS `:` (even # of forms) -- the global-leaking top-level-define form (sat.l, the
@@ -1019,14 +1047,15 @@
        (memo-leak? form0) form0                                                                ; a `:`-sibling map memo (fact/bell) -> interp, sound
        (: form (plift (lift (delet (defoliate (loopclose (autospec (debool (dehof (dechurch (fold-consts form0))))))))))   ; lower literal church (N f x)->f^N(x), inline lambda-const HOFs to first-order, lower &&/||/min/max/abs to ?, specialize interp-over-static-data, CLOSE polynomial folds to a closed form, deforest the rest -> loops, inline value-lets, lambda-lift named-let bodies, THEN plift read-only loops out of nested lets (hash's scan) -> flat group fns
           parsed (anat-defs (cup form)) pairs (cap parsed)
-          fns (filter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
+          fns0 (filter (\ p (: nf (cap p) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))) pairs)   ; (name p..), 1..4 distinct sym params
+          fns (? (getenv "AI_GROUP_SWALLOW") (swgather fns0) fns0)                          ; swallow: pull called globals' recorded sources in as synthetic members
           (? (! (two? fns)) form0                                                            ; no candidate functions -> original
              (: armap (map (\ p (L (cap (cap p)) (- (tally (cap p)) 1))) fns)                 ; (name arity) candidates
                 grp (grpfix fns armap)                                                        ; the closed glazeable subset
                 (? (atom? grp) form0                                                          ; nothing survives the fixpoint -> original (un-lifted)
                    (: gnames (map cap grp)
                       gdefs (map mapfix-def (filter (\ p (member? (cap (cap p)) gnames)) fns))   ; the group's (nameform . body) defs, with map-valued peeps rewritten to mpeep
-                      (link ': (rewrite-bindings (cup form) gnames gdefs))))))))              ; each binding of the LIFTED form -> its native
+                      (link ': (rewrite-bindings (cup form) gnames gdefs)))))))))             ; each binding of the LIFTED form -> its native  (last ) closes the srcrec `:` wrapper)
    ; --- TWIN LOWERING (twolow): a complex(TWIN)-recurrence grid -> the real-pair float grid the
    ;     float-grid lane (autonat/jitfgridn) ALREADY glazes -- so idiomatic complex code glazes with
    ;     NO new codegen (Route A). A `:` whose recurrence carries TWIN params (a var built/updated
