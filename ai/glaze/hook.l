@@ -31,6 +31,11 @@
                                                (exprn ps (caup e)) (exprn ps (caup (cup e))) (exprn ps (caup (cup (cup e)))))
                                   0))
                    0)
+   ; opnd-ok? -- every OPERAND-position leaf symbol in e is a frame param. heads are op-checked by
+   ; jgir-ok?; in FIRST-ORDER group code a group name only ever appears as a HEAD, so a bare-symbol
+   ; operand that isn't a frame var is a FREE capture -> reject (jgir compiles a body over the frame
+   ; params only; it has no slot to bind an outer var). the synthetic-__outer tail guard.
+   (opnd-ok? ps e) (? (two? e) (all (\ x (opnd-ok? ps x)) (cup e))  (name? e) (member? e ps)  1)
    fires #0                                          ; a probe: how many closures the hook native-backed
    ; natjit e s a -- e = the bytecode entry (deopt target), s = (\ frame.. body) the
    ; surface src, a = arity. ps = (init (cup s)) = the frame [imps args]; body = the
@@ -57,22 +62,30 @@
                    (? ln (: _ (pin fires () (+ 1 (peep fires () 0)))
                             (njit-loop-n s (cap ln) (caup ln) (caup (cup ln)) (caup (cup (cup ln))) (caup (cup (cup (cup ln)))) e))
                       ; GROUP prototype (flag AI_GROUP_GLAZE, off by default) -- a reusable closure
-                      ; (\ frame.. <flat mutually-recursive arith group>) whose tail is (entry frame..),
-                      ; so the outer closure IS the group entry. auto-ev can't reach this (never gets the
-                      ; closure body as a callable-later unit); natjit does, at ala-build. PURE path: parse
-                      ; the defs (anat-defs), op-cover (jgir-ok?), compile with jitgroupirx and `e` as deopt
-                      ; -- NO ev/base-ev/autogroup (all re-enter ala mid-build -> crash). Prototype scope:
-                      ; a FLAT group (no church/hof lifting) with the tail = entry applied to the frame in
-                      ; order; anything else falls to bytecode. jgir-ok? is the soundness gate.
+                      ; (\ frame.. <first-order mutually-recursive arith group>) whose tail calls the group.
+                      ; auto-ev can't reach this (never gets the closure body as a callable-later unit); natjit
+                      ; does, at ala-build. PURE path: parse the defs (anat-defs), op-cover (jgir-ok?), compile
+                      ; with jitgroupirx and `e` as deopt -- NO ev/base-ev/autogroup (all re-enter ala mid-build
+                      ; -> crash). Scope: a FIRST-ORDER group (no church/hof lifting); the tail is a flat call
+                      ; (entry frame..) OR any arith over group calls (routed through a synthetic __outer entry).
                       ; at ala the body is post-feel: define-sugar `(fib n) B` is DESUGARED to `fib (\ n B)`,
                       ; so anat-defs yields dds = ((name . (\ p.. B))..). Convert to jitgroupir's ((name p..) . B).
+                      ; TWO shapes: a FLAT tail (entry frame..) -- the outer closure IS the group entry, no
+                      ; indirection; or a GENERAL tail (any arith over group calls -- (+ 1 (fib m)), a reordered
+                      ; /computed-arg call, tree recursion) -- synthesize an entry ((__outer . frame) . tail) and
+                      ; make IT the group entry, so the outer closure evaluates the tail then dispatches. opnd-ok?
+                      ; rejects a tail that reads a captured var (jgir binds only the frame); jgir-ok? gates ops.
                       (: pd (? (&& (getenv "AI_GROUP_GLAZE") (two? body) (id? (cap body) ':)) (anat-defs (cup body)) ())
                          dds (? pd (cap pd) ())  tail (? pd (caup pd) ())
                          okshape (&& pd (two? tail) (all (\ dd (&& (two? dd) (name? (cap dd)) (two? (cup dd)) (id? (cap (cup dd)) '\) (two? (cup (cup dd))))) dds))   ; every def is name (\ p.. B)
                          gdefs (? okshape (map (\ dd (: lam (cup dd) (link (cat (L (cap dd)) (init (cup lam))) (last (cup lam))))) dds) ())   ; ((name p..) . B)
                          gnames (map (\ d (cap (cap d))) gdefs)
-                         (? (&& okshape (member? (cap tail) gnames) (= (cup tail) ps) (jgir-ok? gdefs))     ; tail = (entry frame..), ops covered
+                         flat? (&& okshape (member? (cap tail) gnames) (= (cup tail) ps))       ; tail IS (entry frame..)
+                         osym '__outer  agdefs (? okshape (cat gdefs (L (link (link osym ps) tail))) ())   ; group + synthetic ((__outer . frame) . tail)
+                         (? (&& flat? (jgir-ok? gdefs))                                          ; FLAT: entry direct, zero indirection
                             (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx gdefs (cap tail) 'x64 e))
+                            (&& okshape (! (member? osym gnames)) (opnd-ok? ps tail) (jgir-ok? agdefs))   ; GENERAL tail via the synthetic entry
+                            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx agdefs osym 'x64 e))
                             e))))))))
    (fired? n) (< n (peep fires () 0))                 ; did the hook fire since count n?
  _ (assert
