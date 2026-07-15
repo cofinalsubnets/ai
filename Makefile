@@ -570,9 +570,11 @@ test_raw: host out/host$(hsuf)/aicc
 	  echo "test_raw: ai.c + host/*.c + nolibc + am math + sys.o, our linker, no gcc/glibc/ld -- corpus passes"
 # test_raw's aarch64 twin (rung D): aicc -t arm64 lays every object, mksys-arm64
 # the syscall leaf, OUR linker binds, qemu-user runs the corpus over the fresh
-# egg. test/uukind{,law}.l sit out: uk-jj fails under qemu-arm64 at the
-# GCC-built reference too (pre-existing, its own session); the raw binary and
-# that reference agree file-for-file -- tools/arm64check.sh is the differential.
+# egg. Runs the WHOLE C-sorted $t (uukind{,law}.l included): the raw binary and
+# the GCC-built reference agree file-for-file -- tools/arm64check.sh is the
+# differential. ($t is C/byte order, so test/uu.l loads before test/uukindlaw.l,
+# which calls the kernel it defines; a locale `ls` sorts uukind* first and the
+# uk-jj assert runs before uu.l -- an ordering trap, never a GC/arm64 bug.)
 # Opt-in (not in test_all): the qemu corpus costs minutes. Skips without qemu.
 .PHONY: test_raw_arm64
 test_raw_arm64: host out/host$(hsuf)/aicc
@@ -594,7 +596,7 @@ test_raw_arm64: host out/host$(hsuf)/aicc
 	    || { echo "FAIL mksys-arm64 sys.o"; exit 1; }; \
 	  $m $(ho)/aicc -t arm64 $$d/*.o -o $(ho)/ai-raw-a64 \
 	    || { echo "FAIL our-linker bind ai-raw-a64"; exit 1; }; \
-	  cat test/00-init.l test/spec.l `ls test/*.l | grep -vE '00-init|spec\.l|glaze-x86|uukind'` \
+	  cat $t \
 	    | AI_NO_IMAGE=1 qemu-aarch64 $(ho)/ai-raw-a64 > $(ho)/.test_raw_a64.out 2>&1; s=$$?; \
 	  tail -1 $(ho)/.test_raw_a64.out; \
 	  { [ $$s -eq 0 ] && grep -q "tests pass" $(ho)/.test_raw_a64.out; } \
