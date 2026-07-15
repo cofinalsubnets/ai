@@ -234,9 +234,11 @@ What the prototype does NOT yet do (the increments to a full port):
 
 natjit owns the leaf, captured-leaf, counted-loop, float-leaf and n-var-loop lanes
 outright; the group lane is in as a flag-gated prototype covering flat AND general tails. Capture-safety
-and transparency are settled (fixed above), and the front-half coverage gap is audited (above) —
-default-on-SAFE, the pure enablers being a not-urgent perf increment. So the last gate before deleting
-the `AI_GROUP_GLAZE` flag is measuring the compile-time tax (welow walks every form twice, always).
+and transparency are settled (fixed above), the front-half coverage gap is audited (default-on-SAFE),
+and the compile-time tax is measured (+2.7% plain / +5.8% church-HOF-dense / +2-4% egg bake, memory
+flat — and largely MOVED cost, since the front-half lowering is intrinsic to native-codegen and welow
+just runs it at eval-time, matching ai's eager-codegen model). All investigative gates are cleared, so
+the last step to enabling it by default is the mechanical one: deleting the `AI_GROUP_GLAZE` gates.
 
 ## the cache — MEASURED, decided NO (`fires`-probe, host x86, baked image)
 
