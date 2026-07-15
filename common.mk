@@ -40,10 +40,14 @@ hsuf := $(if $(STATIC),-musl,)
 # see the K_TEST block in the root Makefile).
 tco ?= 1
 
-# the corpus: 00-init's harness first, the spec second, then the rest. glaze-x86 is EXCLUDED:
-# it needs emit.l/auto.l cat'd ahead of it and EXECUTES x86-64 native code, so it runs only under
-# the x86-guarded `test_glaze`, never the arch-neutral corpus (which would crash on a non-x86 host).
-t = $R/test/00-init.l $R/test/spec.l $(filter-out %/00-init.l %/spec.l %/glaze-x86.l,$(sort $(wildcard $R/test/*.l)))
+# the corpus: 00-init's harness first, the spec second, then uu.l (the uu kernel: vof/defn/kjoin/...),
+# then the rest. uu.l is front-loaded EXPLICITLY so its dependents (uukind*, uulay, uupatch, uuwm*)
+# always see it, whatever the sort collation -- a locale `ls` orders uukind* before uu.l and the
+# laws would run against an unloaded kernel (the byte-sort here happens to put uu.l first, but that
+# is implicit and a rename could flip it; test/uukindlaw.l also guards with an explicit assert).
+# glaze-x86 is EXCLUDED: it needs emit.l/auto.l cat'd ahead of it and EXECUTES x86-64 native code, so
+# it runs only under the x86-guarded `test_glaze`, never the arch-neutral corpus (crash on non-x86).
+t = $R/test/00-init.l $R/test/spec.l $R/test/uu.l $(filter-out %/00-init.l %/spec.l %/glaze-x86.l %/uu.l,$(sort $(wildcard $R/test/*.l)))
 
 ai_h = $(wildcard $R/*.h)
 # the core rides with its math floor (crew/cc/lib/math/am.c -- our own

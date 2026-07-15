@@ -7,6 +7,10 @@
 ; here is thus a COMPLETE proof over the carrier, and drift-gated: a kinds.l edit
 ; that breaks a law re-emits a kjoin that fails an assert at `make test`. the four
 ; kinds.l driver cases ride below as uu idpath lemmas -- the bridge to Rocq + Lean.
+; guard: the uu kernel (test/uu.l -- vof/defn/kjoin/...) MUST load before these laws. $t front-loads
+; it, but a locale-sorted corpus glob puts uukind* first and the laws would run against an unloaded
+; kernel (a cryptic ;; missing vof -> BADJJ). Fail loudly and by name instead if that ever recurs.
+(assert (member? 'vof (names ())))
 (:
    (uk-jj a b) (vof 0 (L 'kjoin a b))                        ; kjoin a b, run in the kernel
    (uk-all f)  (foldl (\ acc x (&& acc (f x))) 1 uk-codes)   ; forall over the carrier
