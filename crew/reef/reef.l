@@ -269,7 +269,49 @@
              nc (rf-mater oldsnap newsnap)
              _ (puts ("reef: synced -- " + (show (tally ids)) + " patches (" + (show np)
                       + " new), " + (show nb) + " blobs, " + (show nc) + " files updated\n"))
-             (tally ids)))))
+             (tally ids))))
+
+   ; --- hatch: (source_tree, arch) -> a native seed. the local derivation
+   ;     (doc/hatch.md's fallback path: rebuild from a present binary). we hatch
+   ;     the RECORDED state -- a dirty tree refuses -- run the nest's build recipe,
+   ;     fingerprint the output as the SEED, and ledger it keyed by (patchset,
+   ;     arch). the patchset id is the hash of the sorted tips = the head DAG
+   ;     state, so hatching the same head with the same recipe twice is a
+   ;     reproducibility audit: a seed that doesn't match the prior hatch is a
+   ;     NON-REPRODUCIBLE flag, not a silent divergence. the recipe + its output
+   ;     path are opaque to hatch (it just runs an argv and hashes a file), the
+   ;     way the store is opaque to what a hunk's old/new mean; for ai the recipe
+   ;     is `make`, for a test a one-line stub. config in .reef/hatch:
+   ;       (hatch (recipe "make" "candidate") (out "out/host/ai")) ---
+   (rf-hatched _) (rf-form ".reef/hatched")                     ; ((psid arch seed time)..) newest-first | ()
+   (rf-hatch-find led psid arch)                                ; the last hatch of this (psid,arch) | ()
+    (? (! (two? led)) ()
+       (: r <led (? (&& ((<r) = psid) ((<>r) = arch)) r (rf-hatch-find >led psid arch))))
+   (rf-arch _) (: u (run (list "uname" "-m")) ls (lines (cup u)) (? (two? ls) <ls "unknown"))
+   (reef-hatch argv)
+    (: _ (rf-mk ())
+       (? (0 < (rf-dirty ()))
+          (: _ (say err "reef: working tree has changes; record or revert before hatching\n") ())
+          (: tips (rf-tips ())
+             (? (! (two? tips)) (: _ (say err "reef: nothing recorded to hatch\n") ())
+                (: cfg (rf-form ".reef/hatch")
+                   rc (? (two? argv) argv (rf-fld cfg 'recipe))
+                   (? (! (two? rc)) (: _ (say err "reef: no build recipe (pass one, or set .reef/hatch)\n") ())
+                      (: psid (sha256 (show (sort tips))) arch (rf-arch ())
+                         _ (puts ("reef: hatching " + (snip psid 0 12) + " (arch " + arch + ") -- " + (show rc) + "\n"))
+                         st (cap (run rc))
+                         (? (! (0 = st)) (: _ (say err ("reef: build failed (status " + (show st) + ")\n")) ())
+                            (: outp (: o (rf-fld cfg 'out) (? (two? o) <o ()))
+                               seed (? (! outp) () (: t (rf-look outp) (? (two? t) (sha256 <>t) ())))
+                               prior (rf-hatch-find (rf-hatched ()) psid arch)
+                               _ (? (&& (two? prior) (&& seed (<>>prior)))
+                                    (? ((<>>prior) = seed) (puts "reef: reproducible -- the seed matches the prior hatch\n")
+                                       (say err "reef: NON-REPRODUCIBLE -- this patch set hatched to a different seed!\n"))
+                                    ())
+                               _ (rf-lay ".reef/hatched" (show (link (list psid arch seed (clock 0)) (rf-hatched ()))))
+                               _ (puts ("reef: hatched " + (snip psid 0 12) + " -> seed "
+                                        + (? seed (snip seed 0 12) "(none)") + "\n"))
+                               psid))))))))))
 
 ; the SEAT: fire reef-main iff reef sits in the program seat of the real command
 ; line -- the positional program or a -l preload -- taking the args after the
@@ -289,6 +331,8 @@ usage: reef VERB ..
   record [NOTE]   working changes -> a patch in the store (.reef/)
   sync PEER       union a peer nest's store (a dir holding .reef/), then
                   re-derive tips + snap and materialize onto a clean tree
+  hatch [CMD..]   build the recorded source into a native seed (the recipe is
+                  CMD.. or .reef/hatch), fingerprint + ledger it by patch set
   log             the patches, newest first (* marks a tip)
   diff            working tree vs the recorded state (unified; exit 1 on change)
 ")
@@ -298,6 +342,7 @@ usage: reef VERB ..
        (: v <as
           (? (v = "record") (: _ (reef-record (? (two? >as) <>as "")) (quit 0))
              (v = "sync") (? (two? >as) (: r (reef-sync <>as) (quit (? r 0 1))) (usage ()))
+             (v = "hatch") (: r (reef-hatch >as) (quit (? r 0 1)))
              (v = "log") (: _ (reef-log ()) (quit 0))
              (v = "diff") (: n (reef-diff ()) (quit (? (0 < n) 1 0)))
              (usage ()))))

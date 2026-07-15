@@ -1,17 +1,31 @@
 # reef — the vcs and the distro, one verb set
 
-Status: **the MVP's exchange half is live** (2026-07-14): `record` · **`sync`** ·
+Status: **the MVP verb set is live** (2026-07-14): `record` · `sync` · **`hatch`** ·
 `log` · `diff` over the content-addressed store — [`crew/reef/reef.l`](../crew/reef/reef.l),
 gated by `make test_reef`; a hunk is test/patch.l's proven `chg` at file grain
-(slot = path, context = old content hash). **`sync PEER`** unions a peer nest's
-store (a directory holding a `.reef/`): copy the missing blobs + patches
-(content-addressed, so the union just fills gaps), re-derive tips + snap from the
-*whole* patch set (order-free — the DAG is a pure function of its patches), then
-materialize the merged snap onto a **clean** working tree (a dirty tree refuses,
-exit 1). Same-path divergence warns and the topo-latest write wins; a *convergent*
-write (two nests reach the same content) is silent. `hatch` (the derivation) is
-the MVP's last piece; `cut` / `undo` reserve-the-names. The rest of this doc is
-the design brief from the 2026-07-14 session. The **interface** layer over the model in [`doc/hatch.md`](hatch.md)
+(slot = path, context = old content hash).
+
+- **`sync PEER`** unions a peer nest's store (a directory holding a `.reef/`):
+  copy the missing blobs + patches (content-addressed, so the union just fills
+  gaps), re-derive tips + snap from the *whole* patch set (order-free — the DAG
+  is a pure function of its patches), then materialize the merged snap onto a
+  **clean** working tree (a dirty tree refuses, exit 1). Same-path divergence
+  warns and the topo-latest write wins; a *convergent* write (two nests reach the
+  same content) is silent.
+- **`hatch [CMD..]`** is the derivation — the local-rebuild path of §2. It hatches
+  the *recorded* state (a dirty tree refuses), runs the nest's build recipe (`CMD..`
+  or a `.reef/hatch` config `(hatch (recipe ..) (out PATH))`; for ai the recipe is
+  `make`), fingerprints the output as the **seed**, and ledgers `(psid arch seed
+  time)` in `.reef/hatched` keyed by the patch-set id (`sha256` of the sorted tips
+  = the head DAG state). So re-hatching the same head with the same recipe is a
+  **reproducibility audit**: a seed that doesn't match the prior hatch raises a
+  NON-REPRODUCIBLE flag (a warning, not a stop). The recipe + its output path are
+  opaque to hatch — it runs an argv and hashes a file — the way the store is opaque
+  to what a hunk's old/new mean.
+
+`cut` / `undo` reserve-the-names; the cached-fetch (CDN substituter) side of hatch
+is deferred with public distribution (§Deferred). The rest of this doc is the
+design brief from the 2026-07-14 session. The **interface** layer over the model in [`doc/hatch.md`](hatch.md)
 (the patch DAG, the hatch derivation, the nest, refs) and the machinery in
 [`port/inle/{serve,drive,patch}.l`](../port/inle/patch.l) (the dock — adopt +
 two-generation re-exec). hatch.md says *what the objects are*; this says *what

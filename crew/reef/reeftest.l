@@ -88,4 +88,27 @@
  (0 = (reef-diff ()))                                     ; working tree == the recomputed snap
  (! (reef-record "noop")))                                ; ...so nothing is left to record
 
+; --- hatch: build the recorded source into a native seed, ledgered by patch
+;     set + arch. the recipe is a deterministic stub writing under out/ (a
+;     default ignore, so the build output never dirties the tree); a re-hatch of
+;     the same head with the same recipe is a reproducibility audit -- the seed
+;     must reproduce. (the real ai recipe is `make`; the shape is identical.) ---
+(: _ (rf-lay ".reef/hatch"
+       (show '(hatch (recipe "sh" "-c" "mkdir -p out; printf reef-seed > out/seed.bin") (out "out/seed.bin"))))
+   hid (reef-hatch ())
+   led (rf-hatched ())
+   again (reef-hatch ())
+   led2 (rf-hatched ()))
+
+(assert
+ (64 = (tally hid))                                    ; the patchset id = sha256 of the sorted tips
+ (0 = (rf-dirty ()))                                   ; the build output stayed under ignored out/
+ (1 = (tally led))                                     ; one derivation ledgered...
+ (hid = (<<led))                                       ; ...keyed by the patchset id
+ ((<><led) = (rf-arch ()))                             ; ...with this machine's arch (second field)
+ (64 = (tally (<>><led)))                              ; ...and a real seed fingerprint (third)
+ (hid = again)                                         ; same head + recipe -> same patchset id
+ (2 = (tally led2))                                    ; a second, auditable hatch
+ ((<>><led2) = (<>><led)))                             ; ...and the seed reproduced bit-for-bit
+
 (: _ (puts "reef: ok") _ (putc 10) 0)
