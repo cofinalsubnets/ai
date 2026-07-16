@@ -206,6 +206,15 @@
       (two? (cgn "int main() { int i = 0; top: i++; if (i < 3) goto top; return i; }"))
       (! (cgn "struct S { int x; }; int main() { struct S s; return s; }"))                       ; no struct VALUES
       (! (cgn "struct S { int x; }; int main() { struct S s; return s.y; }"))                      ; no such member
+      ; --- bitfields: LSB-first packing into a declared-type unit (SysV/gcc x86);
+      ; the member's stored (unit-offset bitoff width) drives a 2-shift load and a
+      ; read-modify-write store. layout folds at parse; &bitfield is illegal. ---
+      (= (cexpp "struct S { unsigned a:1; unsigned b:1; unsigned c:1; };" "sizeof(struct S)") '(num 4))   ; three :1 pack into one int unit
+      (= (cexpp "struct M { char pre; unsigned x:3; unsigned y:5; int post; };" "sizeof(struct M)") '(num 8))   ; the run rides pre's tail, post int-aligns
+      (= (cexpp "struct U { unsigned a:4; unsigned b:4; };" "sizeof(struct U)") '(num 4))            ; one byte of bits, int-aligned
+      (= (cexpp "struct Z { int a; int :0; int b; };" "sizeof(struct Z)") '(num 8))                 ; `:0` forces the next unit to align
+      (two? (cgn "struct b { unsigned a:1; unsigned n:5; int s:4; }; int main() { struct b x; x.a=1; x.n=21; x.s=-3; return x.a + x.n + (x.s < 0); }"))  ; read/write, signed sign-extends
+      (! (cgn "struct b { unsigned a:1; }; int main() { struct b x; unsigned *p = &x.a; return *p; }"))   ; &bitfield is illegal -- refuse
       ; --- stage 4b: whole-struct assignment (a block copy) and function pointers ---
       (two? (cgn "struct S { int x; int y; }; int main() { struct S a; struct S b; a.x = 3; a.y = 4; b = a; return b.x + b.y; }"))
       (two? (cgn "struct S { long a; long b; }; int f(struct S *p, struct S *q) { *p = *q; return p->a; } int main() { return 0; }"))
@@ -587,5 +596,5 @@
       (two? (cgn "int f(int x){return x;} typedef int (*fp)(int); fp t[1] = { &f }; int main(){ return t[0](1); }"))
       (! (cgn "int main(){ return (long)&nope; }"))))
 
-(say err "crew/moon/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE (a typed local/member folds at parse -- an array bound), bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) + the gen tail (mproto siblings pinned, &f a function's address in code and images) ok")
+(say err "crew/moon/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch/bitfields) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE (a typed local/member folds at parse -- an array bound), bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) + the gen tail (mproto siblings pinned, &f a function's address in code and images) ok")
 (put err 10)

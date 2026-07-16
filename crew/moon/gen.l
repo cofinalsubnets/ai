@@ -101,6 +101,8 @@
    (arr? ty) (&& (two? ty) (<ty = 'arr))
    (stru? ty) (&& (two? ty) (<ty = 'struct))
    (fn? ty) (&& (two? ty) (<ty = 'fn))         ; ('fn ret?) -- a function; decays to its address
+   (bitf? ty) (&& (two? ty) (<ty = 'bitfield))  ; a bitfield member: (bitfield uty bitoff width); its lvalue is a UNIT address
+   (uldop sz) (? (sz = 1) 'ldu1 (sz = 2) 'ldu2 (sz = 4) 'ldu4 'ld)   ; unsigned load of a sz-byte word
    (fnty g nm) (: sig (peep (g 'sigs) nm ())        ; a named function's type, return riding when sig'd
                   (? (two? sig) `('fn <sig) `('fn)))
    ; by-value aggregates (structs AND unions): a struct VALUE in cgexpr is its
@@ -491,7 +493,16 @@
            (: r (clval g env e)
               (? (bad? r) 'bad
                  (: ty (vty r)
-                    (? (arr? ty) (mkv `('ptr <>ty) 'r0 (vfs r))
+                    (? (bitf? ty)                          ; a bitfield: load the unit, then a 2-shift extract (sar signed, shr unsigned)
+                        (: uty <>ty bitoff <>>ty width <>>>ty
+                           usz (tsz g uty) hi (64 - (bitoff + width)) lo (64 - width)
+                           sgn (! (usg? uty))
+                           (mkv 'long 'r0
+                                ((vfs r)
+                                 + `(`((uldop usz) 'r0 'r0 0))
+                                 + (? (hi > 0) `(`('shl 'r0 hi)) ())
+                                 + (? (lo > 0) `(`((? sgn 'sar 'shr) 'r0 lo)) ()))))
+                       (arr? ty) (mkv `('ptr <>ty) 'r0 (vfs r))
                        (fn? ty) (mkv `('ptr ty) 'r0 (vfs r))     ; a fn-pointer member is its address
                        (stru? ty) (mkv ty 'r0 (vfs r))    ; a struct member's value is its address (the sse2 rep)
                        (flo? ty) (mkv 'double 'r0 ((vfs r) + (fldf ty 'f0 'r0 0)))
@@ -525,7 +536,8 @@
            (: r (clval g env <>e)
               ap? (peep g 'argpos ())
               _ (pin g 'argpos ())
-              (? (! (bad? r))                        ; under & the lvalue's address ESCAPES: flip its leans to leas
+              (? (&& (! (bad? r)) (bitf? (vty r))) 'bad   ; &bitfield is illegal C -- refuse
+                 (! (bad? r))                        ; under & the lvalue's address ESCAPES: flip its leans to leas
                  (: v (mkv `('ptr (vty r)) 'r0 (unlean (vfs r))) (? ap? v (escan g v)))
                  ; &f on a function name: same address as the bare use (no lvalue).
                  ; a VARIABLE of the same name shadows it -- a homed param's regv
@@ -589,6 +601,23 @@
                      (? (bad? r) 'bad
                         (mkv 'double 'r0 (cat (vfs lv) (cat (spush 'r0)
                          ((asflo g r) + (spop 'r1) + (fstf g (vty lv) 'r1 0 'f0)))))))
+                 (bitf? (vty lv))                    ; a bitfield store: unit addr in r1, read-modify-write, result (truncated) in r0
+                  (: r (cgexpr g env <>>e)
+                     (? (bad? r) 'bad
+                        (: bt (vty lv) uty <>bt bitoff <>>bt width <>>>bt
+                           usz (tsz g uty)
+                           mask ((<< 1 width) - 1) mv (<< mask bitoff) cmask ((0 - mv) - 1)
+                           sgn (! (usg? uty)) lo (64 - width)
+                           (mkv 'long 'r0
+                              ((vfs lv) + (spush 'r0)
+                               + (asint g r) + (spop 'r1)
+                               + `(`((uldop usz) 'r2 'r1 0)              ; r2 = the unit
+                                   `('li 'r3 mask) `('and 'r0 'r0 'r3)   ; r0 = v & mask (the truncated value)
+                                   `('li 'r3 cmask) `('and 'r2 'r2 'r3)  ; clear the field's bits
+                                   `('mov 'r3 'r0))
+                               + (? (bitoff > 0) `(`('shl 'r3 bitoff)) ())   ; r3 = (v & mask) << bitoff
+                               + `(`('or 'r2 'r2 'r3) `((stop uty) 'r1 0 'r2))
+                               + (? sgn `(`('shl 'r0 lo) `('sar 'r0 lo)) ()))))))
                  (: r (cgexpr g env <>>e)
                     (? (bad? r) 'bad
                        (: ty (vty lv)
@@ -609,6 +638,7 @@
                  (: ty (vty lv)
                     stp (? (ptr? ty) (tsz g <>ty) 1)
                     (? (arr? ty) 'bad
+                       (bitf? ty) 'bad             ; bitfield ++/-- -- refuse (rare; use `f = f + 1`)
                        (mkv ty 'r0 (cat (vfs lv)
                               `(`('mov 'r2 'r0)
                                  `((ldop ty) 'r0 'r2 0)

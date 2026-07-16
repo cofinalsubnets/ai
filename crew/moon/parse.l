@@ -154,14 +154,17 @@
    (ptr? ty) (&& (two? ty) (<ty = 'ptr))
    (arr? ty) (&& (two? ty) (<ty = 'arr))
    (stru? ty) (&& (two? ty) (<ty = 'struct))
+   (bitf? ty) (&& (two? ty) (<ty = 'bitfield))     ; a bitfield member: (bitfield uty bitoff width)
    (tsz ps ty) (? (ptr? ty) 8
                   (arr? ty) (* <>>ty (tsz ps <>ty))
                   (stru? ty) (caup (peep (ps 'stag) <>ty 0))
+                  (bitf? ty) (tsz ps <>ty)          ; the unit's size (a bitfield rides its declared type)
                   (|| (ty = 'char) (ty = 'uchar)) 1 (|| (ty = 'short) (ty = 'ushort)) 2
                   (|| (ty = 'int) (|| (ty = 'uint) (ty = 'float))) 4 8)
    (talign ps ty) (? (ptr? ty) 8
                      (arr? ty) (talign ps <>ty)
                      (stru? ty) (cauup (peep (ps 'stag) <>ty 0))
+                     (bitf? ty) (talign ps <>ty)
                      (tsz ps ty))
    (aup n a) (& (n + (a - 1)) (0 - a))              ; round n up to alignment a
 
@@ -256,7 +259,12 @@
 
    ; -- base types: scalars, struct/union (with bodies), enum, typedef names --
    ; struct bodies REGISTER into ps 'stag; answers (ty rest) | ()
-   (pmembers ps ts acc)                             ; member pairs ((name ty)..); () name = anonymous splice
+   ; ": CONST-EXPR" bitfield width (ts starts AT the ":") -> (width rest) | ()
+   (pbits ps ts) (? (! (peekp ts ":")) ()
+                    (: er (pasn ps >ts)
+                       (? (! (two? er)) ()
+                          (: cv (cfold <er) (? (charm? cv) `(cv <>er) ())))))
+   (pmembers ps ts acc)                             ; member pairs ((name ty)..); () name = anonymous splice; (name ty width) = a bitfield
     (? (! (two? ts)) ()
        (peekp ts "}") `((rev acc) >ts)
        (: br (pbty ps ts)
@@ -264,41 +272,70 @@
              (: bty <br ts2 <>br
                 (? (peekp ts2 ";")                   ; an anonymous struct/union member
                    (? (stru? bty) (pmembers ps >ts2 (link `(() bty) acc)) ())
-                   (: (dts ts3 acc2)                 ; dtor (, dtor)* ;
+                   (peekp ts2 ":")                   ; an anonymous bitfield (padding / `:0` aligner): () name + width
+                   (: bw (pbits ps ts2)
+                      (? (! (two? bw)) ()
+                         (: rest (want <>bw ";")
+                            (? (two? rest) (pmembers ps rest (link `(() bty <bw) acc)) ()))))
+                   (: (dfin mem2 toks acc2)          ; after a declarator (+ optional bitfield): , or ;
+                       (? (peekp toks ",") (dts (cup toks) (link mem2 acc2))
+                          (: rest (want toks ";")
+                             (? (two? rest) `((link mem2 acc2) rest) ())))
+                      (dts ts3 acc2)                 ; dtor [: width] (, dtor [: width])* ;
                        (: dr (pdtor ps ts3 bty)
                           (? (! (two? dr)) ()
-                             (peekp <>dr ",") (dts (cup (caup dr)) (link <dr acc2))
-                             (: rest (want <>dr ";")
-                                (? (two? rest) `((link <dr acc2) rest) ()))))
+                             (peekp <>dr ":")        ; a bitfield: append the width to (name ty)
+                              (: bw (pbits ps <>dr)
+                                 (? (! (two? bw)) () (dfin (<dr + `(<bw)) <>bw acc2)))
+                             (dfin <dr <>dr acc2)))
                       r (dts ts2 ())
                       ; (cap r) is REVERSED (dts links) -- and acc accumulates reversed
                       ; too (pmembers revs at "}"), so prepend it AS IS: a second rev
                       ; here laid `double re, im;` as im-then-re (an ABI break vs gcc)
                       (? (two? r) (pmembers ps <>r (<r + acc)) ())))))))
-   ; lay a member list out; a union flattens every offset to 0
+   ; lay a member list out; a union flattens every offset to 0. the cursor is a
+   ; BIT position from the struct start: normal members byte-align to their own
+   ; alignment; a bitfield sits at the cursor, only bumped to the next declared-
+   ; type unit boundary to avoid straddling it -- the SysV/gcc x86 packing. its
+   ; stored (unit-byte-offset bitoff) let gen load the aligned word and extract.
+   (bfmem? m) (two? (cup (cup m)))                  ; a member pair carrying a width: (name ty width)
    (playout ps ms uni)                              ; -> (fields size align)
-    (: (go l off mx acc)
+    (: (go l bit mx acc)
         (? (! (two? l))
            (: a2 (? (mx < 1) 1 mx)
-              `((rev acc) (aup off a2) a2))
+              `((rev acc) (aup (>> (bit + 7) 3) a2) a2))
            (: m <l name <m ty <>m
-              (? (! name)                            ; the anonymous splice (name absent)
+              (? (bfmem? m)                          ; a bitfield member (named or anonymous): (name ty width)
+                 (: w <>>m
+                    usz (tsz ps ty) ubits (usz * 8) a (talign ps ty)
+                    nmx (? (mx < a) a mx)
+                    (? (= w 0) (go >l (aup bit ubits) nmx acc)        ; `:0` -- align the cursor to the unit, no field
+                       uni (: fld (? name `(name 0 `('bitfield ty 0 w)) ())
+                              (go >l (? (bit < ubits) ubits bit) nmx (? name (link fld acc) acc)))
+                       (: bit2 (? (((& bit (ubits - 1)) + w) > ubits) (aup bit ubits) bit)   ; bump to avoid straddling the unit
+                          uoff (& (>> bit2 3) (0 - usz))              ; the declared-type-aligned word holding these bits
+                          bitoff (bit2 - (uoff * 8))
+                          fld (? name `(name uoff `('bitfield ty bitoff w)) ())   ; anonymous -> reserve bits, no field
+                          (go >l (bit2 + w) nmx (? name (link fld acc) acc)))))
+                 (! name)                            ; the anonymous struct/union splice (name absent, no width)
                  (: inner (peep (ps 'stag) <>ty 0)
                     ia <>>inner
                     isz <>inner
-                    at (? uni 0 (aup off ia))
+                    sbit (? uni 0 (aup bit (ia * 8)))
+                    at (>> sbit 3)
                     (spl fs acc2) (? (! (two? fs)) acc2
                                      (: f <fs
                                         (spl >fs (link `(<f (at + <>f) <>>f) acc2))))
                     nmx (? (mx < ia) ia mx)
-                    noff (? uni (? (off < isz) isz off) (at + isz))
-                    (go >l noff nmx (spl <inner acc)))
+                    nbit (? uni (? (bit < (isz * 8)) (isz * 8) bit) (sbit + (isz * 8)))
+                    (go >l nbit nmx (spl <inner acc)))
                  (: a (talign ps ty)
                     sz (tsz ps ty)
-                    at (? uni 0 (aup off a))
+                    abit (? uni 0 (aup bit (a * 8)))
+                    at (>> abit 3)
                     nmx (? (mx < a) a mx)
-                    noff (? uni (? (off < sz) sz off) (at + sz))
-                    (go >l noff nmx (link `(name at ty) acc))))))
+                    nbit (? uni (? (bit < (sz * 8)) (sz * 8) bit) (abit + (sz * 8)))
+                    (go >l nbit nmx (link `(name at ty) acc))))))
        (go ms 0 0 ()))
    (panon ps) (: k (peep ps 'anon 0) _ (pin ps 'anon (k + 1)) (".anon" + (show k)))
    (pbty ps ts0)
