@@ -127,39 +127,46 @@
    (jitsum body)
     (: src `('\ 'n `(`(': `('go 'i 'a) `('? `('< 'i 'n) `('go `('+ 'i 1) `('+ 'a body)) 'a)) 0 0))
        (nif (emit (loopcode body 'i '+ '< 'x64)) (ev src) src 1))
-   ; --- CALL-OUT BRIDGE, native side (step 2 phase 1, x86 POC) -------------------------------------
-   ;     calloutir: a native lane calls ai_call1 to apply the interp closure `clos` to the raw loop
-   ;     counter CV; the fixnum result lands UNTAGGED in acc. Saves the caller-saved regs (g/Ip/Sp +
-   ;     the 3 loop regs) across the C call, PACKS Sp/Hp into g first (ai_call1 reads them), then
-   ;     RELOADS Hp from g (it moved under a callee GC) and RESTORES Sp from the spill (so the loop's
-   ;     Sp never drifts); result read from g->sp[0] (struct ai: ip@0, hp@8, sp@16). GC-safe for an
-   ;     INTEGER loop -- the raw loop regs hold ints, not heap pointers, so only the closure (rooted
-   ;     by ai_call1's own ai_push) needs GC care. x64-only. THIS IS THE TAX-MEASUREMENT lane.
-   ;     The closure to call is value[1] of THIS nif (reached Ip-relative, `(ld IP 8)`, exactly as
-   ;     deoptbody reaches the interp twin) -- NOT a baked immediate: a live heap pointer can't be an
-   ;     immediate, and would go stale the moment the callee's GC moved it. Being a live cell it stays
-   ;     a GC root. clos arg is ignored (kept so the call isn't nullary/unrun).
-   (calloutir _) (: A (greg 'x64 'acc) G (greg 'x64 'g) IP (greg 'x64 'ip) HP (greg 'x64 'hp) SP (greg 'x64 'sp) T (greg 'x64 'tmp)
-                    rs (loopregs 'x64) N (nthl rs 0) CV (nthl rs 1) ACC (nthl rs 2) SV 'r3
-      (L (L 'ld T IP 8)                                                            ; T = value[1] = clos (before IP is spilled)
-         (L 'st G 16 SP) (L 'st G 8 HP)                                             ; Pack Sp/Hp into g
-         (L 'push SV) (L 'mov SV 'sp)                                              ; snapshot machine rsp in rbx
-         (L 'push G) (L 'push IP) (L 'push SP) (L 'push N) (L 'push CV) (L 'push ACC)   ; save 6 caller-saved regs
-         (L 'leax HP CV CV 1 1) (L 'mov IP T)                                       ; rdx=arg=2*CV+1 (tagged) ; rsi=clos ; rdi=g already
-         (L 'and 'sp 'sp -16) (L 'li T (calloutaddr 0)) (L 'callr T)                ; call ai_call1(g, clos, arg)
-         (L 'ld T A 16) (L 'ld T T 0)                                              ; T = [g->sp][0] = result (rax=g on return)
-         (L 'mov 'sp SV) (L 'sub 'sp 'sp 48)                                       ; restore rsp to the 6-reg block
-         (L 'pop ACC) (L 'pop CV) (L 'pop N) (L 'pop SP) (L 'pop IP) (L 'pop G) (L 'pop SV)
-         (L 'ld HP G 8) (L 'mov A T) (L 'sar A 1)))                                ; Hp = g->hp (moved) ; acc = untag(result)
-   ; (jitcalloutsum clos) -- (\ n (sum_{i<n} (clos i))) as a native counted loop whose body CALLS OUT
-   ;     to the interp closure each iteration. Measures the native-side call-out tax vs the pure-interp
-   ;     equivalent. deopt fallback is a stub (the measurement stays in fixnum range, never overflows).
-   (jitcalloutsum clos) (: rs (loopregs 'x64) N (nthl rs 0) CV (nthl rs 1) ACC (nthl rs 2) A (greg 'x64 'acc) S (greg 'x64 'sp)
-       code (asmt 'x64 (`(`('ld N S 0) `('sar N 1) `('li CV 0) `('li ACC 0))
-              + `('(label top) `('cmp CV N) `('br 'ge 'end))
-              + (calloutir clos) + (`(`('adds ACC ACC A)) + (ldeopt 'x64 0))
-              + `(`('inc CV) '(jmp top) '(label end) `('mov A ACC)) + (loopepi 'x64)))
-       (nif (emit code) clos `('\ 'n 0) 1))   ; clos IS value[1] -- calloutir loads it Ip-relative
+   ; --- CALL-OUT BRIDGE, native side: the STACKLESS drive ------------------------------------------
+   ; (jitcalloutsum clos) -- a native counted loop `(\ n (sum_{i<n} (clos i)))` that CALLS OUT to the
+   ; closure each iteration WITHOUT a re-entrant C frame. The call threads through callout_drive (ai.c,
+   ; {lvm_ap, lvm_ret0}, address via `calloutdrive`): the blob builds a [arg, clos, retB] frame on Sp,
+   ; points Ip at the drive, and TAIL-jumps; lvm_ap applies clos to the tagged counter, lvm_ret0
+   ; delivers the result to retB -- the blob's own resume label `bb`, whose address is materialized
+   ; position-independently by `la` (survives an image reload; no baked W^X pointer) into a Sp slot the
+   ; callee cannot reach. So the callee runs entirely on the VM stack: a deep or re-entrant callee
+   ; grows Sp, NEVER the C stack (the whole point -- the retired re-entrant ai_call1 pinned a C frame
+   ; per nesting level). The loop state lives in 5 reserved Sp slots (a GC root, so a callee GC
+   ; relocates the closure for free): R[0]=SA sum, R[1]=SC counter, R[2]=SN bound, R[3]=Sclos closure,
+   ; R[4]=Sret resume addr; the arg n rides at R[5], the caller continuation at R[6]. Prototype scope:
+   ; clos returns fixnums, the sum stays in range -- no result-kind guard or sum-overflow deopt yet
+   ; (the production bridge adds them, cf. loopepi/ldeopt). x64-only.
+   (jitcalloutsum clos)
+    (: A (greg 'x64 'acc)  IP (greg 'x64 'ip)  SP (greg 'x64 'sp)  T (greg 'x64 'tmp)  U (greg 'x64 'scratch)
+       code (asmt 'x64
+         (`(`('sub SP SP 40)                                     ; reserve 5 loop-state slots (Sp = R)
+            `('ld T IP 8)  `('st SP 24 T)                        ; Sclos = value[1] = clos  (IP still &value[0])
+            `('ld T SP 40) `('sar T 1) `('st SP 16 T)            ; SN = untag(arg @ R[5])
+            `('li T 0) `('st SP 0 T) `('st SP 8 T)               ; SA = 0 ; SC = 0
+            `('la T 'bb) `('st SP 32 T))                          ; Sret = &bb  (position-independent)
+          + `('(label top)
+             `('ld T SP 8) `('ld U SP 16) `('cmp T U) `('br 'ge 'end))   ; i >= n -> end
+          + `(`('ld T SP 8) `('leax T T T 1 1) `('st SP -24 T)   ; F[0] = arg = tag(i)
+             `('ld T SP 24) `('st SP -16 T)                       ; F[1] = clos
+             `('lea T SP 32) `('st SP -8 T)                       ; F[2] = retB = &Sret
+             `('li IP (calloutdrive 0)) `('sub SP SP 24)          ; Ip = callout_drive ; Sp = frame
+             `('ld T IP 0) `('jmpr T))                            ; Continue -> lvm_ap -> clos -> ret0 -> bb
+          + `('(label bb)
+             `('ld A SP 0) `('sar A 1)                            ; result (Sp[0] on resume) -> untagged acc
+             `('ld T SP 8) `('add T T A) `('st SP 8 T)            ; SA += result
+             `('ld T SP 16) `('add T T 1) `('st SP 16 T)          ; SC += 1
+             `('add SP SP 8) `('jmp 'top))                        ; Sp = R ; next iteration
+          + `('(label end)
+             `('ld A SP 0) `('leax A A A 1 1)                     ; acc = tag(SA)
+             `('add SP SP 40) `('st SP 0 A)                       ; Sp = entry ; result into arg slot
+             `('ld IP SP 8) `('st SP 8 A) `('add SP SP 8)         ; inline ret0: Ip=caller-cont; Sp[1]=result; Sp++
+             `('ld T IP 0) `('jmpr T))))                          ; Continue -> caller
+       (nif (emit code) clos `('\ 'n 0) 1))   ; clos IS value[1] -- the prologue loads it Ip-relative
    ; --- N-VARIABLE loop: the general tail-recursive counted loop ------------------
    ; (\ n ((: (go v0..vk) (? TEST (go U0..Uk) RESULT)) I0..Ik)), up to 3 loop vars in
    ; r9/r10/r11 (RAW), the param n the tagged Sp[0] (fxv-guarded). each iteration: if

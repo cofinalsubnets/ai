@@ -443,10 +443,10 @@ extern const struct ai_mint ai_mint_zero;
 #define ZeroPoint ((word) &ai_mint_zero)
 void ai_wait_fds(int const *fds, int n, uintptr_t ticks);
 bool ai_ready(int fd), ai_strp(ai_word);
+uintptr_t ai_calloutdrive(void);   // address of the stackless call-out drive (the glaze bakes it as an immediate)
 struct ai
  *ai_please(struct ai*, uintptr_t),
  *ai_push(struct ai*, uintptr_t, ...),
- *ai_call1(struct ai*, ai_word, ai_word),   // re-entrant call-out: apply a unary closure, return the value on sp[0]
  *ai_strof(struct ai*, const char*),
  *gxl(struct ai*),
  *gxr(struct ai*),

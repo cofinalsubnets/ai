@@ -2256,31 +2256,24 @@ static lvm(numap_swap) {
  return Ap(lvm_ap, g); }
 union u const numap_drive[] = { {lvm_ap}, {.ap = numap_swap}, {.ap = lvm_ret0} };
 
-// --- ai_call1: the RE-ENTRANT call-out bridge (step 2 of the glaze call-out arc) ------------------
-// Apply a UNARY closure `clos` to `arg`, run the sub-computation to completion, and RETURN the value
-// -- the piece the tail-threaded VM lacks (ordinary application never returns to C mid-flight; deopt
-// only TAIL-jumps to the twin). Mirrors numap_drive: a [arg, clos, RET] frame under a {ap, ret0}
-// drive applies clos to arg and returns to RET; RET is call1_end, which Packs g and returns g,
-// unwinding the tail-chain back here. NESTS inside the outermost eval's fault barrier (ai_eval_armed
-// is already set on any path that reaches native glaze code), so it does NOT re-arm -- a fault below
-// still unwinds to the one barrier. The caller passes clos/arg by value; ai_push roots them across
-// its own room-guard GC, and every live NATIVE value must already be a root (spilled to Sp) since the
-// callee may collect. On return, g->sp[0] = the result (the caller reloads Sp/Hp from g).
-static lvm(_lvm_call1end) { Pack(g); return encode(g, ai_status_yield); }   // stop the nested run (mirrors _lvm_yieldk: yield=ok under tco, =eof otherwise). the `_` prefix is the vmret exemption: like _lvm_yieldk this legitimately returns to C (the drive terminator), it does NOT tail-jump.
-static union u const call1_end[]   = { {_lvm_call1end} };
-static union u const call1_drive[] = { {lvm_ap}, {.ap = lvm_ret0} };
-struct ai *ai_call1(struct ai *g, word clos, word arg) {
- if (!ai_ok(g)) return g;
- g = ai_push(g, 3, arg, clos, word(call1_end));   // sp[0]=arg, sp[1]=clos, sp[2]=RET
- if (!ai_ok(g)) return g;
- g->ip = (union u*) call1_drive;
-#if ai_tco
- return ai_core_of(g->ip->ap(g, g->ip, g->hp, g->sp));   // tail-call chain; call1_end unwinds here, sp[0]=result
-#else
- while (ai_ok(g)) g = g->ip->ap(g);                       // trampoline: call1_end encodes eof to stop
- return ai_core_of(g);
-#endif
-}
+// --- callout_drive: the STACKLESS call-out bridge (the glaze call-out arc) -------------------------
+// A native glaze blob calls a closure the way the VM itself does -- NOT by re-entering C, but by
+// threading through the VM stack. To apply `clos` to `arg` and resume in native code, the blob builds
+// a [arg, clos, RET] frame on Sp, points Ip at callout_drive, and TAIL-jumps (Continue): lvm_ap
+// applies clos to arg, lvm_ret0 delivers the result to RET. RET is the blob's own native resume
+// point (its address materialized position-independently via the `la` IR op, stored in a Sp slot the
+// callee cannot reach), so control comes back to native code -- with the result in Sp[0] -- entirely
+// through Continue() tail-jumps. This is the SAME shape as numap_drive (church application) and
+// help_drive (the condition system): NO C stack frame is pinned across the sub-run, so a deep or
+// re-entrant callee grows the heap VM stack (Sp) -- growable, degrading to a scare -- exactly like the
+// interpreter, and NEVER the C stack. (The retired ai_call1 was a re-entrant C driver used only to
+// measure the arithmetic tax; it pinned one C frame per call-out nesting level -- the one construct
+// that could overflow the C stack -- so it is gone.) The loop's live state is spilled to Sp (a GC
+// root) around each call, so a collection inside the callee relocates it correctly for free.
+static union u const callout_drive[] = { {lvm_ap}, {.ap = lvm_ret0} };
+// The address of callout_drive as an integer -- the glaze emitter bakes it as the `li Ip` immediate.
+// A data-segment const, so the address is stable across an image reload (unlike a W^X JIT pointer).
+uintptr_t ai_calloutdrive(void) { return (uintptr_t) callout_drive; }
 
 // ============================================================================
 // the lisp help calling convention
