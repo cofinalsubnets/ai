@@ -357,7 +357,7 @@ moonrun = $m --wake $(ho)/mooncc.image -e '(moon-main (cuup (cup cmdline)))'
 .PHONY: test_moon
 test_moon: host out/host$(hsuf)/mooncc out/host$(hsuf)/mooncc.image
 	@echo "CC crew/moon/{lex,cpp,parse,gen,law}.l"; \
-	  cat test/00-init.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/moon/gen.l crew/moon/law.l | $m > out/host/.test_moon.out 2>&1; r=$$?; \
+	  cat test/00-init.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/holo/text.l crew/moon/gen.l crew/moon/law.l | $m > out/host/.test_moon.out 2>&1; r=$$?; \
 	  cat out/host/.test_moon.out; \
 	  { [ $$r -eq 0 ] && grep -q "crew/moon/law:" out/host/.test_moon.out; } \
 	    || { echo "FAIL cc laws (exit $$r)"; exit 1; }
@@ -398,6 +398,19 @@ test_moon: host out/host$(hsuf)/mooncc out/host$(hsuf)/mooncc.image
 	  $(moonrun) -I $(ho)/.flginc -D BONUS=12 -o $(ho)/.flg $(ho)/.flg.c > /dev/null 2>&1 || { echo "FAIL mooncc -I/-D/-o"; exit 1; }; \
 	  $(ho)/.flg; a=$$?; \
 	  [ $$a -eq 42 ] || { echo "FAIL mooncc -I/-D/-o run (got $$a want 42)"; exit 1; }; \
+	  printf 'int main() { long v; asm("li %%0, 40" : "=r"(v)); return v + 2; }\n' > $(ho)/.casm1.c; \
+	  $(moonrun) $(ho)/.casm1.c $(ho)/.casm1 > /dev/null 2>&1 || { echo "FAIL mooncc asm compile"; exit 1; }; \
+	  $(ho)/.casm1; a=$$?; \
+	  [ $$a -eq 42 ] || { echo "FAIL mooncc asm output operand (got $$a want 42)"; exit 1; }; \
+	  printf 'int main() { asm volatile("sys" : : "r0"(60), "r6"(42)); return 0; }\n' > $(ho)/.casm2.c; \
+	  $(moonrun) $(ho)/.casm2.c $(ho)/.casm2 > /dev/null 2>&1 || { echo "FAIL mooncc asm syscall compile"; exit 1; }; \
+	  $(ho)/.casm2; a=$$?; \
+	  [ $$a -eq 42 ] || { echo "FAIL mooncc asm pinned-reg syscall (got $$a want 42)"; exit 1; }; \
+	  printf 'int main() { long x = 30; asm("add %%0, %%0, %%1" : "+r"(x) : "r"(12L)); return x; }\n' > $(ho)/.casm3.c; \
+	  $(moonrun) $(ho)/.casm3.c $(ho)/.casm3 > /dev/null 2>&1 || { echo "FAIL mooncc asm in-out compile"; exit 1; }; \
+	  $(ho)/.casm3; a=$$?; \
+	  [ $$a -eq 42 ] || { echo "FAIL mooncc asm in-out (got $$a want 42)"; exit 1; }; \
+	  $(moonrun) -t arm64 -o $(ho)/.casm1a $(ho)/.casm1.c > /dev/null 2>&1 || { echo "FAIL mooncc asm arm64 compile"; exit 1; }; \
 	  printf 'int f();\nint main() { return f() + 2; }\n' > $(ho)/.mi1.c; \
 	  printf 'int f() { return 40; }\n' > $(ho)/.mi2.c; \
 	  mabs="$$PWD/$(ho)"; (cd $(ho) && $$mabs/ai --wake $$mabs/mooncc.image -e '(moon-main (cuup (cup cmdline)))' -c .mi1.c .mi2.c) > /dev/null 2>&1 || { echo "FAIL mooncc multi-input -c"; exit 1; }; \

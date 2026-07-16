@@ -8,10 +8,12 @@
 ; into the IR list ((li r0 60) (add r0 r0 r1) (label loop) (br eq loop) (ret)) that crew/holo/holo.l
 ; assembles. one line = one instruction; operands are separated by spaces and/or commas; a register
 ; or label is a symbol, an immediate a (optionally signed) number; `;` starts a comment. there is no
-; arch here at all -- it lowers to whatever backend `holo` is handed.
+; arch here at all -- it lowers to whatever backend `holo` is handed. mooncc's inline asm
+; (crew/moon/gen.l) parses its templates with asm-text; its cats carry this file.
 ;
-; load AFTER holo.l + x64.l (it needs the combinators from the baked post layer):
-;   out/host/ai -l crew/holo/holo.l -l crew/holo/x64.l -l crew/holo/text.l ...
+; needs only the baked post layer (the `parse` combinator book) -- no assembler names, so it
+; loads in the raw holo.l stream (test_holo) and on the baked host (book-only) alike:
+;   out/host/ai -l crew/holo/text.l ...
 
 ; the combinators live in the `parse` MODULE book (ai/post.l): bind the set this
 ; front-end drives -- `parse` itself rebound LAST (the sequence law).
@@ -56,15 +58,13 @@
        0 0 ()))
 
    ;; -- the front door: TEXT -> IR. blank/comment-only lines vanish; a line that won't parse is a
-   ;; deliberate raise (a typo shouldn't silently drop an instruction). --
+   ;; deliberate raise (a typo shouldn't silently drop an instruction). the assemble step stays
+   ;; with the caller ((holo-hex t (asm-text s)) and kin): this file binds NO assembler names, so
+   ;; it loads clean in both worlds -- the raw holo.l stream AND the baked host (book-only). --
    (asm-text src)
       (foldr (\ ln acc
                 (: clean (txtrim (txdecomment ln))
                    (? (= 0 (tally clean)) acc
                       (: form (parse txline clean)
                          (? (two? form) (>< form acc) (scare 'asm-text clean))))))
-             () (txsplit src))
-
-   ;; -- assemble straight from text. --
-   (asm-text-hex target src) (holo-hex target (asm-text src))
-   (asm-text-bytes target src) (holo-bytes target (asm-text src)))
+             () (txsplit src)))

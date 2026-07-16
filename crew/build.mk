@@ -19,7 +19,10 @@ korefiles = crew/kore/text.l crew/kore/core.l crew/kore/fs.l crew/kore/re.l crew
 # only mooncc (never kore), so an kore rebuild in another session can't tear the compiler.
 # Its own catted `#!/usr/bin/env -S ai -l` script: the u-floor (text+core), the assembler
 # book + elf/obj writers, then crew/moon/{lex,cpp,parse,gen,cc}.l whose tail SEAT fires.
-moonfiles = crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/holo/link.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/moon/gen.l crew/moon/moon.l
+# (crew/holo/text.l = the neutral-text assembler front end gen.l's inline asm
+# parses templates with; it leaks stream globals incl. a `parse` rebind -- fine
+# here, no later cat member reads them bare.)
+moonfiles = crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/text.l crew/holo/elf.l crew/holo/obj.l crew/holo/link.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/moon/gen.l crew/moon/moon.l
 # (`ho` is defined further down, after this rule is READ -- target/prereq names
 # expand at parse time, so these two lines spell out/host$(hsuf) themselves.)
 out/host$(hsuf)/kore: $(korefiles)

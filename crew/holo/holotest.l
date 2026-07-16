@@ -175,10 +175,10 @@
 
    ;; -- the text front-end (crew/holo/text.l) parses to the same IR, so it assembles byte-identically. --
    _ (chk-eq "text.basic" (holo-hex 'x64 '((li r0 60) (ret)))
-                          (asm-text-hex 'x64 "li r0, 60\nret"))
+                          (holo-hex 'x64 (asm-text "li r0, 60\nret")))
    _ (chk-eq "text.full"
         (holo-hex 'x64 '((add r0 r0 r1) (label loop) (dec r0) (br ne loop) (ret)))
-        (asm-text-hex 'x64 "add r0, r0, r1   ; with a comment\nlabel loop\n  dec r0\n  br ne, loop\n\n  ret\n"))
+        (holo-hex 'x64 (asm-text "add r0, r0, r1   ; with a comment\nlabel loop\n  dec r0\n  br ne, loop\n\n  ret\n")))
 
    ;; -- the ELF linker (crew/holo/elf.l) wraps assembled bytes in a well-formed static executable. --
    elfprog '((li r0 60) (li r6 0) (sys))

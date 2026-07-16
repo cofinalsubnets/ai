@@ -739,6 +739,41 @@ two ideas to keep warm as the stages climb, neither committed yet:
    (elf.l already lays executables -- close the last binutils door), -g
    line tables.
 
+## inline asm (landed 2026-07-16 -- the minimal skeleton)
+
+the GNU statement form, with ONE deliberate twist: the template is holo's
+neutral TEXT (crew/holo/text.l's `asm-text` parses it, the baked assembler
+encodes it), not AT&T -- so one template rides both targets wherever it
+sticks to the neutral surface, and no new assembler exists anywhere.
+
+    asm [volatile] ("li %0, 40" : "=r"(v) : "r"(x), "i"(3) : "memory");
+
+* registers are the neutral file: x64 r0=rax r1=rcx r2=rdx r3=rbx
+  r4=rbp(the frame) r5=rsi r6=rdi r7..r14=r8..r15; arm64 rN=xN. so a raw
+  x64 syscall is `asm("sys" : : "r0"(nr), "r6"(a0), "r5"(a1), "r2"(a2))`.
+* constraints: `"r"`/`"=r"`/`"+r"` pick a register, `"rN"` forms pin one,
+  `"i"` an immediate (parse-time constant). `%0..%9` substitute (outputs
+  first), `%%` a literal `%`. adjacent template strings concatenate.
+* the body assembles AT CODEGEN into one opaque `('raw bytes)`: the IR
+  passes barrier on raw, labels inside a template stay LOCAL to it, and no
+  pass (nor arm64's r4->fp retarget) ever rewrites user instructions.
+  external symbols can't be named in a template -- reach values through
+  operands ("r"(&x) works; the address-taken local also fences deadst).
+* operands stage through the machine stack, so calls inside operand
+  expressions are safe, and any scalar lvalue output works (*p, a[i]).
+  float/struct/bitfield operands refuse.
+* allowed registers (operands + clobbers): x64 r0-r3 + r5-r10 (r3 rides
+  every prologue's -8 slot; r4 is the frame and refuses), arm64 adds r4
+  (x4, an argument register there -- 5+-arg syscalls need it). sp and the
+  callee-saved r11-r14 refuse. clobbers (`"memory"`/`"cc"`/reg names) are
+  validated but need no action yet: an asm-containing fn turns register
+  HOMING off (gen.l's g 'hasasm, the 'sys-gate precedent), so nothing
+  lives in a register across any statement -- that flag is the seam the
+  coming register allocator must honor (asm = a precolor + clobber node).
+* deferred until a consumer demands them: an AT&T template front-end (the
+  Linux floor), "f" float operands, asm goto (Linux x86 requires it),
+  named [sym] operands, top-level asm.
+
 ## testing (the house discipline, restated for C)
 
 * every pure piece lawed in crew/moon/law.l from day 0 (lexer goldens, cpp

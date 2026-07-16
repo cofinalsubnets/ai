@@ -731,6 +731,50 @@
                              (? (two? rest) `(`((? stat 'sdecl 'decl) (rev (link <r acc))) rest) ()))))
                    (more ts0 ()))))))
 
+   ; asm [volatile] ( "template" [: outputs [: inputs [: clobbers]]] ) ; -- the
+   ; GNU STATEMENT form (basic and extended), the template in holo's neutral
+   ; TEXT (crew/holo/text.l; gen assembles it). adjacent template strings
+   ; concatenate (multi-line templates). operands ride as ((constraint expr)..),
+   ; clobbers as (string..) -- the constraint grammar is gen's business.
+   ; -> (('asm tmpl outs ins clobs) rest) | ()
+   (asmid? t) (&& (two? t) (&& ((tkk t) = 'id)
+                                (member? (tkv t) `("asm" "__asm__" "__asm"))))
+   (pasm ps ts)
+    (: r >ts
+       t1 (? (&& (two? r) (|| (tkw? <r 'volatile)
+                              (&& ((tkk <r) = 'id) ((tkv <r) = "__volatile__"))))
+             >r r)
+       r0 (want t1 "(")
+       (? (! (&& (two? r0) ((tkk <r0) = 'str))) ()
+          (: (tmpl ts2 acc) (? (&& (two? ts2) ((tkk <ts2) = 'str))
+                               (tmpl >ts2 (acc + (tkv <ts2)))
+                               `(acc ts2))
+             ; an operand run: "constraint" ( expr ) , .. -- empty before : or )
+             (ops ts2 acc)
+              (? (! (&& (two? ts2) ((tkk <ts2) = 'str))) `((rev acc) ts2)
+                 (: c (tkv <ts2)
+                    r1 (want >ts2 "(")
+                    re (? (two? r1) (pexpr ps r1) ())
+                    r2 (? (two? re) (want <>re ")") ())
+                    (? (! (two? r2)) ()
+                       (peekp r2 ",") (ops >r2 (link `(c <re) acc))
+                       `((rev (link `(c <re) acc)) r2))))
+             (clobs ts2 acc)
+              (? (! (&& (two? ts2) ((tkk <ts2) = 'str))) `((rev acc) ts2)
+                 (: c (tkv <ts2)
+                    (? (peekp >ts2 ",") (clobs >>ts2 (link c acc))
+                       `((rev (link c acc)) >ts2))))
+             tr (tmpl r0 "")
+             s1 (? (peekp <>tr ":") (ops (cup (caup tr)) ()) `(() <>tr))
+             (? (! (two? s1)) ()
+                (: s2 (? (peekp <>s1 ":") (ops (cup (caup s1)) ()) `(() <>s1))
+                   (? (! (two? s2)) ()
+                      (: s3 (? (peekp <>s2 ":") (clobs (cup (caup s2)) ()) `(() <>s2))
+                         (? (! (two? s3)) ()
+                            (: r9 (want <>s3 ")")
+                               rest (? (two? r9) (want r9 ";") ())
+                               (? (two? rest) `(`('asm <tr <s1 <s2 <s3) rest) ()))))))))))
+
    (pstmt ps ts)
     (? (! (two? ts)) ()
        (static? ts) (pstatic ps ts)
@@ -843,6 +887,7 @@
                              (? (two? rest) `(`('case v) rest) ()))))))
              (tkw? t 'default)
               (: rest (want >ts ":") (? (two? rest) `(`('dflt) rest) ()))
+             (asmid? t) (pasm ps ts)     ; before the call/label fallthroughs: asm( is a statement
              (tp? t "{") (pblock ps ts)
              (tp? t ";") `(`('nop) >ts)
              ; a label: id ':' (a ternary's id is followed by '?', never ':')

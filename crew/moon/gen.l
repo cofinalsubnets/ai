@@ -2141,6 +2141,140 @@
        (one pairs env))
 
    ; stmt -> forms | 'bad
+   ; -- inline asm (the 'asm statement): the template is holo neutral TEXT
+   ; (crew/holo/text.l's asm-text parses it; the cats carry text.l), %0..%9 the
+   ; operands (outputs first, GNU numbering), %% a literal %. the body assembles
+   ; to bytes RIGHT HERE and splices as ONE opaque ('raw ..): the IR passes
+   ; barrier on raw, template labels stay local to the splice, and arm64's
+   ; a4ize never rewrites inside it. operands stage through the machine stack
+   ; (spush/spop 16-byte cells -- a call inside an operand expr stays aligned):
+   ; every input evaluates and pushes, then pops into its register; outputs
+   ; push after the body and store back through clval in reverse, so the store
+   ; scratch (r0 the address, r1 the value) can never trample an unstored
+   ; output. constraints: "=r"/"+r"/"r" pick a register, "=rN"/"+rN"/"rN" pin
+   ; one, "i" an immediate (a parse-time constant); clobbers "memory"/"cc"/reg
+   ; names -- validated only: an asm fn's homing is OFF (g 'hasasm, the 'sys
+   ; precedent), so nothing lives in a register across the statement. x64
+   ; refuses r4 (the frame) and the callee-saved r11-r14; r3 rides every
+   ; prologue's -8 slot; arm64 adds r4 (x4, an argument register there). --
+   asmregs '(r0 r1 r2 r3 r5 r6 r7 r8 r9 r10)
+   asmpick '(r10 r9 r8 r7 r6 r5 r2 r1 r0)
+   asmnames (: t (tablet 0)
+               _ (foldl (\ _ i (: s9 ("r" + (show i)) _ (pin t (intern s9) s9) 0)) 0 (jot 11))
+               t)
+   (asmreg? g r9) (|| (member? r9 asmregs) (&& (a64? g) (id? r9 'r4)))
+   ; a constraint's register part: "r" -> 'pick, "i" -> 'imm, "rN" -> the nom
+   (asmc c9) (: n (tally c9)
+                (? (n < 1) 'bad
+                   (n = 1) (? ((c9 0) = 114) 'pick ((c9 0) = 105) 'imm 'bad)
+                   (intern c9)))
+   ; %-substitute the template: al the operand texts, GNU order
+   (asmsub tm al)
+    (: n (tally tm)
+       (go i acc)
+        (? (n <= i) acc
+           (: c (tm i)
+              (? (! (c = 37)) (go (i + 1) (acc + c))
+                 ((i + 1) < n)
+                  (: d (tm (i + 1))
+                     (? (d = 37) (go (i + 2) (acc + 37))
+                        (&& (48 <= d) (d <= 57))
+                         (: ix (d - 48)
+                            (? (ix < (tally al)) (go (i + 2) (acc + (nthr al ix))) 'bad))
+                        'bad))
+                 'bad)))
+       (go 0 ""))
+   asmhb (holo 'holo-bytes)
+   (cgasm g env s)
+    (: _ (pin g 'hasasm 1)
+       tmpl <>s
+       ; one operand list, GNU order: ('o|'x reg expr) an output (x in-out),
+       ; ('i reg expr) a register input, ('m imm) an immediate input
+       (oconv l acc)
+        (? (! (two? l)) (rev acc)
+           (: c (cap <l) n (tally c)
+              h (? (0 < n) (c 0) 0)
+              k (? (|| (h = 61) (h = 43)) (asmc (snip c 1 n)) 'bad)
+              (? (|| (id? k 'bad) (id? k 'imm)) 'bad
+                 (oconv >l (link `((? (h = 43) 'x 'o) k (caup <l)) acc)))))
+       (iconv l acc)
+        (? (! (two? l)) (rev acc)
+           (: k (asmc (cap <l)) e (caup <l)
+              (? (id? k 'bad) 'bad
+                 (id? k 'imm)
+                  (? (&& (two? e) (&& (id? <e 'num) (charm? <>e)))
+                     (iconv >l (link `('m <>e) acc)) 'bad)
+                 (iconv >l (link `('i k e) acc)))))
+       os (oconv <>>s ())
+       is9 (iconv <>>>s ())
+       (? (|| (bad? os) (bad? is9)) 'bad
+          (: ops9 (os + is9)
+             ; pinned registers: validated, a duplicate refuses
+             (pinset l acc)
+              (? (! (two? l)) acc
+                 (: e2 <l k (caup e2)
+                    (? (|| (id? <e2 'm) (id? k 'pick)) (pinset >l acc)
+                       (! (asmreg? g k)) 'bad
+                       (member? k acc) 'bad
+                       (pinset >l (link k acc)))))
+             pinned (pinset ops9 ())
+             (? (bad? pinned) 'bad
+                (: (assign l fr acc)
+                    (? (! (two? l)) (rev acc)
+                       (: e2 <l k (caup e2)
+                          (? (id? <e2 'm) (assign >l fr (link k acc))
+                             (id? k 'pick)
+                              (? (two? fr) (assign >l >fr (link <fr acc)) 'bad)
+                             (assign >l fr (link k acc)))))
+                   asgn (assign ops9 (filter (\ r9 (! (member? r9 pinned))) asmpick) ())
+                   (cok? l) (? (! (two? l)) 1
+                               (: c <l
+                                  (? (|| (c = "memory") (c = "cc")) (cok? >l)
+                                     (asmreg? g (intern c)) (cok? >l)
+                                     ())))
+                   (? (|| (bad? asgn) (! (cok? (cauup (cuup s))))) 'bad
+                      (: txt (asmsub tmpl (map (\ a9 (? (charm? a9) (show a9) (peep asmnames a9 "r?"))) asgn))
+                         (? (bad? txt) 'bad
+                            (: ; inputs (and in-out outputs) evaluate and PUSH..
+                               (loads l acc)
+                                (? (! (two? l)) acc
+                                   (: e2 <l
+                                      (? (member? <e2 '(x i))
+                                          (: r (cgexpr g env (cauup e2))
+                                             (? (bad? r) 'bad
+                                                (|| (flo? (vty r)) (stru? (vty r))) 'bad
+                                                (loads >l (acc + (tor0 g r) + (spush 'r0)))))
+                                         (loads >l acc))))
+                               lf (loads ops9 ())
+                               (? (bad? lf) 'bad
+                                  (: ; ..then POP into their registers, reverse order
+                                     (pops l al acc)
+                                      (? (! (two? l)) acc
+                                         (? (member? (cap <l) '(x i))
+                                            (pops >l >al ((spop <al) + acc))
+                                            (pops >l >al acc)))
+                                     ; the body: text -> IR forms -> BYTES, one opaque raw
+                                     body `(`('raw (asmhb (peep g 'tgt 'x64) (asm-text txt))))
+                                     ; outputs: push each register, store back reverse
+                                     (opush l al acc)
+                                      (? (! (two? l)) acc
+                                         (? (member? (cap <l) '(o x))
+                                            (opush >l >al (acc + (spush <al)))
+                                            (opush >l >al acc)))
+                                     (ostores l al acc)
+                                      (? (! (two? l)) acc
+                                         (: e2 <l
+                                            (? (! (member? <e2 '(o x))) (ostores >l >al acc)
+                                               (: lv (clval g env (cauup e2))
+                                                  (? (bad? lv) 'bad
+                                                     (: ty (vty lv)
+                                                        (? (|| (flo? ty) (|| (stru? ty) (|| (arr? ty) (bitf? ty)))) 'bad
+                                                           (ostores >l >al
+                                                            (((vfs lv) + (spop 'r1) + `(`((stop ty) 'r0 0 'r1))) + acc)))))))))
+                                     osf (ostores ops9 asgn ())
+                                     (? (bad? osf) 'bad
+                                        (lf + (pops ops9 asgn ()) + body + (opush ops9 asgn ()) + osf)))))))))))))
+
    (cgstmt g env s)
     (: _ (pin g 'pool (peep g 'pool0 ()))            ; a statement never carries a live operand in
        k <s
@@ -2245,6 +2379,7 @@
                     (c + `(`('label ld))))))))
           (k = 'goto) `(`('jmp (intern ((g 'fn) + "." + <>s))))
           (k = 'lbl) `(`('label (intern ((g 'fn) + "." + <>s))))
+          (k = 'asm) (cgasm g env s)
           ; a case/default label -- anywhere in the body, tied to the nearest enclosing
           ; switch by VALUE. the switch's pre-scan (below) pinned value->label into the
           ; tablet at the top of the g 'cases stack; here we just emit that label. a
@@ -2702,13 +2837,14 @@
            (? (two? cs) `((mk cs hpool (tablet 0)) (dropn hpool (tally cs))) ()))
        n0 (peep g 'n 0) strs0 (g 'strs)             ; snapshot the accumulators for a possible regen
        _ (pin g 'pool0 opool) _ (pin g 'pool opool)
+       _ (pin g 'hasasm ())                         ; fresh per fn: an asm statement pins it (homing off)
        ; the homing regens stay x64 until their pools re-tune (rung B's tail).
        sp1 (? (&& vararg (a64? g)) (vaspill-a64 params)
               vararg (vaspill params) (spill params 0 0 0 () ()))
        ir1 (build sp1)
        n1 (peep g 'n 0) strs1 (g 'strs)             ; ir1's accumulators -- a DEOPT restores these
-       hm (&& (! (a64? g)) (&& (! vararg) (&& (! (anyop? ir1 'sys)) (homes? params 0))))
-       lr (? (|| (a64? g) (|| vararg (|| (bad? ir1) (anyop? ir1 'sys)))) () (lpick ir1))
+       hm (&& (! (a64? g)) (&& (! vararg) (&& (! (peep g 'hasasm ())) (&& (! (anyop? ir1 'sys)) (homes? params 0)))))
+       lr (? (|| (a64? g) (|| vararg (|| (bad? ir1) (|| (peep g 'hasasm ()) (anyop? ir1 'sys))))) () (lpick ir1))
        lh (? (two? lr) <lr ())
        lp0 (? (two? lr) <>lr hpool)
        (? (bad? ir1) 'bad

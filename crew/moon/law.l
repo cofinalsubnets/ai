@@ -597,5 +597,35 @@
       (two? (cgn "int f(int x){return x;} typedef int (*fp)(int); fp t[1] = { &f }; int main(){ return t[0](1); }"))
       (! (cgn "int main(){ return (long)&nope; }"))))
 
-(say err "crew/moon/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch/bitfields) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE (a typed local/member folds at parse -- an array bound), bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) + the gen tail (mproto siblings pinned, &f a function's address in code and images) ok")
+; -- inline asm (the statement): the template is holo neutral TEXT, %N the
+; operands (outputs first), adjacent template strings concatenate, and the
+; body assembles at cg time into ONE opaque ('raw ..) between the staging
+; forms. the picks come off asmpick front-first (r10 the first), so the
+; one-output golden's bytes are exactly (li r10 40) assembled. constraint
+; refusals: a letter outside r/i/rN, a duplicate pin, x64's frame r4, a
+; float operand -- each () out of cgen, never fudged bytes.
+(: (cast src) (caup (cparse (caup (clex src))))
+   (cgn src) (: r (cparse (caup (clex src)))
+               (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
+   hb (holo 'holo-bytes)
+   g1 (cgn "int main() { long v; asm(\"li %0, 40\" : \"=r\"(v)); return v + 2; }")
+   want (hb 'x64 (asm-text "li r10, 40"))
+   (hasraw fs) (? (! (two? fs)) ()
+                  (: f2 <fs
+                     (? (&& (two? f2) (&& (= <f2 'raw) (= <>f2 want))) 1 (hasraw >fs))))
+   (assert
+      (= (cast "void f() { asm(\"sys\"); }")
+         '(prog ((fn "f" () (blk ((asm "sys" () () ())))))))
+      (= (cast "void f() { long v; asm volatile(\"li %0, 4\" \"0\" : \"=r\"(v) : \"r\"(v), \"i\"(3) : \"memory\"); }")
+         '(prog ((fn "f" () (blk ((decl (("v" long ())))
+                                  (asm "li %0, 40" (("=r" (var "v")))
+                                       (("r" (var "v")) ("i" (num 3)))
+                                       ("memory"))))))))
+      (two? g1) (hasraw (caup g1))
+      (! (cgn "int main() { long v; asm(\"li %0, 1\" : \"=q\"(v)); return 0; }"))
+      (! (cgn "int main() { asm(\"sys\" : : \"r0\"(1), \"r0\"(2)); return 0; }"))
+      (! (cgn "int main() { asm(\"sys\" : : \"r4\"(1)); return 0; }"))
+      (! (cgn "int main() { double d; asm(\"sys\" : : \"r\"(d)); return 0; }"))))
+
+(say err "crew/moon/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch/bitfields) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE (a typed local/member folds at parse -- an array bound), bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) + the gen tail (mproto siblings pinned, &f a function's address in code and images) + inline asm (holo-text templates, %N operands, one opaque raw, constraint refusals) ok")
 (put err 10)
