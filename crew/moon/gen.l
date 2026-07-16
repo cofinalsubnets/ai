@@ -86,6 +86,14 @@
    (ip2 g) (? (a64? g) 'r1 'r2)                     ; an int-pair aggregate's SECOND register (rax:rdx / x0:x1)
    (psc g) (? (a64? g) 'r9 'r0)                     ; the xmm-arg pop scratch (arm64 r0 IS arg 0; a pool reg is dead at a call)
    (ovb g) (? (a64? g) 32 16)                       ; overflow params: above [ret+rbp] (x64) / the lr+fp push cells (arm64)
+   ; the arm64 HOME pool: caller-saved, never an argument register (x0..x7 all
+   ; stage args at calls, so no positional alignment with the incoming regs --
+   ; every home takes one prologue mov), and clear of the staging scratches
+   ; (x9 the xmm pop scratch, x15 the callr park, x16 holo's far-offset lane).
+   hregs-a64 '(r10 r11 r12 r13 r14)
+   (hregs g) (? (a64? g) hregs-a64 opool)           ; the home pool (x64 rides opool, positionally arg-aligned)
+   (nhome g) (? (a64? g) 5 6)                       ; how many gp positions can home (the pool's reach)
+   (fbase g) (? (a64? g) 'fp 'r4)                   ; the frame base as post-build ir1 spells it (a4ize)
    ; the immediate gate: x64 ALU/cmp immediates ride le32; arm64 add/sub/cmp
    ; take imm12 (a negative flips, a 24-bit value splits in the backend), the
    ; logicals only a bottom-aligned bitmask (2^n - 1), multiply none at all.
@@ -2343,7 +2351,7 @@
         (? (! (two? ps)) acc
            (: pty (caup (cap ps))
               (? (|| (flo? pty) (|| (sse2? g pty) (id? (aone g pty) 'sse))) (pgo >ps gpi acc)
-                 (5 < gpi) acc
+                 ((nhome g) <= gpi) acc
                  (homable? pty) (pgo >ps (gpi + 1) (link (cap (cap ps)) acc))
                  (pgo >ps (gpi + 1) acc))))
        _ (pdcl params)
@@ -2815,6 +2823,7 @@
        _ (pin g 'fn <>f)
        sig (peep (g 'sigs) <>f ())
        vararg (? (two? sig) (nthr sig 2) ())
+       fb9 (fbase g)                                 ; the frame base the RANKERS see: post-build ir1 (r4, or fp once a4ized)
        ; spill each param from its SysV register: integers from r6 r5 r2 r1 r7 r8
        ; (<=6), doubles from f0..f7 (<=8), SEPARATE counters. an OVERFLOW param
        ; already sits on the caller stack -- addressed at rbp+16+8k, no store.
@@ -2906,8 +2915,8 @@
        ; scalar (long/ulong/pointer) whose address never escapes can live in a
        ; CALLER-SAVED, non-scratch register for the whole function instead of a
        ; frame slot -- gcc's win on the hot dispatch ops (lvm_arg0 &c keep Sp/Hp/
-       ; Ip in registers). the home pool (r6 r5 r9 r10 r7 r8), indexed by gp
-       ; position, is disjoint from the codegen's scratch set (r0-r3) and from the
+       ; Ip in registers). the home pool ((hregs g), indexed by gp position) is
+       ; disjoint from the codegen's scratch set (r0-r3) and from the
        ; overflow/xmm registers -- so Hp (incoming r2) and Sp (incoming r1) MOVE
        ; out of scratch at the prologue. it is applied ONLY when the function turns
        ; out to be a LEAF: after the sibcall pass no `call`/`callr` remains (every
@@ -2916,7 +2925,7 @@
        ; taken), there is no raw `sys` (rcx/r11 are syscall-clobbered), and it is
        ; not variadic. decided by GENERATING first, then regenerating with the
        ; register env if the gate holds. --
-       (homereg gpi) (nthr opool gpi)
+       (homereg gpi) (nthr (hregs g) gpi)
        (spillr ps gpi xmmi ovi env acc)             ; like spill, but home eligible gp params in registers
         (? (! (two? ps)) `(acc env)
            (: p <ps pty <>p
@@ -2933,29 +2942,29 @@
                         _ (pin g 'off ((peep g 'off 0) + 8))
                         (spillr >ps gpi (xmmi + 1) ovi (link `(<p off pty) env)
                                (acc + (fstf g 'double 'r4 off (xmmreg xmmi)))))
-                     (spillr >ps gpi xmmi (ovi + 1) (link `(<p (16 + (* 8 ovi)) pty) env) acc))
+                     (spillr >ps gpi xmmi (ovi + 1) (link `(<p ((ovb g) + (* 8 ovi)) pty) env) acc))
                  (&& (stru? pty) (! (id? (aone g pty) 'int))) 'bad   ; MIXED / >16B ahead; small INT rides the gp lane (never homable)
                  (&& (flo? pty) (xmmi < 8))
                   (: off (0 - ((peep g 'off 0) + 8))
                      _ (pin g 'off ((peep g 'off 0) + 8))
                      (spillr >ps gpi (xmmi + 1) ovi (link `(<p off pty) env)
                             (acc + (fstf g pty 'r4 off (xmmreg xmmi)))))
-                 (&& (! (flo? pty)) (gpi < 6))
-                  (? (homable? pty)                  ; home in a register: move from the incoming arg reg if it differs
-                      (: home (homereg gpi) inc (nthr argregs gpi)
+                 (&& (! (flo? pty)) (gpi < (ngp g)))
+                  (? (&& (homable? pty) (gpi < (nhome g)))   ; home in a register: move from the incoming arg reg if it differs
+                      (: home (homereg gpi) inc (nthr (argr g) gpi)
                          mv (? (home = inc) () `(`('mov home inc)))
                          (spillr >ps (gpi + 1) xmmi ovi (link `(<p `('reg home) pty) env)
                                 (acc + mv)))
                      (: off (0 - ((peep g 'off 0) + 8))
                         _ (pin g 'off ((peep g 'off 0) + 8))
                         (spillr >ps (gpi + 1) xmmi ovi (link `(<p off pty) env)
-                               (acc + `(`('st 'r4 off (nthr argregs gpi)))))))
-                 (spillr >ps gpi xmmi (ovi + 1) (link `(<p (16 + (* 8 ovi)) pty) env) acc))))
+                               (acc + `(`('st 'r4 off (nthr (argr g) gpi)))))))
+                 (spillr >ps gpi xmmi (ovi + 1) (link `(<p ((ovb g) + (* 8 ovi)) pty) env) acc))))
        (homes? ps gpi)                              ; does any gp param qualify for a register home?
         (? (! (two? ps)) ()
            (: pty (caup (cap ps))
               (? (|| (flo? pty) (|| (sse2? g pty) (id? (aone g pty) 'sse))) (homes? >ps gpi)
-                 (5 < gpi) ()
+                 ((nhome g) <= gpi) ()
                  (homable? pty) 1
                  (homes? >ps (gpi + 1)))))
        ; -- the NON-LEAF lane: like spillr, but each home ALSO takes a frame slot
@@ -2979,16 +2988,16 @@
                         _ (pin g 'off ((peep g 'off 0) + 8))
                         (spillr2 >ps gpi (xmmi + 1) ovi (link `(<p off pty) env)
                                (acc + (fstf g 'double 'r4 off (xmmreg xmmi)))))
-                     (spillr2 >ps gpi xmmi (ovi + 1) (link `(<p (16 + (* 8 ovi)) pty) env) acc))
+                     (spillr2 >ps gpi xmmi (ovi + 1) (link `(<p ((ovb g) + (* 8 ovi)) pty) env) acc))
                  (&& (stru? pty) (! (id? (aone g pty) 'int))) 'bad   ; MIXED / >16B ahead; small INT rides the gp lane (never homable)
                  (&& (flo? pty) (xmmi < 8))
                   (: off (0 - ((peep g 'off 0) + 8))
                      _ (pin g 'off ((peep g 'off 0) + 8))
                      (spillr2 >ps gpi (xmmi + 1) ovi (link `(<p off pty) env)
                             (acc + (fstf g pty 'r4 off (xmmreg xmmi)))))
-                 (&& (! (flo? pty)) (gpi < 6))
-                  (? (homable? pty)
-                      (: home (homereg gpi) inc (nthr argregs gpi)
+                 (&& (! (flo? pty)) (gpi < (ngp g)))
+                  (? (&& (homable? pty) (gpi < (nhome g)))
+                      (: home (homereg gpi) inc (nthr (argr g) gpi)
                          off (0 - ((peep g 'off 0) + 8))
                          _ (pin g 'off ((peep g 'off 0) + 8))
                          _ (pin g 'homes (link `(home off <p) (peep g 'homes ())))
@@ -2998,8 +3007,8 @@
                      (: off (0 - ((peep g 'off 0) + 8))
                         _ (pin g 'off ((peep g 'off 0) + 8))
                         (spillr2 >ps (gpi + 1) xmmi ovi (link `(<p off pty) env)
-                               (acc + `(`('st 'r4 off (nthr argregs gpi)))))))
-                 (spillr2 >ps gpi xmmi (ovi + 1) (link `(<p (16 + (* 8 ovi)) pty) env) acc))))
+                               (acc + `(`('st 'r4 off (nthr (argr g) gpi)))))))
+                 (spillr2 >ps gpi xmmi (ovi + 1) (link `(<p ((ovb g) + (* 8 ovi)) pty) env) acc))))
        (anyop? fs op) (? (! (two? fs)) () (: f <fs (? (&& (two? f) (<f = op)) 1 (anyop? >fs op))))
        (hascall? fs) (|| (anyop? fs 'call) (anyop? fs 'callr))
        ; the non-leaf PAYOFF gate: homing saves one frame load per param READ but
@@ -3010,7 +3019,7 @@
         (? (! (two? ps)) n
            (: pty (caup (cap ps))
               (? (|| (flo? pty) (|| (sse2? g pty) (id? (aone g pty) 'sse))) (nhomable >ps gpi n)
-                 (5 < gpi) n
+                 ((nhome g) <= gpi) n
                  (homable? pty) (nhomable >ps (gpi + 1) (n + 1))
                  (nhomable >ps (gpi + 1) n))))
        (ncalls fs n) (? (! (two? fs)) n
@@ -3025,8 +3034,8 @@
         (? (! (two? fs)) n
            (: f <fs
               hit (? (! (two? f)) ()
-                     (member? <f '(ld ld1 ld2 ld4 ldu1 ldu2 ldu4)) (&& (<>>f = 'r4) (member? <>>>f offs))
-                     (member? <f '(st st1 st2 st4)) (&& (<>f = 'r4) (member? <>>f offs))
+                     (member? <f '(ld ld1 ld2 ld4 ldu1 ldu2 ldu4)) (&& (<>>f = fb9) (member? <>>>f offs))
+                     (member? <f '(st st1 st2 st4)) (&& (<>f = fb9) (member? <>>f offs))
                      ())
               (nreads >fs offs (? hit (n + 1) n))))
        (build sp0)                                  ; assemble prologue + body + epilogue for a spill result
@@ -3068,7 +3077,7 @@
        ; the operand pool rides BESIDE the homes: pass 1 owns all of opool, a
        ; regen loses the registers its param homes occupy
        (uhomes ps gpi acc)
-        (? (|| (! (two? ps)) (5 < gpi)) acc
+        (? (|| (! (two? ps)) ((nhome g) <= gpi)) acc
            (: pty (caup (cap ps))
               (? (|| (flo? pty) (|| (sse2? g pty) (id? (aone g pty) 'sse))) (uhomes >ps gpi acc)
                  (homable? pty) (uhomes >ps (gpi + 1) (link (homereg gpi) acc))
@@ -3085,13 +3094,13 @@
         (? (! (two? fs)) n
            (: f2 <fs
               hit (? (! (two? f2)) ()
-                     (member? <f2 '(ld ld1 ld2 ld4 ldu1 ldu2 ldu4)) (&& (<>>f2 = 'r4) (<>>>f2 = off))
-                     (member? <f2 '(st st1 st2 st4)) (&& (<>f2 = 'r4) (<>>f2 = off))
+                     (member? <f2 '(ld ld1 ld2 ld4 ldu1 ldu2 ldu4)) (&& (<>>f2 = fb9) (<>>>f2 = off))
+                     (member? <f2 '(st st1 st2 st4)) (&& (<>f2 = fb9) (<>>f2 = off))
                      ())
               (ntouch >fs off (? hit (n + 1) n))))
        (leaoffs fs t) (? (! (two? fs)) t
                          (: f2 <fs
-                            _ (? (&& (two? f2) (&& (member? <f2 '(lea lean)) (<>>f2 = 'r4)))
+                            _ (? (&& (two? f2) (&& (member? <f2 '(lea lean)) (<>>f2 = fb9)))
                                  (pin t <>>>f2 1) ())
                             (leaoffs >fs t)))
        (lastn l n) (: d ((tally l) - n)
@@ -3127,16 +3136,15 @@
        n0 (peep g 'n 0) strs0 (g 'strs)             ; snapshot the accumulators for a possible regen
        _ (pin g 'pool0 opool) _ (pin g 'pool opool)
        _ (pin g 'hasasm ())                         ; fresh per fn: an asm statement pins it (homing off)
-       ; the homing regens stay x64 until their pools re-tune (rung B's tail).
        sp1 (? (&& vararg (a64? g)) (vaspill-a64 params)
               vararg (vaspill params) (spill params 0 0 0 () ()))
        ir1 (build sp1)
        n1 (peep g 'n 0) strs1 (g 'strs)             ; ir1's accumulators -- a DEOPT restores these
-       hm (&& (! (a64? g)) (&& (! vararg) (&& (! (peep g 'hasasm ())) (&& (! (anyop? ir1 'sys)) (homes? params 0)))))
+       hm (&& (! vararg) (&& (! (peep g 'hasasm ())) (&& (! (anyop? ir1 'sys)) (homes? params 0))))
        ; the alive pass runs once per homing-eligible fn: lpick reads cross/
        ; univ (a zero-crossing local homes through calls), the regens pin its
        ; livtab so call-fixed wraps only what a call actually needs
-       av (? (|| (a64? g) (|| vararg (|| (bad? ir1) (|| (peep g 'hasasm ()) (anyop? ir1 'sys))))) () (alive g f))
+       av (? (|| vararg (|| (bad? ir1) (|| (peep g 'hasasm ()) (anyop? ir1 'sys)))) () (alive g f))
        lr (? av (lpick ir1 (caup av) (cauup av)) ())
        lh (? (two? lr) <lr ())
        lp0 (? (two? lr) <>lr hpool)

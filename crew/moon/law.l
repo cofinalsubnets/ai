@@ -671,5 +671,55 @@
       (member? '(add r5 r5 r10) (caup irB))           ; s accumulates in its home
       (member? '(add r9 r9 1) (caup irB))))           ; i++ is ONE add on the home
 
-(say err "crew/moon/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch/bitfields) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE (a typed local/member folds at parse -- an array bound), bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) + the gen tail (mproto siblings pinned, &f a function's address in code and images) + inline asm (holo-text templates, %N operands, one opaque raw, constraint refusals) + the alive pass (per-call wraps: dead-across drops, live-across keeps, shadowed/goto blanket; free locals home through calls) ok")
+; -- arm64 homing (stage D): the same alive machinery rides AAPCS64. homes come
+; off r10..r14 (caller-saved, never an argument register -- every home takes a
+; prologue mov), wraps say fp (a4ize), an overflow param (the 9th long) reads
+; at fp+32 -- ABOVE the lr+fp push cells (the x64 base 16 was stage D's first
+; bug), and a name BORN in a call-bearing statement joins that statement's
+; record (m = g(a), n = g(b): m crosses the second call INSIDE one tick --
+; statement-grain liveness can't order intra-statement events, so the kill
+; rides the wrapset and such a local keeps its frame slot; stage D's second
+; bug, x64 only masked it because the folds erase intra-statement slot traffic
+; from the ranking).
+(: (cgna src) (: r (cparse (caup (clex src)))
+                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'arm64) ()))
+   (wrapsa fs) (: (go l n) (? (! (two? l)) n
+                              (: f2 <l
+                                 (go >l (? (&& (two? f2)
+                                           (&& (<f2 = 'st)
+                                           (&& (<>f2 = 'fp)
+                                               (member? <>>>f2 '(r10 r11 r12 r13 r14)))))
+                                           (n + 1) n))))
+                  (go fs 0))
+   (ldat fs k) (? (! (two? fs)) ()
+                  (: f2 <fs
+                     (? (&& (two? f2) (&& (<f2 = 'ld) (&& (<>>f2 = 'fp) (<>>>f2 = k)))) 1
+                        (ldat >fs k))))
+   (hmovs fs) (: (go l n) (? (! (two? l)) n
+                             (: f2 <l
+                                (go >l (? (&& (two? f2)
+                                          (&& (<f2 = 'mov)
+                                              (member? <>f2 '(r5 r6 r7 r8 r9))))
+                                          (n + 1) n))))
+                 (go fs 0))
+   pre9 "long g(long x); "
+   irDa (cgna (pre9 + "long f(long a, long b) { long s = a+b+a*b+a-b; g(1); return s+1; } int main() { return f(20, 22); }"))
+   irLa (cgna (pre9 + "long h(long a, long b) { long s = a+b+a*b; g(1); return s+a-b+a*b; } int main() { return h(20, 22); }"))
+   irOa (cgna "static long f9(long a, long b, long c, long d, long e, long f, long g2, long h, long i) { return a+h+i; } long q(long a) { return f9(a,2,3,4,5,6,7,8,9) - 17; } int main() { return (int)(q(1) + 24); }")
+   irKa (cgna (pre9 + "long k(long a, long b) { long m = g(a), n = g(b), p = m*n; return p; } int main() { return (int)(k(2,3) - 2); }"))
+   irBa (cgna "long g(long x); long p(long n) { g(1); long s = 0; long i; for (i = 0; i < n; i++) s = s + i*i; return s; } int main() { return (int)(p(4) + 28); }")
+   (assert
+      (two? irDa) (two? irLa) (two? irOa) (two? irKa) (two? irBa)
+      (member? '(mov r10 r0) (caup irDa))            ; a homes off the pool, one prologue mov
+      (member? '(mov r11 r1) (caup irDa))
+      (= 0 (wrapsa (caup irDa)))                     ; dead across the call: no spills
+      (= 2 (wrapsa (caup irLa)))                     ; live across: both homes wrap
+      (ldat (caup irOa) 32)                          ; the 9th long reads ABOVE the lr+fp cells
+      (! (ldat (caup irOa) 16))                      ; ...never at the x64 base
+      (= 0 (hmovs (caup irKa)))                      ; born-at-a-call locals keep their slots
+      (member? '(mov r6 r0) (caup irBa))             ; the free local homes...
+      (member? '(add r6 r6 r5) (caup irBa))          ; ...and accumulates 3-address
+      (= 0 (wrapsa (caup irBa)))))                   ; ...with zero wraps
+
+(say err "crew/moon/law: lexer (kinds/lines/munch) + parser (precedence/desugar/shapes + refusals) + gen (golden + seams) + aggregates (layout/members/switch/bitfields) + cpp (macros/rescan/hidesets/stringize/paste/variadic/conditionals) + doubles (float literals/xmm value path/conversions/the calling convention) + varargs & _Static_assert (the ... signature bit / va builtins / SysV register save area / array-param decay / const-fold-or-refuse) + float (4-byte scalar, widen/narrow, single-precision globals) & compound literals + objects (text/data split, symbols, no crt0) + freestanding headers (ignored quals/attributes, unnamed proto params) + unsigned & hex (hex/suffix/escape lexing, the specifier-soup canonicalizer, logical >>/unsigned compare/divide) + the C tail (object-vs-function macros, GNU `,##__VA_ARGS__`, function-type/multi-declarator typedefs, sizeof EXPR vs TYPE (a typed local/member folds at parse -- an array bound), bare void return, folded case labels, function-pointer cast types, incomplete arrays, multidimensional arrays with const-expr/enum dims, hex float literals, designated array initializers, block-scoped typedef shadowing) + the gen tail (mproto siblings pinned, &f a function's address in code and images) + inline asm (holo-text templates, %N operands, one opaque raw, constraint refusals) + the alive pass (per-call wraps: dead-across drops, live-across keeps, shadowed/goto blanket; free locals home through calls; a born-at-a-call kill rides its statement's record) + arm64 homing (r10..r14 homes, fp wraps, fp+32 overflow, free locals off the pool) ok")
 (put err 10)

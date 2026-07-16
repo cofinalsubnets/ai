@@ -770,8 +770,10 @@ sticks to the neutral surface, and no new assembler exists anywhere.
   HOMING off (gen.l's g 'hasasm, the 'sys-gate precedent), so nothing
   lives in a register across any statement. the allocator arc (the alive
   pass: per-call wrap sets + zero-crossing locals homing through calls,
-  landed 2026-07-16) KEEPS this gate -- asm-as-precolor+clobber-node waits
-  for a consumer that needs homes in an asm fn.
+  landed 2026-07-16 on BOTH targets -- arm64 homes ride r10-r14, one
+  prologue mov each, wraps say fp) KEEPS this gate --
+  asm-as-precolor+clobber-node waits for a consumer that needs homes in
+  an asm fn.
 * deferred until a consumer demands them: an AT&T template front-end (the
   Linux floor), "f" float operands, asm goto (Linux x86 requires it),
   named [sym] operands, top-level asm.
