@@ -42,6 +42,8 @@ int  setsid(void);
 int  isatty(int);
 int  ftruncate(int, long);
 int  fsync(int);
+int  fdatasync(int);
+int  unlinkat(int, char const*, int);
 unsigned int sleep(unsigned int);
 int  usleep(unsigned int);
 long pread(int, void*, unsigned long, long);

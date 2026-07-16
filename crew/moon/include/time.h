@@ -2,6 +2,14 @@
 #define _AI_TIME_H
 typedef long time_t;
 struct timespec { long tv_sec; long tv_nsec; };
+/* glibc layout -- a hosted (cc-built) object links libc's localtime, so the
+   field order + the two GNU extensions (tm_gmtoff/tm_zone) must match. */
+struct tm { int tm_sec; int tm_min; int tm_hour; int tm_mday; int tm_mon;
+            int tm_year; int tm_wday; int tm_yday; int tm_isdst;
+            long tm_gmtoff; char const* tm_zone; };
+struct tm* localtime(time_t const*);
+struct tm* gmtime(time_t const*);
+time_t     mktime(struct tm*);
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
 int clock_gettime(int, struct timespec*);

@@ -17,6 +17,8 @@ struct dirent {
 #define DT_LNK    10
 #define DT_SOCK   12
 DIR *opendir(char const*);
+DIR *fdopendir(int);
 struct dirent *readdir(DIR*);
 int closedir(DIR*);
+int dirfd(DIR*);
 #endif

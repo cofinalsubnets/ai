@@ -129,8 +129,8 @@ are ordinary C; the 118 `lib/*.c` are gnulib portability glue (the "hard far end
 bootstrap we lean on first). Probed 2026-07-15:
 
 ```
-  7 of 8 core files compile: bits trees zip inflate unzip deflate util  ->  .o each
-  gzip.c (the CLI) blocked on timespec.h  ->  a 16-byte struct-by-value ABI rung (below)
+  ALL core files compile: gzip bits deflate inflate trees unlzh unlzw unpack unzip  ->  .o each
+  (gzip.c, the CLI, was the last: cleared via the cpp fix + header sweep + abstract-array param, below)
 ```
 
 Getting there surfaced **five real mooncc capability rungs** (all general, all gated green on
@@ -220,8 +220,27 @@ deterministic signal, and when a parser blames a symbol that "is" defined, suspe
 STREAM (cpp order), not the parser state. Dumping cpp's output positions + the include
 accumulator size per `#include` is what exposed the reorder.
 
-To actually advance gzip.c from here, add a `stdckdint.h` shim to `crew/moon/include` (the
-`__builtin_*_overflow` checked-arithmetic header) — the next header-completeness rung.
+### gzip.c COMPILES — all core `.c` files now `.o` (2026-07-15)
+
+With the cpp fix in, gzip.c cleared its remaining blockers in a header-completeness sweep plus
+one small parser rung. Every gzip-1.13 core `.c` (gzip bits deflate inflate trees unlzh unlzw
+unpack unzip) now compiles to a valid x86-64 ELF `.o` under mooncc. The rungs:
+
+- **`stdckdint.h` shim** (new) — C23 checked arithmetic; `ckd_{add,sub,mul}` over the
+  `__builtin_*_overflow` gen.l already lowers.
+- **abstract array-of-struct params** (`parse.l`) — `int fdutimens(int, char const*, struct
+  timespec const[2])`: the unnamed-param path only accepted a bare abstract declarator (then
+  `)`/`,`); it now takes an abstract `[n]` array suffix via `adims`, decaying to a pointer like
+  the named case. Verified byte-equal to gcc (exit 55) on a struct-array-param repro.
+- **header completeness**: `fdatasync`/`unlinkat` (unistd), `openat`/`O_SEARCH`(=O_RDONLY)/
+  `O_BINARY`/`O_TEXT`(=0)/`O_NOFOLLOW`(arch-gated) (fcntl), `ELOOP` (errno), `struct tm` +
+  `localtime`/`gmtime`/`mktime` (time, glibc-accurate layout for the hosted link), `S_IRWXUGO`/
+  `S_IXUGO` (sys/stat), `fdopendir`/`dirfd` (dirent), `sigismember` (signal).
+
+Method note: mooncc **refuses an undeclared function call** (no C89 implicit `int f()`), so each
+missing libc/POSIX prototype surfaced as a `cgfn refuses` / `(var "name")` codegen refusal — a
+clean, one-at-a-time header-completeness signal (instrument `cgitems`/`cgexpr` to print the bad
+node; the deepest prints first). Gated green: `make test_moon` + `make test_raw` (3453).
 
 ### the other wall: the gnulib `lib/*.c` link tree — NOT DONE
 

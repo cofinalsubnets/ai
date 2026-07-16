@@ -207,7 +207,11 @@
                                             finalty (? (charm? arn) `('arr fty arn) fty)
                                             `(`(name finalty) t8))))))))))))
           (! (&& (two? ts2) ((tkk <ts2) = 'id)))    ; no name: an ABSTRACT declarator (unnamed proto param)
-           (? (|| (peekp ts2 ")") (peekp ts2 ",")) `(`(() ty) ts2) ())
+           (? (peekp ts2 "[")                          ; abstract ARRAY `T [n]..` (e.g. `struct timespec const[2]`)
+               (: dr (adims ps ts2 ())                 ; -> nested arr of ty; pparams decays it to a pointer
+                  (? (! (two? dr)) () `(`(() (mkarr ty <dr)) <>dr)))
+              (|| (peekp ts2 ")") (peekp ts2 ",")) `(`(() ty) ts2)
+              ())
           (: name (tkv <ts2)
              ts3 >ts2
              (? (peekp ts3 "(")                       ; name(params) -- a function declarator; type ('fn), the params balance-skipped (cc calls untyped)

@@ -43,5 +43,6 @@ int sigemptyset(sigset_t*);
 #define SIG_SETMASK 2
 int kill(pid_t, int);
 int sigaddset(sigset_t*, int);
+int sigismember(sigset_t const*, int);
 int sigprocmask(int, sigset_t const*, sigset_t*);
 #endif

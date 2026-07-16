@@ -75,6 +75,9 @@ struct stat {
 #define S_IROTH 4
 #define S_IWOTH 2
 #define S_IXOTH 1
+/* the common (non-POSIX) all-user combos gnulib/coreutils expect */
+#define S_IRWXUGO (S_IRWXU | S_IRWXG | S_IRWXO)
+#define S_IXUGO   (S_IXUSR | S_IXGRP | S_IXOTH)
 /* the st_Xtime compatibility aliases glibc supplies (third-party C reads these) */
 #define st_atime st_atim.tv_sec
 #define st_mtime st_mtim.tv_sec
