@@ -1017,15 +1017,18 @@
    ;     swallowed body over any free var / unknown call is rejected by groupok?'s existing grammar
    ;     -> the swallow declines, never miscompiles. (Staleness: a global redefined AFTER a caller
    ;     was glazed+memoized keeps the caller's cached native, as any memoized glaze does. The
-   ;     recorded source is LOWERED (fold-consts->dechurch->dehof->debool, autogroup's source-rewrite
-   ;     prefix) so a church/HOF/&& callee still fits the group grammar; the structural passes
-   ;     (loopclose/defoliate/delet/lift/plift) are NOT applied here -- they'd turn a body-less define
-   ;     into a body-having / multi-fn form (gensym sub-fns), so a callee needing those still declines.
+   ;     recorded source is lowered through autogroup's FULL chain, so church/HOF/&& AND STRUCTURAL
+   ;     callees swallow: a named-let helper lifts to `helper` + its loop fn, a value-let inlines, a
+   ;     poly-fold closes. lift names a lifted fn `F_g` (content-derived, auto.l ~line 280), NOT a
+   ;     counter/gensym -- collision-free here because a name is EITHER a `:`-local candidate OR a
+   ;     swallowed global (swgather's member? split), never both, so each `F_` namespace is owned once.
+   ;     The chain appends a `()` body (body-less -> body-having); anat-defs drops it, the fn pairs
+   ;     (helper + every F_g sub-fn) are recorded and swgather pulls them transitively.
    srcreg (tablet 0)
    (swfnpair? pr) (: nf (cap pr) (&& (two? nf) (< 1 (tally nf)) (< (tally nf) 6) (all name? (cup nf)) (distinctp (cup nf))))
    (srcrec form0) (? (&& (getenv "AI_GROUP_SWALLOW") (two? form0) (id? (cap form0) ':) (! (atom? (cup form0)))
                        (= 0 (% (tally (cup form0)) 2)))                                   ; body-less `:` only -> a GLOBAL-leaking define
-      (: low (debool (dehof (dechurch (fold-consts form0))))                              ; lower church/HOF/&& (body-less-preserving) so more callees fit the grammar
+      (: low (plift (lift (delet (defoliate (loopclose (autospec (debool (dehof (dechurch (fold-consts form0))))))))))   ; autogroup's FULL lowering: church/HOF/&& + structural (lift/loops/value-lets)
          (foldl (\ _ pr (? (swfnpair? pr) (pin srcreg (caap pr) (link (cup (cap pr)) (cup pr))) ())) () (cap (anat-defs (cup low))))) ())
    (swuniq l) (? (atom? l) () (member? (cap l) (cup l)) (swuniq (cup l)) (link (cap l) (swuniq (cup l))))
    (swheads e acc) (? (atom? e) acc  (&& (two? e) (id? (cap e) '\)) acc                   ; collect call heads (symbols); skip quoted/lambda subforms
