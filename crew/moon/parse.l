@@ -837,6 +837,43 @@
                          (: rest (want ts3 ")")
                             (? (two? rest) `((rev (link entry acc)) rest ()) ())))))))))
 
+   ; -- K&R (old-style) definitions: `f(a, b) int a; char *b; { .. }`. the parens
+   ; hold a bare IDENTIFIER list; the parameter TYPES follow as declarations before
+   ; the `{` (an undeclared id defaults to int, C's rule). answers the SAME
+   ; (entries rest variadic?) shape pparams does, with rest AT the `{` -- so the fn
+   ; path flows straight into pblock. protos stay ANSI (OF() expands with types), so
+   ; a bare non-type id after `(` is the sole K&R tell.
+   (krhead? ps ts) (&& (two? ts) (&& ((tkk <ts) = 'id) (! (tkbty? ps <ts))))
+   (kids ts acc)                                     ; the identifier list -> (names rest-after-`)`)
+    (? (&& (two? ts) ((tkk <ts) = 'id))
+        (: nm (tkv <ts) r >ts
+           (? (peekp r ",") (kids >r (link nm acc))
+              (peekp r ")") `((rev (link nm acc)) >r)
+              ()))
+       ())
+   (klook nm l) (? (! (two? l)) 'int ((cap (cap l)) = nm) (caup (cap l)) (klook nm >l))
+   (kdtors ps ts base acc)                           ; `dtor (, dtor)* ;` -> (name ty) pairs, K&R arrays decay to ptr
+    (: dr (pdtor ps ts base)
+       (? (! (two? dr)) ()
+          (: nm (cap (cap dr)) ty0 (caup (cap dr)) rest <>dr
+             ty (? (arr? ty0) `('ptr <>ty0) ty0)
+             acc2 (link `(nm ty) acc)
+             (? (peekp rest ",") (kdtors ps >rest base acc2)
+                (peekp rest ";") (kdecls ps >rest acc2)
+                ()))))
+   (kdecls ps ts acc)                                ; the run of parameter declarations up to `{` -> (tmap rest)
+    (? (peekp ts "{") `(acc ts)
+       (: br (pbty ps ts)
+          (? (! (two? br)) () (kdtors ps <>br <br acc))))
+   (pkr ps ts)                                       ; ts after `(` -> (entries rest-at-`{` ()) | ()
+    (: kr (kids ts ())
+       (? (! (two? kr)) ()
+          (: names <kr afterp <>kr
+             dr (kdecls ps afterp ())
+             (? (! (two? dr)) ()
+                (: tmap <dr rest <>dr
+                   `((map (\ nm `(nm (klook nm tmap))) names) rest ()))))))
+
    ; a comma-list of `*.. name (params)` function prototypes sharing one base type.
    ; each sibling's OWN stars ride into its sig's return slot -- dropping them read
    ; `struct ai *ai_strof(..)` as a struct-by-value return, and every host-TU call
@@ -929,7 +966,7 @@
                             ts2 <>fdr
                             fpty (cauup fdr)
                             (? (&& (! (two? fpty)) (peekp ts2 "("))   ; a function (the return type rides the sig table)
-                               (: rp (pparams ps >ts2 ())
+                               (: rp (? (krhead? ps >ts2) (pkr ps >ts2) (pparams ps >ts2 ()))
                                   (? (! (two? rp)) ()
                                      (: _ (pin (ps 'sigs) name `(rty (map caup <rp) <>>rp))
                                         (? (peekp <>rp ";") `(`('proto name) (cup (caup rp)))
@@ -1018,8 +1055,8 @@
            _ (pin ps 'curstat ())
            (pin ps 'cursect ()))
        (tops ts2 acc)
-        (? (! (two? ts2)) (? (two? acc) `(1 `('prog (rev acc)) (ps 'stag) (ps 'sigs) (ps 'weaks)
-                                           (ps 'sfns) (ps 'svars) (ps 'sects)) ())
+        (? (! (two? ts2)) `(1 `('prog (rev acc)) (ps 'stag) (ps 'sigs) (ps 'weaks)   ; empty acc = a valid EMPTY TU (crypt.c), not a parse failure
+                              (ps 'sfns) (ps 'svars) (ps 'sects))
            (: r (ptop ps ts2)
               (? (two? r) (: _ (note <r) (tops <>r (link <r acc))) ())))
        (tops ts ())))

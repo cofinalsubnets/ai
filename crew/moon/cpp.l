@@ -281,13 +281,13 @@
                  body >>line
                  (? (member? dir '("if" "ifdef" "ifndef" "elif" "else" "endif"))
                      (: cond2 (docond dir body line macs cond)
-                        (? (id? cond2 'err) ()
+                        (? (id? cond2 'err) 'cppbad             ; unbalanced #else/#elif/#endif -- FATAL, not empty
                            (cppgo rest macs cond2 () out1 incf)))
                     (! (condactive cond)) (cppgo rest macs cond () out1 incf)   ; skipped: ignore non-cond directives
                     (dir = "define") (: _ (defmacro macs body) (cppgo rest macs cond () out1 incf))
                     (dir = "undef") (: _ (pin macs (vof <body) ()) (cppgo rest macs cond () out1 incf))
                     (dir = "include") (doinc body macs cond out1 rest incf)
-                    (dir = "error") ()
+                    (dir = "error") (: _ (say err "cc: #error directive") _ (put err 10) 'cppbad)
                     (member? dir '("pragma" "line")) (cppgo rest macs cond () out1 incf)   ; ignored
                     (cppgo rest macs cond () out1 incf)))                              ; unknown directive: ignore
              (! (condactive cond)) (cppgo rest macs cond buf out incf)                 ; skipped code: drop
@@ -374,4 +374,4 @@
                _ (pin t "false" `('obj `((tok 'num 0 0))))
                t)
        r (cppgo toks macs () () () incf)
-       (? (|| (id? r 'cppbad) (! (two? r))) () `(1 (strcat-pass r)))))
+       (? (id? r 'cppbad) () `(1 (strcat-pass r)))))   ; an EMPTY token list is a valid empty TU, not a failure -- only 'cppbad fails

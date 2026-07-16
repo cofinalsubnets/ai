@@ -10,6 +10,8 @@ struct tm { int tm_sec; int tm_min; int tm_hour; int tm_mday; int tm_mon;
 struct tm* localtime(time_t const*);
 struct tm* gmtime(time_t const*);
 time_t     mktime(struct tm*);
+char*      ctime(time_t const*);
+char*      asctime(struct tm const*);
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 1
 int clock_gettime(int, struct timespec*);

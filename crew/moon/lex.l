@@ -18,7 +18,7 @@
        p32 (p3 + p2)                              ; joined ONCE (this sat in the per-token path)
        kwt (: t (tablet 0) (go l) (? (! (two? l)) t (: _ (pin t <l 1) (go >l))) (go kws))
        p1 "()[]{};,.:?~!+-*/%<>=&|^#"
-       (ws? c) (|| (c = 32) (|| (c = 9) (c = 13)))
+       (ws? c) (|| (c = 32) (|| (c = 9) (|| (c = 13) (|| (c = 12) (c = 11)))))   ; space tab CR, + form-feed \f (GNU page breaks) + vertical-tab \v
        (dig? c) (&& (48 <= c) (c <= 57))
        (hexd? c) (|| (dig? c) (|| (&& (97 <= c) (c <= 102)) (&& (65 <= c) (c <= 70))))   ; 0-9 a-f A-F
        (hexv c) (? (dig? c) (c - 48) (&& (97 <= c) (c <= 102)) (c - 87) (c - 55))         ; a=10 A=10
@@ -95,6 +95,10 @@
        ; -- hex literals: 0x integer (0xff), OR a hex FLOAT 0x H.H p [+-] D (a binary
        ; exponent, base 2): 0x1.0p-53, 0x1p4, 0x.8p1. i points at the '0'. -> (endj isflo? value). --
        (hxrun j v nd) (? (&& (j < n) (hexd? (src j))) (hxrun (j + 1) ((* 16 v) + (hexv (src j))) (nd + 1)) `(j v nd))
+       ; -- octal literal: a leading 0 then octal digits (0777, 0644). i points at the 0
+       ; (it folds to 0). -> (endj value); a plain `0`, `0.5`, `08`, `0x..` never reach here. --
+       (octd? c) (&& (48 <= c) (c <= 55))
+       (octlit i) (: (go k v) (? (&& (k < n) (octd? (src k))) (go (k + 1) ((* 8 v) + ((src k) - 48))) `(k v)) (go i 0))
        (hexlit i)
         (: ir (hxrun (i + 2) 0 0) j0 <ir im <>ir
            dot (&& (j0 < n) ((src j0) = 46))
@@ -157,6 +161,11 @@
                   (: r (hexlit i)
                      k (? <>r 'flo (ukind i <r <>>r))   ; a u/U in the suffix run marks it UNSIGNED (1U / 1ULL)
                      (go <r line (link `(k <>>r line) acc)))
+                 (&& (c = 48) (&& ((i + 1) < n) (octd? (src (i + 1)))))   ; 0NNN octal integer (0644, 0777)
+                  (: r (octlit i)
+                     j2 (skipsuf <r)
+                     k (ukind i j2 <>r)
+                     (go j2 line (link `(k <>r line) acc)))
                  (|| (dig? c) (&& (c = 46) (&& ((i + 1) < n) (dig? (src (i + 1))))))
                   (: r (flolit i)                        ; a digit run, or .digit -- integer or float
                      j2 (? <>r <r (skipsuf <r))    ; an integer eats its u/U/l/L suffix

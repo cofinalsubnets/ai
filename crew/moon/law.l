@@ -42,7 +42,12 @@
       (= (tn (caup (clex "\"a\\nb\"")) 0) (L 'str "a\nb" 1))
       (! (clex "\"open"))                                    ; unterminated string refuses
       (! (clex "int @"))                                     ; not C: the lex error rides up
+      (= (tally (caup (clex "abc"))) 3)                   ; form-feed + vertical-tab are WHITESPACE (GNU page breaks); real FF/VT bytes here
       (! (clex "a /* open"))                                 ; unterminated comment refused
+      (= (tn (caup (clex "0644")) 0) (L 'num 420 1))       ; octal integer literal (0644 = 420); gzip's 0777/0666 modes
+      (= (tn (caup (clex "0777")) 0) (L 'num 511 1))
+      (= (tn (caup (clex "0")) 0) (L 'num 0 1))            ; a plain 0 stays 0
+      (= (tn (caup (clex "08")) 0) (L 'num 8 1))           ; 8/9 aren't octal digits -> falls to decimal
       (= (tn (caup (clex "0x1F")) 0) (L 'num 31 1))         ; 7c-ii: hex literals
       (= (tn (caup (clex "0xFF & 1")) 0) (L 'num 255 1))
       (= (tn (caup (clex "255L")) 0) (L 'num 255 1))        ; an l/L suffix is consumed outright
@@ -122,7 +127,7 @@
       (! (cparse (caup (clex "int main() { return (1+2; }"))))       ; the lost )
       (! (cparse (caup (clex "int main() { if 1 return 2; }"))))     ; if wants parens
       (! (cparse (caup (clex "int main() { return 42 }"))))
-      (! (cparse ()))))
+      (= (caup (cparse ())) '(prog ()))))     ; an empty token list is a VALID empty TU (crypt.c), not a parse failure
 
 ; --- the generator: one full golden, and the refusals that guard the seams ---
 (: (cast src) (caup (cparse (caup (clex src))))
@@ -418,6 +423,8 @@
       (= (pps "#define G 1\n#if defined(G)\nd\n#endif") "d")           ; defined() operator
       (= (pps "#define M(x) x\nno M here") "no M here")                ; a fn macro name not called stays literal
       (! (cpp (caup (clex "#if 1\nx")) ()))                            ; unterminated #if refuses
+      (two? (cpp (caup (clex "#ifdef NOPE\nx\n#endif")) ()))           ; a fully-skipped file is a VALID empty TU (crypt.c), not a failure
+      (! (cpp (caup (clex "#error boom")) ()))                         ; #error is FATAL
       (= (pps "#define E\nE + E") "+")))                               ; empty macro body vanishes
 
 ; -- 7c-i: freestanding-header surface. cc keeps no linkage/qualifier state, so

@@ -26,6 +26,7 @@
 #include <setjmp.h>
 #include <poll.h>
 #include <time.h>
+#include <utime.h>
 #include <dirent.h>
 #include <termios.h>
 #include <netdb.h>
@@ -220,6 +221,33 @@ size_t strlen(char const *s) { size_t n = 0; while (*s++) n++; return n; }
 int strcmp(char const *a, char const *b) {
   while (*a && *a == *b) { a++; b++; }
   return (int) (unsigned char) *a - (int) (unsigned char) *b; }
+int strncmp(char const *a, char const *b, size_t n) {
+  while (n && *a && *a == *b) { a++; b++; n--; }
+  return n ? (int) (unsigned char) *a - (int) (unsigned char) *b : 0; }
+char *strcpy(char *d, char const *s) { char *r = d; while ((*d++ = *s++)) ; return r; }
+char *strncpy(char *d, char const *s, size_t n) {
+  char *r = d;
+  while (n && *s) { *d++ = *s++; n--; }
+  while (n) { *d++ = 0; n--; }
+  return r; }
+char *strcat(char *d, char const *s) {
+  char *r = d;
+  while (*d) d++;
+  while ((*d++ = *s++)) ;
+  return r; }
+char *strrchr(char const *s, int c) {
+  char const *last = 0;
+  do { if (*s == (char) c) last = s; } while (*s++);
+  return (char *) last; }
+size_t strspn(char const *s, char const *set) {
+  size_t n = 0;
+  for (; s[n]; n++) { char const *p = set; while (*p && *p != s[n]) p++; if (!*p) break; }
+  return n; }
+size_t strcspn(char const *s, char const *set) {
+  size_t n = 0;
+  for (; s[n]; n++) { char const *p = set; while (*p && *p != s[n]) p++; if (*p) break; }
+  return n; }
+int isupper(int c) { return c >= 65 && c <= 90; }
 
 /* ---- the plain syscall tail: one line each ---- */
 long read(int fd, void *b, long n) { return er(sc3(NR_read, fd, (long) b, n)); }
@@ -289,6 +317,66 @@ long pwrite(int fd, void const *b, unsigned long n, long off) { return er(sc4(NR
 int memfd_create(char const *name, unsigned int fl) { return (int) er(sc2(NR_memfd_create, (long) name, fl)); }
 int utimensat(int dfd, char const *p, struct timespec const *ts, int fl) {
   return (int) er(sc4(NR_utimensat, dfd, (long) p, (long) ts, fl)); }
+int utime(char const *path, struct utimbuf const *t) {
+  if (!t) return utimensat(AT_FDCWD, path, 0, 0);
+  struct timespec ts[2];
+  ts[0].tv_sec = t->actime;  ts[0].tv_nsec = 0;
+  ts[1].tv_sec = t->modtime; ts[1].tv_nsec = 0;
+  return utimensat(AT_FDCWD, path, ts, 0); }
+
+/* ---- the calendar: no timezone database, so localtime IS gmtime (UTC). the
+ * civil-from-days is Hinnant's exact integer algorithm (1970-01-01 = Thursday,
+ * wday 4). asctime lays glibc's fixed 26-byte "Www Mmm dd hh:mm:ss yyyy\n". ---- */
+struct tm *gmtime(time_t const *tp) {
+  static struct tm tm;
+  long t = *tp;
+  long days = t / 86400, secs = t % 86400;
+  if (secs < 0) { secs += 86400; days -= 1; }
+  tm.tm_hour = (int) (secs / 3600);
+  tm.tm_min = (int) (secs % 3600 / 60);
+  tm.tm_sec = (int) (secs % 60);
+  tm.tm_wday = (int) (((days % 7) + 4 + 7) % 7);
+  long z = days + 719468;
+  long era = (z >= 0 ? z : z - 146096) / 146097;
+  long doe = z - era * 146097;
+  long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  long y = yoe + era * 400;
+  long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  long mp = (5 * doy + 2) / 153;
+  long d = doy - (153 * mp + 2) / 5 + 1;
+  long m = mp < 10 ? mp + 3 : mp - 9;
+  y += (m <= 2);
+  tm.tm_year = (int) (y - 1900);
+  tm.tm_mon = (int) (m - 1);
+  tm.tm_mday = (int) d;
+  tm.tm_yday = 0;
+  tm.tm_isdst = 0;
+  tm.tm_gmtoff = 0;
+  tm.tm_zone = "UTC";
+  return &tm; }
+struct tm *localtime(time_t const *tp) { return gmtime(tp); }
+static void __d2(char *p, int v) { p[0] = (char) (48 + v / 10 % 10); p[1] = (char) (48 + v % 10); }
+char *asctime(struct tm const *tm) {
+  static char b[26];
+  static char const *wd = "SunMonTueWedThuFriSat";
+  static char const *mo = "JanFebMarAprMayJunJulAugSepOctNovDec";
+  int i;
+  int w = tm->tm_wday, mn = tm->tm_mon, y = tm->tm_year + 1900;
+  if (w < 0 || w > 6) w = 0;
+  if (mn < 0 || mn > 11) mn = 0;
+  for (i = 0; i < 3; i++) b[i] = wd[w * 3 + i];
+  b[3] = ' ';
+  for (i = 0; i < 3; i++) b[4 + i] = mo[mn * 3 + i];
+  b[7] = ' ';
+  __d2(b + 8, tm->tm_mday); if (b[8] == '0') b[8] = ' ';
+  b[10] = ' ';
+  __d2(b + 11, tm->tm_hour); b[13] = ':';
+  __d2(b + 14, tm->tm_min);  b[16] = ':';
+  __d2(b + 17, tm->tm_sec);  b[19] = ' ';
+  __d2(b + 20, y / 100); __d2(b + 22, y % 100);
+  b[24] = 10; b[25] = 0;
+  return b; }
+char *ctime(time_t const *tp) { return asctime(gmtime(tp)); }
 void *mmap(void *a, long n, int prot, int fl, int fd, long off) {
   long r = sc6(NR_mmap, (long) a, n, prot, fl, fd, off);
   if ((unsigned long) r > (unsigned long) -4096L) { __errno_v = (int) -r; return (void *) -1; }
@@ -373,6 +461,18 @@ void *malloc(size_t n) {
       return (void *) (q + 1); }
     if (q == __mfree)
       if (!(q = __mcore(nu))) { __errno_v = ENOMEM; return 0; } } }
+
+void *calloc(size_t n, size_t sz) {
+  size_t t = n * sz;
+  void *p = malloc(t);
+  if (p) memset(p, 0, t);
+  return p; }
+int atoi(char const *s) {
+  int sign = 1, v = 0;
+  while (*s == ' ' || *s == 9) s++;
+  if (*s == '-') { sign = -1; s++; } else if (*s == '+') s++;
+  while (*s >= '0' && *s <= '9') { v = v * 10 + (*s - '0'); s++; }
+  return sign * v; }
 
 /* ---- env ---- */
 char *getenv(char const *k) {
@@ -515,34 +615,62 @@ static void __semit(void *ctx, int c) {
   struct __sctx *s = ctx;
   if (s->at + 1 < s->n) s->p[s->at] = (char) c;
   s->at++; }
-static void __fmtu(void (*put)(void *, int), void *ctx, unsigned long v, unsigned base, int neg) {
+static void __pad(void (*put)(void *, int), void *ctx, int n, int ch) { while (n-- > 0) put(ctx, ch); }
+/* one integer field with %[-0]WIDTH: digits reversed into tmp, then sign +
+ * pad (zeros hug the digits, spaces sit outside) + digits, or left-justified. */
+static void __fmtnum(void (*put)(void *, int), void *ctx, unsigned long v, unsigned base,
+                     int neg, int width, int zero, int left) {
   char tmp[24];
-  int i = 0;
-  do { unsigned d = (unsigned) (v % base); tmp[i++] = (char) (d < 10 ? 48 + d : 87 + d); v /= base; } while (v);
+  int nd = 0;
+  do { unsigned d = (unsigned) (v % base); tmp[nd++] = (char) (d < 10 ? 48 + d : 87 + d); v /= base; } while (v);
+  int len = nd + (neg ? 1 : 0);
+  int pad = width > len ? width - len : 0;
+  if (!left && !zero) __pad(put, ctx, pad, 32);
   if (neg) put(ctx, 45);
-  while (i) put(ctx, tmp[--i]); }
+  if (!left && zero) __pad(put, ctx, pad, 48);
+  while (nd) put(ctx, tmp[--nd]);
+  if (left) __pad(put, ctx, pad, 32); }
 static void __fmt(void (*put)(void *, int), void *ctx, char const *fmt, va_list ap) {
   for (; *fmt; fmt++) {
     if (*fmt != '%') { put(ctx, *fmt); continue; }
     fmt++;
-    int wide = 0;                            /* 0 int, 1 long/size_t */
-    while (*fmt == 'l' || *fmt == 'z') { wide = 1; fmt++; }
+    int left = 0, zero = 0, width = 0, prec = -1, wide = 0;
+    for (; ; fmt++) {                        /* flags: - and 0 act; + space # ignored */
+      if (*fmt == '-') left = 1;
+      else if (*fmt == '0') zero = 1;
+      else if (*fmt == '+' || *fmt == ' ' || *fmt == '#') ;
+      else break; }
+    while (*fmt >= '0' && *fmt <= '9') { width = width * 10 + (*fmt - 48); fmt++; }
+    if (*fmt == '.') { fmt++; prec = 0; while (*fmt >= '0' && *fmt <= '9') { prec = prec * 10 + (*fmt - 48); fmt++; } }
+    while (*fmt == 'l' || *fmt == 'z' || *fmt == 'h') { if (*fmt != 'h') wide = 1; fmt++; }
+    if (left) zero = 0;
     if (*fmt == 's') {
       char const *s = va_arg(ap, char const *);
       if (!s) s = "(null)";
-      while (*s) put(ctx, *s++); }
-    else if (*fmt == 'c') put(ctx, va_arg(ap, int));
-    else if (*fmt == 'd') {
+      int len = 0;
+      while (s[len] && (prec < 0 || len < prec)) len++;
+      int pad = width > len ? width - len : 0;
+      if (!left) __pad(put, ctx, pad, 32);
+      for (int i = 0; i < len; i++) put(ctx, s[i]);
+      if (left) __pad(put, ctx, pad, 32); }
+    else if (*fmt == 'c') {
+      int pad = width > 1 ? width - 1 : 0;
+      if (!left) __pad(put, ctx, pad, 32);
+      put(ctx, va_arg(ap, int));
+      if (left) __pad(put, ctx, pad, 32); }
+    else if (*fmt == 'd' || *fmt == 'i') {
       long v = wide ? va_arg(ap, long) : (long) va_arg(ap, int);
       unsigned long u = (unsigned long) v;
       int neg = v < 0;
       if (neg) u = 0UL - u;
-      __fmtu(put, ctx, u, 10, neg); }
+      __fmtnum(put, ctx, u, 10, neg, width, zero, left); }
     else if (*fmt == 'u')
-      __fmtu(put, ctx, wide ? va_arg(ap, unsigned long) : (unsigned long) va_arg(ap, unsigned int), 10, 0);
-    else if (*fmt == 'x')
-      __fmtu(put, ctx, wide ? va_arg(ap, unsigned long) : (unsigned long) va_arg(ap, unsigned int), 16, 0);
-    else if (*fmt == 'p') { put(ctx, 48); put(ctx, 120); __fmtu(put, ctx, (unsigned long) va_arg(ap, void *), 16, 0); }
+      __fmtnum(put, ctx, wide ? va_arg(ap, unsigned long) : (unsigned long) va_arg(ap, unsigned int), 10, 0, width, zero, left);
+    else if (*fmt == 'x' || *fmt == 'X')
+      __fmtnum(put, ctx, wide ? va_arg(ap, unsigned long) : (unsigned long) va_arg(ap, unsigned int), 16, 0, width, zero, left);
+    else if (*fmt == 'o')
+      __fmtnum(put, ctx, wide ? va_arg(ap, unsigned long) : (unsigned long) va_arg(ap, unsigned int), 8, 0, width, zero, left);
+    else if (*fmt == 'p') { put(ctx, 48); put(ctx, 120); __fmtnum(put, ctx, (unsigned long) va_arg(ap, void *), 16, 0, 0, 0, 0); }
     else if (*fmt == '%') put(ctx, 37);
     else { put(ctx, 37); if (*fmt) put(ctx, *fmt); else fmt--; } }
 }
@@ -559,6 +687,26 @@ int snprintf(char *p, size_t n, char const *fmt, ...) {
   va_end(ap);
   if (n) p[s.at < n ? s.at : n - 1] = 0;
   return (int) s.at; }
+int printf(char const *fmt, ...) {
+  va_list ap; va_start(ap, fmt);
+  __fmt(__femit, stdout, fmt, ap);
+  va_end(ap);
+  return 0; }
+int putc(int c, FILE *f) { return fputc(c, f); }
+void perror(char const *s) {
+  int e = __errno_v;
+  if (s && *s) fprintf(stderr, "%s: ", s);
+  fprintf(stderr, "errno %d\n", e); }
+char *fgets(char *buf, int n, FILE *f) {
+  int i = 0;
+  while (i < n - 1) {
+    char c;
+    long k = read(f->fd, &c, 1);
+    if (k <= 0) { if (i == 0) return 0; break; }
+    buf[i++] = c;
+    if (c == 10) break; }
+  buf[i] = 0;
+  return buf; }
 
 /* ---- signals: glibc's 152-byte sigaction folded onto the kernel's 32-byte
  * one. BOTH arches carry the restorer slot (aarch64 is the odd asm-generic

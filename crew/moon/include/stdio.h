@@ -25,6 +25,8 @@ int    fgetc(FILE*);
 int    ungetc(int, FILE*);
 int    getc(FILE*);
 int    getchar(void);
+char  *fgets(char*, int, FILE*);
+char  *gets(char*);
 FILE  *fopen(char const*, char const*);
 int    fclose(FILE*);
 size_t fread(void*, size_t, size_t, FILE*);

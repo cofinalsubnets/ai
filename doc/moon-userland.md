@@ -257,6 +257,42 @@ above are pure profit regardless (general modern-C coverage). A faster path to a
 is a pre-gnulib release (gzip-1.2.4, plain K&R/C89) which sidesteps both walls — the same shape
 as bzip2.
 
+## gzip-1.2.4 — a COMPLETE runnable binary (2026-07-16)
+
+The pre-gnulib path paid off: **gzip-1.2.4 builds to a working, format-accurate binary** —
+all 14 `.c` + `nolibc.c` + `sys.o` linked by our own holo linker, no gcc/glibc/ld. Verified
+round-trip (empty/1-byte/binary/text/random), `-t` integrity, `-l`/`-v` output, and — the real
+proof — **our `.gz` decodes byte-identical under the system `gunzip`, both directions**.
+
+Compile blockers (each a durable mooncc fix; `test_moon` + `test_raw` green):
+- **do_list refused** — `ctime` had no prototype → added `ctime`/`asctime` to `include/time.h`.
+  gzip.c calls `ctime` *undeclared* (fine on 1993's 32-bit boxes; implicit-int truncates the
+  returned pointer on x86-64), so the one app-side edit is `#include <time.h>` in gzip.c — a real
+  64-bit portability fix, not a mooncc gap.
+- **check_ofname refused** — `fgets` missing → `include/stdio.h`.
+- **crypt.c "preprocessor error"** — an empty-after-cpp TU was rejected as failure. `cpp.l`: only
+  `'cppbad` fails now (an empty token list is a valid empty TU); `#error` + unbalanced conditionals
+  now raise `'cppbad` (were bare `()`). `parse.l`: an empty token list parses to `(prog ())`.
+- **getopt.c "lex error"** — form-feed `\f` (GNU page-break, 5 of them) wasn't whitespace →
+  `lex.l` `ws?` now includes `\f` and `\v`.
+
+Link + run blockers:
+- **⚠ octal integer literals** (`0644`/`0777`) lexed as **decimal** → gzip chmod'd its output to
+  garbage modes (`----r-----`), so decompress hit `EACCES`. `lex.l` gained an octal branch
+  (`0`+octal-digit → base 8; `0`/`0x`/`0.5`/`08` still route correctly). The last and subtlest
+  bug — the compress/decompress *engine* was already byte-perfect via `-c` stdout mode; only the
+  file-mode copy exposed it. Debug trap: a probe `printf("%o",…)` mis-read `struct stat` as
+  garbage because nolibc's `__fmt` didn't grok `%o` and skipped the vararg — the struct was fine.
+- **nolibc grew 16 libc functions** (it had `fprintf`/`malloc`/`memset`/`strlen`/`strcmp`): the
+  `str*` family (`strcpy strcat strncmp strncpy strrchr strspn strcspn`), `atoi calloc isupper`,
+  `printf perror putc fgets`, the calendar (`ctime`/`gmtime`/`localtime`/`asctime` — `localtime`
+  **is** `gmtime`, UTC with no tz database; Hinnant's exact civil-from-days), and `utime` (on
+  `utimensat`). Plus `__fmt` gained **field width / precision / `0`-pad / `-` / `%o`** — it had
+  ignored width, so `%9ld`/`%08lx`/`%5s` printed literally and `-l`/`-v` columns were garbled.
+
+Build: lay `sys.o` via `crew/moon/lib/mksys.l`, then one `mooncc -DSTDC_HEADERS -DHAVE_UNISTD_H
+-DDIRENT -I crew/moon/include -I <src> -o gzip <src>/*.c crew/moon/lib/nolibc.c sys.o`.
+
 ## suggested order (LFS-shaped, easiest real C first)
 
 bzip2 → gzip → less → m4 → make → sed/grep (gnulib-heavy, harder) → bash → coreutils.
