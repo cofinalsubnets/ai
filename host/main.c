@@ -550,9 +550,9 @@ static char const glaze_export[] =              // ai/glaze/export.l: sweep the 
 #include "gexport.h"
  ;
 #endif
-#if defined(__x86_64__)
+#if defined(__x86_64__) || defined(__aarch64__)
 static char const glaze_hook[] =                // ai/glaze/hook.l: install book['natjit] -- the ala
-#include "hook.h"                               //   creation hook (glaze EVERY embedded closure, not just (ev '(\..))); x86-64 only
+#include "hook.h"                               //   creation hook (glaze EVERY embedded closure, not just (ev '(\..))); the hook's lanes take `arch` (= (intern ai-arch)) so aarch64 emits its own code
  ;
 #endif
 // the post-warm dispatch (shared by boot() and the --wake path, which skips the warm).
@@ -587,12 +587,12 @@ static struct ai *boot(struct ai *g, bool argp) {
   g = ai_evals_(g, glaze_emit);                          // load the native JIT post-egg -> ev = auto-ev, glaze always-on
   g = ai_evals_(g, glaze_auto);                          // (no fragile stale image; base-ev captures the hatched ev).
   g = ai_evals_(g, glaze_export);                        // the glaze module boundary: its names sweep into the `glaze` book
-#endif                                                   // ~680ms from-scratch; the image snapshots past it. arm64: auto-ev's integer + scalar-float lanes (leaf, counted/n-var loops, group) are native; only the float-GRID lane + castbuild fall to interp (auto.l's `x86?` gate), and the natjit creation hook (embedded closures incl. call-outs) is x86-only.
+#endif                                                   // ~680ms from-scratch; the image snapshots past it. arm64: the integer + scalar-float lanes (leaf, counted/n-var loops, group, call-out) are native via BOTH auto-ev and the natjit hook; only the float-GRID lane + castbuild fall to interp (auto.l's `x86?` gate).
   g = ai_evals_(g,                                       // the holo module boundary (crew/holo/export.l): the assembler's names
 #include "export.h"                                      //   sweep into the ONE public `holo` book and off the global book.
   );                                                     //   AFTER the glaze, whose direct references folded at its compile.
-#if defined(__x86_64__)
-  g = ai_evals_(g, glaze_hook);                          // install natjit: glaze embedded closures at creation, not just (ev '(\..))
+#if defined(__x86_64__) || defined(__aarch64__)
+  g = ai_evals_(g, glaze_hook);                          // install natjit: glaze embedded closures at creation, not just (ev '(\..)); arch-parameterized, so aarch64 too
 #endif
   g = ai_evals_(g, "(: welow wsave)");                   // toolchain baked -> welow back on for USER code
 #if defined(__x86_64__) || defined(__aarch64__)

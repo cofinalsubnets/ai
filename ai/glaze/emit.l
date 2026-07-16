@@ -240,8 +240,8 @@
            `('ld T SP 48)                                       ; T = Se (= e, R[5] @ Sp+48) -- BEFORE restoring Sp
            `('add SP SP 56)                                     ; Sp = E (frame intact for e's body)
            `('lea IP T 16) `('ld T IP 0) `('jmpr T))))          ; enter e's body (a>=2: e+16), saturated frame on Sp
-   (njit-calloutframe src Fidx Nidx a e)
-    (nif (emit (asmt 'x64 (calloutframeir 'x64 Fidx Nidx a))) e src a)   ; value[1] = e (the bytecode twin, deopt target); arity a ; src for =/show
+   (njit-calloutframe src Fidx Nidx a e tgt)
+    (nif (emit (asmt tgt (calloutframeir tgt Fidx Nidx a))) e src a)   ; value[1] = e (the bytecode twin, deopt target); arity a ; src for =/show
    ; --- N-VARIABLE loop: the general tail-recursive counted loop ------------------
    ; (\ n ((: (go v0..vk) (? TEST (go U0..Uk) RESULT)) I0..Ik)), up to 3 loop vars in
    ; r9/r10/r11 (RAW), the param n the tagged Sp[0] (fxv-guarded). each iteration: if

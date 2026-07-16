@@ -18,6 +18,7 @@
 ; ai/glaze/auto.l's counted-loop path. Rides the BAKED glaze through the module books
 ; (the binds just below). x86-64 only.
 (: assemble (holo 'assemble)                                                 ; through the module books (crew/holo/export.l,
+   arch (intern ai-arch)                                                    ;   the runtime CPU target ('x64 / 'arm64), evaluated at boot on the actual binary -- so the SAME baked hook.h emits x64 on the x86 host and aarch64 under qemu (mirrors auto.l's `arch`). njit-loop/njit-loop-n already close over auto.l's arch; the leaf/float/callout/group lanes below take it explicitly.
    emit (glaze 'emit)  coreir (glaze 'coreir)  deoptir (glaze 'deoptir)     ;   ai/glaze/export.l) -- this stream cat-loads
    loopinfo (glaze 'loopinfo)  njit-loop (glaze 'njit-loop)                 ;   post-boot, so nothing folded for it. loop lane
    loopinfo-n (glaze 'loopinfo-n)  njit-loop-n (glaze 'njit-loop-n)         ;   (unify with auto-ev): the counted + N-VAR back-edges
@@ -56,12 +57,12 @@
     (: ps (init (cup s))  body (last (cup s))
        (? (&& (two? s) (two? (cup (cup s))) (exprn ps body))         ; >=1 param, a body, leaf grammar
           (: _ (pin fires () (+ 1 (peep fires () 0)))                  ; compile via the neutral-IR lane (coreir); deopt target = e
-             (nif (emit (peep (assemble 'x64 (coreir 'x64 ps body (deoptir 'x64 (? (= a 1) 0 1)))) 'bytes 0)) e s a))
+             (nif (emit (peep (assemble arch (coreir arch ps body (deoptir arch (? (= a 1) 0 1)))) 'bytes 0)) e s a))
           ; FLOAT-RESULT leaf -- (\ x <fexpr>) that BOXES a gem (auto-ev's qualfr/jitfr lane).
           ; one param only (qualfr's shape), so a captured float leaf falls through for now. deopt -> e,
           ; not (ev s): jitfr bakes (ev lam), which under the hook would re-enter ala -> so jitfrx takes e.
           (qualfr s)
-            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitfrx s 'x64 e))
+            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitfrx s arch e))
           ; NOT a leaf -- try the counted-loop lane, then the general N-VAR loop lane (auto-ev's
           ; njit-loop / njit-loop-n, but deopting to `e`, the bytecode ala already built, NOT
           ; (base-ev s): re-interpreting s here would re-enter ala -> natjit -> ... So natjit passes
@@ -87,12 +88,12 @@
                     ; ns/iter, measured), so the recognizer order (callout before group) is already the cheap one.
                     (: ci (calloutinfo s)  fv (? ci (gv ci 0) 0)
                        (? (&& ci (lit? fv))
-                          (: _ (pin fires () (+ 1 (peep fires () 0))) (jitcalloutx fv s 'x64))
+                          (: _ (pin fires () (+ 1 (peep fires () 0))) (jitcalloutx fv s arch))
                      ; CAPTURED / multi-arg call-out: F (and the bound) are FRAME params -> read from the
                      ; [imps args] frame, no bake; deopt to value[1]=e (the bytecode twin, which captures F).
                      (: cf (calloutinfo-frame s)
                         (? cf
-                           (: _ (pin fires () (+ 1 (peep fires () 0))) (njit-calloutframe s (cap cf) (caup cf) a e))
+                           (: _ (pin fires () (+ 1 (peep fires () 0))) (njit-calloutframe s (cap cf) (caup cf) a e arch))
                       ; GROUP lane (always-on) -- a reusable closure
                       ; (\ frame.. <first-order mutually-recursive arith group>) whose tail calls the group.
                       ; auto-ev can't reach this (never gets the closure body as a callable-later unit); natjit
@@ -115,9 +116,9 @@
                          flat? (&& okshape (member? (cap tail) gnames) (= (cup tail) ps))       ; tail IS (entry frame..)
                          osym '__outer  agdefs (? okshape (cat gdefs (L (link (link osym ps) tail))) ())   ; group + synthetic ((__outer . frame) . tail)
                          (? (&& flat? (jgir-ok? gdefs) (gdefs-ok? gdefs))                         ; FLAT: entry direct, zero indirection
-                            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx gdefs (cap tail) 'x64 e s))   ; stamp the OUTER src s -> =/show transparent vs the bytecode twin
+                            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx gdefs (cap tail) arch e s))   ; stamp the OUTER src s -> =/show transparent vs the bytecode twin
                             (&& okshape (! (member? osym gnames)) (opnd-ok? ps tail) (jgir-ok? agdefs) (gdefs-ok? gdefs))   ; GENERAL tail via the synthetic entry
-                            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx agdefs osym 'x64 e s))
+                            (: _ (pin fires () (+ 1 (peep fires () 0))) (jitgroupirx agdefs osym arch e s))
                             e))))))))))))
    (fired? n) (< n (peep fires () 0))                 ; did the hook fire since count n?
  _ (assert
