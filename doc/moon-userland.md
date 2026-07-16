@@ -183,32 +183,45 @@ combos (int:int, int:sse, sse:int, sse:sse). Arch-correct: x64 splits per eightb
 interleaved with scalar args. ai.c never passed a >8-byte struct by value, so it had hidden. A
 register-exhausted arg or a >16-byte (MEMORY) struct still refuses (`crew/moon/law.l` asserts both
 directions). This is a general rung (every modern struct-by-value API needs it); it un-refuses
-timespec.h's helpers, though gzip.c itself has a *separate* parse blocker still open (below).
+timespec.h's helpers, though gzip.c itself hit a *separate* blocker — a cpp include bug, now
+FIXED (below).
 
-### gzip.c's "parse error" is a RUNTIME HEISENBUG, not a missing feature (diagnosed 2026-07-15)
+### gzip.c's "parse error" was a CPP INCLUDE-ACCUMULATION BUG (found + FIXED 2026-07-15)
 
-Chased in depth. gzip.c's failure is **NOT a C construct mooncc can't parse** — it is a
-mooncc **runtime memory/GC heisenbug** surfaced by the large parse. The forensics:
+The misleading "parse error at `typedef ptrdiff_t idx_t;`" was **a real, deterministic bug in
+the preprocessor's `#include` machinery** (`crew/moon/cpp.l`, `doinc`) — NOT a GC heisenbug and
+NOT a missing parser feature. The whole flakiness was an earlier, separate confound; under
+`AI_NO_GLAZE=1 AI_NO_IMAGE=1` gzip.c fails 12/12 deterministically. The forensics that nailed it:
 
-- The parse reliably dies at `typedef ptrdiff_t idx_t;` (gnulib `idx.h`, pulled by `xalloc.h`).
-  But `ptrdiff_t` **is** correctly registered as a type — `tkbty?` returns `long` for it at the
-  exact failing site. So the parser is not rejecting a construct; its state is corrupt.
-- **Size/timing/layout-sensitive**, the signature of memory corruption: the full gzip.c fails
-  12/12; `config+tailor+gzip+xalloc.h` fails 8/8; but drop *either* tailor.h or gzip.h and it
-  passes, and medium inputs are FLAKY (a *separate*, intermittent heisenbug on medium sizes
-  muddied the first bisect — always re-run N× and prefer `AI_NO_GLAZE=1 AI_NO_IMAGE=1` for a
-  deterministic signal). Adding an **unexecuted** debug branch to the parser flips the outcome.
-- **valgrind is clean** — expected for ai's two-space copying/generational collector: the whole
-  heap is one valid mapping, so a missed-root / bad-forward corrupts data invisibly to valgrind.
-- Fails identically under glaze-on, pure-bytecode, and image — so it's in the **core runtime**
-  (ai.c's GC), not the glaze or the snapshot. Same family as memory's `gc-single-barrier`,
-  `image-boot-storm`, `glaze-rewrite-shadow` (the aicc/mooncc "two attractors" heisenbug).
-- 200 dummy typedefs do NOT reproduce it — it's not a type-table size limit; it's allocation/GC
-  timing tied to gzip.c's specific parse. (A `-Dai_gc_ratio` giant-nursery test was inconclusive
-  — the extreme value broke the egg bootstrap; a moderate value + gdb watchpoint is the next step.)
+- The parse dies at `typedef ptrdiff_t idx_t;` (gnulib `idx.h`) because `ptrdiff_t` is **not
+  registered** there (`types[ptrdiff_t]` = MISS) — even though gzip.c:61 `#include <stddef.h>`
+  should have registered it (`typedef long ptrdiff_t;`).
+- Instrumenting cpp's output-token order showed idx.h's `typedef ptrdiff_t idx_t` landing at
+  **output position 62** — near the very front, *before* stddef ever defines ptrdiff_t. So the
+  parser hits the USE before the DEFINITION → "not a type."
+- The reorder traces to the include accumulator (`out`) going **non-monotonic**: it grew to 2314
+  tokens, then `stat-time.h` returned `done=0`, wiping it to empty; everything after (version.h,
+  xalloc.h→idx.h) was then re-accumulated onto an empty base and floated to the front.
+- Root cause: `stat-time.h` includes **`stdckdint.h`** (C23), which mooncc doesn't provide. When
+  a `#include` fails to resolve, `doinc` returned **`()`**. The ancestor `doinc` only special-cased
+  the `'unbalanced` sentinel, so it treated `()` as a *valid empty include* and continued with
+  `(rev ()) = ()` — **silently dropping its accumulated `out` and masking the failed include**.
+  A missing header thus became either a bizarre downstream parse error or (worse) a silent
+  token-reorder miscompile.
 
-**So gzip.c does not need a new parser/codegen feature — it needs a GC/runtime bug hunt** (gdb
-watchpoint on the corrupted cell across minor collections). That is a deep, separate investigation.
+**The fix** (`crew/moon/cpp.l`): a single fatal-cpp sentinel `'cppbad` that **propagates** up
+through every `doinc` level (unresolved include, lex failure, and nested-`'cppbad`), instead of
+degrading to `()`. Now a missing header refuses cleanly and *names itself*:
+`cc: cannot resolve #include <stdckdint.h>` → `cc: preprocessor error in gzip.c` — mooncc's
+"refuse rather than miscompile" law, made honest. Gated green on `make test_moon` + `make test_raw`.
+
+**Method note that mattered:** always probe under `AI_NO_GLAZE=1 AI_NO_IMAGE=1` for a
+deterministic signal, and when a parser blames a symbol that "is" defined, suspect the token
+STREAM (cpp order), not the parser state. Dumping cpp's output positions + the include
+accumulator size per `#include` is what exposed the reorder.
+
+To actually advance gzip.c from here, add a `stdckdint.h` shim to `crew/moon/include` (the
+`__builtin_*_overflow` checked-arithmetic header) — the next header-completeness rung.
 
 ### the other wall: the gnulib `lib/*.c` link tree — NOT DONE
 
@@ -216,8 +229,8 @@ Even with every core `.o`, LINKING a working gzip needs gnulib's implementations
 `xmalloc`/`xstrdup` (xalloc), `dir_name` (dirname), `getopt_long`, `savedir`, `yesno`,
 `fcntl`-safer, quotearg, … — ~100 `lib/*.c`, each its own potential rung. This is the
 "gnulib-heavy" far end the ladder always flagged; gzip-1.13 reaches it where bzip2 (plain
-C89, no gnulib) never did. **A pre-gnulib gzip (1.2.4, plain C89) sidesteps BOTH this and the
-GC-heisenbug size trigger** — the practical path to a runnable gzip.
+C89, no gnulib) never did. **A pre-gnulib gzip (1.2.4, plain C89) sidesteps this whole tree**
+(and the C23/gnulib header cascade like `stdckdint.h`) — the practical path to a runnable gzip.
 
 **Takeaway:** a *working gzip-1.13 binary* is a materially larger arc than bzip2 — it is a
 gnulib userland port plus one real ABI codegen feature, not a header-shim day. The five rungs

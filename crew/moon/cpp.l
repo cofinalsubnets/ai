@@ -273,7 +273,7 @@
    ; longest directive-free run is ~50k tokens); flush restores source order.
    (flush buf macs out) (revcat (expand (rev buf) macs) out)
    (cppgo toks macs cond buf out incf)
-    (? (! (two? toks)) (? (two? cond) 'unbalanced (rev (flush buf macs out)))
+    (? (! (two? toks)) (? (two? cond) 'cppbad (rev (flush buf macs out)))
        (: ls (linesplit toks) line <ls rest <>ls
           (? (pv? <line "#")
               (: out1 (flush buf macs out)
@@ -324,13 +324,14 @@
        (: sys? (&& (two? body) (pv? <body "<"))
           name (incname body)
           txt (? name (incf name sys?) ())
-          (? (! (two? txt)) ()                         ; unresolved include -> fail the compile
-             (: lr (clex <>txt)
-                (? (! (two? lr)) ()
+          spelt (? sys? ("<" + name + ">") ("\"" + name + "\""))
+          (? (! (two? txt)) (: _ (say err ("cc: cannot resolve #include " + spelt)) _ (put err 10) 'cppbad)  ; unresolved -> FATAL
+             (: lr (clex <>txt)                         ; sentinel, NOT () -- () masks as an empty include and the ancestor
+                (? (! (two? lr)) (: _ (say err ("cc: lex error in " + spelt)) _ (put err 10) 'cppbad)         ; doinc drops its accumulated `out`, reordering the stream
                    (: itoks <>lr
                       chf (: c <>>txt (? c c incf))
                       done (cppgo itoks macs () () out chf)   ; recurse with FRESH cond; shares macs; accumulates
-                      (? (id? done 'unbalanced) ()
+                      (? (id? done 'cppbad) 'cppbad           ; a nested failure PROPAGATES up (never wipe `out` for it)
                          (cppgo rest macs cond () (rev done) incf))))))))
    (incname body)                                     ; the header name from #include tokens
     (? (! (two? body)) ()
@@ -373,4 +374,4 @@
                _ (pin t "false" `('obj `((tok 'num 0 0))))
                t)
        r (cppgo toks macs () () () incf)
-       (? (|| (id? r 'unbalanced) (! (two? r))) () `(1 (strcat-pass r)))))
+       (? (|| (id? r 'cppbad) (! (two? r))) () `(1 (strcat-pass r)))))
