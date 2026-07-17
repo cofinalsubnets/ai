@@ -283,7 +283,25 @@
           ; (a baked global answers 11 here, not 10: rc4's miscompile, bref summing dref's loop).
           (: r4 (ev '(\ n ((: (am-go i a) (? (< i n) (am-go (+ i 1) (+ a i)) (+ a (tally (am-go n))))) 0 0)))
              (&& (10 = (r4 5))
-                 ((r4 5) = ((\ n ((: (am-go i a) (? (< i n) (am-go (+ i 1) (+ a i)) (+ a (tally (am-go n))))) 0 0)) 5))))))
+                 ((r4 5) = ((\ n ((: (am-go i a) (? (< i n) (am-go (+ i 1) (+ a i)) (+ a (tally (am-go n))))) 0 0)) 5))))
+          ; the STRING lane: a 1-arg frame-callee call carries a text fast path (kind-guarded,
+          ; falls to the DRIVE -- never a deopt), so (s i) in a loop is a native byte index,
+          ; TOTAL by the unit law (out of range/negative -> 1, the empty product), and (tally s)
+          ; reads the length raw. the same call site takes closures (mx) and strings (drive vs
+          ; byte path chosen at RUN time); a chain tally DRIVES (no storm); a param named tally
+          ; shadows the fast lane.
+          (: dg (ev '(\ s n ((: (go i a) (? (< i n) (go (+ i 1) (+ (* a 10) (- (s i) 48))) a)) 0 0)))
+             (31415926 = (dg "31415926" 8)))
+          (: bs (ev '(\ s ((: (go i a) (? (< i (tally s)) (go (+ i 1) (+ a (s i))) a)) 0 0)))
+             (&& (294 = (bs "abc")) (0 = (bs ""))))
+          (: pk (ev '(\ s n ((: (go i a) (? (< i n) (go (+ i 1) (+ a (s (- i 2)))) a)) 0 0)))
+             (199 = (pk "ab" 6)))                                                 ; 1+1+97+98+1+1: negative AND past-end read the unit
+          (: mx (ev '(\ f n ((: (go i a) (? (< i n) (go (+ i 1) (+ a (f i))) a)) 0 0)))
+             (&& (90 = (mx (\ x (* x 2)) 10)) (296 = (mx "abc" 5))))              ; one site, both callee kinds
+          (: ct (ev '(\ l n ((: (go i a) (? (< i n) (go (+ i 1) (+ a (tally l))) a)) 0 0)))
+             (&& (12 = (ct '(1 2 3) 4)) (8 = (ct "ab" 4))))                       ; chain tally drives; text tally native
+          (: ts (ev '(\ tally n ((: (go i a) (? (< i n) (go (+ i 1) (+ a (tally i))) a)) 0 0)))
+             (10 = (ts (\ x (+ x 1)) 4)))))                                       ; the shadow: the frame binding wins
    (say err "test/glaze-x86: amble -- the boring-tier translator (walker + cons + global callees + restart deopts) ok\n"))
 
 ; GROUP SWALLOW helpers (for the swallow test in the AUTO block below): genuine top-level globals,

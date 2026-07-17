@@ -42,7 +42,8 @@
    (jitn lam) (jitnir lam 'x64)
    (jit2 lam) (jitn lam)                                                  ; arity-2 alias (self-test/auto.l)
    (gfind p l) (? (atom? l) () (p (cap l)) (cap l) (gfind p (cup l)))     ; first elt matching p
-   chainkind (apof (link 0 0))                                                      ; lvm_chain's ap sentinel, for the inline two?/cap/cup kind test (cf. (apof "") for the string lane)
+   chainkind (apof (link 0 0))                                                      ; lvm_chain's ap sentinel, for the inline two?/cap/cup kind test
+   strkind (apof "")                                                                ; lvm_str's ap sentinel, for amble's string index/tally fast lanes
    mapkind (apof (tablet 0))                                                        ; lvm_map_lookup's sentinel, for the map-param entry guard + the (mpeep ..) probe
    nomkind (apof 'nomk)                                                             ; lvm_nom's sentinel, for the point-param entry guard
    mintkind (apof (nom 0))                                                          ; lvm_sym's (a mint's) sentinel, ditto -- () is a mint too
@@ -502,7 +503,31 @@
                                   ((acg (cap as) d) + (adrive cso))
                                   ((acg (cap as) d) + (adrive cso) + (L (L 'st SP (spill d) A))
                                    + (achain (cup as) (spill d) (+ d 1))))                                  ; partial -> spill -> next arg (currying)
-             (acall f as d) (achain as (? (|| (member? f vars) (member? f ps)) (voff f) (+ gbo (* 8 (+ 1 (posof f gn 0))))) d)
+             (astr1 cso) (: ld (mint 0) ok (mint 0) en (mint 0)                                             ; the STRING fast lane at a 1-arg frame-callee site: (s i) with s a
+              ((L (L 'ld T SP cso) (L 'test T 1) (L 'br 'ne ld)                                             ; text and i a charm is a byte index, TOTAL by the spec's unit law --
+                  (L 'ld X T 0) (L 'li SC strkind) (L 'cmp X SC) (L 'br 'ne ld)                             ; in range the unsigned byte, out of range 1 ((1 = ("hi" 9)), the
+                  (L 'test A 1) (L 'br 'eq ld)                                                              ; empty product); any other callee/index falls to the DRIVE (never
+                  (L 'mov X A) (L 'sar X 1) (L 'ld SC T 8)                                                  ; a deopt -- a mixed-type call site keeps its closure speed), so the
+                  (L 'cmp X SC) (L 'br 'below ok)                                                           ; unit-riding and float-index lanes stay C's business. one unsigned
+                  (L 'li A 3) (L 'jmp en)                                                                   ; compare covers the negative index (it wraps huge).
+                  (L 'label ok) (L 'ldxb A T X 1 16) (L 'leax A A A 1 1)
+                  (L 'jmp en) (L 'label ld))
+               + (adrive cso)
+               + (L (L 'label en))))
+             (atally sx d) (: ld (mint 0) en (mint 0)                                                       ; (tally X) with X a text: A = tag(len at [X+8]); anything else
+              ((acg sx d)                                                                                   ; DRIVES the tally global through its gn slot (a chain tally is a
+               + (L (L 'test A 1) (L 'br 'ne ld)                                                            ; walk -- C's, not a deopt storm)
+                    (L 'ld X A 0) (L 'li SC strkind) (L 'cmp X SC) (L 'br 'ne ld)
+                    (L 'ld X A 8) (L 'leax A X X 1 1) (L 'jmp en)
+                    (L 'label ld))
+               + (adrive (+ gbo (* 8 (+ 1 (posof 'tally gn 0)))))
+               + (L (L 'label en))))
+             (acall f as d) (: cso (? (|| (member? f vars) (member? f ps)) (voff f) (+ gbo (* 8 (+ 1 (posof f gn 0)))))
+                               (? (&& lp !(two? (cup as)) (|| (member? f vars) (member? f ps)))             ; a 1-arg frame callee can be a STRING at run time (the lexer class) --
+                                  ((acg (cap as) d) + (astr1 cso))                                          ; LOOP bodies only, the same cost gate as gn: the guard amortizes over
+                                  (achain as cso d)))                                                       ; the loop, but on a one-shot recursion wrapper it taxed EVERY drive
+                                                                                                            ; (~7 insns x ~400M mooncc calls = +19%). a gn callee never is a
+                                                                                                            ; string (gvals are lit?-gated), so it keeps the bare drive too.
              (agous us j d) (? (two? us) ((acg (cap us) (+ d j)) + (L (L 'st SP (spill (+ d j)) A)) + (agous (cup us) (+ j 1) d)) ())
              (agomv j d) (? (< j 0) () ((L (L 'ld A SP (spill (+ d j))) (L 'st SP (* 8 j) A)) + (agomv (- j 1) d)))
              (ago as d) ((agous as 0 d) + (agomv (- k 1) d) + (L (L 'jmp 'top)))                            ; updates from OLD vars (spilled first), then the back-edge
@@ -522,6 +547,8 @@
                         (aid (cap as) (caup as) d)                                               ; (= a 'sym): a POINT equals only itself (the point-= law) -> raw identity, total
                        (acmp? op) (acmp2 op (cap as) (caup as) d)
                        (member? op '(+ - *)) (aar op (cap as) (caup as) d)
+                       (&& (id? op 'tally) !(member? 'tally env) (member? 'tally gn) !(two? (cup as)))
+                        (atally (cap as) d)                                       ; the tally fast lane (env-shadowed or multi-arg falls to the call paths)
                        (id? op go) (ago as d)
                        (acall op as d))))
              initR (: (goi j) (? (< j R) ((L (L 'st SP (* 8 j) T)) + (goi (+ j 1))) ())
