@@ -6,6 +6,6 @@
 // .data (PROGBITS, patchable in place), never .bss. Bump RESERVE_WORDS if the build errors that the
 // image exceeds it.
 #include <stdint.h>
-#define RESERVE_WORDS 589824u                                  /* 4.5 MiB */
+#define RESERVE_WORDS 786432u                                  /* 6 MiB */
 __attribute__((section(".image"))) uint64_t ai_baked_image[RESERVE_WORDS] = {1};
 uintptr_t ai_baked_image_len = RESERVE_WORDS * 8u;
