@@ -447,14 +447,27 @@
                 (&& (! fe0) (peep g 'fesc ()))     ; the body took a frame address: keep the caller lean
                  (: _ (pin g 'fesc ()) _ (pin g 'strs strs0) 'no)
                 (<>br + bf)))))
+   ; -- (v & k) as a bare condition: TEST is the flags-only AND, so the value's
+   ; register SURVIVES the check -- no and-clobber, a mapped local stays mapped,
+   ; and the park/reload the destructive form once forced never exists. eq/ne
+   ; read ZF only, so truth through the mask is exact at every width. both
+   ; backends carry test-imm (x64 F7 /0 id, arm64 ands xzr #bitmask); the 'log
+   ; gate is exactly test's immediate reach on each. --
+   (tbr g env v k cc lbl)
+    (: a (cgexpr g env v)
+       (? (|| (bad? a) (flo? (vty a))) 'bad
+          (: fs ((vfs a) + `(`('test (vreg a) k) `('br cc lbl)))
+             _ (rfree g (vreg a))
+             fs)))
    ; -- branch on a condition WITHOUT materializing its truth value: forms that
    ; jump to lbl when the condition is FALSE (cc 'eq) or TRUE (cc 'ne), the same
    ; sense as the fallback `(cmp r0 0) (br cc lbl)` over a ctest value. a
    ; comparison fuses to cmp + br<relation> (the cmp/set/movzx/cmp/br chain
    ; folds to cmp/br on EVERY if/while/for), !e flips the sense, && and ||
-   ; short-circuit straight into the branch structure, and a predicate CALL
-   ; splices through cbinl. a float compare branches straight off ucomisd/
-   ; fcmp, NaN-honest (the fcb lane). forms | 'bad. --
+   ; short-circuit straight into the branch structure, a mask test (e & k)
+   ; branches off TEST (the tbr lane), and a predicate CALL splices through
+   ; cbinl. a float compare branches straight off ucomisd/fcmp, NaN-honest
+   ; (the fcb lane). forms | 'bad. --
    (cbranch g env e cc lbl)
     (? (&& (<e = 'un) (<>e = 'not))
         (cbranch g env <>>e (? (cc = 'eq) 'ne 'eq) lbl)
@@ -552,7 +565,13 @@
                                 (: fs ((vfs ah) + (vfs b) + `(`('cmp (vreg ah) (vreg b)) `('br (bcc op (cu2 (vty ah) (vty b))) lbl)))
                                    _ (rfree g (vreg ah)) _ (rfree g (vreg b))
                                    fs)))))))))
-       (: try (? (<e = 'call) (cbinl g env e cc lbl) 'no)
+       (: rhs (? (&& (<e = 'bin) (<>e = '&)) <>>>e ())   ; the mask-test shapes: (v & k) / (k & v)
+          lhs (? (two? rhs) <>>e ())
+          try (? (<e = 'call) (cbinl g env e cc lbl)
+                 (! (two? rhs)) 'no
+                 (&& (<rhs = 'num) (immok g 'log <>rhs)) (tbr g env lhs <>rhs cc lbl)
+                 (&& (<lhs = 'num) (immok g 'log <>lhs)) (tbr g env rhs <>lhs cc lbl)
+                 'no)
           (? (! (id? try 'no)) try
              (: c (cgexpr g env e)
                 (? (bad? c) 'bad
@@ -2038,6 +2057,8 @@
                                   _ (rset rg d `(1 k))
                                   (go >r 1 cur rg sl ce ci (link `('li d k) acc)))))
                         (go r 1 cur rg sl ce ci (link f acc))))
+                 (op = 'test)                        ; flags only, writes nothing: every record stands
+                  (go r 1 cur rg sl ce ci (link f acc))
                  (member? op '(movqxr ucomisd ldsd ldss cvtsi2sd cvtss2sd cvtsd2ss addsd subsd mulsd divsd movsd))
                   (go r 1 cur rg sl ce ci (link f acc)) ; the xmm lane leaves gp state alone
                  ; anything else: assume nothing survives
