@@ -36,8 +36,8 @@
    ; each pre-rendered as one SGR background cell so a frame is pure lookup
    ramp (L 17 18 19 20 26 32 38 44 45 51 87 123 159 195 189 183 147 111 75 69 63 57 25 24)
    (cell n) (+ (+ (+ esc "[48;5;") (show n)) "m ")   ; show: decimal digits (string of a charm is its CHAR)
-   pal (: (pins t i l) (? l (: _ (pin t i (cell (cap l))) (pins t (+ i 1) (cup l))) t)
-          (pins #(0 (cell 17)) 0 ramp))
+   pal (: (dab t i l) (? l (: _ (pin t i (cell (cap l))) (dab t (+ i 1) (cup l))) t)
+          (dab #(0 (cell 17)) 0 ramp))
 
    ; one frame: quantize the skin to ramp indices, say every cell into a jug,
    ; slurp it back as one write (home first; reset + newline per row)

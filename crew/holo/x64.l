@@ -55,15 +55,21 @@
    (alu-rr opcode d s)
       (: dn (rn d) sn (rn s)
          `((rex 1 (hi sn) 0 (hi dn)) opcode (modrm 3 sn dn)))
-   ;; alu-ri: 0x81 /ext id -- the immediate group, `ext` selecting add/or/and/sub/xor/cmp.
+   ;; alu-ri: the immediate group, `ext` selecting add/or/and/sub/xor/cmp --
+   ;; 0x83 /ext ib when the immediate fits a signed byte (both forms
+   ;; sign-extend, same flags), else 0x81 /ext id.
    (alu-ri ext d imm)
       (: dn (rn d)
-         (+ `((rex 1 0 0 (hi dn)) 129 (modrm 3 ext dn)) (le32 imm)))
+         (? (&& (<= -128 imm) (<= imm 127))
+            `((rex 1 0 0 (hi dn)) 131 (modrm 3 ext dn) (byte imm))
+            (+ `((rex 1 0 0 (hi dn)) 129 (modrm 3 ext dn)) (le32 imm))))
    (alu-step rr ext d y) (? (reg? y) (alu-rr rr d y) (alu-ri ext d y))
    (reg-eq a b) (= (rn a) (rn b))
 
    (emit-mov d s) (alu-rr 137 d s)                                  ; 0x89 mov r/m64, r64
-   (emit-cmp a b) (alu-step 57 7 a b)                               ; 0x39 cmp / 0x81 /7
+   ;; cmp against 0 IS test (r - 0 and r AND r agree on every flag: SF/ZF/PF
+   ;; from r, CF/OF clear both ways) -- 3 bytes for 7
+   (emit-cmp a b) (? (&& (! (reg? b)) (= b 0)) (emit-test a a) (alu-step 57 7 a b))
 
    ;; (li d imm): B8+rd id for an unsigned-32 immediate -- the 5-byte mov-r32
    ;; form, which ZERO-extends across the full register (REX.B alone lifts the
@@ -213,6 +219,10 @@
       (: dn (rn d) `((rex 1 (hi dn) 0 0) 141 (modrm 0 (lo dn) 5) (fix 4 'rel32 label 0)))
    (emit-jmp  label)     `(233 (fix 4 'rel32 label 0))
    (emit-br cond label)  `(15 (jcc-op cond) (fix 4 'rel32 label 0))
+   ;; the 2-byte short forms the relaxer (holo.l relax) rewrites in-range branches to:
+   ;; EB rel8 / 7x rel8 -- the short jcc opcode is the 0F 8x second byte less 0x10.
+   (emit-jmp8 label)     `(235 (fix 1 'rel8 label 0))
+   (emit-br8 cond label) `((- (jcc-op cond) 16) (fix 1 'rel8 label 0))
    ;; jmpr: FF /4 -- an indirect jump through a register (the glaze's Continue / deopt tail). REX.B
    ;; for an extended register; no REX.W (jmp defaults to 64-bit operand size).
    (emit-jmpr d) (: dn (rn d) (+ (? (>= dn 8) `(65) ()) `(255 (modrm 3 4 dn))))
@@ -331,6 +341,8 @@
             (= op 'dec)  (emit-un 255 1 (at ins 1))
             (= op 'jmp)  (emit-jmp  (at ins 1))
             (= op 'br)   (emit-br   (at ins 1) (at ins 2))
+            (= op 'jmp8) (emit-jmp8 (at ins 1))
+            (= op 'br8)  (emit-br8  (at ins 1) (at ins 2))
             (= op 'jmpr) (emit-jmpr (at ins 1))
             (= op 'callr) (emit-callr (at ins 1))
             (= op 'mulo) (emit-mulo (at ins 1) (at ins 2) (at ins 3) (at ins 4) (at ins 5))   ; (mulo d a b t lbl)
@@ -366,6 +378,9 @@
    ;; needs the assembly ORG set to the load vaddr, which elf64 does).
    (x64-patch kind target site width aux)
       (? (= kind 'rel32) (le32 (- target (+ site width)))
+         (= kind 'rel8)  (: d (- target (+ site width))          ; the relaxer proved the fit at the
+                            _ (? (fits8 d) 0 (scare 'rel8-range d))   ; pessimistic layout; this scare
+                            `((byte d)))                              ; is the loud net under that proof
          (= kind 'abs64) (le64 (+ target aux))     ; aux = a byte ADDEND (&arr[i]/&s.field: label + constant offset)
          (scare 'badfix kind))
 
@@ -374,5 +389,6 @@
    _ (pin x64 'lower x64-lower)
    _ (pin x64 'patch x64-patch)
    _ (pin x64 'nop `(144))                     ; the ('align n) filler unit: one-byte nop
+   _ (pin x64 'short 1)                        ; opt into branch relaxation (jmp8/br8 exist here)
    _ (defbackend 'x64 x64)
    _ (defbackend 'amd64 x64))

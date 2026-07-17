@@ -95,7 +95,7 @@
                      (? (! (two? ws)) ()
                       (: r (cap ws) c (cup ws) s (bx -> () 0)
                          (? (&& (= r (gaze s 1)) (= c (gaze s 2))) ()
-                          (: _ (bx <- 0 (screen (cask (screen () r c)) r c))
+                          (: _ (bx <- () (screen (cask (screen () r c)) r c))
                              _ (setwinsize m r c)
                              _ (pin dirty () 1)
                              ())))))
