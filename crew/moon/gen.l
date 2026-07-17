@@ -88,7 +88,17 @@
    ; (g 'vuniv -- the alive pass's univ, pinned only for the regen builds)
    ; already excludes address-taken and multiply-declared names. off while
    ; inlining (an inlinee's names would conflate with the caller's). --
-   (vmon? g) (&& (two? (peep g 'vuniv ())) (! (peep g 'inlining ())))
+   ; ...and SEALED while a call's arguments stage: the staging splices args
+   ; right-to-left (evaluation order is free in C) while generation runs
+   ; left-to-right, so a pin born inside one arg would read STALE from a
+   ; later-generated, earlier-spliced sibling -- its establishing load
+   ; splices AFTER the read. under the seal vmget answers nothing and vmpin
+   ; refuses (reads go to the slots, no pins are born), while the standing
+   ; pins KEEP their registers (vpin holds -- a captured tuple must not see
+   ; its register handed out as a sibling's scratch). a depth count, not a
+   ; flag: an argument may hold a nested call.
+   (vmon? g) (&& (two? (peep g 'vuniv ()))
+                 (&& (! (peep g 'inlining ())) (! (0 < (peep g 'argseal 0)))))
    (vmget g nm)
     (? (! (vmon? g)) ()
        (: e9 (assoc nm (peep g 'vmap ()))
@@ -467,7 +477,12 @@
            ; evaluates -- allocation order must match execution order, or the
            ; right's freed inner temps alias the parked left. a flo side falls
            ; back to ctest (both sides re-evaluate whole, the old shape).
-           (fcb z9) (: c (ctest g env e)
+           ; the float fallback DISCARDS the int-flavored emission and re-runs
+           ; through ctest -- any vmap pin born inside the dropped forms would
+           ; survive with its establishing load gone (the lvm_aall stale-index
+           ; fault), so the map flushes before the re-evaluation
+           (fcb z9) (: _ (vmflush g)
+                       c (ctest g env e)
                        (? (bad? c) 'bad ((vfs c) + `(`('cmp 'r0 0) `('br cc lbl)))))
            (bcc o u) (scc (? (cc = 'ne) o (negrel o)) u)
            (cu2 ta tb) (|| (|| (usg? ta) (usg? tb)) (|| (ptr? ta) (ptr? tb)))
@@ -1234,7 +1249,9 @@
                           (? (&& wd2 (xmmc < 8)) (kls >as (i + 1) gpc (xmmc + 1) ovc (link `(`('x xmmc) rpush) acc))
                              (&& (! wd2) (gpc < (ngp g))) (kls >as (i + 1) (gpc + 1) xmmc ovc (link `(`('g gpc) rpush) acc))
                              (kls >as (i + 1) gpc xmmc (ovc + 1) (link `(`('ov ovc) opush) acc)))))))))))
+       _ (pin g 'argseal ((peep g 'argseal 0) + 1))     ; the vmap seals across the staging (see vmon?)
        kr (kls ags 0 0 0 0 ())
+       _ (pin g 'argseal ((peep g 'argseal 0) - 1))
        (? (bad? kr) 'bad
           (: ov? (\ kent ((cap (cap kent)) = 'ov))
              ovr (: (go1 l1 acc1) (? (! (two? l1)) acc1
@@ -3531,6 +3548,7 @@
        _ (pin g 'pool0 opool) _ (pin g 'pool opool)
        _ (pin g 'vuniv ()) _ (vmflush g)            ; vmap off for the ir1 build (no universe yet)
        _ (pin g 'hasasm ())                         ; fresh per fn: an asm statement pins it (homing off)
+       _ (pin g 'argseal 0)                         ; fresh per fn: the vmap's staging seal depth
        sp1 (? (&& vararg (a64? g)) (vaspill-a64 params)
               vararg (vaspill params) (spill params 0 0 0 () ()))
        ir1 (build sp1)
