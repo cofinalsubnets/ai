@@ -55,15 +55,21 @@
    (alu-rr opcode d s)
       (: dn (rn d) sn (rn s)
          `((rex 1 (hi sn) 0 (hi dn)) opcode (modrm 3 sn dn)))
-   ;; alu-ri: 0x81 /ext id -- the immediate group, `ext` selecting add/or/and/sub/xor/cmp.
+   ;; alu-ri: the immediate group, `ext` selecting add/or/and/sub/xor/cmp --
+   ;; 0x83 /ext ib when the immediate fits a signed byte (both forms
+   ;; sign-extend, same flags), else 0x81 /ext id.
    (alu-ri ext d imm)
       (: dn (rn d)
-         (+ `((rex 1 0 0 (hi dn)) 129 (modrm 3 ext dn)) (le32 imm)))
+         (? (&& (<= -128 imm) (<= imm 127))
+            `((rex 1 0 0 (hi dn)) 131 (modrm 3 ext dn) (byte imm))
+            (+ `((rex 1 0 0 (hi dn)) 129 (modrm 3 ext dn)) (le32 imm))))
    (alu-step rr ext d y) (? (reg? y) (alu-rr rr d y) (alu-ri ext d y))
    (reg-eq a b) (= (rn a) (rn b))
 
    (emit-mov d s) (alu-rr 137 d s)                                  ; 0x89 mov r/m64, r64
-   (emit-cmp a b) (alu-step 57 7 a b)                               ; 0x39 cmp / 0x81 /7
+   ;; cmp against 0 IS test (r - 0 and r AND r agree on every flag: SF/ZF/PF
+   ;; from r, CF/OF clear both ways) -- 3 bytes for 7
+   (emit-cmp a b) (? (&& (! (reg? b)) (= b 0)) (emit-test a a) (alu-step 57 7 a b))
 
    ;; (li d imm): B8+rd id for an unsigned-32 immediate -- the 5-byte mov-r32
    ;; form, which ZERO-extends across the full register (REX.B alone lifts the
