@@ -1,0 +1,97 @@
+# holo encoder fuzz — the fuzz-first rung of the holo verification ladder
+
+The verification frontier stops at holo today: `crew/holo/` (the x86-64 + aarch64 assembler)
+has no formal proof, only the frozen goldens in `holotest.l`/`astest.l`. Those goldens were
+each validated by hand — "emit the bytes, `objdump -d -M intel`, confirm the mnemonic" — over a
+few dozen forms. This harness **automates that exact round-trip and runs it over tens of
+thousands of randomly generated forms**, so the encoder is exercised far past the goldens
+before we invest in a proof.
+
+It is the first rung of a ladder (the shape borrowed from `proof/rocq/extract.v`'s
+differential oracle, which fuzzes a Coq-extracted normalizer against the live `ev`):
+
+1. **fuzz** (this) — random IR form → holo bytes → disassemble → check the decode matches intent.
+2. **prove** — a verified encoder: instruction → bytes, checked against the same decode relation
+   the fuzzer uses as its oracle. The fuzzer's per-class checkers are the informal spec the
+   proof will formalize.
+
+## How the oracle works
+
+For each generated IR form we already know the intended instruction. We ask holo to encode it,
+then **disassemble the bytes with `objdump`** (cross-checked by `llvm-mc`) and verify the decoded
+mnemonic + operands match intent. This is a *decode* oracle, not a byte-exact one, because x86
+encoding is non-unique: holo legally picks the 32-bit zero-extending `mov` for small positive
+immediates, minimal displacement sizes, redundant-but-legal REX prefixes, etc. A byte-exact
+compare against GNU `as` would false-alarm on every such choice. So:
+
+- **registers** compare by *abstract identity* (width-agnostic — `eax` and `rax` both read back as
+  holo `r0`). The abstract→x86 map is probed directly from the encoder by `regmap.py`, never
+  guessed.
+- **immediates** compare by numeric value mod 2^64 (so a sign-extended `-1` and its `0xff..ff`
+  decode agree).
+- **memory** operands compare base / index / scale / displacement structurally.
+
+For x64, `objdump` gives the primary semantic check and `llvm-mc` is a second, independent
+decoder required to also decode the bytes without falling back to `.byte`. **arm64** is
+disassembled by `llvm-mc --triple=aarch64` (the host `objdump` is not built with aarch64); since
+every aarch64 instruction is exactly 4 bytes, the decoded-instruction count must equal
+`len(bytes)/4`, which doubles as a full-consumption check.
+
+## Running
+
+```
+python3 crew/holo/fuzz/regmap.py                            # verify the abstract-reg -> x86 map
+python3 crew/holo/fuzz/fuzz.py --arch x64  -n 300 --seed 7  # x64, both decoders
+python3 crew/holo/fuzz/fuzz.py --arch arm64 -n 300 --seed 7 # arm64, via llvm-mc
+python3 crew/holo/fuzz/fuzz.py --arch x64 -n 250 --seed 3 --no-llvm    # faster, objdump only
+python3 crew/holo/fuzz/fuzz.py --arch arm64 --classes ld,st,li -n 500  # a subset
+```
+
+Deterministic per seed. Needs `out/host/ai` built, plus `objdump` (x64) / `llvm-mc` (arm64, and
+x64 unless `--no-llvm`). Exit code is nonzero iff any sample fails.
+
+## Coverage
+
+**x64 — 25 classes**: moves/immediates (`mov_rr`, `li`), ALU reg+imm (`alu_rr`, `alu_imm`,
+`flagalu`), `cmp`, memory base+disp loads/stores incl. the rsp(SIB)/rbp(forced-disp) quirks
+(`ld`, `st`, `ld_sized`, `st_sized`), scaled-index addressing (`ldx`, `leax`), `lea`, shifts by
+immediate and by CL (`shift`, `shiftv`), `unary`, `push`/`pop`, `setcc` (the setcc+movzx pair),
+indirect `jmpr`/`callr`, and the SSE2 double lane (`ssealu`, `cvt`, `movqxr`, `ldsd`, `stsd`).
+
+**arm64 — 16 classes**: `mov_rr`, `li` (the movz/movk chain, 1–4 insns, reconstructed and
+compared by value), three-address `alu_rr` (add/sub/and/orr/eor/mul) and 12-bit `alu_imm`,
+`cmp`, `ld`/`st` and the sized family (`ldrsb`/`ldursw`/`strb`/… with x-vs-w width checks),
+`pushpop` (pre/post-indexed sp), `shift` (lsl/lsr/asr), `unary`, `jmpr`/`callr` (br/blr),
+`setcc` (single-insn `cset`), `sx` (sxtb/sxth/sxtw). The two backends share generators where the
+neutral IR maps cleanly; the checkers are arch-specific (arm64 is three-address, stores put the
+source operand first, ALU immediates are 12-bit, and logical/mul immediates *raise* rather than
+emit — so those are not fuzzed there).
+
+Status as of 2026-07-17: **x64 ~32,500 samples / 5 seeds and arm64 ~27,000 / 5 seeds, zero
+encoder discrepancies on either backend.**
+
+## Known out-of-contract inputs (not reachable bugs)
+
+The stack pointer has architecture-specific restrictions, so the generators bar it from the
+positions where the two backends would diverge — the fuzz analogue of respecting holo's contract:
+
+- **x64**: `rsp` (holo `sp`) cannot be a scaled SIB *index* — slot `100b` means "no index". holo
+  silently encodes `sp`-as-index as no-index (dropping the scaled term). Generators bar `sp` from
+  index slots (`irand`).
+- **arm64**: encoding `31` is SP only in load/store-base and add/sub-immediate contexts; as a
+  general data-processing or value operand it is XZR (the zero register). holo maps `sp`→31 and
+  uses it *only* as SP (per `crew/holo/arm64.l`), so `(mov sp x)`, `(cmp x sp)`, `(jmpr sp)`, a
+  loaded/stored value register of `sp`, etc. silently encode the zero register — diverging from
+  x64 where `rsp` is a general operand. Generators use `nrand` (no-sp) for those positions and
+  keep `sp` only for load/store base and add/sub-immediate (the reachable stack cases, verified).
+
+Neither is reachable from real codegen. If holo ever grows a caller that could hit these, the
+backend should hard-reject rather than silently mis-encode.
+
+## Extending
+
+Add a `g_<class>(rng) -> (ir_string, checker)` generator and register it in `GENS`. The checker
+receives the parsed objdump instruction list and raises `Fail(msg)` on any mismatch. Probe what
+holo actually emits first (`echo "(...)" | ... | out/host/ai`, then `objdump` the bytes) so the
+checker matches reality rather than assumption — several classes lower to more than one machine
+instruction (e.g. `setcc` → setcc+movzx, three-address ALU with distinct dest → mov+op).

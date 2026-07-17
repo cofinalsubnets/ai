@@ -731,6 +731,29 @@ test_extract: host
 	  proof/rocq/normalizer.ml proof/rocq/normalizer.mli proof/rocq/oracle_drive proof/rocq/*.cmi proof/rocq/*.cmx proof/rocq/*.o \
 	  out/.extract_oracle.l
 endif
+# the fuzz-first rung of the holo encoder verification ladder (crew/holo/fuzz/):
+# generate random IR forms, encode via holo, disassemble the bytes, and check the
+# decode matches intent -- the goldens' hand round-trip, automated over many forms.
+# x64 disassembles with objdump; arm64 with llvm-mc (host objdump lacks aarch64).
+# Needs python3; each arch runs only if its disassembler is present, no-op like
+# test_extract. Fixed seed, small n so it stays a few seconds in test_all; run
+# bigger campaigns by hand (see crew/holo/fuzz/README.md).
+PYTHON3 ?= $(shell command -v python3 2>/dev/null)
+ifeq ($(PYTHON3),)
+test_holofuzz:
+	@echo "test_holofuzz: skipped (needs python3)"
+else
+test_holofuzz: host
+	@echo TEST crew/holo/fuzz/fuzz.py "(holo x64+arm64 encoder differential fuzz)"
+	@if command -v objdump >/dev/null 2>&1; then \
+	   $(PYTHON3) crew/holo/fuzz/fuzz.py --arch x64 -n 8 --seed 20250717 --no-llvm \
+	     || { echo "FAIL holofuzz x64 -- a holo encoding disagrees with objdump"; exit 1; }; \
+	 else echo "  (x64 skipped: no objdump)"; fi
+	@if command -v llvm-mc >/dev/null 2>&1; then \
+	   $(PYTHON3) crew/holo/fuzz/fuzz.py --arch arm64 -n 8 --seed 20250717 \
+	     || { echo "FAIL holofuzz arm64 -- a holo encoding disagrees with llvm-mc"; exit 1; }; \
+	 else echo "  (arm64 skipped: no llvm-mc)"; fi
+endif
 # uu's NbE kernel lives at ai/uu.l (mark + kernel + the sweep into the `uu`
 # book at its tail) and bakes post.l-style through the lib_h/%0.h pattern
 # rules -- into the host, ai0, the inle kernel and wasm, so the corpus's uu
