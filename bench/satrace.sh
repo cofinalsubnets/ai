@@ -114,11 +114,14 @@ for h in $INSTANCES; do
   # ai: its own solve clock (warmup + self-test excluded), under a process timeout.
   # one full throwaway solve first: kernels assemble+cache AND the solver's own lisp
   # (fbva/fmk) JITs, both OUTSIDE the clock, like the interpreter warmup -- the honest
-  # "solve time" is the warm one (the rnd lane already warms the same way).
-  out=$(printf '(: _ (fcdcl (php %s) (php-vars %s)) t0 (clock 0) r (fcdcl (php %s) (php-vars %s)) ms (- (clock 0) t0) _ (puts (+ "RESULT " (+ (show ms) (+ " " (show r))))))' "$h" "$h" "$h" "$h" \
+  # "solve time" is the warm one (the rnd lane already warms the same way). (clock 0)
+  # is INTEGER milliseconds, and php5/php6 solve sub-ms -- a single solve would round
+  # to 0. So clock K solves in one span and report the total; the shell divides for a
+  # fractional ms, matching the C solvers' %.3f. Reported as "RESULT <total-ms> <K> <verdict>".
+  out=$(printf '(: _ (fcdcl (php %s) (php-vars %s)) K 32 t0 (clock 0) (rep i r) (? (>= i K) r (rep (+ i 1) (fcdcl (php %s) (php-vars %s)))) r (rep 0 ()) tot (- (clock 0) t0) _ (puts (+ "RESULT " (+ (show tot) (+ " " (+ (show K) (+ " " (show r))))))))' "$h" "$h" "$h" "$h" \
         | cat "$R/crew/sat/sat.l" "$R/crew/sat/flat.l" - | timeout "$TIMEOUT" "$GL" 2>/dev/null | grep -a '^RESULT' || true)
   if [ -n "$out" ]; then
-    echo "php$h ai $(echo "$out" | awk '{print $2, $3}')"
+    echo "php$h ai $(echo "$out" | awk '{printf "%.3f %s", $2/$3, $4}')"
   else
     echo "php$h ai timeout dnf"
   fi
