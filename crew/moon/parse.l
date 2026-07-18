@@ -154,6 +154,7 @@
    ; -- the type floor (parse side; gen re-derives with the same stag) --
    (ptr? ty) (&& (two? ty) (<ty = 'ptr))
    (arr? ty) (&& (two? ty) (<ty = 'arr))
+   (fn? ty) (&& (two? ty) (<ty = 'fn))
    (stru? ty) (&& (two? ty) (<ty = 'struct))
    (bitf? ty) (&& (two? ty) (<ty = 'bitfield))     ; a bitfield member: (bitfield uty bitoff width)
    ; the machine WORD (bytes): a pointer and a gp scalar (long) ride it. 4 on the 32-bit thumb ABI,
@@ -231,24 +232,29 @@
                     (? 1                                    ; the name is OPTIONAL: `(*)(..)` is an ABSTRACT fn pointer
                        (: name (? (&& (two? t4) ((tkk <t4) = 'id)) (tkv <t4) ())
                           t5 (? name >t4 t4)
-                          ar (? (peekp t5 "[")
+                          ar (? (peekp t5 "[")                    ; inner [n] on the name -> an ARRAY of the pointers
                                 (: t6 >t5
                                    (? (! (&& (two? t6) ((tkk <t6) = 'num))) ()
                                       (: r (want >t6 "]")
-                                         (? (two? r) `((tkv <t6) r) ()))))
-                                `(() t5))
+                                         (? (two? r) `('arr (tkv <t6) r) ()))))
+                                (peekp t5 "(")                    ; inner (params) -> the name is a FUNCTION returning the pointer
+                                 (: rp (pparams ps >t5 ()) (? (two? rp) `('fn rp <>rp) ()))   ; keep rp so a fn DEF can bind them
+                                `('none () t5))
                           (? (! (two? ar)) ()
-                             (: arn <ar t7 <>ar
+                             (: kind <ar dat <>ar t7 <>>ar
                                 r7 (want t7 ")")
-                                ; the pointee's type comes from what TRAILS the ) : (params) a function,
-                                ; [dims] an array (pointer-to-array), nothing a plain pointer. an inner
-                                ; [n] on the name (arn) makes the whole thing an ARRAY of those pointers.
+                                ; the pointee comes from what TRAILS the ) : (params) a function, [dims] an
+                                ; array (pointer-to-array), nothing a plain pointer. the name's INNER shape
+                                ; then wraps it -- [n] an array of those pointers, (params) a function returning it.
+                                ; the fn shape carries dat (the parsed params) as a THIRD result element.
                                 mkfin (\ pointee tail
-                                        `(`(name (? (charm? arn) `('arr `('ptr pointee) arn) `('ptr pointee))) tail))
+                                        (: p `('ptr pointee)
+                                           shaped (? (kind = 'arr) `('arr p dat) (kind = 'fn) `('fn p) p)
+                                           `((? (kind = 'fn) `(name shaped dat) `(name shaped)) tail)))
                                 (? (! (two? r7)) ()
-                                   (peekp r7 "(")                        ; (*name..)(params) -- pointer to FUNCTION
+                                   (peekp r7 "(")                        ; (*name..)(params) -- pointee is a FUNCTION
                                     (: t8 (skipbal >r7 1) (? (two? t8) (mkfin `('fn ty) t8) ()))
-                                   (peekp r7 "[")                        ; (*name..)[dims]  -- pointer to ARRAY
+                                   (peekp r7 "[")                        ; (*name..)[dims]  -- pointee is an ARRAY
                                     (: dr (adims ps r7 ()) (? (two? dr) (mkfin (mkarr ty <dr) <>dr) ()))
                                    (mkfin ty r7)))))))))
           (! (&& (two? ts2) ((tkk <ts2) = 'id)))    ; no name: an ABSTRACT declarator (unnamed proto param)
@@ -1103,17 +1109,18 @@
                       ; through pdtor like the comma declarators below; the
                       ; leading stars already rode into rty. -> (name rest ty),
                       ; ty () on the plain path (the declarator's type is rty)
-                      fdr (? (&& (two? ts1) ((tkk <ts1) = 'id)) `((tkv <ts1) >ts1 ())
+                      fdr (? (&& (two? ts1) ((tkk <ts1) = 'id)) `((tkv <ts1) >ts1 () ())
                              (peekp ts1 "(")
                               (: dr (pdtor ps ts1 rty)
                                  (? (! (two? dr)) ()
                                     (! (cap (cap dr))) ()             ; abstract at top level: refuse
-                                    `((cap (cap dr)) <>dr (caup (cap dr)))))
+                                    `((cap (cap dr)) <>dr (caup (cap dr)) (cauup (cap dr)))))   ; 4th = a fn declarator's parsed params
                              ())
                       (? (! (two? fdr)) ()
                          (: name <fdr
                             ts2 <>fdr
                             fpty (cauup fdr)
+                            fprm <>>>fdr                              ; the inner params when the declarator IS a function
                             (? (&& (! (two? fpty)) (peekp ts2 "("))   ; a function (the return type rides the sig table)
                                (: rp (? (krhead? ps >ts2) (pkr ps >ts2) (pparams ps >ts2 ()))
                                   (? (! (two? rp)) ()
@@ -1130,6 +1137,15 @@
                                               b (pblock ps aft)
                                               _ (unshadow ps psh)
                                               (? (two? b) `(`('fn name <rp <b) <>b) ()))))))
+                               (fn? fpty)                                ; the declarator IS a function (returns a fn-ptr):
+                                                                         ; the return type is <>fpty, the params rode fprm out of pdtor
+                                (: _ (pin (ps 'sigs) name `(<>fpty (map caup <fprm) <>>fprm))
+                                   aft (patt ts2)
+                                   (? (peekp aft ";") `(`('proto name) (cup aft))
+                                      (: psh (bindlocs ps <fprm ())
+                                         b (pblock ps aft)
+                                         _ (unshadow ps psh)
+                                         (? (two? b) `(`('fn name <fprm <b) <>b) ()))))
                                ; a global declaration; the first declarator's stars came off `sr`
                                (: (one ts3 nm t2)                        ; t2 is the element type (stars included)
                                    (? (peekp ts3 "[")

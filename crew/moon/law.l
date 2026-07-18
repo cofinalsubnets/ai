@@ -225,6 +225,11 @@
       (two? (cgn "int a[3] = {1,2,3}; int main() { int (*p)[3] = &a; return (*p)[2]; }"))
       (two? (cgn "int main() { int a[3]; int (*p)[3] = &a; (*p)[1] = 9; return (*p)[1]; }"))
       (two? (cgn "int f(int (*p)[3]) { return (*p)[0]; } int main() { int a[3] = {7,8,9}; return f(&a); }"))
+      ; a FUNCTION returning a function pointer -- int (*g(void))(void) : g is a function
+      ; whose return type is a pointer-to-function. definition, prototype, and inner params bound.
+      (two? (cgn "int f(void){return 7;} int (*g(void))(void){ return f; } int main(){ return g()(); }"))
+      (two? (cgn "int f0(int x){return x;} int f1(int x){return x+1;} int (*pick(int k))(int){ return k ? f1 : f0; } int main(){ return pick(1)(9); }"))
+      (two? (cgn "int f(void){return 7;} int (*g(void))(void); int (*g(void))(void){ return f; } int main(){ return g()(); }"))
       ; a dispatch table -- an array of function pointers, THE ai.c pattern
       (two? (cgn "int a(int x){return x+1;} int b(int x){return x*2;} int main(){ int (*t[2])(int); t[0]=a; t[1]=b; return t[0](10)+t[1](10); }"))
       ; --- stage 4c: brace/designated initializers, string inits, [] inference, flexible arrays ---

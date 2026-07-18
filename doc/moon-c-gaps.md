@@ -148,17 +148,24 @@ fold defects — separate commit.
 
 ## 3. the syntax ledger
 
-Sweep of 40 constructs, x64: **31 pass, 9 fail** (brace elision + pointer-to-array landed).
-Grouped by *why* each is missing, since that drives priority.
+Sweep of 40 constructs, x64: **32 pass, 8 fail** (brace elision, pointer-to-array, and
+function-returning-function-pointer landed). Grouped by *why* each is missing.
 
 ### C89 — should work; these are the real conformance bugs
 
 | construct | probe | failure |
 |---|---|---|
 | ~~pointer to array~~ | `int (*p)[3] = &a;` | **RESOLVED** |
-| function returning function pointer | `int (*g(void))(void){ return f; }` | parse error |
+| ~~function returning function pointer~~ | `int (*g(void))(void){ return f; }` | **RESOLVED** |
 | ~~brace elision in nested initialiser~~ | `int a[2][2] = { 1,2,3,4 };` | **RESOLVED** |
 | wide character constant | `L'a'` | parse error |
+
+Function-returning-function-pointer landed alongside pointer-to-array — the same parenthesized
+declarator, but the name carries an inner `(params)` (`pdtor` now parses them, not `skipbal`,
+and carries them out as a third result element). At top level, a declarator whose type is
+`('fn ret)` is recognized as a function (definition or prototype) with return type `ret` and
+those inner params bound in the body. Only the wide character constant `L'a'` remains in C89 —
+a lexer gap, not a declarator one.
 
 Brace elision landed: the init tree is normalized up front (`unelide`/`normfill` in `gen.l`)
 so an elided flat run is wrapped in explicit `('init ..)` before layout — the existing
