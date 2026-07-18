@@ -598,6 +598,10 @@ test_raw_arm64: host out/host$(hsuf)/mooncc
 # arm-none-eabi-ld binds it all against a gas startup; qemu runs it on an emulated
 # Cortex-M0 (semihosting SYS_EXIT_EXTENDED carries the answer out). tiny (~1s), rides
 # test_all; skips clean without the arm toolchain or qemu-system-arm.
+# qemu reads </dev/null: -nographic muxes the guest serial+monitor onto stdio, so
+# without a definite-EOF stdin qemu BLOCKS on the host chardev when the recipe runs
+# without an interactive tty -- the guest exits via semihosting instantly (a bare run
+# returns 127) but qemu-in-make would hang to the timeout (124). Host I/O, not codegen.
 .PHONY: test_thumb1
 test_thumb1: host out/host$(hsuf)/mooncc
 	@echo THUMB1 $(ho)/thumb1
@@ -630,7 +634,7 @@ test_thumb1: host out/host$(hsuf)/mooncc
 	    echo '  .data : { *(.data*) } > RAM'; echo '  .bss : { *(.bss*) } > RAM'; echo '}'; } > $$d/link.ld; \
 	  arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -c $$d/start.S -o $$d/start.o || { echo "FAIL as start.S"; exit 1; }; \
 	  arm-none-eabi-ld -T $$d/link.ld $$d/start.o $$d/harness.o $$d/lib.o -o $$d/t1.elf || { echo "FAIL ld thumb1 objects"; exit 1; }; \
-	  timeout 30 qemu-system-arm -M microbit -semihosting -nographic -kernel $$d/t1.elf; a=$$?; \
+	  timeout 30 qemu-system-arm -M microbit -semihosting -nographic -kernel $$d/t1.elf </dev/null; a=$$?; \
 	  [ $$a -eq 127 ] || { echo "FAIL thumb1 -c link+run (got $$a, want 127 = addto(40+50) then addto(-17/5 + -17%%5)=85 + s->x=30 + arr[3]=12; a wrong struct offset misreads s->x, a wrong leax scale/base misreads arr[3])"; exit 1; }; \
 	  echo "test_thumb1: mooncc -t thumb1 -c -> ELF32/EM_ARM (R_ARM_THM_CALL + soft divide + la/R_ARM_ABS32 + 32-bit struct layout + leax indexed array vs gcc), ld binds, runs on qemu Cortex-M0"
 # moon-tar -- the userland cousin of test_raw: build GNU tar 1.13 (a real third-
