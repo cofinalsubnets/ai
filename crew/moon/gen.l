@@ -3614,7 +3614,10 @@
                             (acc + (fstf g pty 'r4 off (xmmreg xmmi)))))
                  (&& (! (flo? pty)) (gpi < (ngp g)))
                   (? (&& (homable? pty) (gpi < (nhome g)))   ; home in a register: move from the incoming arg reg if it differs
-                      (: home (homereg gpi) inc (nthr (argr g) gpi)
+                      (: inc (nthr (argr g) gpi)
+                         ; a rideable param rides its ARRIVAL register -- no home
+                         ; reserved, no entry mov, its home register freed to the pool
+                         home (? (member? gpi (peep g 'ride ())) inc (homereg gpi))
                          mv (? (home = inc) () `(`('mov home inc)))
                          (spillr >ps (gpi + 1) xmmi ovi (link `(<p `('reg home) pty) env)
                                 (acc + mv)))
@@ -3747,8 +3750,44 @@
               (? (|| (flo? pty) (|| (sse2? g pty) (id? (aone g pty) 'sse))) (uhomes >ps gpi acc)
                  (homable? pty) (uhomes >ps (gpi + 1) (link (homereg gpi) acc))
                  (uhomes >ps (gpi + 1) acc))))
-       hpool (: uh (uhomes params 0 ())
-                (filter (\ r9 (! (member? r9 uh))) opool))
+       ; -- the RIDE analysis (freeing a pass-through param's home): a param
+       ; whose home register (r9/r10 on x64; every gp home on a64) differs from
+       ; its arrival register and whose ARRIVAL register the body never uses as
+       ; scratch can ride the arrival end to end -- exactly the unhome outcome,
+       ; but decided UP FRONT so its home register returns to the pool for a hot
+       ; local (tapn's Hp sits idle in r9 while the copy loop's counter slots).
+       ; soundness: every def of the arrival reg in ir1 must be a reload from
+       ; the param's OWN spill slot (its staging restores); any other def (the
+       ; shuttle's spop/la/ld scratch, a div/shift clobber) bars the ride. an
+       ; opaque bar op (raw/sys/call) bars it too. leaf lane only -- ride is
+       ; empty under a call, so spillr2/spill never meet a freed home. --
+       (rst-stoff fs A)                             ; A's entry spill-store (base off) | 'no
+        (? (! (two? fs)) 'no
+           (: f <fs
+              (? (&& (two? f) (&& (member? <f '(st st1 st2 st4)) (id? <>>>f A))) `(<>f <>>f)
+                 (rst-stoff >fs A))))
+       (rst-defok fs A boff)                        ; every def of A is a reload from boff -> 1 | ()
+        (? (! (two? fs)) 1
+           (: f <fs
+              (? (! (two? f)) (rst-defok >fs A boff)
+                 (: rd (rdsp f)
+                    (? (id? rd 'bar)
+                        (? (member? <f '(label jmp br ret jmpr)) (rst-defok >fs A boff) ())
+                       (! (member? A <>rd)) (rst-defok >fs A boff)
+                       (&& (member? <f '(ld ld1 ld2 ld4 ldu1 ldu2 ldu4))
+                           (&& (id? <>f A) (&& (id? <>>f <boff) (id? <>>>f <>boff))))
+                        (rst-defok >fs A boff)
+                       ())))))
+       (rst-ok fs A) (: bo (rst-stoff fs A) (? (id? bo 'no) () (rst-defok fs A bo)))
+       (rideset fs ps gpi acc)                      ; the rideable gp indices
+        (? (|| (! (two? ps)) ((nhome g) <= gpi)) acc
+           (: pty (caup (cap ps))
+              (? (|| (flo? pty) (|| (sse2? g pty) (id? (aone g pty) 'sse))) (rideset fs >ps gpi acc)
+                 (homable? pty)
+                  (rideset fs >ps (gpi + 1)
+                     (? (&& (! (id? (nthr (argr g) gpi) (homereg gpi))) (rst-ok fs (nthr (argr g) gpi)))
+                        (link gpi acc) acc))
+                 (rideset fs >ps (gpi + 1) acc))))
        ; -- the LOCALS picker: rank the homable locals ir1 recorded (cgdecl's
        ; hook) by residual frame touches, drop any whose slot is lea/lean'd
        ; (address taken), gate each on touches beating the per-call wrap, and
@@ -3812,6 +3851,11 @@
               vararg (vaspill params) (spill params 0 0 0 () ()))
        ir1 (build sp1)
        n1 (peep g 'n 0) strs1 (g 'strs)             ; ir1's accumulators -- a DEOPT restores these
+       ride (? (|| vararg (|| (peep g 'fesc ()) (hascall? ir1))) () (rideset ir1 params 0 ()))
+       _ (pin g 'ride ride)                          ; spillr reads it: a rideable param binds to its arrival
+       hpool (: rh (map (\ k (homereg k)) ride)      ; the freed homes rejoin the pool for locals
+                uh (filter (\ q (! (member? q rh))) (uhomes params 0 ()))
+                (filter (\ q (! (member? q uh))) opool))
        hm (&& (! vararg) (&& (! (peep g 'hasasm ())) (&& (! (anyop? ir1 'sys)) (homes? params 0))))
        ; the alive pass runs once per homing-eligible fn: lpick reads cross/
        ; univ (a zero-crossing local homes through calls), the regens pin its
