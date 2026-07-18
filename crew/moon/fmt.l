@@ -227,13 +227,19 @@
                              (? (<>>r = 0) bnd (bnd? <>>r)))))))))
        (g lines () 0 0 () () 1))
 
-   ; --- driver: moonfmt FILE ..  -> formatted text on stdout (gofmt-style, no -w).
-   ; the seat drops the interpreter + this script, formatting each remaining path. ---
+   ; --- driver: moonfmt [-w] FILE ..  -> formatted text on stdout (gofmt-style),
+   ; or with -w rewritten in place. the seat drops the interpreter + this script. ---
    (rdf p) (: q (open p "r") (? q (: t (slurp q) _ (close q) `(1 t)) ()))
-   (fmt-each fs) (? (! (two? fs)) 0
-                    (: r (rdf <fs)
-                       _ (? (two? r) (puts (cfmt <>r))
-                            (say err ("moonfmt: cannot open " + <fs + "\n")))
-                       (fmt-each >fs)))
-   files (? (two? >>cmdline) >>cmdline (: _ (say err "usage: moonfmt FILE ..\n") ()))
-   (fmt-each files))
+   (fmt-each fs fix) (? (! (two? fs)) 0
+                        (: r (rdf <fs)
+                           _ (? (two? r)
+                                (: txt (cfmt <>r)
+                                   (? fix (: q (open <fs "w") _ (say q txt) (close q)) (puts txt)))
+                                (say err ("moonfmt: cannot open " + <fs + "\n")))
+                           (fmt-each >fs fix)))
+   (flags as fix acc) (? (! (two? as)) `(fix (rev acc))
+                         (<as = "-w") (flags >as 1 acc)
+                         (flags >as fix (link <as acc)))
+   f (flags >>cmdline () ())
+   files <>f
+   (? (two? files) (fmt-each files <f) (say err "usage: moonfmt [-w] FILE ..\n")))
