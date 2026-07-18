@@ -166,7 +166,7 @@ uintptr_t hash(struct ai*, intptr_t);
 static ai_inline union u *map_fill_back(union u*, uintptr_t);
 lvm_t lvm_kcall,
  lvm_chain, lvm_vec, lvm_sym, lvm_nom, lvm_str, lvm_big, lvm_flo, // data sentinels (enum q order); each tail-jumps to its apply handler
- lvm_putn, lvm_gauge,    lvm_clock, lvm_apof, lvm_seal, lvm_books, lvm_setbook,
+ lvm_putn, lvm_gauge,    lvm_clock, lvm_apof, lvm_seal, lvm_books, lvm_setbook, lvm_mods,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_nomctor, lvm_intern, lvm_chainp,
  lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy, lvm_eat1, lvm_eat2, lvm_toast, lvm_toasted,
  lvm_coin, lvm_coinmk, lvm_load, lvm_dieof, lvm_coinp, lvm_add_coin, lvm_mul_coin,   // newtypes: a coin (die + payload), a typed hot riding KHot
@@ -789,7 +789,7 @@ lvm_t lvm_fault;
 #endif
 #define nifs(_) \
  _(nif_clock, "clock", s1(lvm_clock)) _(nif_gauge, "gauge", s1(lvm_gauge)) _(nif_apof, "apof", s1(lvm_apof))\
- _(nif_seal, "seal-hooks", s1(lvm_seal)) _(nif_books, "books", s1(lvm_books)) _(nif_setbook, "setbook", s1(lvm_setbook))\
+ _(nif_seal, "seal-hooks", s1(lvm_seal)) _(nif_books, "books", s1(lvm_books)) _(nif_setbook, "setbook", s1(lvm_setbook)) _(nif_mods, "mods", s1(lvm_mods))\
  _(nif_add, "+", s2(lvm_add)) _(nif_sub, "-", s2(lvm_sub)) _(nif_mul, "*", s2(lvm_mul))\
  _(nif_compose, "compose", compose_thread) _(nif_stack, "stack", stack_thread)\
  _(nif_quot, "/", s2(lvm_quot)) _(nif_fquot, "//", s2(lvm_fquot)) _(nif_rem, "%", s2(lvm_rem)) \
@@ -939,6 +939,7 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
  g->len = len0, g->pool = (void*) g, g->alloc = al;
  g->scare_a = g->scare_b = nil;        // v0..end is GC-walked: raw 0 is not a value
  g->hot_numap = g->hot_opfix = nil;   // unsealed: hot_hook traps until (seal-hooks) fills them
+ g->mods = nil;                       // the module registry: lazily created by the first (mods _) read
  g->hp = g->end, g->sp = (word*) g + len0, g->ip = (union u*) yield_c, g->t0 = ai_clock();
  g->minor = g->end;                  // generational watermark: nothing tenured yet (the first collection sets it)
  // generational setup: a remembered set (old objects holding a young pointer) + the MAJOR pool (a
@@ -5635,6 +5636,19 @@ op11(lvm_cap, chainp(Sp[0]) ? A(Sp[0]) : Sp[0])
 op11(lvm_cup, chainp(Sp[0]) ? B(Sp[0]) : ZeroPoint)   // cup of an atom -> the const () (ZeroPoint), NOT the moving core (which had serial g->ip, not 0)
 op11(lvm_books, g->book)   // the live layer chain (the abyss) -- runtime-internal, mopped at birth; ev.l's gv walks it
 op11(lvm_setbook, (g->book = Sp[0], nil))   // SET the layer chain: the scope-layer door (open/use/close ride it); runtime-internal, mopped at birth
+// (mods _): the MODULE REGISTRY book (g->mods) -- name -> module-book, written by `leave` on a
+// named scope, read by `use`/`from` (ai/prel.l). A LAZY SINGLETON: created on the first read, so
+// a bootstrap's two prel runs capture the SAME tablet and a pre-egg registration survives the
+// egg warm. Runtime-internal (mopped at birth); the prel captures it pre-mop.
+lvm(lvm_mods) {
+ if (g->mods == nil) {
+  uintptr_t cap = map_min_cap, nb = 4 + 2 * cap;
+  Have(nb + 3);
+  union u *b = map_fill_back((union u*) Hp, cap), *h = (union u*) (Hp + nb);
+  h[0].ap = lvm_map_lookup, h[1].x = (word) b, tagthread(h, 2);
+  Hp += nb + 3;
+  g->mods = (word) h; }
+ return Sp[0] = g->mods, Ip++, Continue(); }
 op11(lvm_chainp, (chainp(Sp[0]) && !nomp(Sp[0])) ? putcharm(1) : nil)  // the SURFACE chainp = a real compound list (formp): a named symbol is (name . mint) but counts as an atom
 lvm(lvm_link) {
  Have(Width(struct ai_chain));

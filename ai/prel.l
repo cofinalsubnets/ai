@@ -28,17 +28,33 @@
    (one? x) (= x (cap x))
    (atom? x) (nil? (two? x))
    (names _ ) (keys book)
-   ; -- the scope-layer door (the abyss). PROVISIONAL names enter/use/leave -- `open`/`close` are
-   ;    already file I/O; gwen to christen. `enter` pushes a fresh empty layer as the head (in-scope
-   ;    binds land there, defglob writes the head); `use` splices a module's book in just BELOW the
-   ;    head (its names read by bare name, your writes stay in your layer); `leave` unwinds to the
-   ;    pre-enter chain and hands the built layer back -- the caller names it: (: holo (leave ())).
-   ;    the unwind chain rides a reserved CHARM key (31337) in the pushed layer: a charm can never
-   ;    collide with a name (names are noms), the same trick the macro table (book[nil]) uses.
-   ;    all take an operand (ai has no nullary fns -- fire with the unit: (enter ()) / (leave ())). --
-   (enter _)  (: F (tablet 0) _ (pin F 31337 (books ())) _ (setbook (link F (books ()))) ())
-   (use m)    (setbook (link (cap (books ())) (link m (cup (books ())))))
-   (leave _)  (: F (cap (books ())) up (peep F 31337 ()) _ (pull F 31337 0) _ (setbook up) F)
+   ; -- the scope-layer door (the abyss) + the MODULE REGISTRY (the `mods` nif: g->mods, a lazy
+   ;    singleton tablet, name -> module-book). the chain model: TOP is always the defglob target;
+   ;    under it a use-stack; orth last. `(enter 'holo)` pushes a fresh layer as the head, stashing
+   ;    the pre-enter chain AND the name under a reserved CHARM key (31337 -- a charm can never
+   ;    collide with a name, the macro-table-at-nil trick); `(enter ())` opens an ANONYMOUS scratch
+   ;    scope. `(use 'holo)` splices the registered module just BELOW the head (its names resolve
+   ;    on the walk but can never shadow your layer; a book value splices directly; a missing name
+   ;    scares 'no-module -- a silent ()-splice would be a silent no-op). `(leave ())` on an entered
+   ;    scope unwinds to the pre-enter chain, REGISTERS a named layer in mods, and answers the book;
+   ;    a BARE leave (top never entered -- no charm) truncates the chain to its head: the use-stack
+   ;    clears. `(from 'holo)` answers an OPAQUE accessor closure over the module -- (from 'holo
+   ;    'assemble) currys to a member, (from 'holo 'keys) introspects, (from ()) lists the
+   ;    registered names, a missing module answers () (the presence guard); the raw tablet stays
+   ;    closure-private. all take an operand (ai has no nullary fns -- fire with the unit). --
+   (enter nm) (: F (tablet 0) _ (pin F 31337 (link (books ()) nm)) _ (setbook (link F (books ()))) ())
+   (use m)    (: b (? (book? m) m
+                      (: r (peep (mods ()) m ()) (? (nil? r) (scare (\ no-module) m) r)))
+                 (setbook (link (cap (books ())) (link b (cup (books ()))))))
+   (leave _)  (: F (cap (books ())) s (peep F 31337 ())
+                 (? (two? s)
+                    (: _ (pull F 31337 0) _ (setbook (cap s))
+                       _ (? (nil? (cup s)) 0 (pin (mods ()) (cup s) F)) F)
+                    (setbook (link F ()))))
+   (from k)   (? (nil? k) (keys (mods ()))
+                 (: m (peep (mods ()) k ())
+                    (? (nil? m) ()
+                       (\ q (? (id? q (\ keys)) (keys m) (peep m q 0))))))
    (caap x) (cap (cap x)) (caup x) (cap (cup x))
    (cuap x) (cup (cap x)) (cuup x) (cup (cup x))
    (caaap x) (cap (cap (cap x))) (caaup x) (cap (cap (cup x)))

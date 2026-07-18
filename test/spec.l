@@ -443,6 +443,26 @@
         (? born !operators 1) (? born !monadics 1) (? born !pureset 1))  ; the compile tables too (2026-07-07)
 (: help 0)
 
+; --- modules --- the scope-layer door + the registry. (enter 'name) opens a named scope: binds
+; land in the layer, mutually visible; (leave ()) unwinds, REGISTERS the layer as the module, and
+; answers its book. (enter ()) is an anonymous scratch scope (leave answers the book, registers
+; nothing). (use 'name) splices a registered module just BELOW the top -- its names resolve on the
+; walk but can never shadow the top's own; a bare (leave ()) (no matching enter) clears the spliced
+; stack. (from 'name) is the OPAQUE accessor -- currying reaches a member, 'keys introspects, a
+; missing module answers () (the presence guard), (from ()) lists the registered names. binds
+; here stay LOCAL (body-having :) so the egg's pass-2 mark stays clean.
+(: m1 (: _ (enter 'spec-mod) _ (: (spec-sib x) (+ x 1)) _ (: (spec-pub x) (spec-sib x)) (leave ()))
+   a1 (from 'spec-mod)
+ (assert
+   (book? m1)                                     ; leave answers the layer book itself
+   (lit? a1) (nil? (from 'spec-nope))             ; the accessor / the presence guard
+   (42 = ((from 'spec-mod 'spec-pub) 41))         ; curried member reach; internals fold post-leave
+   (member? 'spec-mod (from ()))                  ; the registry lists it
+   (member? 'spec-sib (from 'spec-mod 'keys))     ; 'keys introspects the module
+   (: _ (use 'spec-mod) r (ev '(spec-pub 1)) _ (leave ()) (= r 2))   ; splice -> a post-splice compile reads bare -> bare leave clears
+   (nil? (from 'spec-mod 'spec-missing))          ; a member miss reads the zero point
+   (: b (: _ (enter ()) _ (: (spec-anon x) x) (leave ())) (&& (book? b) (nil? (from 'spec-anon))))))  ; anonymous scope: a book back, nothing registered
+
 ; --- odds & ends --- show renders a value as its reparsable printed form; (clock t) is ms since
 ; t and (gauge 0) reports a VM stat; an opaque handle acts as a constant function.
 (assert (string? (show @(1 2 3))) (charm? (clock 0)) (1 = ((cask 4) 'x)))

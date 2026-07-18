@@ -1,9 +1,7 @@
-; crew/kore/asbook.l -- re-leak the few asm-book names crew/holo/elf.l reads bare.
-; elf.l predates the holo sweep and loads as a post-boot STREAM inside the multi-call
-; `kore`, where assemble/catall/le* live only in the `holo` book -- this body-less `:`
-; puts the ones elf.l actually reads back on the global book, and the capture law
-; does the rest (elf.l's closures fold them at their own load, right after this).
-; kore's cat order: .. asbook.l, crew/holo/elf.l, crew/kore/kore.l.
-(: catall (holo 'catall)
-   le16 (holo 'le16) le32 (holo 'le32) le64 (holo 'le64)
-   holo-bytes (holo 'holo-bytes) holo-bytes-at (holo 'holo-bytes-at))
+; crew/kore/asbook.l -- splice the assembler module for the rest of the cat. elf.l /
+; obj.l / link.l / gen.l read holo names BARE (catall, le*, lay, laylax, patch-with,
+; holo-bytes ..); this one form resolves them: the registered `holo` module splices
+; just below the cat's top layer, so those reads fold at each file's own compile while
+; the cat's own defglobs stay on top, shadow-proof. kore's cat order: .. asbook.l,
+; crew/holo/elf.l, crew/kore/kore.l; mooncc's: a FRESH holo build + seal, then this.
+(use 'holo)

@@ -46,10 +46,12 @@
 ; ALU ops take a register or an immediate in the same slot with no syntax. the abstract register
 ; file is what makes the IR neutral: each backend maps r0..r14/sp onto its own encoding.
 
-; the module span opens here: crew/holo/export.l diffs (names ()) against this mark and sweeps
-; every name crew/holo/{holo,x64,arm64}.l leak into the ONE public `holo` book -- measured, never
-; listed. (in the test_asm cat-stream, where export.l never loads, the mark is inert.)
-(: holo-mark (names ()))
+; the module scope opens here: everything crew/holo/{holo,x64,arm64,thumb2}.l binds lands in this
+; layer, mutually visible by bare name; crew/holo/seal.l closes the layer, which REGISTERS it as
+; the module `holo` -- a consumer either (use 'holo) and reads bare, or probes one member through
+; the accessor: (from 'holo 'assemble). a test cat-stream simply never seals: the stream rides the
+; open layer and reads everything bare.
+(enter 'holo)
 
 (: ;; -- a 0-based list accessor (prel has none; `nth` is not bound -- it absorbs as the zero
    ;; point). instruction forms read their operands through this. --

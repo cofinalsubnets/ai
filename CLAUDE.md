@@ -64,14 +64,23 @@
 ;   add nifs through the host/*.c glob + AI_NIF (no core edit); ai.c/ai.h/host/main.c are CORE -- an
 ;   app session needing a core change stops and asks the core thread, never reaches in. the runnable
 ;   ones install on PATH via `make install`.
-; * MODULE BOOKS: a baked service sweeps its leaked names into ONE public book -- crew/holo/export.l and
-;   ai/glaze/export.l diff (names ()) across the load span (<name>-mark opens, <name>-load closes:
-;   MEASURED, never a keep-up-to-date list) and pull the span off the global book. a book is a
-;   lookup function, so the surface is (holo 'assemble) and every internal stays a probe away
-;   ((glaze 'loopinfo)); baked consumers FOLDED their direct refs before the sweep (the capture
-;   law links them), while post-boot STREAMS (a cat'd test/app file) fold nothing -- they bind
-;   what they call through the books at their head, bare-global reads ((names ()) fell 820 -> 322
-;   when holo (then `asm`) + glaze swept; an app never leans on another module's leaks -- lux learned this).
+; * MODULES: a baked service keeps its names off the global book. the REGISTRY model (holo, the
+;   pilot): a new top-level book on struct ai (g->mods, the lazy-singleton `mods` nif) maps name ->
+;   module-book. the chain model: TOP is always the defglob target; under it a use-stack; orth last.
+;   (enter 'holo) opens a named scope (crew/holo/holo.l) -- binds land in the layer, mutually
+;   visible; (leave ()) (crew/holo/seal.l) unwinds and REGISTERS the layer as the module. a consumer
+;   either (use 'holo) -- splice BELOW the top, bare names resolve on the walk but never shadow
+;   yours, cleared by a bare (leave ()) (main.c brackets the glaze load this way; a cat leads with
+;   it, crew/kore/asbook.l) -- or (from 'holo 'assemble), the OPAQUE accessor: currying reaches a
+;   member, 'keys introspects, a missing module answers () (the presence guard), (from ()) lists the
+;   registry. a test cat just never seals and reads the open layer bare; a backend joins a SEALED
+;   holo at runtime: (enter ()) (use 'holo) <backend.l> (leave ()). the older MARK/SWEEP model
+;   remains for the glaze (ai/glaze/export.l diffs (names ()) across glaze-mark/glaze-load; the
+;   surface is (glaze 'loopinfo)). baked consumers FOLD their bare refs at their own compile (the
+;   capture law); post-boot STREAMS fold nothing -- they use/from at their head ((names ()) fell
+;   820 -> 322; an app never leans on another module's leaks -- lux learned this). the laws live in
+;   spec.l's modules section. ⚠ a body-less-`:` binding whose name COLLIDES with a module nom (a
+;   `holo` helper) leaks and CLOBBERS the binding -- the one bug that walled the holo conversion.
 
 ; --- vocabulary & house style --- the words here are a VOCABULARY -- never "terminology" or
 ; "nomenclature"; a vocabulary is living and chosen, warm not clinical. the style is COZY:

@@ -143,7 +143,7 @@
       ; and main is a slotless LEAF, so the frame link itself elides: no
       ; push/mov/sub at entry, a bare ret at the exit.
       (= ir '((call main) (mov r6 r0) (li r0 60) (sys)
-              (label main) (li r0 42) (ret)))
+              (align 2) (label main) (li r0 42) (ret)))
       (two? (cgn "int main() { int x=1; while (x<5) x++; return x; }"))
       ; a RET-POSITION call tail-JUMPS (stage 8): the epilogue then (jmp F), no
       ; (call F) -- so deep tail recursion runs flat and the lvm shape Continues
@@ -608,7 +608,7 @@
 (: (cast src) (caup (cparse (caup (clex src))))
    (cgn src) (: r (cparse (caup (clex src)))
                (? (two? r) (cgen (caup r) (cauup r) (caup (cuup r)) (cauup (cuup r)) () 'x64) ()))
-   hb (holo 'holo-bytes)
+   hb (from 'holo 'holo-bytes)
    g1 (cgn "int main() { long v; asm(\"li %0, 40\" : \"=r\"(v)); return v + 2; }")
    want (hb 'x64 (asm-text "li r10, 40"))
    (hasraw fs) (? (! (two? fs)) ()

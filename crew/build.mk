@@ -17,12 +17,14 @@
 korefiles = crew/kore/text.l crew/kore/core.l crew/kore/fs.l crew/kore/re.l crew/kore/sed.l crew/kore/proc.l crew/vi/core.l crew/vi/vi.l crew/kore/diff.l tools/ain.l crew/cook/cook.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/kore/kore.l
 # mooncc: the C compiler is its OWN app, NOT baked into the kore cat -- a cc edit rebuilds
 # only mooncc (never kore), so an kore rebuild in another session can't tear the compiler.
-# Its own cat: the u-floor (text+core), the assembler
-# book + elf/obj writers, then crew/moon/{lex,cpp,parse,gen,cc}.l whose tail SEAT fires.
+# Its own cat: the u-floor (text+core), a FRESH holo module
+# with ALL backends (holo.l opens the scope layer, seal.l closes it as `holo` -- so mooncc
+# cross-compiles every target regardless of what the host image baked), the asbook re-leak,
+# elf/obj/link writers, then crew/moon/{lex,cpp,parse,gen,cc}.l whose tail SEAT fires.
 # (crew/holo/text.l = the neutral-text assembler front end gen.l's inline asm
 # parses templates with; it leaks stream globals incl. a `parse` rebind -- fine
 # here, no later cat member reads them bare.)
-moonfiles = crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/text.l crew/holo/elf.l crew/holo/obj.l crew/holo/link.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/moon/gen.l crew/moon/moon.l
+moonfiles = crew/kore/text.l crew/kore/core.l crew/holo/holo.l crew/holo/x64.l crew/holo/arm64.l crew/holo/thumb2.l crew/holo/seal.l crew/kore/asbook.l crew/holo/text.l crew/holo/elf.l crew/holo/obj.l crew/holo/link.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/moon/gen.l crew/moon/moon.l
 # (`ho` is defined further down, after this rule is READ -- target/prereq names
 # expand at parse time, so these lines spell out/host$(hsuf) themselves.)
 #

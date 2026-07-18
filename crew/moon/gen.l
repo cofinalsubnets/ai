@@ -2864,7 +2864,7 @@
                         'bad))
                  'bad)))
        (go 0 ""))
-   asmhb (holo 'holo-bytes)
+   asmhb holo-bytes                                 ; bare: the cat leads with (use 'holo) (asbook.l), so this folds at compile
    (cgasm g env s)
     (: _ (pin g 'hasasm 1)
        tmpl <>s

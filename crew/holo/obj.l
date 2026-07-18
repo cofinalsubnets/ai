@@ -9,9 +9,10 @@
 ; branches and calls stay pc-relative and resolve internally (both ends ride .text
 ; and move together). aarch64 rides the same walk with its own reloc vocabulary
 ; (CALL26/JUMP26, the ADRP/ADD pair, ABS64) -- see the type table and reltext.
-; loads after crew/holo/elf.l in the au cat -- reads elf-machines /
-; write-bytes / catall / le* bare, and the assembler internals through the `holo`
-; book. moon.l drives it: `mooncc -c foo.c foo.o`.
+; loads after crew/holo/elf.l in the au cat -- reads elf-machines / write-bytes
+; bare, and the assembler internals bare too: the cat leads with (use 'holo)
+; (crew/kore/asbook.l), so lay/laylax/patch-with/le*/catall resolve through the
+; spliced module. moon.l drives it: `mooncc -c foo.c foo.o`.
 (:
    ; the ELF relocation TYPES we emit (x86-64)
    r-64    1                                        ; R_X86_64_64     S + A   (an abs64 data pointer)
@@ -42,20 +43,20 @@
    (o-walk be items labels wkset internal? rset off bacc racc)
     (? (! (two? items)) `((rev bacc) (rev racc))
        (: x <items
-          (? ((holo 'fix?) x)
-              (: lbl ((holo 'fix-l) x) w ((holo 'fix-w) x) k ((holo 'fix-k) x)
+          (? (fix? x)
+              (: lbl (fix-l x) w (fix-w x) k (fix-k x)
                  (? (&& (&& internal? (member? k rset))
                         (&& (o-has? labels lbl) (! (o-has? wkset lbl))))   ; a weak target stays a reloc
                      (: tgt (peep labels lbl 0)
-                        bs ((holo 'patch-with) be k tgt off w ((holo 'fix-a) x))
+                        bs (patch-with be k tgt off w (fix-a x))
                         (o-walk be >items labels wkset internal? rset (off + w)
                                 ((rev bs) + bacc) racc))
-                    (: fill (? (member? k '(b26 b19 adrp21 addlo12)) (le32 ((holo 'fix-a) x)) (o-zeros w))
+                    (: fill (? (member? k '(b26 b19 adrp21 addlo12)) (le32 (fix-a x)) (o-zeros w))
                        ; carry the byte just BEFORE the field (bacc's head, reversed) -- the
                        ; x64 opcode: E8/E9 (call/jmp) vs a lea's modrm, so reltext can tell a
                        ; control transfer (PLT32) from an address-of (PC32) for an external ref.
                        (o-walk be >items labels wkset internal? rset (off + w)
-                               ((rev fill) + bacc) (>< `(off k lbl ((holo 'fix-a) x) (? (two? bacc) (cap bacc) 0)) racc)))))
+                               ((rev fill) + bacc) (>< `(off k lbl (fix-a x) (? (two? bacc) (cap bacc) 0)) racc)))))
              (o-walk be >items labels wkset internal? rset (off + 1) (>< x bacc) racc))))
    (o-zeros n) (? (n < 1) () (>< 0 (o-zeros (n - 1))))
 
@@ -95,7 +96,7 @@
        _ (? (|| (id? target 'x64) a64) 0 (scare 'obj-target target))
        rset (? a64 '(b26 b19) '(rel32 rel8))         ; the in-place-resolvable kinds (translation-invariant)
        machine (peep elf-machines target 0)
-       be (peep (holo 'backends) target ())
+       be (peep backends target ())
        ; a WEAK-defined function's callers must go through a RELOCATION -- an
        ; in-place resolve would pin them to the local body, and the linker could
        ; never redirect to a strong override. built before lay: the relaxer needs
@@ -106,11 +107,11 @@
        ; book rides the running binary's BAKE, and the build pairs them structurally (the
        ; wake shims exec the sibling ai; crew/build.mk). a bake too old to carry laylax
        ; means a hand-mixed script/binary combo: scare LOUD, never lay quietly long.
-       tp (: r (holo 'laylax)
+       tp (: r laylax
              (? (lit? r) (r textforms be 0 (tablet 0) wkset)
                 (scare 'holo-bake-stale 'laylax)))  ; assemble each section at org 0
-       dp ((holo 'lay) dataforms be 0 () (tablet 0))
-       np ((holo 'lay) nifforms be 0 () (tablet 0))
+       dp (lay dataforms be 0 () (tablet 0))
+       np (lay nifforms be 0 () (tablet 0))
        tlabels >tp dlabels >dp nlabels >np
        tw (o-walk be <tp tlabels wkset 1 rset 0 () ())
        dw (o-walk be <dp dlabels wkset 0 rset 0 () ())

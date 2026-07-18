@@ -15,8 +15,8 @@ lib_h = $(patsubst ai/%.l,out/lib/%.h,$(wildcard ai/*.l))
 # every host -- only the glaze, which EXECUTES the bytes, is arch-bound (and it is
 # cat-loaded + x86-gated separately, never baked). asm_h = lcat headers (host ai);
 # asm0_h = sed-wrapped raw source (ai0, the bootstrap -- can't lcat its own sources).
-holo_h = out/lib/holo.h  out/lib/x64.h  out/lib/arm64.h  out/lib/export.h
-asm0_h = out/lib/holo0.h out/lib/x640.h out/lib/arm640.h out/lib/export0.h
+holo_h = out/lib/holo.h  out/lib/x64.h  out/lib/arm64.h  out/lib/seal.h
+asm0_h = out/lib/holo0.h out/lib/x640.h out/lib/arm640.h out/lib/seal0.h
 # the glaze (native JIT, ai/glaze/{emit,auto}.l): baked to raw-text headers (sed_lit,
 # like asm0 -- no lcat reader round-trip). Evaled ONLY before a --bake (x86-gated
 # in main.c), so a normal boot never pays the ~810 ms; the baked snapshot then carries
@@ -52,7 +52,7 @@ out/lib/x64.h: crew/holo/x64.l tools/lcat.l
 	$(lcat_h)
 out/lib/arm64.h: crew/holo/arm64.l tools/lcat.l
 	$(lcat_h)
-out/lib/export.h: crew/holo/export.l tools/lcat.l
+out/lib/seal.h: crew/holo/seal.l tools/lcat.l
 	$(lcat_h)
 # ai0's sed-wrapped raw source of the same three (no interpreter -- the l reader
 # strips ; comments at read time), baked into the bootstrap so the corpus can test
@@ -69,7 +69,7 @@ out/lib/arm640.h: crew/holo/arm64.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@
-out/lib/export0.h: crew/holo/export.l
+out/lib/seal0.h: crew/holo/seal.l
 	@mkdir -p out/lib
 	@echo AI	$@
 	@$(sed_lit) $< > $@

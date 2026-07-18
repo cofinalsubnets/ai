@@ -545,7 +545,7 @@
        _ (foldl (\ _ l (: _ (say j (show l)) (say j " "))) 0 c)
        (say j "0\n"))
    (fnif ir fb ar)                                          ; assemble + install one kernel (fb = the honest twin)
-    (: bs (peep ((holo 'assemble) 'x64 ir) 'bytes 0)         ; through the module book -- holo's whole public surface
+    (: bs (peep ((from 'holo 'assemble) 'x64 ir) 'bytes 0)   ; through the registry accessor -- holo's whole public surface
        c (cask (tally bs))
        _ (foldl (\ i b (: _ (pin c i b) (+ i 1))) 0 bs)
        (nif c fb '(\ q (q)) ar))

@@ -480,7 +480,7 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "holo0.h"                                     //   baked into the bootstrap so the corpus can test it under c0
 #include "x640.h"                                     //   AND the self-hosted ev. Globals persist across the egg warm
 #include "arm640.h"                                   //   below, so one eval here serves both corpus passes.
-#include "export0.h"                                  // the module boundary: the span sweeps into the ONE `holo` book
+#include "seal0.h"                                    // the module boundary: seal.l closes holo.l's scope layer as the `holo` book
   );
   g = ai_evals_(g,                                    // the uu kernel (ai/uu.l, sweep at its tail): the corpus's uu
 #include "uu0.h"                                       //   files drive it through the `uu` book under c0 AND the self-hosted ev
@@ -587,9 +587,12 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "post.h"                                       // the post-egg layer (parser combinators, ...), evaled ONCE after the egg
 #include "uu.h"                                          // uu's NbE kernel (ai/uu.l, sweep at its tail) -- one global name, the
                                                          //   `uu` book; the corpus + an overlay reach (uu 'vof) through it
-#include "holo.h"                                         // the neutral assembler core (crew/holo/holo.l) -- a post-egg language SERVICE
-#include "x64.h"                                         // + BOTH backends: they produce machine-code bytes as DATA (never
-#include "arm64.h"                                       //   execute), so every target is arch-neutral. the glaze (x86 client) executes x64
+#include "holo.h"                                         // the crew/holo/ assembler -- a post-egg language SERVICE, built as a
+#include "x64.h"                                         //   scope MODULE: holo.l opens a named layer ((enter 'holo)), the core +
+#include "arm64.h"                                       //   BOTH backends load into it (bytes as DATA, never execute, so every
+#include "seal.h"                                        //   target is arch-neutral; the glaze executes its own arch), and seal.l's
+                                                         //   (leave ()) REGISTERS the layer as the module `holo` -- orth stays
+                                                         //   clean; (use 'holo) splices it, (from 'holo 'assemble) probes it.
 #include "bao.h"
   );
   // welow (church+HOF lowering, book['welow]) is a USER-code pass. A JIT must NOT lower its own
@@ -598,15 +601,15 @@ static struct ai *boot(struct ai *g, bool argp) {
   // Turn welow off across the toolchain's own post-egg load, restore it below so user code still lowers.
   g = ai_evals_(g, "(: wsave welow welow 0)");
 #if defined(__x86_64__) || defined(__aarch64__)
+  g = ai_evals_(g, "(use 'holo)");                       // splice the assembler module below orth for the glaze's load: its bare
+                                                         //   assemble/assemble-at reads FOLD at compile (the capture law), so the
+                                                         //   glaze's closures stay self-contained after the (leave ()) below.
   g = ai_evals_(g, glaze_emit);                          // load the native JIT post-egg -> ev = auto-ev, glaze always-on
   g = ai_evals_(g, glaze_auto);                          // (no fragile stale image; base-ev captures the hatched ev).
   g = ai_evals_(g, glaze_export);                        // the glaze module boundary: its names sweep into the `glaze` book
-#endif                                                   // ~680ms from-scratch; the image snapshots past it. arm64: the integer + scalar-float lanes (leaf, counted/n-var loops, group, call-out) are native via BOTH auto-ev and the natjit hook; only the float-GRID lane + castbuild fall to interp (auto.l's `x86?` gate).
-  g = ai_evals_(g,                                       // the holo module boundary (crew/holo/export.l): the assembler's names
-#include "export.h"                                      //   sweep into the ONE public `holo` book and off the global book.
-  );                                                     //   AFTER the glaze, whose direct references folded at its compile.
-#if defined(__x86_64__) || defined(__aarch64__)
+                                                         // ~680ms from-scratch; the image snapshots past it. arm64: the integer + scalar-float lanes (leaf, counted/n-var loops, group, call-out) are native via BOTH auto-ev and the natjit hook; only the float-GRID lane + castbuild fall to interp (auto.l's `x86?` gate).
   g = ai_evals_(g, glaze_hook);                          // install natjit: glaze embedded closures at creation, not just (ev '(\..)); arch-parameterized, so aarch64 too
+  g = ai_evals_(g, "(leave ())");                        // a bare leave clears the use-stack: holo off the chain, orth alone again
 #endif
   g = ai_evals_(g, "(: welow wsave)");                   // toolchain baked -> welow back on for USER code
 #if defined(__x86_64__) || defined(__aarch64__)

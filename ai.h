@@ -228,6 +228,12 @@ struct ai {
                   // SECOND (seal-hooks) call, after opfix exists) -- ai_eval reads
                   // the field, so a book rebind can't reach the C compile lane;
                   // pre-seal (mid-prel bootstrap) it falls back to the book probe.
+   ai_word mods;  // the MODULE REGISTRY book: name -> module-book, filled by `leave`
+                  // on a named scope, read by `use`/`from` (ai/prel.l). A lazy
+                  // singleton (the `mods` nif creates it on first read, so both
+                  // prel runs of a bootstrap capture the SAME tablet and pre-egg
+                  // registrations survive the egg warm). In v0..end, so GC-traced
+                  // and image-serialized with no further wiring.
   union {
    ai_word x;
    struct ai_io {

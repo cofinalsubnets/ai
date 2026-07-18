@@ -108,7 +108,7 @@ test_glaze: host
 	  { [ $$r -eq 0 ] && grep -q "test/glaze-x86:" out/host/.test_glaze.out; } \
 	    || { echo "FAIL glaze x86 (exit $$r)"; exit 1; }; \
 	  echo "GLAZE ai/glaze/hook.l"; \
-	  { cat ai/glaze/hook.l; printf '\n(puts "glaze-hook-ran")(putc 10)'; } | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
+	  { echo "(use 'holo)"; cat ai/glaze/hook.l; printf '\n(leave ())(puts "glaze-hook-ran")(putc 10)'; } | $m > out/host/.test_glaze.out 2>&1; r=$$?; \
 	  cat out/host/.test_glaze.out; \
 	  { [ $$r -eq 0 ] && grep -q "glaze-hook-ran" out/host/.test_glaze.out; } \
 	    || { echo "FAIL glaze/hook (exit $$r)"; exit 1; }
@@ -357,7 +357,7 @@ moonrun = $m --wake $(ho)/mooncc.image -e '(moon-main (cuup (cup cmdline)))'
 .PHONY: test_moon
 test_moon: host out/host$(hsuf)/mooncc out/host$(hsuf)/mooncc.image
 	@echo "CC crew/moon/{lex,cpp,parse,gen,law}.l"; \
-	  cat test/00-init.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/holo/text.l crew/moon/gen.l crew/moon/law.l | $m > out/host/.test_moon.out 2>&1; r=$$?; \
+	  { echo "(use 'holo)"; cat test/00-init.l crew/moon/lex.l crew/moon/cpp.l crew/moon/parse.l crew/holo/text.l crew/moon/gen.l crew/moon/law.l; } | $m > out/host/.test_moon.out 2>&1; r=$$?; \
 	  cat out/host/.test_moon.out; \
 	  { [ $$r -eq 0 ] && grep -q "crew/moon/law:" out/host/.test_moon.out; } \
 	    || { echo "FAIL cc laws (exit $$r)"; exit 1; }

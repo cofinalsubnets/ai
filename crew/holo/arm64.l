@@ -388,7 +388,3 @@
    _ (pin arm64 'nop `(31 32 3 213))           ; the ('align n) filler unit: NOP d503201f LE
    _ (defbackend 'arm64 arm64)
    _ (defbackend 'aarch64 arm64))
-
-; the module span closes here (opened by holo-mark in crew/holo/holo.l): the names bound since
-; the mark are the assembler; crew/holo/export.l sweeps them into the `holo` book.
-(: holo-load (names ()))

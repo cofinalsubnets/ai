@@ -1,17 +1,18 @@
 ; the crew/holo/ assembler -- a CORE language service, baked into the post-egg layer of both
 ; the host `ai` and the bootstrap `ai0` (host/main.c), so the corpus exercises it under
 ; BOTH compilers, like prel/ev. Its whole surface is ONE public name: `holo`, a book --
-; and a book is a lookup function, so (holo 'assemble) is the call; the internals live
-; in the book too (crew/holo/export.l sweeps the whole load span: namespacing, not hiding).
+; reached through the module registry: (from 'holo) answers the opaque accessor, so
+; (A 'assemble) is the call and the internals live one probe away (holo.l opens a named
+; scope, seal.l closes it, leave registers: namespacing, not hiding).
 ; NOT in the kernel/wasm frontends (a host-only bake, like the parser combinators), so
-; guard on its presence: (peep book 'holo 0) is the whole service in one read -- no
-; helpless-read warning where it isn't baked. The full encoder gate (every backend
+; guard on its presence: (from 'holo) answers () where it was never baked -- no
+; helpless-read warning. The full encoder gate (every backend
 ; golden, objdump-checked, + the text/elf frontends) stays in crew/holo/holotest.l (`make
 ; test_asm`, its own cat-stream of the sources, untouched by the module sweep); this is
 ; the SMOKE that the MODULE reaches the runtime and assembles bit-identically.
 ; reg map: r0=rax, r7=x86-r8 .. r10=x86-r11; goldens copied from asmtest.l (objdump-verified).
-(? (lit? (peep book 'holo 0))                              ; presence check via the book -- no helpless-read warning when holo isn't baked (wasm/kernel)
-   (: A (peep book 'holo 0)                                ; the module book; bindings LOCAL (a body-having :)
+(? (lit? (from 'holo))                                     ; presence check via the registry -- () when holo isn't baked (wasm/kernel)
+   (: A (from 'holo)                                       ; the module accessor; bindings LOCAL (a body-having :)
       holo-hex (A 'holo-hex)  assemble (A 'assemble)  label-at (A 'label-at)
     (assert
       ; -- x86-64 backend: the SIB + rotate + bignum-movabs forms the glaze's map probe leans on --
