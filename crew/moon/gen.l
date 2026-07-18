@@ -2561,6 +2561,49 @@
    (nthfield fields i) (: (go l k) (? (! (two? l)) 'bad (k < 1) <l (go >l (k - 1)))
                            (go fields i))
 
+   ; -- brace elision (C 6.7.9): a flat run of items fills a nested subaggregate whose
+   ; brace was omitted -- int a[2][2] = {1,2,3,4} means {{1,2},{3,4}}. we NORMALIZE the
+   ; init tree up front (wrapping each elided run in an explicit ('init ..)), so the layout
+   ; code below only ever sees fully-braced inits. idempotent on an already-braced tree. --
+   (initval? v) (&& (two? v) (<v = 'init))
+   (unelide g ty ini)                               ; normalize ini against ty
+    (? (! (initval? ini)) ini                        ; a scalar / non-brace: nothing to nest
+       (! (aggish? ty)) ini                           ; a brace on a scalar type: leave (layout unwraps/scares)
+       (: pr (normfill g ty <>ini) `('init <pr)))     ; <pr = normed items; <>pr (excess) dropped
+   (redesig dh dk v) (link dh (link dk (link v ())))   ; ('didx k v) | ('dfield k v)
+   (normelt g ty desig dh dk val l)                 ; one element of type ty from item stream l -> (item rest)
+    (? (&& (aggish? ty) (! (initval? val)))          ; ELIDE: fill ty from the run starting at val
+        (: pr (normfill g ty (link val >l))
+           w `('init <pr)
+           `((? desig (redesig dh dk w) w) <>pr))
+       (: nv (? (initval? val) (unelide g ty val) val)  ; a braced sub -> recurse-normalize; a scalar -> as-is
+          `((? desig (redesig dh dk nv) (? (id? nv val) <l nv)) >l)))
+   (normfill g ty items)                            ; consume items to fill aggregate ty -> (normed-items rest)
+    (? (arr? ty)
+        (: elt <>ty n <>>ty
+           (go l idx acc)
+            (? (! (two? l)) `((rev acc) ())
+               (&& (< 0 n) (<= n idx)) `((rev acc) l)  ; array full -> the tail is the rest
+               (: it <l
+                  desig (<it = 'didx)
+                  ci (? desig <>it idx)
+                  pr (normelt g elt desig 'didx ci (elval it) l)
+                  (go <>pr (ci + 1) (link <pr acc))))
+           (go items 0 ()))
+       (stru? ty)
+        (: fields (cap (peep (g 'stag) <>ty 0))
+           (go l cur acc)
+            (? (! (two? l)) `((rev acc) ())
+               (: it <l
+                  desig (<it = 'dfield)
+                  ci (? desig (fidx fields <>it) cur)
+                  fe (nthfield fields ci)
+                  (? (bad? fe) `((rev acc) l)          ; unknown field / past the end -> leave the rest
+                     (: pr (normelt g <>>fe desig 'dfield <>it (elval it) l)
+                        (go <>pr (ci + 1) (link <pr acc))))))
+           (go items 0 ()))
+       `(items ()))
+
    ; -- LOCAL init (codegen): zero the slot, then fill (values may be runtime) --
    (cgzero off span)                                ; zero [r4+off .. +span)
     (: (go o rem acc)
@@ -2576,8 +2619,9 @@
        (? (bad? r) 'bad
           (flo? ty) ((asflo g r) + (fstf g ty 'r4 off 'f0))
           ((asint g r) + (cvt ty 'r0) + `(`((stop ty) 'r4 off 'r0)))))
-   (cgfill g env off ty ini)                        ; fill an aggregate at frame offset off (no zero)
-    (? (<ini = 'str) (? (arr? ty) (cgstr off <>ini) 'bad)
+   (cgfill g env off ty ini0)                       ; fill an aggregate at frame offset off (no zero)
+    (: ini (unelide g ty ini0)                        ; normalize elided braces (idempotent)
+     (? (<ini = 'str) (? (arr? ty) (cgstr off <>ini) 'bad)
        (! (<ini = 'init)) 'bad
        (arr? ty)
         (: elt <>ty esz (tsz g elt)
@@ -2605,7 +2649,7 @@
                              (cgstore g env foff fty val))
                         (? (bad? r) 'bad (fill >l (ci + 1) (acc + r)))))))
            (fill <>ini 0 ()))
-       'bad)
+       'bad))
 
    ; -- GLOBAL init (a constant byte image, where a scalar is little-endian
    ; bytes, an aggregate a placement flatten, and a POINTER an abs64 fixup --
@@ -2735,7 +2779,8 @@
         (: r (imaddr g ini)
            (? (! (id? r 'no)) `(`('fix (wsize g) (? (t32? g) 'abs32 'abs64) <r <>r)) (imgbytes g ty <>>ini)))
        (<ini = 'init)
-        (? (arr? ty)
+        (: nini (unelide g ty ini)                     ; normalize elided braces (idempotent)
+         (? (arr? ty)
             (: elt <>ty esz (tsz g elt)
                (place l idx acc)                     ; -> ((off items)..) | 'bad
                 (? (! (two? l)) acc
@@ -2743,7 +2788,7 @@
                       ci (? (<it = 'didx) <>it idx)
                       eb (imgpad g elt esz (elval it))
                       (? (bad? eb) 'bad (place >l (ci + 1) (link `((* ci esz) eb) acc)))))
-               ps (place <>ini 0 ())
+               ps (place <>nini 0 ())
                (? (bad? ps) 'bad (imflat (imsort ps) (* <>>ty esz))))
            (stru? ty)
             (: e (peep (g 'stag) <>ty 0)
@@ -2756,9 +2801,9 @@
                       (? (bad? fe) 'bad
                          (: fb (imgpad g <>>fe (tsz g <>>fe) (elval it))
                             (? (bad? fb) 'bad (place >l (ci + 1) (link `(<>fe fb) acc)))))))
-               ps (place <>ini 0 ())
+               ps (place <>nini 0 ())
                (? (bad? ps) 'bad (imflat (imsort ps) size)))
-           'bad)
+           'bad))
        'bad)
    (imgpad g ty w val)                              ; imgbytes padded (with zeros) to w bytes | 'bad
     (: b (imgbytes g ty val) (? (bad? b) 'bad (b + (zeros (w - (imbytelen b))))))

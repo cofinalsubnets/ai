@@ -233,6 +233,13 @@
       (two? (cparse (caup (clex "struct T { int n; char d[]; }; int main() { return sizeof(struct T); }"))))   ; a flexible array member parses
       (two? (cgn "int main() { int a[4] = {5}; return a[0] + a[3]; }"))            ; partial init zero-fills the rest
       (two? (cgn "struct P { int a; int b; }; int main() { struct P t[2] = {{1,2},{3,4}}; return t[1].a; }"))  ; nested array-of-struct
+      ; brace elision (C 6.7.9): a flat run fills nested subaggregates whose braces were
+      ; omitted (a scalar item on an aggregate element was a codegen error before). global +
+      ; local, arrays + structs, deep nesting; the fully-braced form still lays identically.
+      (two? (cgn "int a[2][2] = {1,2,3,4}; int main(){ return a[1][1]; }"))
+      (two? (cgn "int main(){ int a[2][2] = {1,2,3,4}; return a[1][0]; }"))
+      (two? (cgn "struct P{int x,y;}; struct P p[2] = {1,2,3,4}; int main(){ return p[1].x; }"))
+      (two? (cgn "int a[2][2][2] = {1,2,3,4,5,6,7,8}; int main(){ return a[1][1][1]; }"))
       (two? (cgn "char b[8] = \"hi\"; int main() { return b[0]; }"))               ; a global char array from a string
       (two? (cgn "int t[3] = {1,2,3}; int main() { return t[2]; }"))               ; a global array constant image
       (two? (cgn "int main() { char s[4] = \"ab\"; return s[0]; }"))               ; a local char array from a string
@@ -551,6 +558,11 @@
       (= (dty "char m[2][3][4];") '(arr (arr (arr char 4) 3) 2))    ; three dims fold right
       (= (dty "int a[5];") '(arr int 5))                            ; a lone dim is unchanged
       (= (dty "int g[][3] = {{1,2,3},{4,5,6}};") '(arr (arr int 3) 2))   ; outer [] inferred from the init count
+      ; brace elision (C 6.7.9): a flat run fills nested rows -- the outer [] divides by
+      ; the row's scalar-leaf count (int[2]=2, int[2][3]=6), not the raw item count
+      (= (dty "int a[][2] = {1,2,3,4};") '(arr (arr int 2) 2))          ; elided: 4 items / 2 = 2 rows
+      (= (dty "int a[][2] = {1,2,3,4,5,6};") '(arr (arr int 2) 3))      ; ... /2 = 3 rows
+      (= (dty "int a[][2][3] = {1,2,3,4,5,6,7,8,9,10,11,12};") '(arr (arr (arr int 3) 2) 2))  ; 12 / 6 = 2 outer
       (= (cast "enum q { A, B, KN }; int m[KN][KN]; int main(void){return 0;}")   ; an ENUM CONSTANT dim folds (KN = 2)
          '(prog ((tdef) (gdecl (("m" (arr (arr int 2) 2) ()))) (fn "main" () (blk ((ret (num 0))))))))))
 

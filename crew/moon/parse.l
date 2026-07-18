@@ -614,16 +614,24 @@
                    r)))))   ; cint?: a sun-sized fold (max-charm's image) is still a number
    ; how many array elements an initializer implies (for [] size inference):
    ; a string is its bytes + NUL; a brace list is the highest index reached
-   ; (designated [k] sets the cursor to k). () if it implies nothing.
-   (initcount ini)
+   ; (designated [k] sets the cursor to k). () if it implies nothing. `elt` is the
+   ; element type: when it's an array and the items are a plain elided RUN (no braces,
+   ; no designators), the run fills rows of `arrleaves elt` scalars each -- int a[][2] =
+   ; {1,2,3,4} is 2 rows, not 4 -- so divide (C 6.7.9).
+   (arrleaves ty) (? (arr? ty) (* <>>ty (arrleaves <>ty)) 1)   ; scalar leaves of a (nested) array
+   (allplain? items) (foldl (\ ok it (&& ok (! (member? <it '(init didx dfield))))) 1 items)
+   (initcount elt ini)
     (? (&& (two? ini) (<ini = 'str)) ((tally <>ini) + 1)
        (&& (two? ini) (<ini = 'init))
-        (: (go l i mx)
-            (? (! (two? l)) mx
-               (: it <l
-                  ci (? (<it = 'didx) <>it i)
-                  (go >l (ci + 1) (? (mx < (ci + 1)) (ci + 1) mx))))
-           (go <>ini 0 0))
+        (: items <>ini
+           (? (&& (arr? elt) (&& (two? items) (allplain? items)))
+               (: L (arrleaves elt) (? (< 0 L) (// ((tally items) + (L - 1)) L) (tally items)))
+               (: (go l i mx)
+                   (? (! (two? l)) mx
+                      (: it <l
+                         ci (? (<it = 'didx) <>it i)
+                         (go >l (ci + 1) (? (mx < (ci + 1)) (ci + 1) mx))))
+                  (go items 0 0))))
        ())
    (pinititem ps ts)
     (? (peekp ts ".")
@@ -733,8 +741,8 @@
                                 (: r (pinit ps >ts3)
                                    (? (! (two? r)) ()
                                       (: ini <r
-                                         ty2 (? (&& (arr? ty) (&& (<>>ty = 0) (charm? (initcount ini))))
-                                                `('arr <>ty (initcount ini)) ty)   ; [] local: infer size
+                                         ty2 (? (&& (arr? ty) (&& (<>>ty = 0) (charm? (initcount <>ty ini))))
+                                                `('arr <>ty (initcount <>ty ini)) ty)   ; [] local: infer size
                                          `(`(name ty2 ini) <>r))))
                                 `(`(name ty ()) ts3)))))
                    (more ts2 acc)
@@ -1128,7 +1136,7 @@
                                                    (? (! (peekp rest0 "=")) `(`(nm `('arr t2 0) ()) rest0)   ; no init: incomplete, size 0
                                                       (: ir (pinit ps >rest0)
                                                          (? (! (two? ir)) ()
-                                                            (: n (initcount <ir)
+                                                            (: n (initcount t2 <ir)
                                                                (? (charm? n)
                                                                   `(`(nm `('arr t2 n) <ir) <>ir)
                                                                   ())))))
@@ -1138,7 +1146,7 @@
                                                      (? (peekp rest0 "=")     ; T a[n].. = init
                                                          (: ir (pinit ps >rest0)
                                                             (? (! (two? ir)) ()
-                                                               (: aty (? (<>>aty0 = 0) `('arr <>aty0 (initcount <ir)) aty0)
+                                                               (: aty (? (<>>aty0 = 0) `('arr <>aty0 (initcount <>aty0 <ir)) aty0)
                                                                   `(`(nm aty <ir) <>ir))))
                                                         `(`(nm aty0 ()) rest0)))))))
                                       (peekp ts3 "=")

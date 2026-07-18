@@ -148,8 +148,8 @@ fold defects — separate commit.
 
 ## 3. the syntax ledger
 
-Sweep of 40 constructs, x64: **29 pass, 11 fail.** Grouped by *why* each is missing, since
-that drives priority.
+Sweep of 40 constructs, x64: **30 pass, 10 fail** (brace elision landed). Grouped by *why* each
+is missing, since that drives priority.
 
 ### C89 — should work; these are the real conformance bugs
 
@@ -157,11 +157,14 @@ that drives priority.
 |---|---|---|
 | pointer to array | `int (*p)[3] = &a;` | parse error |
 | function returning function pointer | `int (*g(void))(void){ return f; }` | parse error |
-| brace elision in nested initialiser | `int a[2][2] = { 1,2,3,4 };` | **codegen** error |
+| ~~brace elision in nested initialiser~~ | `int a[2][2] = { 1,2,3,4 };` | **RESOLVED** |
 | wide character constant | `L'a'` | parse error |
 
-Brace elision is the one to take first — it is extremely common in real C, and it is the only
-entry here that reaches codegen before failing.
+Brace elision landed: the init tree is normalized up front (`unelide`/`normfill` in `gen.l`)
+so an elided flat run is wrapped in explicit `('init ..)` before layout — the existing
+fully-braced path then lays it. Global + local, arrays + structs, deep nesting; `[]` row
+inference (`initcount` in `parse.l`) divides the flat count by the row's scalar-leaf count.
+The remaining C89 bugs are both **parse** errors (declarator grammar), less common than elision.
 
 ### C99 — absent
 
