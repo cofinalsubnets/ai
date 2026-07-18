@@ -28,6 +28,11 @@
 ;   unbound and the glaze's map lane emits nothing. one bug, two faces -- infinite loop or crash.
 ; * `make clean` nukes out/dl (ovmf/limine) -- stash them first if you need the kernel tests.
 ;   editing ai.h needs no clean (every object deps on $(ai_h), the lcat'd headers re-lay on ai0).
+; * CHECK A .l EDIT for balance before trusting it: `out/host/ai tools/ltidy.l <file>` (or `make lint`
+;   over every tracked .l) -- a .l-aware paren/bracket/brace + unclosed-string scan (`;`/`#!` comments,
+;   `'` and backtick are reader ops NOT delimiters, so it won't trip where a C lexer would). SILENT means
+;   clean; line-pointed warnings + exit 1 on imbalance (a dropped paren is the classic .l slip, and it
+;   catches it without a full rebuild). `-w` also strips trailing whitespace. NOT in the test gate.
 ; * C and docs EMBED ai the .l sweeps miss -- grep on every rename: host/main.c (s2cl + runner),
 ;   port/inle/kmain.c (the K_TEST runner), port/{playdate,rp2040}/main.c (g_evals_ driver strings),
 ;   wasm/; and index.html (the static page, style.css beside it) runs live demos as data-run chips --
