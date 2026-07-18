@@ -5325,8 +5325,6 @@ static int img_wxp(word v, word *base, word *hp) {   // an un-wakeable absolute?
  if (image_ap_index((intptr_t) v) >= 0) return 0;    // lvm table
  if (image_imm_index(v) >= 0) return 0;              // immortal
  return ai_image_absguard && !ai_image_absguard((uintptr_t) v); }
-uintptr_t ai_image_redir[8];                     // pairs: cell, twin -- the redirects this dump made
-uintptr_t ai_image_nredir = 0;
 static word img_nif_interp(word v, word *base, word *hp) {   // v -> a cell VALUE; its bytecode twin | 0
  word *c = (word*) v; word e = 0;
  // the FULL cell shapes (lvm_nif): arity-1 value = [code, interp, lvm_ret, n(odd)];
@@ -5344,8 +5342,6 @@ static word img_nif_interp(word v, word *base, word *hp) {   // v -> a cell VALU
  else if (c + 4 <= hp && c - 2 >= base && c[-2] == (word) lvm_cur && oddp(c[-1])
      && img_wxp(c[0], base, hp) && c[2] == (word) lvm_ret && oddp(c[3])
      && c[1]) e = c[1] + 2 * sizeof(word);            // a LINK (value+2): twin's value+2, contract kept
- if (e && ai_image_nredir < countof(ai_image_redir) / 2)
-  ai_image_redir[2 * ai_image_nredir] = v, ai_image_redir[2 * ai_image_nredir + 1] = e, ai_image_nredir++;
  return e; }
 static int img_suppress = 0;                     // inside a reverted husk: absolutes are inert ballast
 // encode a live value (post-compaction) -> portable (tag,payload):

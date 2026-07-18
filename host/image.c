@@ -45,13 +45,6 @@ static void image_guard_arm(void) {
   ai_image_nbad = 0;
   ai_image_absguard = image_abs_ok;
 }
-extern uintptr_t ai_image_redir[8];
-extern uintptr_t ai_image_nredir;
-static void image_redir_report(void) {
-  for (uintptr_t i = 0; i < ai_image_nredir && i < 4; i++)
-    fprintf(stderr, "ai: bake reverted a dead-native cell %p -> its bytecode twin %p (doc/wake-storm.md)\n",
-            (void*) ai_image_redir[2 * i], (void*) ai_image_redir[2 * i + 1]);
-}
 static void image_guard_report(void) {
   if (!ai_image_nbad) return;
   fprintf(stderr, "ai: bake refused -- %lu un-wakeable absolute pointer(s) in the live heap\n",
@@ -98,7 +91,9 @@ int image_bake(struct ai *g) {
   image_guard_arm();
   uintptr_t len = 0;
   void *buf = ai_image_save(g, &len);
-  image_redir_report();
+  // the codec silently reverts any would-be-dead native reference to the bytecode
+  // twin the cell carries (ai_image_redir); the bake stays correct (doc/wake-storm.md),
+  // so there is nothing to announce. only a REFUSED bake (below) is worth a word.
   if (!buf) { image_guard_report(); return -2; }
   if (len > ai_baked_image_len) {
     fprintf(stderr, "ai: image %lu > .image reserve %lu -- bump RESERVE_WORDS in host/image_baked.c\n",
