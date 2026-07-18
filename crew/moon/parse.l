@@ -240,13 +240,17 @@
                           (? (! (two? ar)) ()
                              (: arn <ar t7 <>ar
                                 r7 (want t7 ")")
+                                ; the pointee's type comes from what TRAILS the ) : (params) a function,
+                                ; [dims] an array (pointer-to-array), nothing a plain pointer. an inner
+                                ; [n] on the name (arn) makes the whole thing an ARRAY of those pointers.
+                                mkfin (\ pointee tail
+                                        `(`(name (? (charm? arn) `('arr `('ptr pointee) arn) `('ptr pointee))) tail))
                                 (? (! (two? r7)) ()
-                                   (! (peekp r7 "(")) ()
-                                   (: t8 (skipbal >r7 1)
-                                      (? (! (two? t8)) ()
-                                         (: fty `('ptr `('fn ty))   ; the base type rides along: the pointee's RETURN type
-                                            finalty (? (charm? arn) `('arr fty arn) fty)
-                                            `(`(name finalty) t8))))))))))))
+                                   (peekp r7 "(")                        ; (*name..)(params) -- pointer to FUNCTION
+                                    (: t8 (skipbal >r7 1) (? (two? t8) (mkfin `('fn ty) t8) ()))
+                                   (peekp r7 "[")                        ; (*name..)[dims]  -- pointer to ARRAY
+                                    (: dr (adims ps r7 ()) (? (two? dr) (mkfin (mkarr ty <dr) <>dr) ()))
+                                   (mkfin ty r7)))))))))
           (! (&& (two? ts2) ((tkk <ts2) = 'id)))    ; no name: an ABSTRACT declarator (unnamed proto param)
            (? (peekp ts2 "[")                          ; abstract ARRAY `T [n]..` (e.g. `struct timespec const[2]`)
                (: dr (adims ps ts2 ())                 ; -> nested arr of ty; pparams decays it to a pointer

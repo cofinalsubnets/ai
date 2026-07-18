@@ -221,6 +221,10 @@
       (two? (cgn "struct S { long a; long b; }; int f(struct S *p, struct S *q) { *p = *q; return p->a; } int main() { return 0; }"))
       (two? (cgn "int inc(int x) { return x + 1; } int main() { int (*fp)(int); fp = inc; return fp(41); }"))
       (two? (cgn "int inc(int x) { return x+1; } int main() { int (*fp)(int) = 0; fp = inc; return (*fp)(41); }"))
+      ; pointer to ARRAY -- (*p)[i] derefs to the array then indexes; &a of an array is one
+      (two? (cgn "int a[3] = {1,2,3}; int main() { int (*p)[3] = &a; return (*p)[2]; }"))
+      (two? (cgn "int main() { int a[3]; int (*p)[3] = &a; (*p)[1] = 9; return (*p)[1]; }"))
+      (two? (cgn "int f(int (*p)[3]) { return (*p)[0]; } int main() { int a[3] = {7,8,9}; return f(&a); }"))
       ; a dispatch table -- an array of function pointers, THE ai.c pattern
       (two? (cgn "int a(int x){return x+1;} int b(int x){return x*2;} int main(){ int (*t[2])(int); t[0]=a; t[1]=b; return t[0](10)+t[1](10); }"))
       ; --- stage 4c: brace/designated initializers, string inits, [] inference, flexible arrays ---
@@ -563,6 +567,14 @@
       (= (dty "int a[][2] = {1,2,3,4};") '(arr (arr int 2) 2))          ; elided: 4 items / 2 = 2 rows
       (= (dty "int a[][2] = {1,2,3,4,5,6};") '(arr (arr int 2) 3))      ; ... /2 = 3 rows
       (= (dty "int a[][2][3] = {1,2,3,4,5,6,7,8,9,10,11,12};") '(arr (arr (arr int 3) 2) 2))  ; 12 / 6 = 2 outer
+      ; a PARENTHESIZED declarator (*p) then a trailing suffix: [dims] -> pointer to ARRAY,
+      ; (params) -> pointer to FUNCTION, nothing -> a plain pointer. an inner [n] on the name
+      ; makes it an ARRAY of those pointers. (the type the suffix binds outward around the *.)
+      (= (dty "int (*p)[3];") '(ptr (arr int 3)))                   ; pointer to array[3] of int
+      (= (dty "int (*p)[2][3];") '(ptr (arr (arr int 3) 2)))        ; pointer to a 2D array
+      (= (dty "int (*p[2])[3];") '(arr (ptr (arr int 3)) 2))        ; array[2] of pointer-to-array
+      (= (dty "int (*p)(void);") '(ptr (fn int)))                   ; pointer to function (unregressed)
+      (= (dty "int (*fp[4])(void);") '(arr (ptr (fn int)) 4))       ; dispatch table (unregressed)
       (= (cast "enum q { A, B, KN }; int m[KN][KN]; int main(void){return 0;}")   ; an ENUM CONSTANT dim folds (KN = 2)
          '(prog ((tdef) (gdecl (("m" (arr (arr int 2) 2) ()))) (fn "main" () (blk ((ret (num 0))))))))))
 

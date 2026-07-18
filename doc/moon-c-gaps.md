@@ -148,14 +148,14 @@ fold defects — separate commit.
 
 ## 3. the syntax ledger
 
-Sweep of 40 constructs, x64: **30 pass, 10 fail** (brace elision landed). Grouped by *why* each
-is missing, since that drives priority.
+Sweep of 40 constructs, x64: **31 pass, 9 fail** (brace elision + pointer-to-array landed).
+Grouped by *why* each is missing, since that drives priority.
 
 ### C89 — should work; these are the real conformance bugs
 
 | construct | probe | failure |
 |---|---|---|
-| pointer to array | `int (*p)[3] = &a;` | parse error |
+| ~~pointer to array~~ | `int (*p)[3] = &a;` | **RESOLVED** |
 | function returning function pointer | `int (*g(void))(void){ return f; }` | parse error |
 | ~~brace elision in nested initialiser~~ | `int a[2][2] = { 1,2,3,4 };` | **RESOLVED** |
 | wide character constant | `L'a'` | parse error |
@@ -164,7 +164,14 @@ Brace elision landed: the init tree is normalized up front (`unelide`/`normfill`
 so an elided flat run is wrapped in explicit `('init ..)` before layout — the existing
 fully-braced path then lays it. Global + local, arrays + structs, deep nesting; `[]` row
 inference (`initcount` in `parse.l`) divides the flat count by the row's scalar-leaf count.
-The remaining C89 bugs are both **parse** errors (declarator grammar), less common than elision.
+
+Pointer-to-array landed: the parenthesized declarator `(*p)` in `pdtor` (`parse.l`) took its
+pointee type from what TRAILS the `)` — `(params)` a function (the pre-existing case),
+`[dims]` an array (`('ptr ('arr t n))`), nothing a plain pointer. An inner `[n]` on the name
+still makes it an array of those pointers (`int (*p[2])[3]`). Deref/stride/`&a` and the
+fn-pointer + dispatch-table forms were already right in gen — only the declarator grammar
+was missing. The remaining C89 bug (function returning a function pointer) is the same
+declarator family: a `(*g(void))(void)` — a function declarator inside the parens.
 
 ### C99 — absent
 
