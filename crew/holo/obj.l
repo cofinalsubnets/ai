@@ -131,10 +131,10 @@
        dw (o-walk be <dp dlabels wkset 0 rset 0 () ())
        nw (o-walk be <np nlabels wkset 0 rset 0 () ())
        tbytes0 <tw trel <>tw
-       dbytes <dw drel <>dw
+       dbytes0 <dw drel <>dw
        nbytes <nw nrel <>nw
-       _ (? (|| (two? drel) (two? nrel))            ; a DATA-section pointer wants abs32 (la's word rides .text) -- unsupported
-             (scare 'obj32-data-reloc-unsupported target) 0)
+       _ (? (two? nrel)                             ; an ai_nifs data pointer is rare on thumb1 -- unsupported for now
+             (scare 'obj32-nif-reloc-unsupported target) 0)
        exts (o-exts (trel + drel + nrel) tlabels dlabels nlabels)
        nfun (tally funcnames) nglob (tally globnames)
        fstart 4 gstart (4 + nfun) estart ((4 + nfun) + nglob)
@@ -153,13 +153,15 @@
            (o-has? dlabels lbl) `(2 ((peep dlabels lbl 0) + aux))
            (o-has? nlabels lbl) `(3 ((peep nlabels lbl 0) + aux))
            `((peep extidx lbl 0) aux))
-       ; bake each abs32 field into .text (its addend, incl. a section-relative offset) before emitting.
-       tbytes (: (go rs bs) (? (! (two? rs)) bs
-                                (: r <rs
-                                   (go >rs (? (id? <>r 'abs32)
-                                              (: sl (a32loc <>>r <>>>r) (o-put32 bs <r <>sl))
-                                              bs))))
-                 (go trel tbytes0))
+       ; bake each abs32 field (its addend + any section-relative offset) into the section bytes,
+       ; since REL has no addend column. shared by .text (la's pool word) and .data (a pointer global).
+       (bakeabs bytes rs)
+        (: (go rs bs) (? (! (two? rs)) bs
+                         (: r <rs
+                            (go >rs (? (id? <>r 'abs32) (: sl (a32loc <>>r <>>>r) (o-put32 bs <r <>sl)) bs))))
+           (go rs bytes))
+       tbytes (bakeabs tbytes0 trel)
+       dbytes (bakeabs dbytes0 drel)
        symnames (funcnames + globnames + (map (\ s (string s)) exts))
        str (o-strtab symnames)
        strblob <str stroffs <>str
@@ -200,7 +202,16 @@
                             (scare 'obj32-text-reloc k))))
                   (go trel ()))
        ntrel (tally trel)
-       shnames `(".text" ".data" "ai_nifs" ".symtab" ".strtab" ".rel.text" ".shstrtab")
+       ; -- .rel.data: R_ARM_ABS32 for each data pointer (int *p = &g; a string-literal char *). --
+       reldata (: (go rs acc)
+                   (? (! (two? rs)) (catall (rev acc))
+                      (: r <rs off <r k <>r lbl <>>r aux <>>>r
+                         (? (id? k 'abs32)
+                             (: sl (a32loc lbl aux) (go >rs (>< (o-rel32 off <sl r-arm-abs32) acc)))
+                            (scare 'obj32-data-reloc k))))
+                  (go drel ()))
+       ndrel (tally drel)
+       shnames `(".text" ".data" "ai_nifs" ".symtab" ".strtab" ".rel.text" ".rel.data" ".shstrtab")
        shstr (o-strtab shnames)
        shstrblob <shstr shoffs <>shstr
        (shname i) (nthr shoffs i)
@@ -212,7 +223,8 @@
        sym-off (n-off + n-sz)   sym-sz (* nsym 16)
        str-off (sym-off + sym-sz) str-sz (tally strblob)
        rt-off (str-off + str-sz)  rt-sz (* ntrel 8)
-       shs-off (rt-off + rt-sz)   shs-sz (tally shstrblob)
+       rd-off (rt-off + rt-sz)    rd-sz (* ndrel 8)
+       shs-off (rd-off + rd-sz)   shs-sz (tally shstrblob)
        sht-off (shs-off + shs-sz)
        sht (catall `(
               (o-zeros 40)                                                 ; 0 NULL
@@ -222,15 +234,16 @@
               (sh32 (shname 3) 2 0 sym-off sym-sz 5 4 4 16)                ; 4 .symtab link=.strtab info=first-global
               (sh32 (shname 4) 3 0 str-off str-sz 0 0 1 0)                 ; 5 .strtab
               (sh32 (shname 5) 9 0 rt-off rt-sz 4 1 4 8)                   ; 6 .rel.text  SHT_REL link=.symtab info=.text
-              (sh32 (shname 6) 3 0 shs-off shs-sz 0 0 1 0)))               ; 7 .shstrtab
+              (sh32 (shname 6) 9 0 rd-off rd-sz 4 2 4 8)                   ; 7 .rel.data  SHT_REL link=.symtab info=.data
+              (sh32 (shname 7) 3 0 shs-off shs-sz 0 0 1 0)))               ; 8 .shstrtab
        hdr (catall `(
               `(127 69 76 70 1 1 1 0 0 0 0 0 0 0 0 0)                     ; e_ident: \x7fELF 32-bit LSB
               (le16 1) (le16 machine) (le32 1)                            ; ET_REL, EM_ARM, version
               (le32 0) (le32 0) (le32 sht-off)                            ; e_entry=0, e_phoff=0, e_shoff
               (le32 83886080) (le16 52) (le16 0)                          ; e_flags=EABI_VER5, e_ehsize=52, e_phentsize=0
-              (le16 0) (le16 40) (le16 8)                                 ; e_phnum=0, e_shentsize=40, e_shnum=8
-              (le16 7)))                                                  ; e_shstrndx=7
-       (catall `(hdr tbytes dbytes nbytes symbytes strblob reltext shstrblob sht)))
+              (le16 0) (le16 40) (le16 9)                                 ; e_phnum=0, e_shentsize=40, e_shnum=9
+              (le16 8)))                                                  ; e_shstrndx=8
+       (catall `(hdr tbytes dbytes nbytes symbytes strblob reltext reldata shstrblob sht)))
 
    ; build the whole .o image. textforms/dataforms/nifforms are cgen-obj's split
    ; IR (nifforms = the AI_NIF registry entries, laid in their own `ai_nifs`

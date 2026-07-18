@@ -2726,14 +2726,14 @@
         (: t <>ini n (tsz g ty)
            (bs i acc) (? (n <= i) (rev acc) (bs (i + 1) (link (? (i < (tally t)) (t i) 0) acc)))
            (bs 0 ()))
-       (ptr? ty) (: r (imaddr g ini)                    ; a data pointer: a constant ADDRESS (abs64 label+offset),
-                     (? (! (id? r 'no)) `(`('fix 8 'abs64 <r <>r))   ; or a constant INTEGER ((int*)0x1000, a null)
+       (ptr? ty) (: r (imaddr g ini)                    ; a data pointer: a constant ADDRESS (word-sized abs label+offset),
+                     (? (! (id? r 'no)) `(`('fix (wsize g) (? (t32? g) 'abs32 'abs64) <r <>r))   ; or a constant INTEGER ((int*)0x1000, a null)
                         (: v (icfold ini) (? (id? v 'no) 'bad (imnum g ty v)))))
        ; a label cast to a WORD-SIZED integer ((word)nif_absent, (intptr_t)f) is
        ; still the label's address; a non-label cast folds through to its value
-       (&& (<ini = 'cast) (&& (! (aggish? ty)) (&& (! (flo? ty)) ((tsz g ty) = 8))))
+       (&& (<ini = 'cast) (&& (! (aggish? ty)) (&& (! (flo? ty)) ((tsz g ty) = (wsize g)))))
         (: r (imaddr g ini)
-           (? (! (id? r 'no)) `(`('fix 8 'abs64 <r <>r)) (imgbytes g ty <>>ini)))
+           (? (! (id? r 'no)) `(`('fix (wsize g) (? (t32? g) 'abs32 'abs64) <r <>r)) (imgbytes g ty <>>ini)))
        (<ini = 'init)
         (? (arr? ty)
             (: elt <>ty esz (tsz g elt)
@@ -2763,7 +2763,7 @@
    (imgpad g ty w val)                              ; imgbytes padded (with zeros) to w bytes | 'bad
     (: b (imgbytes g ty val) (? (bad? b) 'bad (b + (zeros (w - (imbytelen b))))))
    (cgimage g ty ini)                               ; the full span-padded image | 'bad
-    (: span (& ((tsz g ty) + 7) -8)
+    (: span (& ((tsz g ty) + ((wsize g) - 1)) (0 - (wsize g)))   ; round to the WORD (8 on x64/arm64, 4 on t32)
        raw (imgbytes g ty ini)
        (? (bad? raw) 'bad (raw + (zeros (span - (imbytelen raw))))))
 

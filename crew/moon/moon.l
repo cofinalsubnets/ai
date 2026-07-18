@@ -68,7 +68,7 @@
        _ (? (two? lx) () (udie 1 ("cc: lex error in " + src)))
        pp (cpp <>lx (\ name sys? (incload is (cdir src) name sys?)) src)
        _ (? (two? pp) () (udie 1 ("cc: preprocessor error in " + src)))
-       ps (cparse <>pp)
+       ps (cparse-t <>pp tgt)                 ; thread the target so parse sizes pointers/longs at the ABI width
        _ (? (two? ps) () (udie 1 ("cc: parse error in " + src)))
        ps)
    ; the parser's static/section trio, threaded to the gen as one list

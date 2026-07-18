@@ -131,7 +131,8 @@
                      (passoc s >tbl))
 
    ; -- the parse state --
-   (psnew _) (: t (tablet 0)
+   (psnew tgt) (: t (tablet 0)
+                _ (pin t 'tgt tgt)                  ; the codegen target: 32-bit widths (thumb1/thumb2) vs 64-bit
                 _ (pin t 'types (tablet 0))         ; typedef name -> ty
                 _ (pin t 'weaks ())                 ; __attribute__((weak)) function names
                 _ (pin t 'enums (tablet 0))         ; enum constant -> value
@@ -155,13 +156,18 @@
    (arr? ty) (&& (two? ty) (<ty = 'arr))
    (stru? ty) (&& (two? ty) (<ty = 'struct))
    (bitf? ty) (&& (two? ty) (<ty = 'bitfield))     ; a bitfield member: (bitfield uty bitoff width)
-   (tsz ps ty) (? (ptr? ty) 8
+   ; the machine WORD (bytes): a pointer and a gp scalar (long) ride it. 4 on the 32-bit thumb ABI,
+   ; 8 otherwise. MUST match gen's (wsize g) (gen.l) -- a divergence mislays every pointer-bearing
+   ; struct SILENTLY, since playout bakes offsets here at parse and gen trusts the stag table.
+   (pst32? ps) (member? (peep ps 'tgt ()) '(thumb2 thumb1))
+   (psword ps) (? (pst32? ps) 4 8)
+   (tsz ps ty) (? (ptr? ty) (psword ps)
                   (arr? ty) (* <>>ty (tsz ps <>ty))
                   (stru? ty) (caup (peep (ps 'stag) <>ty 0))
                   (bitf? ty) (tsz ps <>ty)          ; the unit's size (a bitfield rides its declared type)
                   (|| (ty = 'char) (ty = 'uchar)) 1 (|| (ty = 'short) (ty = 'ushort)) 2
-                  (|| (ty = 'int) (|| (ty = 'uint) (ty = 'float))) 4 8)
-   (talign ps ty) (? (ptr? ty) 8
+                  (|| (ty = 'int) (|| (ty = 'uint) (ty = 'float))) 4 (psword ps))
+   (talign ps ty) (? (ptr? ty) (psword ps)
                      (arr? ty) (talign ps <>ty)
                      (stru? ty) (cauup (peep (ps 'stag) <>ty 0))
                      (bitf? ty) (talign ps <>ty)
@@ -1163,8 +1169,9 @@
                                                   (? (two? vps) `(`('gdecl vps) rest)
                                                      `(`('tdef) rest)))))
                                         (more <>first `(<first))))))))))))))
-   (cparse ts)
-    (: ps (psnew ())
+   (cparse ts) (cparse-t ts 'x64)          ; the law tests + any bare caller: 64-bit widths (unchanged behavior)
+   (cparse-t ts tgt)
+    (: ps (psnew tgt)
        ; note the completed form's staticness/section per declared name, then
        ; clear the stashes for the next form
        (note f)
