@@ -1,4 +1,4 @@
-#!/usr/bin/env -S ai -l
+#!/usr/bin/env -S love -l
 ; ain -- a netcat clone in ~50 lines of ai (ai's cat).
 ;
 ;   ain HOST PORT   TCP client: connect to HOST:PORT

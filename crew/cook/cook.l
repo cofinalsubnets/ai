@@ -1,4 +1,4 @@
-#!/usr/bin/env -S ai -l
+#!/usr/bin/env -S love -l
 ; cook -- ai make
 ;
 ; ai reads the `#!` hashbang line above as a line comment (ai.c: `#!` runs to

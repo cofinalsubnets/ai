@@ -1,4 +1,4 @@
-#!/usr/bin/env -S ai -l
+#!/usr/bin/env -S love -l
 ; crew/moon/fmt.l -- moonfmt, the C reindenter (v3). shares NOTHING with the
 ; parser/codegen: it reads text and writes text, a pure line-preserving pass.
 ; the house C style is the .l style ported to C -- 1-space indent, cuddled close

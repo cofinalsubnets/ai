@@ -46,7 +46,7 @@ out/host$(hsuf)/kore: out/host$(hsuf)/kore.image
 	@{ echo '#!/bin/sh'; \
 	   echo 'h=$$(CDPATH= cd -- "$$(dirname -- "$$0")" && pwd)'; \
 	   echo 'n=$$(basename -- "$$0")'; \
-	   echo 'exec "$$h/ai" --wake "$$h/kore.image" -e "(kore-main (link \"$$n\" (cuup (cup cmdline))))" "$$@"'; } > $@
+	   echo 'exec "$$h/love" --wake "$$h/kore.image" -e "(kore-main (link \"$$n\" (cuup (cup cmdline))))" "$$@"'; } > $@
 	@chmod 755 $@
 out/host$(hsuf)/.mooncc-cat.l: $(moonfiles)
 	@echo AI	$(abspath $@)
@@ -55,14 +55,14 @@ out/host$(hsuf)/mooncc: out/host$(hsuf)/mooncc.image
 	@echo AI	$(abspath $@)
 	@{ echo '#!/bin/sh'; \
 	   echo 'h=$$(CDPATH= cd -- "$$(dirname -- "$$0")" && pwd)'; \
-	   echo 'exec "$$h/ai" --wake "$$h/mooncc.image" -e "(moon-main (cuup (cup cmdline)))" "$$@"'; } > $@
+	   echo 'exec "$$h/love" --wake "$$h/mooncc.image" -e "(moon-main (cuup (cup cmdline)))" "$$@"'; } > $@
 	@chmod 755 $@
 # reef: the patch-set vcs (crew/reef/reef.l over the kore text+diff floor;
 # doc/reef.md). its own catted shebang script, the mooncc precedent.
 reeffiles = crew/kore/text.l crew/kore/diff.l crew/reef/reef.l
 out/host$(hsuf)/reef: $(reeffiles)
 	@echo AI	$(abspath $@)
-	@{ echo '#!/usr/bin/env -S ai'; cat $(reeffiles); } > $@
+	@{ echo '#!/usr/bin/env -S love'; cat $(reeffiles); } > $@
 	@chmod 755 $@
 # the mooncc image: the compiler baked WARM (the live bake, doc/snapshot.md). The
 # cat loads under a NEUTRAL name so moon.l's tail SEAT stays quiet, then the bake

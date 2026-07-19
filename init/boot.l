@@ -1,11 +1,11 @@
-#!/bin/ai
+#!/bin/love
 ; --- boot.l: the initramfs /init -- ai as pid 1 on the Linux kernel ---
 ; the REAL bringup companion to init.l's (pid1 0) tour. where (pid1 0) mounts into
 ; /tmp/ai-* demo paths and reaps a planted orphan to PROVE the shape, this is what the
 ; kernel actually execs as process 1 out of the initramfs: mount the FHS filesystems,
 ; then hand the console to init/sh.l and never exit (pid 1 leaving panics the kernel).
 ;
-; packaged by mk/distro.mk as /init (this file, shebang -> /bin/ai), beside /bin/ai,
+; packaged by mk/distro.mk as /init (this file, shebang -> /bin/love), beside /bin/love,
 ; /bin/kore (+ applet symlinks) and /lib/sh.l. boot line:
 ;   qemu ... -kernel <bzImage> -initrd initramfs.cpio.gz -append "console=ttyS0 rdinit=/init"
 ;
@@ -22,11 +22,11 @@
                  (? r (+ " -> errno " (show r)) " -> ok")))))))
 
    ; the console job: a fresh `ai` running the shell over the inherited console fds.
-   (console _) (L "/bin/ai" "-l" "/lib/sh.l" "-e" "(sh 0)")
+   (console _) (L "/bin/love" "-l" "/lib/sh.l" "-e" "(sh 0)")
 
    ; a boot self-check: run a real userland command (kore, forked + captured) so the
    ; console SHOWS the base system works end to end before we hand off the tty. `run`
-   ; returns (exit . stdout); the shebang on /bin/kore points at /bin/ai.
+   ; returns (exit . stdout); the shebang on /bin/kore points at /bin/love.
    (selfcheck _)
      (: r (run (L "/bin/kore" "ls" "/proc"))
         (say1 (+ "-- self-check: kore ls /proc -> exit " (+ (show (cap r))
@@ -46,7 +46,7 @@
 
    (boot-init _)
      (: me (getpid 0)
-        _ (say1 (+ "-- ai as PID " (+ (show me) " -- the initramfs /init --")))
+        _ (say1 (+ "-- love as PID " (+ (show me) " -- the initramfs /init --")))
         (? (= me 1)
              (: _ (say1 "-- mount the early filesystems --")
                 _ (mnt "proc"     "/proc" "proc")

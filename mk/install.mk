@@ -11,6 +11,7 @@ DESTDIR ?= $(HOME)/
 d = $(DESTDIR)/$(PREFIX)
 v = $(DESTDIR)/$(VIMPREFIX)
 installs = \
+  $d/bin/love \
   $d/bin/ai \
   $d/bin/kore \
   $d/bin/mooncc \
@@ -19,7 +20,7 @@ installs = \
   $d/bin/ain \
   $d/bin/lux \
   $d/bin/bao \
-  $d/share/man/man1/ai.1 \
+  $d/share/man/man1/love.1 \
   $d/share/man/man1/cook.1 \
   $d/lib/love/prel.l \
   $d/lib/love/ev.l \
@@ -27,17 +28,17 @@ installs = \
   $d/lib/love/mooncc.image \
   $d/lib/liblove.a \
   $d/lib/liblove.so \
-  $d/include/ai.h \
-  $v/ftdetect/ai.vim \
-  $v/syntax/ai.vim \
-  $v/ftplugin/ai.vim
+  $d/include/love.h \
+  $v/ftdetect/love.vim \
+  $v/syntax/love.vim \
+  $v/ftplugin/love.vim
 
 install: $(installs)
 uninstall:
 	@echo RM	$(abspath $(installs))
 	@rm -f $(installs)
 
-$d/include/ai.h: ai.h
+$d/include/love.h: ai.h
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
@@ -63,16 +64,21 @@ $d/lib/liblove.so: $(glibc_ho)/liblove.so
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
 
-$d/bin/ai: $(ho)/love $(ho)/love.baked
+$d/bin/love: $(ho)/love $(ho)/love.baked
 	@echo CP	$(abspath $@)
 	@install -D -m 755 -s $< $@
+# compat: `ai` was the name from 2026-06-15 until the reversion to `love`. A
+# script on a user's disk carrying `#!/usr/bin/env -S ai -l` keeps working.
+$d/bin/ai: $d/bin/love
+	@echo LN	$(abspath $@)
+	@ln -sf love $@
 # the boot image travels INSIDE the binary (.image is an allocated PROGBITS section, so the
 # stripped install keeps it; strip removes only the symbol table -- .text/.rodata vaddrs are
 # unchanged, so the image's lvm-table indices and base-delta still resolve, and a bad match
 # just falls back to a normal egg boot).
 
 # cook: the build tool (crew/cook/cook.l) installed as an executable `cook` on PATH.
-# Its `#!/usr/bin/env -S ai -l` shebang re-execs the installed `ai` to load it,
+# Its `#!/usr/bin/env -S love -l` shebang re-execs the installed `love` to load it,
 # then it discovers a Makefile/Cookfile/Cards.l in the cwd. Installed as a SYMLINK
 # to the source so edits to crew/cook/cook.l are picked up without a reinstall.
 $d/bin/cook: crew/cook/cook.l
@@ -81,7 +87,7 @@ $d/bin/cook: crew/cook/cook.l
 	@ln -sf $(abspath $<) $@
 
 # moonfmt: the C formatter (crew/moon/fmt.l). Same single-file shebang mechanism as
-# cook (`#!/usr/bin/env -S ai -l` re-execs the installed `ai`; the SEAT inside fires
+# cook (`#!/usr/bin/env -S love -l` re-execs the installed `love`; the SEAT inside fires
 # on its own name and quits). Installed as a SYMLINK to the source, so edits to
 # crew/moon/fmt.l are picked up without a reinstall.
 $d/bin/moonfmt: crew/moon/fmt.l
@@ -90,7 +96,7 @@ $d/bin/moonfmt: crew/moon/fmt.l
 	@ln -sf $(abspath $<) $@
 
 # ain: the netcat clone (tools/ain.l). Same shebang-script mechanism as cook
-# (`#!/usr/bin/env -S ai -l` re-execs the installed `ai` to load it); the SEAT
+# (`#!/usr/bin/env -S love -l` re-execs the installed `love` to load it); the SEAT
 # form inside the file finds its own name on the command line and fires.
 $d/bin/ain: tools/ain.l
 	@echo CP	$(abspath $@)
@@ -105,14 +111,14 @@ $d/bin/ain: tools/ain.l
 $d/bin/kore: $(korefiles)
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
-	@{ echo '#!/usr/bin/env -S ai'; cat $(korefiles); } > $@
+	@{ echo '#!/usr/bin/env -S love'; cat $(korefiles); } > $@
 	@chmod 755 $@
 
 # mooncc: the C compiler, ITS OWN app (doc/moon.md). The installed bin is a WAKE SHIM:
 # it boots the baked mooncc IMAGE next door (--wake, ~ms) and fires moon-main on the
 # args -- the whole-cat re-eval (~1.3 s at every compile) is paid ONCE, at bake.
 # The image is baked by the build binary against the build cat (below); strip
-# keeps .text/.rodata vaddrs, so the stripped installed ai wakes it fine -- but
+# keeps .text/.rodata vaddrs, so the stripped installed love wakes it fine -- but
 # it IS binary-specific (anchor-checked), so image and binary always install
 # from the same build. Kept OUT of the kore cat so a cc edit never forces an kore
 # rebuild and vice versa.
@@ -121,7 +127,7 @@ $d/bin/mooncc: $(MAKEFILE_LIST)
 	@install -d $(dir $@)
 	@{ echo '#!/bin/sh'; \
 	   echo 'h=$$(CDPATH= cd -- "$$(dirname -- "$$0")" && pwd)'; \
-	   echo 'exec "$$h/ai" --wake "$$h/../lib/love/mooncc.image" -e "(moon-main (cuup (cup cmdline)))" "$$@"'; } > $@
+	   echo 'exec "$$h/love" --wake "$$h/../lib/love/mooncc.image" -e "(moon-main (cuup (cup cmdline)))" "$$@"'; } > $@
 	@chmod 755 $@
 $d/lib/love/mooncc.image: $(ho)/mooncc.image
 	@echo CP	$(abspath $@)
@@ -134,7 +140,7 @@ luxfiles = crew/lux/core.l crew/lux/layout.l crew/lux/wire.l crew/lux/ewmh.l cre
 $d/bin/lux: $(luxfiles)
 	@echo AI	$(abspath $@)
 	@install -d $(dir $@)
-	@{ echo '#!/usr/bin/env -S ai -l'; cat $(luxfiles); } > $@
+	@{ echo '#!/usr/bin/env -S love -l'; cat $(luxfiles); } > $@
 	@chmod 755 $@
 
 # bao: the interactive shell. Unlike crew/cook/ain, love/bao.l is DEFINE-ONLY (the
@@ -145,10 +151,10 @@ $d/bin/bao: $(MAKEFILE_LIST)
 	@install -d $(dir $@)
 	@{ echo '#!/bin/sh'; \
 	   echo 'h=$$(CDPATH= cd -- "$$(dirname -- "$$0")" && pwd)'; \
-	   echo 'exec "$$h/ai" -l "$$h/../lib/love/bao.l" -e "(bao 0)" "$$@"'; } > $@
+	   echo 'exec "$$h/love" -l "$$h/../lib/love/bao.l" -e "(bao 0)" "$$@"'; } > $@
 	@chmod 755 $@
 
-$d/share/man/man1/ai.1: $(ho)/love.1
+$d/share/man/man1/love.1: $(ho)/love.1
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
@@ -156,14 +162,14 @@ $d/share/man/man1/cook.1: $(ho)/cook.1
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$v/ftdetect/ai.vim: vim/ftdetect.vim
+$v/ftdetect/love.vim: vim/ftdetect.vim
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$v/syntax/ai.vim: vim/syntax.vim
+$v/syntax/love.vim: vim/syntax.vim
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
 
-$v/ftplugin/ai.vim: vim/ftplugin.vim
+$v/ftplugin/love.vim: vim/ftplugin.vim
 	@echo CP	$(abspath $@)
 	@install -D -m 644 $< $@
