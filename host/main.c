@@ -398,10 +398,8 @@ static lvm(lvm_getenv) {
  Sp += 1; Ip += 1;
  return Continue(); }
 
-// (getpid x) -> the running process id (x ignored). The host-nif worked example,
-// merged here from the former host/host.c. NOTE: unlike the host/*.c nifs, main.c
-// is linked into love0 too, so getpid is present in the bootstrap as well -- not a
-// pure host-glob nif. net.c (ain) / pty.c (bao) are the live not-in-love0 ones.
+// (getpid x) -> the running process id (x ignored). main.c is linked into love0
+// too, so unlike the host/*.c glob nifs this one exists in the bootstrap as well.
 static lvm(lvm_getpid) { return Sp[0] = putcharm(getpid()), Ip++, Continue(); }
 
 // --- PARTIAL-GLAZE PROTOTYPE (flag-gated; see love/glaze/emit.l cgir bridge) -----------
@@ -421,17 +419,6 @@ ai_noinline intptr_t ai_pg_dyad(intptr_t op, intptr_t a, intptr_t b) {
 // once and embeds it as the callr target. Fixnum-safe: code addresses are < 2^62.
 static lvm(lvm_pgaddr) { return Sp[0] = putcharm((intptr_t) ai_pg_dyad), Ip++, Continue(); }
 static union u const nif_pgaddr[] = {{lvm_pgaddr}, {lvm_ret0}};
-
-// (calloutdrive x) -> the address of callout_drive as a fixnum (x ignored) -- the glaze emitter reads
-// it once and bakes it as the `li Ip` immediate for a native-lane call-out (cf. pgaddr / ai_pg_dyad).
-// callout_drive is the STACKLESS call-out bridge (love.c): a native blob threads a closure application
-// through the VM stack -- no re-entrant C frame -- so a deep/re-entrant callee grows Sp, not the C
-// stack. (The retired re-entrant ai_call1 driver + its callout1 POC nif are gone with it.)
-static lvm(lvm_calloutdrive) { return Sp[0] = putcharm((intptr_t) ai_calloutdrive()), Ip++, Continue(); }
-static union u const nif_calloutdrive[] = {{lvm_calloutdrive}, {lvm_ret0}};
-// (calloutresume x) -> the address of callout_resume (the WALKABLE resume drive, love.c) as a fixnum.
-static lvm(lvm_calloutresume) { return Sp[0] = putcharm((intptr_t) ai_calloutresume()), Ip++, Continue(); }
-static union u const nif_calloutresume[] = {{lvm_calloutresume}, {lvm_ret0}};
 
 static union u const
  nif_exit[] = {{lvm_exit}, {lvm_ret0}},
@@ -458,8 +445,6 @@ AI_NIF("exec", nif_exec);
 AI_NIF("getenv", nif_getenv);
 AI_NIF("getpid", nif_getpid);
 AI_NIF("pgaddr", nif_pgaddr);
-AI_NIF("calloutdrive", nif_calloutdrive);
-AI_NIF("calloutresume", nif_calloutresume);
 
 // --- the boot script ---------------------------------------------------
 // Everything the two builds disagree about lives in this ONE conditional
@@ -491,9 +476,7 @@ static char const cli[] =
 static char const tests0[] =
 #include "tests0.h"
  ;
-static char const
- s2cldef[] = "(: (s2cl s) ((: (g i) (? (< i (tally s)) (link (peep s i 0) (g (+ 1 i))))) 0))",
- runner[] = "(reads (tap (s2cl tests)))";   // the stream shell (love/bao.l) drinks the baked corpus
+static char const runner[] = "(reads (tap (s2cl tests)))";   // the stream shell (love/bao.l) drinks the baked corpus
 
 // With args, run the build tool (lcat / gen_data) through the CLI driver.
 // With no args, self-test: eval prel+bao (the shell core) and run the baked corpus
@@ -512,16 +495,14 @@ static struct ai *boot(struct ai *g, bool argp) {
 #include "prel0.h"
 #include "bao0.h"
   );
-  g = ai_evals_(g,                                    // the crew/holo/ assembler service (neutral core + both backends),
-#include "holo0.h"                                     //   baked into the bootstrap so the corpus can test it under c0
-#include "x640.h"                                     //   AND the self-hosted ev. Globals persist across the egg warm
-#include "arm640.h"                                   //   below, so one eval here serves both corpus passes.
-#include "seal0.h"                                    // the module boundary: seal.l closes holo.l's scope layer as the `holo` book
+  g = ai_evals_(g,                                    // the crew/holo/ assembler service (neutral core + both backends)
+#include "holo0.h"                                     //   and the uu kernel (love/uu.l, sweep at its tail), baked into the
+#include "x640.h"                                     //   bootstrap so the corpus can test them under c0 AND the self-hosted
+#include "arm640.h"                                   //   ev. Globals persist across the egg warm below, so one eval here
+#include "seal0.h"                                    //   serves both corpus passes. seal.l closes holo.l's scope layer as
+#include "uu0.h"                                       //   the `holo` book.
   );
-  g = ai_evals_(g,                                    // the uu kernel (love/uu.l, sweep at its tail): the corpus's uu
-#include "uu0.h"                                       //   files drive it through the `uu` book under c0 AND the self-hosted ev
-  );
-  g = ai_evals_(g, s2cldef);
+  g = ai_evals_(g, "(: (s2cl s) ((: (g i) (? (< i (tally s)) (link (peep s i 0) (g (+ 1 i))))) 0))");   // string -> charlist, for the runner
   g = ai_evals_(g, runner);                           // pass 1: corpus via ev = the c0 nif
   g = ai_evals_(g, "("                                // bootstrap: install the self-hosted ev
 #include "egg0.h"
@@ -534,7 +515,10 @@ static struct ai *boot(struct ai *g, bool argp) {
 #else
 // the full love: raw terminal mode for the interactive REPL (love0 never needs
 // it -- a build tool / self-test is non-interactive); the CLI driver is the
-// canonicalized lcat header; `rel` is the non-tty stdin runner.
+// canonicalized lcat header.
+#if defined(__x86_64__) || defined(__aarch64__)
+#define AI_GLAZED 1                                      // the native JIT exists on this arch
+#endif
 static struct termios saved_termios;
 static void restore_termios(void) {
   tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios); }
@@ -553,20 +537,6 @@ static void raw_mode(void) {
 static char const cli[] =
 #include "cli.h"
  ;
-static char const
- rel[] = "(reads in)";   // non-tty stdin: the stream shell (love/bao.l) drinks the in port
-// a tty: launch the bao shell. bao IS the baked shell core now (love/bao.l, baked to
-// bao.h, evaled in the egg-warm below), DEFINE-ONLY -- it installs (bao _)/shell/...
-// but does not launch, so the same image serves a pipe (the bare `rel` runner) and
-// the corpus self-test. The frontend launches it on a tty by evaling "(bao 0)".
-static char const baolaunch[] = "(bao 0)";   // bao.l is define-only -> the frontend starts it
-
-// NOTE: the native-JIT experiment was retracted. It proved one durable finding
-// (you can run native code from a buf -- (eat 1 (toast bytes) x) -- and the kernel's
-// HHDM is executable, so a kernel JIT needs only a trampoline; see love/glaze/probe.l) and
-// one real speedup (reduction reassociation), which now lives baked in the C builtins
-// asum/aprod/amax/amin. The scalar/array kernels themselves were a net loss or
-// unused, so only eat (the curried eat1/eat2 nifs) + toast remain. See love/glaze/README.md.
 
 // --bake [PATH] / --wake PATH: the heap-image snapshot (doc/snapshot.md). `--bake` boots fully,
 // then lays the post-warm image back into the binary's OWN .image section (host/image.c's
@@ -576,42 +546,29 @@ static char const baolaunch[] = "(bao 0)";   // bao.l is define-only -> the fron
 extern int image_dump(struct ai*, char const*);          // host/image.c (file I/O around love.c's codec)
 extern int image_bake(struct ai*);                       // host/image.c (the self-bake)
 extern struct ai *image_load(char const*);
-static char const *image_dump_path = NULL;
-static bool image_bake_p = false;                        // --bake with no PATH: patch the binary itself
 // The baked post-boot image: a reserve in its own .image section (host/image_baked.c), filled by
 // `love --bake` (the binary boots, snapshots itself, and lays the result back into its own body).
 // Loaded at startup when its magic validates; else a normal egg boot.
 extern uint64_t ai_baked_image[];
 extern uintptr_t ai_baked_image_len;
-// the glaze (native JIT, love/glaze/{emit,auto}.l), x86-64 only. Baked but evaled ONLY
-// before a --bake -- so a normal boot never pays the ~810 ms native-compile of
-// its self-tests, while the dumped snapshot carries the JIT always-on at zero startup
-// (Phase 4, doc/snapshot.md). The asserts compile transient native closures; the
-// gen_major inside image_dump drops them, so the serialized heap is pure closures
-// (ev rebound to auto-ev) with no W^X arena to serialize -- natives JIT lazily on load.
-#if defined(__x86_64__) || defined(__aarch64__)
-static char const glaze_emit[] =
-#include "emit.h"
- ;
-static char const glaze_auto[] =
-#include "auto.h"
- ;
-static char const glaze_export[] =              // love/glaze/export.l: sweep the span into the `glaze` book
-#include "gexport.h"
- ;
-#endif
-#if defined(__x86_64__) || defined(__aarch64__)
-static char const glaze_hook[] =                // love/glaze/hook.l: install book['natjit] -- the ala
-#include "hook.h"                               //   creation hook (glaze EVERY embedded closure, not just (ev '(\..))); the hook's lanes take `arch` (= (intern love-arch)) so aarch64 emits its own code
- ;
-#endif
 // the post-warm dispatch (shared by boot() and the --wake path, which skips the warm).
 static struct ai *run_program(struct ai *g, bool argp, bool replp) {
+#ifdef AI_GLAZED
+  // AI_NO_GLAZE: a pure-interpreter session -- ev back to base-ev (kept in the glaze
+  // module book) and the natjit creation hook cleared. The forensics twin of AI_NO_IMAGE.
+  // Checked here, the convergence of the egg-boot and image-wake paths: a body-less
+  // top-level : pins even where the book nom is sealed away (an image). --bake never
+  // sees it -- the knob governs a session, not the baked artifact.
+  if (getenv("AI_NO_GLAZE")) g = ai_evals_(g, "(: ev (glaze 'base-ev) natjit ())");
+#endif
   if (argp) return ai_evals_(g, cli);
-  if (!replp) return ai_evals_(g, rel);
-  return ai_evals_(g, baolaunch); }      // a tty: launch the baked bao shell: (bao 0)
+  if (!replp) return ai_evals_(g, "(reads in)");         // non-tty stdin: the stream shell (love/bao.l) drinks the in port
+  return ai_evals_(g, "(bao 0)"); }                      // a tty: bao (the baked shell core) is DEFINE-ONLY -- installs
+                                                         //   (bao _)/shell/... but never launches, so one image serves a
+                                                         //   pipe and the self-test too; the frontend fires it here.
 
-static struct ai *boot(struct ai *g, bool argp) {
+// bake: NULL = no snapshot; "" = --bake (patch the binary's own .image); else --bake PATH (write an image file).
+static struct ai *boot(struct ai *g, bool argp, char const *bake) {
   bool replp = !argp && isatty(STDIN_FILENO);
   if (replp) raw_mode();
   g = ai_evals_(g, "("
@@ -641,39 +598,29 @@ static struct ai *boot(struct ai *g, bool argp) {
   // lowering its source changes its behavior (a group's __outer tail miscompiles -> wrong capture).
   // Turn welow off across the toolchain's own post-egg load, restore it below so user code still lowers.
   g = ai_evals_(g, "(: wsave welow welow 0)");
-#if defined(__x86_64__) || defined(__aarch64__)
-  g = ai_evals_(g, "(use 'holo)");                       // splice the assembler module below orth for the glaze's load: its bare
-                                                         //   assemble/assemble-at reads FOLD at compile (the capture law), so the
-                                                         //   glaze's closures stay self-contained after the (leave ()) below.
-  g = ai_evals_(g, glaze_emit);                          // load the native JIT post-egg -> ev = auto-ev, glaze always-on
-  g = ai_evals_(g, glaze_auto);                          // (no fragile stale image; base-ev captures the hatched ev).
-  g = ai_evals_(g, glaze_export);                        // the glaze module boundary: its names sweep into the `glaze` book
-                                                         // ~680ms from-scratch; the image snapshots past it. arm64: the integer + scalar-float lanes (leaf, counted/n-var loops, group, call-out) are native via BOTH auto-ev and the natjit hook; only the float-GRID lane + castbuild fall to interp (auto.l's `x86?` gate).
-  g = ai_evals_(g, glaze_hook);                          // install natjit: glaze embedded closures at creation, not just (ev '(\..)); arch-parameterized, so aarch64 too
-  g = ai_evals_(g, "(leave ())");                        // a bare leave clears the use-stack: holo off the chain, orth alone again
+#ifdef AI_GLAZED
+  g = ai_evals_(g,
+      "(use 'holo)"
+#include "emit.h"
+#include "auto.h"
+#include "gexport.h"
+#include "hook.h"
+      "(leave ())");
 #endif
-  g = ai_evals_(g, "(: welow wsave)");                   // toolchain baked -> welow back on for USER code
-#if defined(__x86_64__) || defined(__aarch64__)
-  // AI_NO_GLAZE: a pure-interpreter session -- ev back to base-ev (kept in the
-  // glaze module book) and the natjit creation hook cleared. The forensics twin
-  // of AI_NO_IMAGE: it isolates glaze-lane decisions from interpreter behavior.
-  if (getenv("AI_NO_GLAZE")) g = ai_evals_(g, "(: ev (glaze 'base-ev) natjit ())");
-#endif
+  g = ai_evals_(g, "(: welow wsave)(pull book 'wsave 0)");   // toolchain baked -> welow back on for USER code; the scratch nom unpinned
 
-  if (image_dump_path || image_bake_p) {                 // --bake: snapshot the post-warm heap, then exit
-#if defined(__x86_64__) || defined(__aarch64__)
+  if (bake) {                                            // --bake: snapshot the post-warm heap, then exit
+#ifdef AI_GLAZED
     // auto.l's self-tests ran auto-ev, filling the `memo` compile cache with native nif
     // closures (ap = a W^X mmap addr) that can't be serialized. Empty it: the image boots
     // with a clean cache (natives JIT lazily on the loaded runtime's first ev, as designed).
-    // BOTH glazing arches -- the guard was x86-only from when the glaze was too, so an arm64
-    // host bake carried the whole cache into img_nif_interp's revert (or a refused bake).
     g = ai_evals_(g, "(: c ((peep book 'glaze 0) 'cache) (map (\\ k (pull c k 0)) (keys c)))");
 #endif
     // HIDE the raw machine-code-execution seam from USERS (who boot this image): the glaze folded
     // `nif` into its closures, so pulling it off the book is safe. eat/toast/nif off, then seal `book`.
     // The no-image dev/test binary keeps them (egg.l defers book-removal) as the test knob.
     g = ai_evals_(g, "(: _ (pull book 'eat 0) _ (pull book 'toast 0) _ (pull book 'nif 0) _ (pull book 'nifx 0) (pull book 'book 0))");
-    int rc = image_dump_path ? image_dump(g, image_dump_path) : image_bake(g);
+    int rc = *bake ? image_dump(g, bake) : image_bake(g);
     if (rc) fprintf(stderr, "love: bake failed (rc=%d)\n", rc);
     exit(rc ? 1 : 0); }
   return run_program(g, argp, replp); }
@@ -683,19 +630,20 @@ int main(int argc, char const **argv) {
   struct ai *g = NULL;
 #ifndef GL_BOOTSTRAP
   // --bake [PATH] / --wake PATH must lead the args; strip them (keep argv[0]).
-  char const *image_load_path = NULL;
+  char const *image_load_path = NULL, *bake = NULL; // see boot(): "" = self-bake, a path = image file
   if (argc >= 2 && !strcmp(argv[1], "--bake")) {
-    if (argc >= 3) { image_dump_path = argv[2]; argv[2] = argv[0], argv += 2, argc -= 2; }
-    else           { image_bake_p = true; argv[1] = argv[0], argv += 1, argc -= 1; } }
-  else if (argc >= 3 && !strcmp(argv[1], "--wake")) { image_load_path = argv[2]; argv[2] = argv[0], argv += 2, argc -= 2; }
+   if (argc >= 3) bake = argv[2], argv[2] = argv[0], argv += 2, argc -= 2;
+   else bake = "", argv[1] = argv[0], argv += 1, argc -= 1; }
+  else if (argc >= 3 && !strcmp(argv[1], "--wake"))
+   image_load_path = argv[2], argv[2] = argv[0], argv += 2, argc -= 2;
   if (image_load_path && !(g = image_load(image_load_path))) image_load_path = NULL;   // NULL -> normal boot
   // AUTO-LOAD: with no image flag, wake the image baked into the binary's own .image section, so a
   // plain `love` is glazed-by-default at ~4 ms cold start instead of the ~230 ms egg eval. Opt out with
   // AI_NO_IMAGE (the bench does, to control glazed-vs-interp itself). Any problem -- unbaked, stale,
   // truncated -- makes the load return NULL, so we fall through to the normal egg boot. Never wrong.
-  if (!g && !image_dump_path && !image_bake_p && !getenv("AI_NO_IMAGE")) {
-    if (ai_baked_image_len && (g = ai_image_load(ai_baked_image, ai_baked_image_len)))
-      image_load_path = "<baked>"; }                                     // a loaded image is the booted state: skip the egg warm
+  if (!g && !bake && !getenv("AI_NO_IMAGE")) {
+   if (ai_baked_image_len && (g = ai_image_load(ai_baked_image, ai_baked_image_len)))
+    image_load_path = "<baked>"; }                                     // a loaded image is the booted state: skip the egg warm
 #endif
   if (!g) g = ai_ini();
   g = env_budget(g);                               // the AI_BUDGET_MB cap, on whichever g won (fresh or woken image)
@@ -713,19 +661,16 @@ int main(int argc, char const **argv) {
     g = ai_defn(g, __start_ai_nifs, __stop_ai_nifs - __start_ai_nifs);
     struct ai_def d[] = {{"argv", full_argv}, {"cmdline", full_argv}};
     g = ai_defn(g, d, countof(d));      // re-pins the host nifs (live addresses) into the loaded book too
-#ifndef GL_BOOTSTRAP
-    if (image_load_path) {              // --wake: skip the egg warm, dispatch straight to the program
+#ifdef GL_BOOTSTRAP
+    g = boot(g, argp);
+#else
+    if (!image_load_path) g = boot(g, argp, bake);
+    else {              // --wake: skip the egg warm, dispatch straight to the program
       bool replp = !argp && isatty(STDIN_FILENO);
       if (replp) raw_mode();
-#if defined(__x86_64__) || defined(__aarch64__)
-      // the AI_NO_GLAZE knob on the image path: the book nom is sealed away in an
-      // image, but a body-less top-level : still pins -- no book access needed.
-      if (getenv("AI_NO_GLAZE")) g = ai_evals_(g, "(: ev (glaze 'base-ev) natjit ())");
+      g = run_program(g, argp, replp); }
 #endif
-      g = run_program(g, argp, replp);
-    } else
-#endif
-    g = boot(g, argp); }
+  }
   switch (ai_code_of(g)) {
    default: break;
    case ai_status_scare:               // the honest face: ";; a b" when the scare

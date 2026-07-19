@@ -204,6 +204,7 @@ lvm_t lvm_kcall,
  lvm_nif,         // CODEGEN BACKEND: emitted bytes -> applicable native value (1-arg / multi-arg)
  lvm_nifx,        // ... with an EXTRAS word (value[3]+8 = Ip+32): refs a native needs beyond the twin (the callout's clos, amble's ()/globals) ride a GC-walked cell slot, so value[1] stays the PLAIN twin and the image revert (img_nif_interp) never dereferences a pack
  lvm_resume,      // the WALKABLE call-out resume: jump blob-base + untag(offset) after delivering the result -- the frame carries an odd charm + an out-of-pool code address, so a GC (gen_grow included) with a call-out pending walks it clean (the retB stack-interior pointer is retired)
+ lvm_calloutdrive, lvm_calloutresume,   // the drive addresses as fixnums (the glaze emitter bakes them as `li Ip` immediates)
  lvm_absent, lvm_absent2;   // safe defaults for the frontend nifs (exit/open/..)
 // Carry extra operands, so (like lvm_gc) they are declared apart from the
 // plain lvm_t list, which fixes the 4-argument ap signature. lvm_vbin
@@ -849,7 +850,8 @@ _(nif_nifx, "nifx", s5(lvm_nifx))\
  _(nif_rng_seed, "seed", s1(lvm_rng_seed))\
  _(nif_rand_next, "rand-next", s1(lvm_rand_next)) _(nif_randf_next, "randf-next", s1(lvm_randf_next))\
  _(nif_coinmk, "coin", s2(lvm_coinmk)) _(nif_load, "load", s1(lvm_load))\
- _(nif_dieof, "die-of", s1(lvm_dieof)) _(nif_coinp, "coin?", s1(lvm_coinp)) NIF_FAULT(_)
+ _(nif_dieof, "die-of", s1(lvm_dieof)) _(nif_coinp, "coin?", s1(lvm_coinp))\
+ _(nif_calloutdrive, "calloutdrive", s1(lvm_calloutdrive)) _(nif_calloutresume, "calloutresume", s1(lvm_calloutresume)) NIF_FAULT(_)
 #define native_implemented_function(n, _, d) static union u const n[] = d;
 #define insts(_) _(lvm_unc) _(lvm_index) _(lvm_ret) _(lvm_ap) _(lvm_tap) _(lvm_apn) _(lvm_tapn)\
   _(lvm_jump) _(lvm_cond) _(lvm_arg) _(lvm_quote) _(lvm_defglob)\
@@ -2312,9 +2314,10 @@ union u const numap_drive[] = { {lvm_ap}, {.ap = numap_swap}, {.ap = lvm_ret0} }
 // that could overflow the C stack -- so it is gone.) The loop's live state is spilled to Sp (a GC
 // root) around each call, so a collection inside the callee relocates it correctly for free.
 static union u const callout_drive[] = { {lvm_ap}, {.ap = lvm_ret0} };
-// The address of callout_drive as an integer -- the glaze emitter bakes it as the `li Ip` immediate.
-// A data-segment const, so the address is stable across an image reload (unlike a W^X JIT pointer).
-uintptr_t ai_calloutdrive(void) { return (uintptr_t) callout_drive; }
+// (calloutdrive x) -> the address of callout_drive as a fixnum (x ignored) -- the glaze emitter reads
+// it once and bakes it as the `li Ip` immediate. A data-segment const, so the address is stable
+// across an image reload (unlike a W^X JIT pointer).
+lvm(lvm_calloutdrive) { return Sp[0] = putcharm((intptr_t) callout_drive), Ip++, Continue(); }
 // --- callout_resume: the WALKABLE resume (v2 of the bridge) -----------------------------------------
 // callout_drive's RET was the ADDRESS OF A STACK SLOT holding the blob's resume point -- a stack-
 // INTERIOR in-pool pointer, which violates the stack-walk invariant (slots hold values or out-of-pool
@@ -2326,7 +2329,8 @@ uintptr_t ai_calloutdrive(void) { return (uintptr_t) callout_drive; }
 // result. NO stack-interior pointers remain, and a stack RELOCATION is equally safe: the offset is a
 // value, the base is immortal. Same stackless shape as callout_drive otherwise.
 static union u const callout_resume[] = { {lvm_ap}, {.ap = lvm_resume} };
-uintptr_t ai_calloutresume(void) { return (uintptr_t) callout_resume; }
+// (calloutresume x) -> the address of callout_resume as a fixnum (x ignored).
+lvm(lvm_calloutresume) { return Sp[0] = putcharm((intptr_t) callout_resume), Ip++, Continue(); }
 
 // ============================================================================
 // the lisp help calling convention
