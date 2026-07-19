@@ -103,7 +103,7 @@ out/lib/tests0.h: $t
 	@echo AI	$@
 	@cat $t | $(sed_lit) > $@
 
-# love_version.h: the build's version-control id, surfaced in the runtime as the `ai-version`
+# love_version.h: the build's version-control id, surfaced in the runtime as the `love-version`
 # global (ai.c ai_ini_0). VCS-AGNOSTIC: a _darcs/ repo stamps darcs-<12-hex patch hash>
 # (-dirty when darcs whatsnew is non-empty), else git describe, else "unknown" -- so the
 # darcs snapshot import carries this rule verbatim and stamps itself. Regenerated every

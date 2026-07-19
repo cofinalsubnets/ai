@@ -78,7 +78,7 @@ data-run=
   // top-level datum; ONE datum evaluates as-is, MANY become the application
   // (a b c).
   ev("(: webln (\\ s (: e (nom 0) (chs i acc) (? (< i 0) acc (chs (- i 1) (link (s i) acc))) (go p acc) (: r (sound p e) (? (= r p) () (= r e) (rev acc) (go p (link r acc)))) ds (go (tap (chs (- (tally s) 1) ())) ()) (? !(two? ds) () !(two? (cup ds)) (ev (cap ds)) (ev ds)))))");
-  ev("(. ai-version)");
+  ev("(. love-version)");
   const ver = drain();
   status.style.display = 'none';
   put(`;3 ai ${ver} ${(performance.now() - t0).toFixed(0)}ms`, 'cnd');

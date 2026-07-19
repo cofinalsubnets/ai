@@ -1,12 +1,12 @@
-.TH COOK 1 "" "ai @VERSION@" "ai manual"
+.TH COOK 1 "" "love @VERSION@" "love manual"
 .SH NAME
-cook \- a dependency-driven build tool, make in ai
+cook \- a dependency-driven build tool, make in love
 .SH SYNOPSIS
 .B cook
 .RI [ options ]
 .RI [ recipe ...]
 .br
-.B ai
+.B love
 .B \-l
 .I apps/cook/cook.l
 .RI [ options ]
@@ -18,12 +18,12 @@ brings an
 up to date when it is missing or older than any of its prerequisites, running
 the item's recipe over freshened prerequisites first \(em the whole of make's
 idea. It is written in
-.BR ai (1)
+.BR love (1)
 and runs on it.
 .PP
 With no
 .BR \-f ,
-cook discovers a build file in the current directory, preferring an ai-native
+cook discovers a build file in the current directory, preferring a love-native
 recipe file over a Makefile: a legacy
 .B Cards.l
 first, then a
@@ -36,7 +36,7 @@ is ever read as make; a
 .B Cards.l
 or
 .B Cookfile
-is ai source. Name one explicitly with
+is love source. Name one explicitly with
 .B \-f
 to override. Like
 .BR make ,
@@ -69,7 +69,7 @@ so pipes, globs and redirections work.
 .SS Cookfile
 A
 .B Cookfile
-is ordinary ai source that registers recipes and then calls
+is ordinary love source that registers recipes and then calls
 .BR cook :
 .PP
 .RS
@@ -158,7 +158,7 @@ cook \-\-emit \-f Makefile > Cookfile
 Without the installed symlink, loading cook by hand:
 .RS
 .EX
-ai \-l apps/cook/cook.l Makefile host
+love \-l apps/cook/cook.l Makefile host
 .EE
 .RE
 .SH EXIT STATUS
@@ -168,7 +168,7 @@ exits
 when every cooked item is up to date, and non-zero when a recipe command fails
 or a needed item has neither a recipe nor a file.
 .SH SEE ALSO
-.BR ai (1),
+.BR love (1),
 .BR make (1).
 The project README, and
 .I tools/cook-example/

@@ -1,8 +1,8 @@
-.TH AI 1 "" "ai @VERSION@" "ai manual"
+.TH LOVE 1 "" "love @VERSION@" "love manual"
 .SH NAME
-ai \- a curried lisp over a tiny generic core
+love \- a curried lisp over a tiny generic core
 .SH SYNOPSIS
-.B ai
+.B love
 .RB [ \-l
 .IR lib ]
 .RB [ \-e
@@ -14,7 +14,7 @@ ai \- a curried lisp over a tiny generic core
 .RI [ arg
 \&...]]
 .SH DESCRIPTION
-.B ai
+.B love
 is a small lisp in which every value is a total function of one argument and
 application is left-to-right currying:
 .RI ( f
@@ -47,7 +47,7 @@ With a
 .I file
 argument (or
 .BR \-e ),
-.B ai
+.B love
 runs it as the program and exits; any further arguments are the program's, in
 .BR argv .
 With no program it starts an interactive read-eval-print loop when standard
@@ -87,7 +87,7 @@ Evaluate a file:
 .PP
 .RS
 .EX
-ai prog.l
+love prog.l
 .EE
 .RE
 .PP
@@ -95,7 +95,7 @@ Load a library, then run a script:
 .PP
 .RS
 .EX
-ai \-l lib.l prog.l
+love \-l lib.l prog.l
 .EE
 .RE
 .PP
@@ -103,7 +103,7 @@ Evaluate an expression:
 .PP
 .RS
 .EX
-ai \-e '(. (+ 1 2))'
+love \-e '(. (+ 1 2))'
 .EE
 .RE
 .PP
@@ -111,7 +111,7 @@ Evaluate from standard input:
 .PP
 .RS
 .EX
-echo '(+ 1 2)' | ai
+echo '(+ 1 2)' | love
 .EE
 .RE
 .PP
@@ -119,11 +119,11 @@ Start the interactive shell:
 .PP
 .RS
 .EX
-ai
+love
 .EE
 .RE
 .SH EXIT STATUS
-.B ai
+.B love
 exits
 .B 0
 on success and non-zero on a fatal error, such as a file that cannot be opened

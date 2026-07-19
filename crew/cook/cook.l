@@ -722,7 +722,7 @@
    ; positional word that names an existing file is taken as the build file and the
    ; rest are recipes; with -f, every positional word is a recipe.
    (bye s) (: _ (puts s) _ (putc 10) _ (flush out) (quit 0))
-   (version _) (bye ("cook (ai " + ai-version + ")"))
+   (version _) (bye ("cook (love " + love-version + ")"))
    (usage _) (bye ("usage: cook [-f FILE] [--emit] [-v] [-h] [RECIPE ...]\n"
                    + "  -f, --file FILE   the build file (Makefile or Cookfile); else discovered\n"
                    + "      --emit        transpile a Makefile to a resolved Cookfile, then exit\n"

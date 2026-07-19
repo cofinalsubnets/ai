@@ -407,7 +407,7 @@
    (shell _)
      (: _ (? (peep book (\ help) 0) 0 (ev (list (\ :) (\ help) shell-help)))
         _ ((ev 'raw) 1)
-        _ (puts (";3 ai " + ai-version + "\n"))
+        _ (puts (";3 love " + love-version + "\n"))
         (repl 0 0))
 
    ; --- the host-only pty wrapper (wrap) ---

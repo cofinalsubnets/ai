@@ -566,7 +566,7 @@ static char const glaze_export[] =              // love/glaze/export.l: sweep th
 #endif
 #if defined(__x86_64__) || defined(__aarch64__)
 static char const glaze_hook[] =                // love/glaze/hook.l: install book['natjit] -- the ala
-#include "hook.h"                               //   creation hook (glaze EVERY embedded closure, not just (ev '(\..))); the hook's lanes take `arch` (= (intern ai-arch)) so aarch64 emits its own code
+#include "hook.h"                               //   creation hook (glaze EVERY embedded closure, not just (ev '(\..))); the hook's lanes take `arch` (= (intern love-arch)) so aarch64 emits its own code
  ;
 #endif
 // the post-warm dispatch (shared by boot() and the --wake path, which skips the warm).
@@ -638,7 +638,7 @@ static struct ai *boot(struct ai *g, bool argp) {
     // The no-image dev/test binary keeps them (egg.l defers book-removal) as the test knob.
     g = ai_evals_(g, "(: _ (pull book 'eat 0) _ (pull book 'toast 0) _ (pull book 'nif 0) _ (pull book 'nifx 0) (pull book 'book 0))");
     int rc = image_dump_path ? image_dump(g, image_dump_path) : image_bake(g);
-    if (rc) fprintf(stderr, "ai: bake failed (rc=%d)\n", rc);
+    if (rc) fprintf(stderr, "love: bake failed (rc=%d)\n", rc);
     exit(rc ? 1 : 0); }
   return run_program(g, argp, replp); }
 #endif

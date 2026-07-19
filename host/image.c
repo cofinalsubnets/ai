@@ -48,10 +48,10 @@ static void image_guard_arm(void) {
 }
 static void image_guard_report(void) {
   if (!ai_image_nbad) return;
-  fprintf(stderr, "ai: bake refused -- %lu un-wakeable absolute pointer(s) in the live heap\n",
+  fprintf(stderr, "love: bake refused -- %lu un-wakeable absolute pointer(s) in the live heap\n",
           (unsigned long) ai_image_nbad);
   for (uintptr_t i = 0; i < ai_image_nbad && i < 2; i++)
-    fprintf(stderr, "ai:   offender %lu: value %p in object at heap word %lu (object hot %p) -- JIT/W^X/mmap; see doc/wake-storm.md\n",
+    fprintf(stderr, "love:   offender %lu: value %p in object at heap word %lu (object hot %p) -- JIT/W^X/mmap; see doc/wake-storm.md\n",
             (unsigned long) i, (void*) ai_image_bad[4 * i + 1],
             (unsigned long) ai_image_bad[4 * i], (void*) ai_image_bad[4 * i + 2]);
 }
@@ -97,7 +97,7 @@ int image_bake(struct ai *g) {
   // so there is nothing to announce. only a REFUSED bake (below) is worth a word.
   if (!buf) { image_guard_report(); return -2; }
   if (len > ai_baked_image_len) {
-    fprintf(stderr, "ai: image %lu > .image reserve %lu -- bump RESERVE_WORDS in host/image_baked.c\n",
+    fprintf(stderr, "love: image %lu > .image reserve %lu -- bump RESERVE_WORDS in host/image_baked.c\n",
             (unsigned long) len, (unsigned long) ai_baked_image_len);
     return -3; }
   struct bake_at b = { (uintptr_t) ai_baked_image, 0, 0 };

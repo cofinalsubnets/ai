@@ -20,7 +20,7 @@
 (: sfuel (tablet 0))   ; autospec's unfold-fuel -- its OWN global (a sibling-captured value-local in the letrec below misses in the hatched ev; smix re-seeds it per specialization, so the shared tablet is safe)
 (: glaze-loaded? (lit? (peep book 'glaze 0))   ; RE-LOAD detector, read BEFORE this load defglob's anything: the `glaze` MODULE book on the book => the glaze is installed (the file is being cat'd on top of the baked glaze; export.l pinned the book). Used at the `ev` rebind below to make a re-load IDEMPOTENT -- keep the baked glaze, don't reinstall -- so `cat auto.l prog | ai` just runs prog. (Loading the compiler's own source through itself otherwise recompiles its helpers wrong; tracked separately.)
    base-ev (: G (peep book 'glaze 0) (? (lit? G) (G 'base-ev) ev))   ; the PURE interpreter, captured ONCE: first load -> ev (interpreter); a RE-LOAD (glaze cat'd on the baked glaze) has ev=auto-ev already, so take the interpreter out of the MODULE book (else base-ev becomes the glaze and autospec's static fold re-enters it)
-   arch (intern ai-arch)                ; the host CPU as the assembler target ('x64 / 'arm64); glaze loads only on these
+   arch (intern love-arch)                ; the host CPU as the assembler target ('x64 / 'arm64); glaze loads only on these
    x86? (id? arch 'x64)                 ; gates the still-x86-only lanes (float result, counted loops, float grids)
    ; the emitter's expression grammar over var v: var | int | arith | cmp | (? t a b)
    (exprp e v) (? (e = v)   1
@@ -1269,8 +1269,8 @@
                            (? ln (memo e (\ l (njit-loop-n l <ln <>ln <>>ln <>>>ln <>>>>ln (base-ev l))))
                               (base-ev (autogroup (autonat (twolow (castbuild e))))))))))    ; fall-through: cask-build a string-accumulator loop (the jug threads as a loop param -> survives autogroup's pure passes), LOWER a complex(twin) grid to real-pairs (twolow), then glaze a float-grid nest / mutually-recursive arith group if either fits, else interpret
    ev (? glaze-loaded? ev                                      ; rebind the global: ev is now auto-native. On a RE-LOAD (glaze-loaded?) KEEP the baked auto-ev -- it captured the correct baked helpers, so the user's program runs through the working glaze; double-loading is a no-op, not a crash.
-         (0 < ai-tco) auto-ev
-         ev)                                                   ; a TRAMPOLINE build (ai-tco 0): glazed code Continues by tail-jump, which only the threaded VM honors -- stay the pure interpreter (the glaze book still installs for probes)
+         (0 < love-tco) auto-ev
+         ev)                                                   ; a TRAMPOLINE build (love-tco 0): glazed code Continues by tail-jump, which only the threaded VM honors -- stay the pure interpreter (the glaze book still installs for probes)
 )
 
 ; --- re-declare member? through the glazed compiler: the recognizer's POINT-= grammar
@@ -1284,7 +1284,7 @@
 ; Two forms: memb0 must read the GLOBAL member? (one scope would read the rebind before
 ; its pin -- the missing condition).
 (: memb0 member?)
-(: member? (? glaze-loaded? memb0 (0 < ai-tco)
+(: member? (? glaze-loaded? memb0 (0 < love-tco)
               (ev '(: (member? x l) (? (two? l) (? (= x (cap l)) 1 (member? x (cup l))) 0) member?))
               memb0))
 

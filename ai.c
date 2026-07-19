@@ -1,6 +1,6 @@
 #include "ai.h"
 // The build's version string (the version-control id), generated into out/lib/love_version.h by
-// the Makefile and surfaced in the runtime as the `ai-version` global (ai_ini_0).
+// the Makefile and surfaced in the runtime as the `love-version` global (ai_ini_0).
 // Optional include so a standalone/unwired compile still builds; falls back to "unknown".
 #if defined(__has_include) && __has_include("love_version.h")
 #include "love_version.h"
@@ -985,20 +985,20 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
    // tests gate on the real boundary (it differs on 32- vs 64-bit ports).
    {"max-charm", putcharm((ai_word)((uintptr_t)-1 >> 2))},
    {"min-charm", putcharm(-(ai_word)((uintptr_t)-1 >> 2) - 1)},
-   // ai-tco: 1 = the tail-threaded VM, 0 = the trampoline. glazed code CONTINUES
+   // love-tco: 1 = the tail-threaded VM, 0 = the trampoline. glazed code CONTINUES
    // by tail-jump (registers carry Ip/Hp/Sp), which only the threaded build
    // honors -- auto.l reads this and keeps the pure interpreter on a trampoline
    // build (a tco=0 host with the glaze installed segfaulted on its first hot loop).
-   {"ai-tco", putcharm(ai_tco)}, };
+   {"love-tco", putcharm(ai_tco)}, };
   g = ai_defn(g, def0, countof(def0));
   g = ai_defn(g, def1, countof(def1));
   g = ai_defn(g, frontend_defaults, countof(frontend_defaults));   // overridable by the frontend
-  // `ai-version`: the build's version-control id (love_version.h), surfaced on init so the user
+  // `love-version`: the build's version-control id (love_version.h), surfaced on init so the user
   // can read the running version. A non-fixnum global, harmlessly skipped by ev.l's pureset.
   if (ai_ok(g = ai_strof(g, AI_VERSION))) {
-   struct ai_def vd[] = {{"ai-version", ai_pop1(g)}};
+   struct ai_def vd[] = {{"love-version", ai_pop1(g)}};
    g = ai_defn(g, vd, countof(vd)); }
-  // `ai-arch`: the host CPU the glaze emits for. auto-ev interns it as the assembler
+  // `love-arch`: the host CPU the glaze emits for. auto-ev interns it as the assembler
   // target ('x64 / 'arm64) and gates the still-x86-only lanes (float / loops).
 #if defined(__x86_64__)
   #define AI_ARCH "x64"
@@ -1008,7 +1008,7 @@ static struct ai *ai_ini_0(struct ai*g, uintptr_t len0, void *(*al)(struct ai*, 
   #define AI_ARCH "other"
 #endif
   if (ai_ok(g = ai_strof(g, AI_ARCH))) {
-   struct ai_def ad[] = {{"ai-arch", ai_pop1(g)}};
+   struct ai_def ad[] = {{"love-arch", ai_pop1(g)}};
    g = ai_defn(g, ad, countof(ad)); }
   // the 'missing condition tag needs no pre-intern: it is the `missing` nif's
   // name, so installing that nif interns it and the book roots it; the raise

@@ -663,12 +663,12 @@ two ideas to keep warm as the stages climb, neither committed yet:
    <= compare swapped onto above/ae, ==/!= carry the parity bit -- holo grew
    set p/np); negative float literals image (the neg folds into the literal;
    fbits answers the SIGNED i64 pattern so the sign bit doesn't big); and cc now
-   PREDEFINES `__x86_64__` (ai-arch read the fallback "other" and the glaze
+   PREDEFINES `__x86_64__` (love-arch read the fallback "other" and the glaze
    handed holo an unknown target) while `__SIZEOF_INT128__` stays undefined --
    the bignum limbs keep the portable 32-bit branch, the lone `divq` asm stays
    out of reach. found on the way, in the CORE: a tco=0 host with the glaze
    baked segfaulted on its first hot loop (glazed code Continues by tail-jump --
-   threaded-VM only); ai.c now pins `ai-tco` and auto.l keeps the pure
+   threaded-VM only); ai.c now pins `love-tco` and auto.l keeps the pure
    interpreter on a trampoline build. and the house speed-law paid off:
    `mooncc -c ai.c` took ~13 MINUTES -- holo's lay appended each lowered chunk to
    the tail of the item stream, a re-copy per instruction -- accumulating

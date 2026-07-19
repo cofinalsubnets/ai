@@ -46,7 +46,7 @@ all: ai.js
 # ai.o bakes the version string (love_version.h, via ai.c's __has_include), so
 # regenerate it through the parent (force_version) and recompile ai.o when the
 # id changes -- mirrors the host build's l.o relink. Without this the browser
-# banner (ai-version) drifts to whatever revision ai.o was last built at.
+# banner (love-version) drifts to whatever revision ai.o was last built at.
 #
 # The committed ai.js is ALWAYS built from a tree that ai.js itself dirties, so
 # `git describe --dirty` would brand the page banner "-dirty" in perpetuity --

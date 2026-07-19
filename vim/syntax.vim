@@ -37,7 +37,7 @@ syn keyword AiFunc ev call-cc yield spawn wait sleep done? hush key?
 syn keyword AiFunc help scare scare? more? eof?
 syn keyword AiFunc rand randf rand-next randf-next rng-seed rng-get rng-set
 syn keyword AiFunc open close run getenv exit
-syn keyword AiFunc clock gauge assert ai-version argv cmdline
+syn keyword AiFunc clock gauge assert love-version argv cmdline
 syn keyword AiSigilWord non twin sat
 
 " Macros (head-symbol rewrites installed with ::)

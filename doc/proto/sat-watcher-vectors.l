@@ -630,7 +630,7 @@
        _ (foldl (\ i b (: _ (pin c i b) (+ i 1))) 0 bs)
        (nif c fb '(\ q (q)) ar))
    (fbcpk nv)                                               ; -> (bcp conf dec), or () when they can't build
-    (? (! (&& (lit? nif) (id? (intern ai-arch) 'x64))) ()
+    (? (! (&& (lit? nif) (id? (intern love-arch) 'x64))) ()
        (: hit (peep fkers nv ())
           (? (two? hit) hit
              (: ks (L (fnif (fbcp-ir nv) fbcp3 3)

@@ -685,7 +685,7 @@
        _ (foldl (\ i b (: _ (pin c i b) (i + 1))) 0 bs)
        (nif c fb '(\ q (q)) ar))
    (fbcpk nv)                                               ; -> (bcp conf dec), or () when they can't build
-    (? !(&& (lit? nif) (id? (intern ai-arch) 'x64)) ()
+    (? !(&& (lit? nif) (id? (intern love-arch) 'x64)) ()
        (: hit (peep fkers nv ())
           (? (two? hit) hit
              (: ks `((fnif (fbcp-ir nv) fbcp3 3)
@@ -694,7 +694,7 @@
                 _ (pin fkers nv ks) ks))))
    bvkers (tablet 0)                                        ; NB -> (fbvag), the grow-step kernel, one assemble per bucket
    (fbvagk NB2)
-    (? !(&& (lit? nif) (id? (intern ai-arch) 'x64)) ()
+    (? !(&& (lit? nif) (id? (intern love-arch) 'x64)) ()
        (: hit (peep bvkers NB2 ())
           (? (two? hit) hit
              (: ks (link (fnif (fbvag-ir NB2) fbvag3 4) ())

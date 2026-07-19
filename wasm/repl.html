@@ -65,10 +65,10 @@
       return text;
     }
 
-    // banner: the running version, read from the live image (ai-version) so
+    // banner: the running version, read from the live image (love-version) so
     // it tracks the build rather than a hardcoded string. `. ` prints the raw
     // string bytes; drain reads them back.
-    eval_('(. ai-version)');
+    eval_('(. love-version)');
     const ver = drain().trim();
     if (ver) {
       const banner = document.createElement('div');
