@@ -13,12 +13,12 @@
 ; symbol tests below define their target in-snippet where as-hex resolves the rel32 in place.
 (: pass (tablet 0) _ (pin pass 0 0)
    fail (tablet 0) _ (pin fail 0 0)
-   (bump t)  (pin t 0 (+ 1 (peep t 0 0)))
+   (bump t)  (pin t 0 (1 + (peep t 0 0)))
    (sayln s) (: _ (puts s) (flush out))
    (chk-eq name want got)
-      (? (= want got) (bump pass)
+      (? (want = got) (bump pass)
          (: _ (bump fail)
-            (sayln (+ "FAIL " (+ name (+ ": want " (+ (show want) (+ " got " (+ (show got) "\n")))))))))
+            (sayln ("FAIL " + (name + (": want " + ((show want) + (" got " + ((show got) + "\n")))))))))
    (chk name want src) (chk-eq name want (as-hex src))
 
    ;; -- the golden table: (name  expected-hex  AT&T-source). byte-identical to /usr/bin/as. --
@@ -66,5 +66,5 @@
 
    _ (foldl (\ _ t (chk (at t 0) (at t 1) (at t 2))) 0 tests)
    np (peep pass 0 0) nf (peep fail 0 0)
-   _ (sayln (+ "crew/holo/astest: " (+ (show np) (+ " passed, " (+ (show nf) " failed\n")))))
-   _ (? (= 0 nf) 0 (quit 1)))
+   _ (sayln ("crew/holo/astest: " + ((show np) + (" passed, " + ((show nf) + " failed\n")))))
+   _ (? (0 = nf) 0 (quit 1)))

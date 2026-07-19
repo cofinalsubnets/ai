@@ -7,12 +7,12 @@
 
 (: pass (tablet 0) _ (pin pass 0 0)
    fail (tablet 0) _ (pin fail 0 0)
-   (bump t)  (pin t 0 (+ 1 (peep t 0 0)))
+   (bump t)  (pin t 0 (1 + (peep t 0 0)))
    (sayln s) (: _ (puts s) (flush out))
    (chk-eq name want got)
-      (? (= want got) (bump pass)
+      (? (want = got) (bump pass)
          (: _ (bump fail)
-            (sayln (+ "FAIL " (+ name (+ ": want " (+ (show want) (+ " got " (+ (show got) "\n")))))))))
+            (sayln ("FAIL " + (name + (": want " + ((show want) + (" got " + ((show got) + "\n")))))))))
    (chk2 name want target prog) (chk-eq name want (holo-hex target prog))
    (chk name want prog) (chk2 name want 'x64 prog)
 
@@ -196,7 +196,7 @@
    ;; non-commutative): it raises 'alias-dst rather than emit subtly wrong bytes. we trap the scare
    ;; with a help that delegates everything else (incl the reader's own eof/more) back to welp. --
    caught (tablet 0) _ (pin caught 0 0)
-   _ (: help (\ s a b (? (= a 'alias-dst) (: _ (pin caught 0 1) ()) (welp s a b))))
+   _ (: help (\ s a b (? (a = 'alias-dst) (: _ (pin caught 0 1) ()) (welp s a b))))
    _ (holo-bytes 'x64 '((sub r0 r3 r0)))
    _ (chk-eq "alias.refused" 1 (peep caught 0 0))
 
@@ -214,7 +214,7 @@
    _ (chk-eq "elf.magic"   127     (at elfimg 0))        ; \x7f E L F
    _ (chk-eq "elf.machine" 62      (at elfimg 18))       ; e_machine = x86-64
    _ (chk-eq "elf.entry"   4194424 (peep elfres 'entry 0))
-   _ (chk-eq "elf.size"    (+ 120 (+ (tally (holo-bytes 'x64 elfprog)) 3)) (tally elfimg))
+   _ (chk-eq "elf.size"    (120 + ((tally (holo-bytes 'x64 elfprog)) + 3)) (tally elfimg))
    _ (chk-eq "elf.arm64-machine" 183 (at (peep (elf64 'arm64 (\ a elfprog) ()) 'bytes 0) 18))
 
    ;; -- the aarch64 backend (crew/holo/arm64.l): the SAME neutral IR, a second target. fixed 32-bit
@@ -289,7 +289,7 @@
       ;; reads/writes XZR for reg 31, never sp). set anchor = sp ; deopt abandons frames with sp = anchor.
       `("a64.anchor"  "f7030091"          '((lea r23 sp 0)))           ; mov x23, sp
       `("a64.abandon" "ff020091"          '((lea sp r23 0)))           ; mov sp, x23
-      ;; a WHOLE glaze leaf for (\ x (+ x 1)) -- the integer leaf ABI end to end: g/Ip/Hp/Sp kept in
+      ;; a WHOLE glaze leaf for (\ x (x + 1)) -- the integer leaf ABI end to end: g/Ip/Hp/Sp kept in
       ;; x0..x3, acc=x4, temp=x5. fetch+fixnum-guard Sp[0]; untag; +1 with overflow->deopt; putfix;
       ;; store Sp[0]; Continue (Ip+=16; br [Ip]); deopt tail-applies interp (value[1] at [Ip+8]).
       `("a64.glaze.leaf"
@@ -513,5 +513,5 @@
 
    ;; -- summary; nonzero exit on any miss, so `make`-style gates see the failure. --
    np (peep pass 0 0) nf (peep fail 0 0)
-   _ (sayln (+ "crew/holo/holotest: " (+ (show np) (+ " passed, " (+ (show nf) " failed\n")))))
-   _ (? (= 0 nf) 0 (quit 1)))
+   _ (sayln ("crew/holo/holotest: " + ((show np) + (" passed, " + ((show nf) + " failed\n")))))
+   _ (? (0 = nf) 0 (quit 1)))
