@@ -1,6 +1,7 @@
 # Retiring the dirty flag — collapsing the write barrier to one mechanism
 
-Status: **plan / spike, not started.** Pick-up doc from the 2026-06-27 session.
+Status: **reader (2026-06-27) + c0 (2026-07-19) legs DONE — `lvm_poke` is the one `dirty`
+setter left (Step 3 open).** Pick-up doc from the 2026-06-27 session.
 Companion to [`doc/gengc.md`](gengc.md) (the generational design as shipped) and
 [`proof/rocq/gc.v`](../proof/rocq/gc.v) (the soundness proof of the *model*).
 
@@ -85,14 +86,20 @@ Tried Step 1 as written (convert all three `gen_dirty` sites to `gen_wb`). Resul
   corruption → infinite loop. `gen_dirty`'s forced **major** caught it (a major traces from
   roots, ignoring the rem set). So the precise rem-set is **not a drop-in** for the poke; it
   needs Step 3 (build the thread young + tenure its group atomically) or it keeps `dirty`.
-- **c0 (boot) → kept `gen_dirty`.** Boot-only; ~21 in-place env/thread mutation sites across
-  the compiler (see "how hard" below) — same terminator hazard, same atomic-tenure answer.
+- **c0 → precise barriers, DONE (2026-07-19).** The "boot-only" premise died when `--wake`
+  images made c0 run on every installed-tool invocation (the cli driver compile forced a
+  full-heap major per `mooncc` call). Unlike the poke, c0's stores turned out NOT to have the
+  terminator hazard: every target is either a cell inside a span that is terminator-tagged at
+  store time (c1 tags the full thread span before `pull`; `enscope` tags the env) or a cons —
+  both shapes `gen_scan_inplace` walks soundly from the remembered address. `gen_wb_cell`
+  (exact cell of a tagged span) + `gen_wb_two` (the mutated cons) cover all ~24 pointer-store
+  sites; `rev` took a `g` param to barrier its reversal. Validated: `make test_all` green,
+  valgrind 0 errors, rem_hi 73/65536. mooncc wake 46.5→29.4ms, post-wake collections all minor.
 
-**End state of this pass:** reader on `gen_wb`; poke + c0 on `gen_dirty`. `dirty` is NOT
-deleted — it is now purely COMPILATION's "force a major" knob (c0 at boot, ev's poke at
-runtime-compile), never EXECUTION's. Every minor still runs only with `dirty` clear, so its
-soundness rests solely on the rem set = exactly what `gc.v` proves. Deleting `dirty` entirely
-is gated on Step 3 for BOTH the poke and c0, not the cheap swap Step 1 assumed.
+**End state:** reader + c0 on the precise rem set; only `lvm_poke` still sets `dirty` (its
+arbitrary-index poke can hit a cell no remembered scan root reaches — that one genuinely needs
+Step 3). Every minor still runs only with `dirty` clear, so its soundness rests solely on the
+rem set = exactly what `gc.v` proves.
 
 ### Step 1 (original plan, now amended by the finding above) — collapse to one mechanism
 
@@ -135,10 +142,9 @@ old} → no barrier, no flag, generation drops out.
   accumulator — is young→old-safe and barrier-free; bulk-at-end just also buys the
   contiguous fast spine.)
 
-### Step 3 — the thread-builder and c0
+### Step 3 — the thread-builder
 
-- **c0 (`~1684`) is boot-only** and boot does majors anyway — its `dirty` can stay (harmless)
-  or go; the first major flushes boot's edges regardless. Lowest priority.
+- **c0: done via precise barriers** (see the session finding above) — no atomic tenure needed.
 - **`lvm_poke` thread-build (`~2970`)** is the remaining steady-state site after Step 2.
   Either keep a precise `gen_wb` on the poke (cheapest), or build the thread young and tenure
   the whole mutually-recursive group atomically ("close the group in the nursery, then
@@ -188,4 +194,5 @@ bulk allocation *last* so they're uniformly youngest (young→old only, no edge 
 which also makes reads faster and resolves the streaming case. c0 is boot-only; the ev
 thread-builder keeps a precise `gen_wb` (or atomic-tenures its group). Validate with
 `gen_audit` (0 misses) + the GC-stress oracle. End state: a single-mechanism barrier the
-shipped code and the proof both describe.
+shipped code and the proof both describe. (2026-07-19: c0 is off the flag — gen_wb_cell /
+gen_wb_two, all gates green; `lvm_poke` is the one setter left.)

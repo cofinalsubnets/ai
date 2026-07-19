@@ -1147,14 +1147,15 @@ static ai_inline void evac_data(struct ai *g, word const *const p0, word const*c
 //
 // The DIRTY flag is NOT a second barrier on the same edges -- it is "skip the minor,
 // do a MAJOR" (a major traces from roots with no rem set, so it is unconditionally
-// sound). COMPILATION sets it: c0 (boot) and ev's poke-based thread-build (lvm_poke,
-// runtime) mutate threads/env in place by routes the rem set can't safely track -- a
-// poke can hit a cell the minor's terminator-bounded inplace-scan won't reach, so a
-// precise rem-set entry there would be UNSOUND (an early gen_wb attempt hung the
-// egg-warm). Forcing a major is the safe call. A minor only ever runs with dirty
-// clear (no compile pending), so its soundness rests solely on the rem set, which is
-// what gc.v covers. Retiring the dirty leg entirely needs the thread-builder to build
-// young + tenure its group atomically (doc/gc-single-barrier.md Step 3, not done).
+// sound). One setter remains: ev's poke-based thread-build (lvm_poke, runtime
+// compile) writes at an ARBITRARY index into a tenured thread -- a cell the minor's
+// terminator-bounded inplace-scan can't be aimed at from outside, so a precise
+// rem-set entry there would be UNSOUND (an early gen_wb attempt hung the egg-warm).
+// c0's stores ARE precise now (gen_wb_cell/gen_wb_two below): each remembers the
+// exact mutated cell of a TAGGED span (thread/env) or the mutated cons, both shapes
+// gen_scan_inplace re-walks soundly -- so a c0 compile no longer forces majors.
+// Retiring dirty entirely needs the same for lvm_poke (build young + tenure the
+// group atomically, doc/gc-single-barrier.md Step 3, not done).
 //
 // young?: a heap pointer allocated since the last collection -- in [minor, hp).
 // The ADDRESS is the generation (ai objects carry no age bit).
@@ -1182,6 +1183,20 @@ static ai_inline bool ai_major_cell(struct ai *g, word *c) {       // a tenured 
 // rem set is unsafe here; a major traces from roots and is always sound. Boot/compile-only.
 static ai_inline void gen_dirty(struct ai *g, word *cell) {
  if (ai_major_cell(g, cell)) g->dirty = 1; }
+// c0's precise barrier (the bootstrap compiler off the dirty flag): a compile-time
+// store of a young value into a tenured cell, remembered by the smallest scannable
+// unit around it so the next minor re-promotes what the store planted.
+//   gen_wb_cell -- the cell sits in a TAGGED span (a thread under construction, a
+//     struct env): gen_scan_inplace runs [cell, terminator), covering the store.
+//     Never a chain's field: data has no terminator, the scan would walk off the object.
+//   gen_wb_two -- a chain mutation: remember the CONS (the KChain lane rescans a+b).
+// Both mask g: a call site may hold a scared g mid-chain.
+static ai_inline void gen_wb_cell(struct ai *g, void *cl, word v) {
+ g = ai_core_of(g);
+ if (ai_young(g, v) && ai_major_cell(g, cl)) gen_remember(g, (word) cl); }
+static ai_inline void gen_wb_two(struct ai *g, word two, word v) {
+ g = ai_core_of(g);
+ if (ai_young(g, v) && ai_major_cell(g, ptr(two))) gen_remember(g, two); }
 // (Stage 2's reachability AUDIT -- which proved the rem set complete for a hypothetical
 // minor -- is retired here: its old-region was [end, minor), which the two-pool layout
 // replaces, and the live MINOR below is itself verified end-to-end by the differential
@@ -1617,11 +1632,10 @@ static struct ai *append(struct ai *g) {
 
 // don't inline this so callers can tail call optimize
 static ai_noinline struct ai *c0(struct ai *g, lvm_t *y) {
- g->dirty = 1;   // c0 (the bootstrap compiler) builds threads + mutates its env in place by routes the
-                 // rem set doesn't track -> force a MAJOR (always sound, no barrier needed). Boot-only:
-                 // after the egg, runtime compilation self-hosts through ev, whose thread-build pokes
-                 // also dirty (lvm_poke). A minor never coincides with a compile, so gc.v's rem-set
-                 // barrier covers every minor; dirty just keeps compile-time collections major.
+ // every in-place store below (env accumulators, cons surgery, thread emission) is
+ // precisely barriered -- gen_wb_cell / gen_wb_two -- so a mid-compile collection
+ // stays MINOR. (the old blanket `dirty = 1` here forced a major per compile; a
+ // woken image paid it as a full-heap copy on every invocation.)
  // the operator factor pass: c0 delegates the sigil surface -> core source
  // rewrite to the l `opfix` prepass (prel.l) -- evaluated like a macro,
  // once that global exists (i.e. for everything after its own definition
@@ -1664,6 +1678,7 @@ static Cata(c1) {
   if (ai_ok(g = pull(g, c))) {           // pull emits l words (may GC); Kp now = entry
    // read src AFTER all allocation: ai_have/pull can GC and relocate the env's src.
    if (extra) Kp[-1].x = (*c)->src,     // value[-1] = source \-expr
+              gen_wb_cell(g, Kp - 1, Kp[-1].x),
               clip(g, Kp - 1);          // tag head spans [src .. body]; value stays Kp
    else clip(g, Kp); } }
  return g; }
@@ -1672,6 +1687,7 @@ static Cata(c1_yield) { return g; }
 
 static Cata(c1_cond_pop_exit) { return
  (*c)->exits = B((*c)->exits), // pops cond expression exit address off env stack exits
+ gen_wb_cell(g, &(*c)->exits, (*c)->exits),
  pull(g, c); }
 
 static Cata(c1_apn) {
@@ -1697,6 +1713,7 @@ static Cata(c1_ix) {
  Kp -= 2;
  Kp[0].ap = i;
  Kp[1].x = x;
+ gen_wb_cell(g, Kp + 1, x);
  return pull(g, c); }
 
 // Emit a recursive-function ref: bake `quote AB(y)` if the closure is final, else
@@ -1705,8 +1722,8 @@ static Cata(c1_recv) {
  word y = pop1(g), site = pop1(g);
  Kp -= 2;
  Kp[0].ap = lvm_quote;
- if (nilp(site)) Kp[1].x = AB(y);
- else Kp[1].x = nil, B(site) = (word) &Kp[1];
+ if (nilp(site)) Kp[1].x = AB(y), gen_wb_cell(g, Kp + 1, Kp[1].x);
+ else Kp[1].x = nil, B(site) = (word) &Kp[1], gen_wb_two(g, site, B(site));
  return pull(g, c); }
 
 static Cata(c1_ar, lvm_t *i, word ar) { return
@@ -1725,9 +1742,10 @@ static Cata(c1_ret) {
  uintptr_t ar = llen(e->args) + llen(e->imps);
  return c1_ar(g, c, lvm_ret, ar); }
 
-cata1(c1_cond_push_branch, g = gxl(ai_push(g, 2, Kp, (*c)->branches)), (*c)->branches = ai_ok(g) ? pop1(g) : nil)
-cata1(c1_cond_push_exit, g = gxl(ai_push(g, 2, Kp, (*c)->exits)), (*c)->exits = ai_ok(g) ? pop1(g) : nil)
-cata1(c1_cond_pop_branch, Kp -= 2, Kp[0].ap = lvm_cond, Kp[1].x = A((*c)->branches), (*c)->branches = B((*c)->branches))
+cata1(c1_cond_push_branch, g = gxl(ai_push(g, 2, Kp, (*c)->branches)), (*c)->branches = ai_ok(g) ? pop1(g) : nil, gen_wb_cell(g, &(*c)->branches, (*c)->branches))
+cata1(c1_cond_push_exit, g = gxl(ai_push(g, 2, Kp, (*c)->exits)), (*c)->exits = ai_ok(g) ? pop1(g) : nil, gen_wb_cell(g, &(*c)->exits, (*c)->exits))
+cata1(c1_cond_pop_branch, Kp -= 2, Kp[0].ap = lvm_cond, Kp[1].x = A((*c)->branches),   // Kp[1] = a same-thread address: no cross-gen edge
+      (*c)->branches = B((*c)->branches), gen_wb_cell(g, &(*c)->branches, (*c)->branches))
 
 static Cata(c1_cond_exit) {
  union u *a = cell(A((*c)->exits));
@@ -1848,7 +1866,8 @@ static Ana(ana_v) {
    // pattern in the capture path below). c0_ix then emits the live pointer.
    if (!nilp((*c)->par))
     g = gxl(ai_push(g, 2, x, (*c)->imps)),
-    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil;
+    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil,
+    gen_wb_cell(g, &(*c)->imps, (*c)->imps);
    return c0_ix(g, c, lvm_index, x); }
   // lambda definition of local let form?
   if ((y = assq(g, d->lams, x))) {
@@ -1860,7 +1879,7 @@ static Ana(ana_v) {
     g = gxl(ai_push(g, 2, y, nil)); // site = (y . nil)
     if (ai_ok(g)) {
      g = gxl(ai_push(g, 2, g->sp[0], d->sites)); // (site . d->sites)
-     if (ai_ok(g)) d->sites = pop1(g), site = pop1(g); }
+     if (ai_ok(g)) d->sites = pop1(g), gen_wb_cell(g, &d->sites, d->sites), site = pop1(g); }
     um(g), um(g); }
    incl(*c, 2);
    if (ai_ok(g = ai_push(g, 3, c1_recv, y, site)))
@@ -1878,7 +1897,8 @@ static Ana(ana_v) {
       !(!nilp(d->par) && memq(g, d->par->stack, x))) {
    if (!nilp((*c)->par))
     g = gxl(ai_push(g, 2, x, (*c)->imps)),
-    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil;
+    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil,
+    gen_wb_cell(g, &(*c)->imps, (*c)->imps);
    return c0_ix(g, c, lvm_index, x); }
   // a let binding, closure var, or lambda arg -- possibly from an enclosing
   // scope. If enclosing, import it into this scope's free-variable (imps) list
@@ -1889,7 +1909,8 @@ static Ana(ana_v) {
    incl(*c, 2);
    if (d != *c) // found in an enclosing scope -> import (capture) it
     g = gxl(ai_push(g, 2, x, (*c)->imps)),
-    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil;
+    x = ai_ok(g) ? A((*c)->imps = pop1(g)) : nil,
+    gen_wb_cell(g, &(*c)->imps, (*c)->imps);
    return ai_push(g, 3, c1_var, x, (*c)->stack); } } }
 
 
@@ -1938,6 +1959,7 @@ static struct ai *c0_lambda(struct ai *g, struct env **c, intptr_t imps, intptr_
 
  if (ai_ok(g)) {
   d->args = g->sp[0];
+  gen_wb_cell(g, &d->args, d->args);
   g->sp[0] = (word) c1_yield;
   incl(d, 4);
   g = ai_push(g, 2, c1_cur, d);
@@ -1954,7 +1976,7 @@ static struct ai *c0_lambda(struct ai *g, struct env **c, intptr_t imps, intptr_
    g = ai_push(g, 1, ops);                                   // tail = (params… body)
    while (ni-- > 0) g = gxr(g);                             // fold: imps ++ ops
    g = gxl(pushl(g));                                       // link '\ onto the front
-   if (ai_ok(g)) d->src = pop1(g); }
+   if (ai_ok(g)) d->src = pop1(g), gen_wb_cell(g, &d->src, d->src); }
   if (ai_ok(g = ai_push(g, 2, c1_ret, d)))
     ip = g->ip,
     avec(g, ip, g = c1(g, &d)); }
@@ -2006,22 +2028,22 @@ static struct ai *ana_ap(struct ai *g, struct env **c, intptr_t x) {
   lvm_t *i = cell(g->sp[2])[2].ap;
   g->sp += 3;
   g = c0_i(ana_ap_r2l(g, c, x), c, i); // r2l arg eval
-  if (ai_ok(g)) while (ca--) (*c)->stack = B((*c)->stack);
+  if (ai_ok(g)) { while (ca--) (*c)->stack = B((*c)->stack); gen_wb_cell(g, &(*c)->stack, (*c)->stack); }
   return g; }
 
  if (ai_ok(g = gxl(ai_push(g, 3, nil, (*c)->stack, x)))) {
-  (*c)->stack = pop1(g), x = pop1(g), mm(g, &x);
+  (*c)->stack = pop1(g), gen_wb_cell(g, &(*c)->stack, (*c)->stack), x = pop1(g), mm(g, &x);
   if (anp) { // r2l 1 n-ary ap
    g = ana_ap_r2l(g, c, x),
    incl(*c, 2),
    g = ai_push(g, 2, c1_apn, putcharm(ca));
-   if (ai_ok(g)) while (ca--) (*c)->stack = B((*c)->stack); }
+   if (ai_ok(g)) { while (ca--) (*c)->stack = B((*c)->stack); gen_wb_cell(g, &(*c)->stack, (*c)->stack); } }
   else while (chainp(x)) // l2r n 1-ary ap
    g = analyze(g, c, A(x)),
    incl(*c, 2),
    g = ai_push(g, 2, c1_apn, putcharm(1)),
    x = B(x);
-  um(g), (*c)->stack = B((*c)->stack); }
+  um(g), (*c)->stack = B((*c)->stack), gen_wb_cell(g, &(*c)->stack, (*c)->stack); }
 
  return g; }
 
@@ -2032,7 +2054,7 @@ static struct ai *ana_ap_r2l(struct ai *g, struct env **c, word x) {
   avec(g, y, g = ana_ap_r2l(g, c, B(x)));
   g = analyze(g, c, y);
   g = gxl(ai_push(g, 2, nil, (*c)->stack));
-  if (ai_ok(g)) (*c)->stack = pop1(g); }
+  if (ai_ok(g)) (*c)->stack = pop1(g), gen_wb_cell(g, &(*c)->stack, (*c)->stack); }
  return g; }
 
 static ai_inline bool lambp(struct ai *g, word x) {
@@ -2040,9 +2062,9 @@ static ai_inline bool lambp(struct ai *g, word x) {
  return chainp(x) && chainp(B(x)) && chainp(B(B(x))) &&
   (n = add_name(g, A(x))) && len(n) == 1 && txt(n)[0] == '\\'; }
 
-static ai_inline word rev(word l) {
- word m, n = nil;
- while (chainp(l)) m = l, l = B(l), B(m) = n, n = m;
+static ai_inline word rev(struct ai *g, word l) {
+ word m, n = nil;   // reversal points each cons at its (younger) predecessor: barrier it
+ while (chainp(l)) m = l, l = B(l), B(m) = n, gen_wb_two(g, m, n), n = m;
  return n; }
 
 static word ldels(struct ai *g, word lam, word l);
@@ -2102,7 +2124,7 @@ static ai_inline struct ai *ana_d(struct ai *g, struct env **b, word exp) {
   for (e = A(d); chainp(e) && !nomp(e); e = A(e)); // unroll (f x..) define-sugar to the name
   g = gxl(ai_push(g, 2, e, q->fars));
   if (!ai_ok(g)) return forget();
-  q->fars = pop1(g); }
+  q->fars = pop1(g), gen_wb_cell(g, &q->fars, q->fars); }
 
  // collect vars and defs into two lists.
  // While finding each bound lambda's closure (the c0_lambda below) we expose
@@ -2129,8 +2151,9 @@ static ai_inline struct ai *ana_d(struct ai *g, struct env **b, word exp) {
    lam = pop1(g); }
   g = gxl(ai_push(g, 2, d, (*b)->stack)); // expose this binding to later siblings
   (*b)->stack = ai_ok(g) ? pop1(g) : nil;
+  gen_wb_cell(g, &(*b)->stack, (*b)->stack);
   exp = BB(exp); }
- (*b)->stack = os; // restore: emission below rebuilds the real frame
+ (*b)->stack = os, gen_wb_cell(g, &(*b)->stack, os); // restore: emission below rebuilds the real frame
 
  intptr_t l = llen(nom);
  bool oddp = chainp(exp),
@@ -2152,14 +2175,15 @@ static ai_inline struct ai *ana_d(struct ai *g, struct env **b, word exp) {
      if (!memq(g, vars = BB(A(e)), var = A(v))) // only add if it's not already there
       j++,
       g = gxl(ai_push(g, 2, var, vars)),
-      BB(A(e)) = ai_ok(g) ? pop1(g) : nil;
+      BB(A(e)) = ai_ok(g) ? pop1(g) : nil,
+      gen_wb_two(g, B(A(e)), BB(A(e)));
  while (j);
 
  // now delete defined functions from the closure variable lists
  // they will be bound lazily when the function runs
- for (e = lam; chainp(e); BB(A(e)) = ldels(g, lam, BB(A(e))), e = B(e));
+ for (e = lam; chainp(e); BB(A(e)) = ldels(g, lam, BB(A(e))), gen_wb_two(g, B(A(e)), BB(A(e))), e = B(e));
 
- (*c)->lams = lam;
+ (*c)->lams = lam, gen_wb_cell(g, &(*c)->lams, lam);
  g = append(gxl(pushl(ai_push(g, 2, nom, exp))));
 
  if (!ai_ok(g)) return forget();
@@ -2179,24 +2203,27 @@ static ai_inline struct ai *ana_d(struct ai *g, struct env **b, word exp) {
    size_t nb = llen(BB(d)); // the import row is FROZEN here: sites already applied it
    g = c0_lambda(g, c, BB(d), BA(v));
    if (!ai_ok(g)) return forget();
-   A(v) = B(d) = pop1(g);
+   A(v) = B(d) = pop1(g), gen_wb_two(g, v, A(v)), gen_wb_two(g, d, A(v));
    if (llen(BB(d)) != nb) __builtin_trap(); } // growth = those sites under-apply (cf. ev.l weave's 'imports-grew scare)
 
  // closures final -> backpatch each recorded recursive-fn ref with its thread.
- for (d = (*c)->sites; chainp(d); d = B(d)) cell(B(A(d)))->x = AB(A(A(d)));
+ for (d = (*c)->sites; chainp(d); d = B(d))
+  cell(B(A(d)))->x = AB(A(A(d))), gen_wb_cell(g, cell(B(A(d))), AB(A(A(d))));
  (*c)->sites = nil;
 
- nom = rev(nom); // put in literal order
+ nom = rev(g, nom); // put in literal order
  g = analyze(g, b, exp);
  g = gxl(ai_push(g, 2, nil, e = (*b)->stack)); // push function stack rep
  (*b)->stack = ai_ok(g) ? pop1(g) : nil;
- for (def = rev(def); chainp(nom); nom = B(nom), def = B(def))
+ gen_wb_cell(g, &(*b)->stack, (*b)->stack);
+ for (def = rev(g, def); chainp(nom); nom = B(nom), def = B(def))
   g = analyze(g, b, A(def)),
   g = globp ? c0_ix(g, b, lvm_defglob, A(nom)) : g,
   g = gxl(ai_push(g, 2, A(nom), (*b)->stack)),
-  (*b)->stack = ai_ok(g) ? pop1(g) : nil;
+  (*b)->stack = ai_ok(g) ? pop1(g) : nil,
+  gen_wb_cell(g, &(*b)->stack, (*b)->stack);
  return
-  (*b)->stack = e,
+  (*b)->stack = e, gen_wb_cell(g, &(*b)->stack, e),
   incl(*b, 2),
   g = ai_push(g, 2, c1_apn, putcharm(l)),
   forget(); }
