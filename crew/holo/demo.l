@@ -25,9 +25,9 @@
    ;; UART data register, then loop. li the UART base once into r1; per char li r2,c ; st r1,0,r2. --
    amsg "hi from ai-asm running on emulated aarch64!\n"
    (a-char c) `(`('li 'r2 c) `('st 'r1 0 'r2))
-   a-prog (+ `(`('li 'r1 0x09000000))
-               (+ (foldr (\ c acc (+ (a-char c) acc)) () (map amsg (jot (tally amsg))))
-                    `(`('label 'hang) `('jmp 'hang))))
+   a-prog (`(`('li 'r1 0x09000000))
+           + (foldr (\ c acc ((a-char c) + acc)) () (map amsg (jot (tally amsg))))
+           + `(`('label 'hang) `('jmp 'hang)))
    ae (elf64-at 0x40000000 'arm64 (\ a a-prog) ())          ; 0x40000000 = qemu-virt RAM base
    _ (write-bytes "/tmp/ai-arm64.elf" (peep ae 'bytes 0))
 

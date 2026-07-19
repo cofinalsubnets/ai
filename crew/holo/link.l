@@ -18,13 +18,13 @@
    (ld-at l i) (? (i < 1) <l (ld-at >l (i - 1)))
    ; little-endian reads off a byte-indexable text; a u64 field can carry a
    ; signed value (a RELA addend), so sg64 folds the high half back down
-   (rle16 s i) ((s i) + (* 256 (s (i + 1))))
-   (rle32 s i) ((rle16 s i) + (* 65536 (rle16 s (i + 2))))
-   (rle64 s i) ((rle32 s i) + (* 4294967296 (rle32 s (i + 4))))
+   (rle16 s i) ((s i) + (256 * (s (i + 1))))
+   (rle32 s i) ((rle16 s i) + (65536 * (rle16 s (i + 2))))
+   (rle64 s i) ((rle32 s i) + (4294967296 * (rle32 s (i + 4))))
    (sg64 v) (? (v < 9223372036854775808) v (v - 18446744073709551616))
    (ld-cstr s i) (: (go j) (? ((s j) = 0) (snip s i j) (go (j + 1))) (go i))
-   (ld-zeros n) (? (n < 1) () (>< 0 (ld-zeros (n - 1))))
-   (ld-align a v) (? (a < 2) v (: r (% v a) (? (r = 0) v (v + (a - r)))))
+   (ld-zeros n) (? (n < 1) () (0 >< (ld-zeros (n - 1))))
+   (ld-align a v) (? (a < 2) v (: r (v % a) (? (r = 0) v (v + (a - r)))))
    (ld-fits32 v) (&& (-2147483648 <= v) (v <= 2147483647))
    ; a section tag's base key on the object record
    (ld-key tag) (? (id? tag 'text) 'tbase (id? tag 'data) 'dbase 'nbase)
@@ -42,7 +42,7 @@
        _ (? (&& ((rle16 s 16) = 1) ((rle16 s 18) = mach)) 0 (scare 'link-machine id))
        _ (? ((rle16 s 58) = 64) 0 (scare 'link-shentsize id))
        shoff (rle64 s 40) shnum (rle16 s 60) shstrx (rle16 s 62)
-       (sh i) (shoff + (* i 64))                       ; the i-th section header
+       (sh i) (shoff + (i * 64))                       ; the i-th section header
        shstro (rle64 s ((sh shstrx) + 24))
        (sname i) (ld-cstr s (shstro + (rle32 s (sh i))))
        ob (tablet 0) _ (pin ob 'id id) _ (pin ob 'src s)
@@ -51,19 +51,19 @@
        ; classify: our three PROGBITS by name, symtab/rela by type; anything
        ; else with bytes is a foreign object -- refuse, never drop
        (class i symt rls)
-        (? (shnum <= i) (>< symt rls)
+        (? (shnum <= i) (symt >< rls)
            (: h (sh i) ty (rle32 s (h + 4))
               off (rle64 s (h + 24)) sz (rle64 s (h + 32))
               (? (ty = 1)
                   (: nm (sname i)
                      tag (? (nm = ".text") 'text (nm = ".data") 'data
                             (nm = "ai_nifs") 'nifs ())
-                     (? (! tag) (? (0 < sz) (scare 'link-section nm) (class (i + 1) symt rls))
+                     (? !tag (? (0 < sz) (scare 'link-section nm) (class (i + 1) symt rls))
                         (: _ (pin secmap i tag)
                            _ (pin sects tag `(off sz (rle64 s (h + 48))))
                            (class (i + 1) symt rls))))
                  (ty = 2) (class (i + 1) `(off sz (rle32 s (h + 40))) rls)
-                 (ty = 4) (class (i + 1) symt (>< `((rle32 s (h + 44)) off sz) rls))
+                 (ty = 4) (class (i + 1) symt (`((rle32 s (h + 44)) off sz) >< rls))
                  (member? ty '(0 3)) (class (i + 1) symt rls)
                  (0 < sz) (scare 'link-section (sname i))
                  (class (i + 1) symt rls))))
@@ -72,26 +72,25 @@
        _ (? (two? symt) 0 (scare 'link-no-symtab id))
        stro (rle64 s ((sh (ld-at symt 2)) + 24))       ; .strtab offset, via symtab's link
        syms (tablet 0) _ (pin ob 'syms syms)
-       nsym (// (ld-at symt 1) 24)
+       nsym ((ld-at symt 1) // 24)
        _ (pin ob 'nsym nsym)
        _ (: (go i) (? (nsym <= i) 0
-                      (: e ((ld-at symt 0) + (* i 24))
+                      (: e ((ld-at symt 0) + (i * 24))
                          info (s (e + 4))
                          _ (pin syms i `((ld-cstr s (stro + (rle32 s e)))
-                                          (>> info 4) (& info 15)
+                                          (info >> 4) (info & 15)
                                           (rle16 s (e + 6)) (rle64 s (e + 8))))
                          (go (i + 1))))
             (go 0))
        relas (map (\ r (: tag (peep secmap <r ())
                           _ (? tag 0 (scare 'link-rela-target id))
-                          n (// (ld-at r 2) 24)
+                          n ((ld-at r 2) // 24)
                           (es i acc) (? (i < 0) acc
-                                        (: e ((ld-at r 1) + (* i 24))
+                                        (: e ((ld-at r 1) + (i * 24))
                                            (es (i - 1)
-                                               (>< `((rle64 s e) (rle32 s (e + 8))
-                                                        (rle32 s (e + 12)) (sg64 (rle64 s (e + 16))))
-                                                     acc))))
-                          (>< tag (es (n - 1) ()))))
+                                               (`((rle64 s e) (rle32 s (e + 8))
+                                                        (rle32 s (e + 12)) (sg64 (rle64 s (e + 16)))) >< acc))))
+                          (tag >< (es (n - 1) ()))))
                   >cl)
        _ (pin ob 'relas relas)
        ob)
@@ -102,9 +101,9 @@
    ; array across every object. pins the bases; -> (end nifstart nifend).
    (ldlay objs base)
     (: (one tag cur os)
-        (? (! (two? os)) cur
+        (? !(two? os) cur
            (: ob <os se (peep (peep ob 'sects 0) tag ())
-              (? (! (two? se)) (one tag cur >os)
+              (? !(two? se) (one tag cur >os)
                  (: a (ld-align (ld-at se 2) cur)
                     _ (pin ob (ld-key tag) a)
                     (one tag (a + (ld-at se 1)) >os)))))
@@ -122,19 +121,19 @@
         (? ((peep ob 'nsym 0) <= i) 0
            (: sy (peep (peep ob 'syms 0) i ())
               bind (ld-at sy 1) shx (ld-at sy 3)
-              (? (|| (shx = 0) (! (member? bind '(1 2)))) (one ob (i + 1))
+              (? (|| (shx = 0) !(member? bind '(1 2))) (one ob (i + 1))
                  (: nm <sy
                     tag (peep (peep ob 'secmap 0) shx ())
                     _ (? tag 0 (scare 'link-sym-section nm))
                     a ((peep ob (ld-key tag) 0) + (ld-at sy 4))
                     w (bind = 2)
                     old (peep glo nm ())
-                    _ (? (! (two? old)) (pin glo nm `(a w))
+                    _ (? !(two? old) (pin glo nm `(a w))
                          w 0                                   ; incoming weak: the standing def keeps
                          (ld-at old 1) (pin glo nm `(a w))    ; strong replaces weak
                          (scare 'link-dup nm))
                     (one ob (i + 1))))))
-       _ (: (each os) (? (! (two? os)) 0 (: _ (one <os 1) (each >os)))
+       _ (: (each os) (? !(two? os) 0 (: _ (one <os 1) (each >os)))
             (each objs))
        glo)
 
@@ -159,11 +158,11 @@
    (ldpatch ob tag base glo n0 n1 r0 r1 relbox)
     (: s (peep ob 'src 0) se (peep (peep ob 'sects 0) tag ())
        off0 (ld-at se 0) sz (ld-at se 1)
-       (ent es) (? (! (two? es)) ()
+       (ent es) (? !(two? es) ()
                    (id? <<es tag) ><es
                    (ent >es))
        (go pos es acc)
-        (? (! (two? es)) (rev (>< (snip s pos (off0 + sz)) acc))
+        (? !(two? es) (rev ((snip s pos (off0 + sz)) >< acc))
            (: e <es ro <e kind (ld-at e 1) ad (ld-at e 3)
               _ (? ((pos - off0) <= ro) 0 (scare 'link-unsorted (peep ob 'id 0)))
               sy (peep (peep ob 'syms 0) (ld-at e 2) ())
@@ -176,7 +175,7 @@
               ; -pie: this abs64 site holds a base-0 offset (base is 0), so record its
               ; load-address for the startup relocator to add the real base to.
               _ (? (&& relbox (member? kind '(1 257)))
-                    (pin relbox 0 (>< (base + ro) (peep relbox 0 ()))) 0)
+                    (pin relbox 0 ((base + ro) >< (peep relbox 0 ()))) 0)
               _ (? (member? kind '(1 2 4 257 275 277 282 283)) 0 (scare 'link-reloc kind))
               _ (? ((ro + w) <= sz) 0 (scare 'link-oob (peep ob 'id 0)))
               ; the aarch64 field kinds patch BITS of the instruction word the
@@ -190,14 +189,14 @@
                     (member? kind '(282 283))           ; JUMP26/CALL26: (S+A-P)>>2 into imm26
                      (: v ((sv + ad) - (base + ro))
                         _ (? (&& (-134217728 <= v) (v <= 134217727)) 0 (scare 'link-range <sy))
-                        (le32 (| wd (& (// v 4) 67108863))))
+                        (le32 (wd | ((v // 4) & 67108863))))
                     (kind = 275)                        ; ADR_PREL_PG_HI21: page(S+A)-page(P) into adrp
-                     (: pg ((// (sv + ad) 4096) - (// (base + ro) 4096))
+                     (: pg (((sv + ad) // 4096) - ((base + ro) // 4096))
                         _ (? (&& (-1048576 <= pg) (pg <= 1048575)) 0 (scare 'link-range <sy))
-                        (le32 (| wd (| (<< (& pg 3) 29) (<< (& (>> pg 2) 524287) 5)))))
-                    (le32 (| wd (<< (% (sv + ad) 4096) 10))))   ; ADD_ABS_LO12_NC: the low 12
+                        (le32 (wd | (((pg & 3) << 29) | (((pg >> 2) & 524287) << 5)))))
+                    (le32 (wd | (((sv + ad) % 4096) << 10))))   ; ADD_ABS_LO12_NC: the low 12
               (go (off0 + ro + w) >es
-                  (>< bs (>< (snip s pos (off0 + ro)) acc)))))
+                  (bs >< ((snip s pos (off0 + ro)) >< acc)))))
        (go off0 (ent (peep ob 'relas ())) ()))
 
    ; count the abs64 (R_X86_64_64 / R_AARCH64_ABS64) data relocations across the
@@ -224,14 +223,14 @@
        end <lay n0 <>lay
        nrel (? pie (ld-nabs objs) 0)
        r0 (? pie (ld-align 16 end) end)         ; the reloc table starts 16-aligned, just past the nifs
-       r1 (r0 + (* 8 nrel))
+       r1 (r0 + (8 * nrel))
        relbox (? pie (: t (tablet 0) _ (pin t 0 ()) t) ())    ; abs64 site accumulator (pie only)
        glo (ldsyms objs)
        ; emit in layout order, zero-padding up to each section's base
        (emit tag cur os acc)
-        (? (! (two? os)) (>< cur acc)
+        (? !(two? os) (cur >< acc)
            (: ob <os se (peep (peep ob 'sects 0) tag ())
-              (? (! (two? se)) (emit tag cur >os acc)
+              (? !(two? se) (emit tag cur >os acc)
                  (: b (peep ob (ld-key tag) 0)
                     pad (? (cur < b) `((ld-zeros (b - cur))) ())
                     (emit tag (b + (ld-at se 1)) >os
@@ -242,13 +241,13 @@
        tail (? (<en < r0) `((ld-zeros (r0 - <en))) ())      ; nif tail + table alignment in one pad
        rtab (? pie (catall (map (\ o (le64 o)) (rev (peep relbox 0 ())))) ())
        hdr (elf64-hdr (? pie 3 2) base (peep <objs 'tbase 0) (r1 - base) mach)
-       (>< hdr (>en + tail + (? pie `(rtab) ()))))
+       (hdr >< (>en + tail + (? pie `(rtab) ()))))
 
    ; write a piece list to a file, raw (texts pass through; byte lists pack).
    ; an explicit left walk: map runs its effects right-to-left.
    (ld-write path ps)
     (: q (open path "w")
-       (go l) (? (! (two? l)) (close q)
+       (go l) (? !(two? l) (close q)
                  (: _ (say q (: p <l (? (string? p) p (string p))))
                     (go >l)))
        (go ps)))
