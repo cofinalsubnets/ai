@@ -10,6 +10,7 @@
 #define MAP_FIXED     16
 #define MAP_ANONYMOUS 32
 #define MAP_ANON      32
+#define MAP_POPULATE  32768
 #define MAP_FAILED ((void*)(-1))
 void *mmap(void*, long, int, int, int, long);
 int munmap(void*, long);
