@@ -133,7 +133,7 @@ tablet, so a stray `(pin holo …)` can no longer poison a baked service. See [[
 **housekeeping** — not a feature, but lands with the cut
 - [ ] **break up the 1635-line root `Makefile`** — non-recursive `include` fragments, host/kernel builds
       split out next to their source (`host/build.mk`, `port/inle/build.mk`) + the crew test bulk to
-      `mk/apps.mk`. Pure motion, `make -pqn` byte-identical at each step. Plan in [`doc/makefile-split.md`](makefile-split.md)
+      `mk/apps.mk`. Pure motion, `make -pqn` byte-identical at each step.
 
 ### B. naming & persona (gwen christens — offers only)
 

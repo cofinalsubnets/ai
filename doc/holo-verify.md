@@ -111,7 +111,7 @@ give it the same machine-checked floor as x64. reuse the driver shape with an aa
 already spec'd but unstarted: **moon translation-validation** (per-compile certificates that moon's
 asm refines the C it compiled), and the **GC / scheduler refinement** proofs -- gc.v's
 `barrier_sound` and doc/proto/sched.l's 11 checks are proven as *models*; what's missing is the
-proof that the actual C refines them (doc/gengc.md, doc/sched.md). closing holo's encoder is the
+proof that the actual C refines them (doc/gengc.md). closing holo's encoder is the
 first, smallest instance of that general move: prove the model, then bind the real artifact to it.
 
 ## running

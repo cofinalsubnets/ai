@@ -86,12 +86,12 @@ rides on this once images are per-target.
 - **Maintenance** — the image rebuilds whenever prel/ev/glaze change (a Makefile dep); the stamp +
   eval fallback make a stale image safe, never wrong.
 - **Existing infra to lean on** — the generational collector already RELOCATES objects and has the
-  out-of-pool/immortal short-circuit (ai.c:667, the gen_*_relocate machinery); serialize.md's
+  out-of-pool/immortal short-circuit (ai.c:667, the gen_*_relocate machinery); a
   source-level round-trip is an independent cross-check (a dumped closure should `show`-match its
   eval'd twin).
 
-Relates: the egg (ai/egg.l, the double-sat), [[glaze-float]] (the bake this unlocks), serialize.md
-(source-level serialization), gengc.md (the collector + immortal region).
+Relates: the egg (ai/egg.l, the double-sat), [[glaze-float]] (the bake this unlocks), gengc.md
+(the collector + immortal region).
 
 ## Status — landed (Phases 0–4 + cross-arch + the host/core split)
 
