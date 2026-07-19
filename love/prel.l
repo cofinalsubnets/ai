@@ -872,7 +872,7 @@
     (: h (cap x) (?
       (id? h '\) (? (atom? (cuup x)) 0 (: r (lp x) (w v (cup r) (cat (cap r) bnd) 1 dm)))
       (id? h ':) (wl v (cup x) (cat (ln (cup x)) bnd) u dm)
-      (: m (? (nom? h) (peep macros h 0) 0) (? m (w v (m (cup x)) bnd u dm) (any (\ e (w v e bnd u dm)) x))))))
+      (: m (? (nom? h) (peep macros h 0) 0) (? (&& m (nil? (member? h bnd))) (w v (m (cup x)) bnd u dm) (any (\ e (w v e bnd u dm)) x))))))
    (wl v bs bnd u dm) (?
     (atom? bs) 0
     (atom? (cup bs)) (w v (cap bs) bnd u dm)
@@ -890,25 +890,27 @@
 ; redirect). Returns (prepped-prs . body') or 0.
 (: (boxfix-core prs body) (:
    (rmc cs ns) (filter (\ p (nil? (member? (cap p) ns))) cs)
-   (sub cs x) (?
+   ; bnd: the lexical binder set, seeded with the scope's own names -- a locally-bound name is an
+   ; ordinary variable, never a macro head (the shadow law; wx/cprop carry the same guard).
+   (sub cs x bnd) (?
     (nom? x) (: p (assoc x cs) (? (two? p) (list missing (caup p) (list '\ (cuup p))) x))
     (atom? x) x
     (: h (cap x) (?
-      (id? h '\) (? (atom? (cuup x)) x (: r (lp x) (link '\ (cat (cap r) (list (sub (rmc cs (cap r)) (cup r)))))))
-      (id? h ':) (link ': (subl (rmc cs (ln (cup x))) (cup x)))
-      (: m (? (nom? h) (peep macros h 0) 0) (? m (sub cs (m (cup x))) (map (\ e (sub cs e)) x))))))
-   (subl cs bs) (?
+      (id? h '\) (? (atom? (cuup x)) x (: r (lp x) (link '\ (cat (cap r) (list (sub (rmc cs (cap r)) (cup r) (cat (cap r) bnd)))))))
+      (id? h ':) (: ns (ln (cup x)) (link ': (subl (rmc cs ns) (cup x) (cat ns bnd))))
+      (: m (? (nom? h) (peep macros h 0) 0) (? (&& m (nil? (member? h bnd))) (sub cs (m (cup x)) bnd) (map (\ e (sub cs e bnd)) x))))))
+   (subl cs bs bnd) (?
     (atom? bs) bs
-    (atom? (cup bs)) (list (sub cs (cap bs)))
-    (: nd (dsug (cap bs) (caup bs)) (link (cap nd) (link (sub cs (cup nd)) (subl cs (cuup bs))))))
+    (atom? (cup bs)) (list (sub cs (cap bs) bnd))
+    (: nd (dsug (cap bs) (caup bs)) (link (cap nd) (link (sub cs (cup nd) bnd) (subl cs (cuup bs) bnd)))))
    (: bx (boxset prs)
       (? (nil? bx) 0
-       (: cs (mkcs bx)
-          (one p) (: d (sub cs (cup p))
+       (: cs (mkcs bx) ns0 (map cap prs)
+          (one p) (: d (sub cs (cup p) ns0)
                      (? (member? (cap p) bx)
                         (: c (assoc (cap p) cs) (link '_ (list pin (caup c) (list '\ (cuup c)) d)))
                         (link (cap p) d)))
-          (link (cat (cellbinds cs) (map one prs)) (sub cs body)))))))
+          (link (cat (cellbinds cs) (map one prs)) (sub cs body ns0)))))))
 ; flat-list adapter for c0 (ev.c): a `:` binding list (n1 d1 .. [body]) -> the
 ; rewritten list, or the input unchanged. even (body-less) lets and lets that
 ; need no boxing pass through verbatim.

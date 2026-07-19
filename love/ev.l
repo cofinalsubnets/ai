@@ -291,8 +291,8 @@
                  (link ': (wxl (boxfix (cup x)) bnd)))   ; boxfix = letrec* capture-by-location source rewrite, post-macroexpand
      (id? h '?) (? (atom? (cup x)) '?                      ; (?) likewise: the empty form is the head's value
                  (link '? (wxc (cup x) bnd)))
-     (: m (? (nom? h) (macros h) 0)                     ; macro head? expand, then re-walk
-      (? m (wx (m (cup x)) bnd)
+     (: m (? (nom? h) (macros h) 0)                     ; macro head? expand, then re-walk -- unless a binder
+      (? (&& m (! (member? h bnd))) (wx (m (cup x)) bnd)   ;   SHADOWS the name (the bnd walk only on a macro hit)
          (fold (map (\ e (wx e bnd)) x) bnd))))))
    (wxl bs bnd) (wxb bs (cat (ln bs) bnd))        ; a let's names all shadow throughout
    (wxb bs bnd) (?
@@ -424,30 +424,33 @@
     (? (< (tally as) np) (link lam as)                                                 ; under-saturated -> leave a partial
        (: bd2 (bsub (zip ps (take np as)) (last lam)) rest (drop np as)
           (? (two? rest) (link bd2 rest) bd2))))
-   (cplam x se fl op) (? (atom? (cuup x)) x                                           ; (\ v) quote -> leave
-    (: r (lp x) ps (cap r) (link '\ (cat ps (list (cprop (cup r) (strip ps se) fl 0)))))) ; the body is a value -> op 0
-   (cpbinds bs se fl op) (?
+   (cplam x se fl op bnd) (? (atom? (cuup x)) x                                       ; (\ v) quote -> leave
+    (: r (lp x) ps (cap r) (link '\ (cat ps (list (cprop (cup r) (strip ps se) fl 0 (cat ps bnd)))))))   ; the body is a value -> op 0
+   (cpbinds bs se fl op bnd) (?
     (atom? bs) bs
-    (atom? (cup bs)) (list (cprop (cap bs) se fl op))                                  ; the let's BODY inherits the let's op
-    (: nd (dsug (cap bs) (caup bs)) nm (cap nd) v1 (cprop (cup nd) se fl 0)           ; a binding value is a value -> op 0
+    (atom? (cup bs)) (list (cprop (cap bs) se fl op bnd))                              ; the let's BODY inherits the let's op
+    (: nd (dsug (cap bs) (caup bs)) nm (cap nd) v1 (cprop (cup nd) se fl 0 bnd)       ; a binding value is a value -> op 0
        se2 (? (|| (propk? v1) (inlinable? nm v1))                                      ; a const OR a known pure lambda enters se
               (link (list nm v1) (rmq nm se)) (rmq nm se))
-       (link nm (link v1 (cpbinds (cuup bs) se2 fl op)))))
-   (cprop x se fl op) (?
+       (link nm (link v1 (cpbinds (cuup bs) se2 fl op bnd)))))
+   ; bnd: the lexical binder set (\ params + : names), one-scope. its ONE reader is the macro
+   ; lane: a locally-bound name is an ordinary variable, never a macro head (the shadow law;
+   ; se can't stand in for it -- absence from se doesn't distinguish local from global).
+   (cprop x se fl op bnd) (?
     (atom? x) (? (nom? x) (: e (assq x se) (? (atom? e) x (caup e))) x)               ; const/known-lambda var -> value
-    (id? (cap x) '\) (cplam x se fl op)
-    (id? (cap x) ':) (link ': (cpbinds (cup x) se fl op))
-    (id? (cap x) '?) (link '? (map (\ e (cprop e se fl op)) (cup x)))                  ; no prune here -- wxc does it
-    (: h (cap x) m (? (nom? h) (macros h) 0)                                          ; macro head? expand on RAW args -- a structural
-       (? m (cprop (m (cup x)) se fl op)                                               ; macro (assert's quoted msg, a two?/cap probe) must
-          (: as (map (\ e (cprop e se fl 0)) (cup x))                                  ; ARGS are values -> op 0 (escape mode)
-             hr (? (nom? h) (: e (assq h se) (? (atom? e) h (caup e))) (cprop h se fl 1)) ; HEAD is consumed -> op 1
+    (id? (cap x) '\) (cplam x se fl op bnd)
+    (id? (cap x) ':) (link ': (cpbinds (cup x) se fl op (cat (ln (cup x)) bnd)))       ; a let's names all shadow throughout (one scope)
+    (id? (cap x) '?) (link '? (map (\ e (cprop e se fl op bnd)) (cup x)))              ; no prune here -- wxc does it
+    (: h (cap x) m (? (nom? h) (macros h) 0)                                          ; macro head, not shadowed? expand on RAW args -- a structural
+       (? (&& m (! (member? h bnd))) (cprop (m (cup x)) se fl op bnd)                  ; macro (assert's quoted msg, a two?/cap probe) must
+          (: as (map (\ e (cprop e se fl 0 bnd)) (cup x))                              ; ARGS are values -> op 0 (escape mode)
+             hr (? (nom? h) (: e (assq h se) (? (atom? e) h (caup e))) (cprop h se fl 1 bnd)) ; HEAD is consumed -> op 1
              (? (&& (< 0 fl) (lambp hr) (allp as se))
-                  (: red (cprop (beta hr as) se (- fl 1) op)                           ; KNOWN LAMBDA -> beta, re-cprop (fuel-bounded)
+                  (: red (cprop (beta hr as) se (- fl 1) op bnd)                       ; KNOWN LAMBDA -> beta, re-cprop (fuel-bounded)
                      (? (|| op (! (lambp red))) red (link h as)))                      ; escaping lambda result -> REVERT (keep the closure)
                 (&& (nom? h) (inop h opval) (allk as)) (foldc h as)                    ; pure-op on consts -> fold (as before)
                 (link h as))))))                                                       ; else rebuild with the RAW head (source unchanged)
-   (wx (cprop x () 64 0) 0))
+   (wx (cprop x () 64 0 0) 0))
   ; a bare symbol is a variable reference -- EXCEPT the zero point, which reads as a
   ; nom? literal (the `()` a (\ _ ()) / failed parse / `('x) tail evaluates to).
   ; routing it to ava treats it as a free var and captures it as a SPURIOUS import:

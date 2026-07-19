@@ -138,6 +138,8 @@
  (5 = ((\ x x) ((\ x x) 5)))                     ; beta_nested: (\ x x) ((\ x x) a) ~>* a
  (10 = ((\ q ((\ i (: q 7 (+ i q))) q)) 3))      ; capture-avoiding: a : binder shadowing the arg does NOT capture it (i stays 3, local q 7)
  (8  = ((\ q ((\ i (: i 5 (+ i q))) q)) 3))      ; a : REBINDING the lambda param shadows it -- the subst drops, not lands on the binder
+ (99 = ((\ tuple (tuple 1 2 3)) (\ a b c 99)))   ; a binder SHADOWS a same-spelled macro: the macro must not fire (tuple is a prel macro)
+ (5  = (: let (\ x 5) (let 9)))                  ; likewise for a : binder named like a macro
  !((\ x (cap x)) = cap))                         ; eta_redex_shifts' twin: eta stays unbridged
 
 ; --- + and * are generic --- `+` adds numbers, concatenates strings, appends lists; `-` numeric

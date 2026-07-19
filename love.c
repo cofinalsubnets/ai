@@ -2062,8 +2062,18 @@ static ai_inline word rev(struct ai *g, word l) {
 
 static word ldels(struct ai *g, word lam, word l);
 
+// a nom lexically bound anywhere up the scope chain SHADOWS a macro of the same
+// spelling: expansion must not fire (ev.l's wx/cprop carry the twin guard, so both
+// compilers agree). binder rosters only -- imps are derived captures and may record
+// undefined globals, so they don't count as binders.
+static bool lexbound(struct ai *g, struct env *d, word x) {
+ for (; !nilp(d); d = d->par)
+  if (memq(g, d->args, x) || memq(g, d->stack, x) ||
+      memq(g, d->fars, x) || assq(g, d->lams, x)) return true;
+ return false; }
+
 static ai_inline Ana(ana_2, word a, word b) {
- if ((x = macroget(ai_core_of(g), a)))   // macro table = each layer's [nil] slot, walked
+ if ((x = macroget(ai_core_of(g), a)) && !lexbound(g, *c, a))   // macro table = each layer's [nil] slot, walked; the scope walk only on a macro HIT
   return g = ai_eval(gxr(gxl(gxl(pushq(gxl(ai_push(g, 4, b, nil, nil, x))))))),
          analyze(g, c, ai_ok(g) ? pop1(g) : 0);
  return avec(g, b, g = analyze(g, c, a)),
