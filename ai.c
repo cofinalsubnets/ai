@@ -2471,7 +2471,8 @@ lvm(lvm_index) {
             struct ai *w = ioputs(g, ";; missing ");
             for (uintptr_t i = 0; ai_ok(w) && i < nm->len; i++) w = ioputc(w, nm->bytes[i]);
             if (ai_ok(w)) w = ioputc(w, '\n');
-            if (ai_ok(w)) zflush(w); g->io = sv; }
+            if (ai_ok(w)) zflush(w);
+            g->io = sv; }
 #endif
   return *--Sp = ZeroPoint, Ip += 2, Continue(); }
  word a = word(sym_probe(g, "missing", 7)), b = Ip[1].x;   // 'missing: the nif's name, rooted by the book
@@ -6572,8 +6573,10 @@ static bool nf_walk(struct ai *g, word a, struct arib *ra, struct clonf *ca,
   word pa = B(a), pb = B(b);
   if (!chainp(B(pa)) || !chainp(B(pb))) return eqv_at(g, a, b, scratch);   // quote: data
   int na = 0, nb = 0; word t = pa;
-  for (; chainp(B(t)); t = B(t)) na++; word ba = A(t);
-  for (t = pb; chainp(B(t)); t = B(t)) nb++; word bb = A(t);
+  for (; chainp(B(t)); t = B(t)) na++;
+  word ba = A(t);
+  for (t = pb; chainp(B(t)); t = B(t)) nb++;
+  word bb = A(t);
   if (na != nb) return false;
   struct arib rA = { pa, pa, na, na, ra }, rB = { pb, pb, nb, nb, rb };
   return nf_walk(g, ba, &rA, ca, bb, &rB, cb, scratch); }
