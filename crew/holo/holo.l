@@ -55,23 +55,23 @@
 
 (: ;; -- a 0-based list accessor (prel has none; `nth` is not bound -- it absorbs as the zero
    ;; point). instruction forms read their operands through this. --
-   (at l k) (? (= k 0) <l (at >l (- k 1)))
+   (at l k) (? (k = 0) <l (at >l (k - 1)))
 
    ;; -- bytes, little-endian. the leaves a backend emits immediates with. byte/le16/le32 ride the fast
    ;; &/>> path (their inputs are offsets/imm32, always < 2^31, where & is exact). le64 must NOT: a movabs
    ;; immediate can be a full 64-bit word >= 2^63 -- a BIGNUM in ai, on which `&` is broken (the high limb
    ;; is dropped). so le64 normalizes negatives into [0,2^64) and slices with //% (both bignum-exact). --
    (catall ls) (foldr (+) () ls)                     ; concat a list of byte-lists
-   (byte n)  (& n 255)
-   (le16 n)  `((byte n) (byte (>> n 8)))
-   (le32 n)  `((byte n) (byte (>> n 8)) (byte (>> n 16)) (byte (>> n 24)))
-   (le64 n)  (: u (? (< n 0) (+ n 18446744073709551616) n)                            ; two's-complement into [0,2^64)
-              ((: (go i) (? (< i 8) (>< (% (// u (i 256)) 256) (go (+ i 1))) ())) 0))   ; 8 LE bytes via //% (i 256)=256^i
-   (fits8  n) (&& (>= n -128) (<= n 127))
-   (fits32 n) (&& (>= n -2147483648) (<= n 2147483647))
+   (byte n)  (n & 255)
+   (le16 n)  `((byte n) (byte (n >> 8)))
+   (le32 n)  `((byte n) (byte (n >> 8)) (byte (n >> 16)) (byte (n >> 24)))
+   (le64 n)  (: u (? (n < 0) (n + 18446744073709551616) n)                            ; two's-complement into [0,2^64)
+              ((: (go i) (? (i < 8) (((u // (i 256)) % 256) >< (go (i + 1))) ())) 0))   ; 8 LE bytes via //% (i 256)=256^i
+   (fits8  n) (&& (n >= -128) (n <= 127))
+   (fits32 n) (&& (n >= -2147483648) (n <= 2147483647))
 
    ;; -- a register operand is a symbol, an immediate a number. --
-   (reg? x)  (! (constellation? x))
+   (reg? x)  !(constellation? x)
    (imm? x)  (constellation? x)
 
    ;; -- a FIXUP: a relocation placeholder a backend drops where a label-relative field goes. it
@@ -80,13 +80,13 @@
    ;; `aux` is a backend scratch value -- x86 ignores it; a fixed-width arch (aarch64) stashes the
    ;; base instruction word there, since its branch offset is a bitfield WITHIN the word, not bytes.
    (fix w kind label aux) `('fix w kind label aux)
-   (fix? x)   (? (two? x) (= <x 'fix) 0)
+   (fix? x)   (? (two? x) (<x = 'fix) 0)
    (fix-w x)  (at x 1)
    (fix-k x)  (at x 2)
    (fix-l x)  (at x 3)
    (fix-a x)  (at x 4)
    (item-len x) (? (fix? x) (fix-w x) 1)              ; a byte is 1; a fixup is its field width
-   (chunk-len l) (foldl (\ a x (+ a (item-len x))) 0 l)
+   (chunk-len l) (foldl (\ a x (a + (item-len x))) 0 l)
 
    ;; -- the backend registry. a backend is a tablet { 'lower 'patch }. --
    backends (tablet 0)
@@ -104,33 +104,33 @@
    ;; the only pass that knows the address. the pad is between-function filler, never
    ;; executed, so a torn unit at an odd grain is harmless.
    (pad-to be addr n)
-      (: k (% (- n (% addr n)) n)
+      (: k ((n - (addr % n)) % n)
          unit (peep be 'nop `(144))
-         (fill j u) (? (< j 1) ()
-                       (! (two? u)) (fill j unit)
-                       (>< <u (fill (- j 1) >u)))
+         (fill j u) (? (j < 1) ()
+                       !(two? u) (fill j unit)
+                       (<u >< (fill (j - 1) >u)))
          (fill k unit))
    (lay prog be addr items labels)
-      (? (! (two? prog)) (>< (rev items) labels)
+      (? !(two? prog) ((rev items) >< labels)
          (: ins <prog
-            (? (= <ins 'label)
+            (? (<ins = 'label)
                (: _ (pin labels (at ins 1) addr) (lay >prog be addr items labels))
-               (= <ins 'align)
+               (<ins = 'align)
                (: pad (pad-to be addr (at ins 1))
-                  (lay >prog be (+ addr (tally pad)) (+ (rev pad) items) labels))
+                  (lay >prog be (addr + (tally pad)) ((rev pad) + items) labels))
                (: chunk (lower-with be ins)
-                  (lay >prog be (+ addr (chunk-len chunk)) (+ (rev chunk) items) labels)))))
+                  (lay >prog be (addr + (chunk-len chunk)) ((rev chunk) + items) labels)))))
 
    ;; -- pass two: stream the items out, resolving each fixup against the now-known labels. --
    (resolve items labels be addr)
-      (? (! (two? items)) ()
+      (? !(two? items) ()
          (: x <items
             (? (fix? x)
                (: tgt (peep labels (fix-l x) ())
                   _ (? (imm? tgt) 0 (scare 'undef-label (fix-l x)))
                   bs (patch-with be (fix-k x) tgt addr (fix-w x) (fix-a x))
-                  (+ bs (resolve >items labels be (+ addr (fix-w x)))))
-               (>< x (resolve >items labels be (+ addr 1))))))
+                  (bs + (resolve >items labels be (addr + (fix-w x)))))
+               (x >< (resolve >items labels be (addr + 1))))))
 
    ;; -- branch relaxation, fused with layout: lay's shape (items . labels), but (jmp l) /
    ;; (br c l) land as the 2-byte short forms (jmp8 / br8) where the target provably fits
@@ -152,50 +152,50 @@
    ;; (the locals here are spelled to shadow NO caller-side global -- a `scan`/`rw`/`skip`
    ;; would collide with moon/kore file-scope names in a cat'd stream.)
    (laylax prog be at0 labels longs)
-      (? (! (peep be 'short 0)) (lay prog be at0 () labels)
+      (? !(peep be 'short 0) (lay prog be at0 () labels)
          (: spots (tablet 0) eras (tablet 0)
             ;; pass one: lower each form once, cache (len . chunk) -- the length rides along
             ;; so pass two never re-walks a chunk (item-len per byte is the cost that counts
             ;; for a hot assembling client). labels ride (0 . ()); pessimistic addresses +
             ;; align epochs pin beside the internal labels.
             (plumb p addr era acc)
-               (? (! (two? p)) (rev acc)
+               (? !(two? p) (rev acc)
                   (: ins <p
-                     (? (= <ins 'label)
+                     (? (<ins = 'label)
                         (: _ (pin spots (at ins 1) addr) _ (pin eras (at ins 1) era)
-                           (plumb >p addr era (>< (>< 0 ()) acc)))
-                        (= <ins 'align)
+                           (plumb >p addr era ((0 >< ()) >< acc)))
+                        (<ins = 'align)
                         (: pad (pad-to be addr (at ins 1))  k (tally pad)
-                           (plumb >p (+ addr k) (+ era 1) (>< (>< k pad) acc)))
+                           (plumb >p (addr + k) (era + 1) ((k >< pad) >< acc)))
                         (: c (lower-with be ins)  k (chunk-len c)
-                           (plumb >p (+ addr k) era (>< (>< k c) acc))))))
+                           (plumb >p (addr + k) era ((k >< c) >< acc))))))
             chunks (plumb prog at0 0 ())
             ;; the short branch is 2 bytes, so its rel8 measures from addr+2 -- forward spans
             ;; shrink toward it, backward spans shrink toward zero, both stay inside [-128,127].
             (near? l addr era)
                (: t (peep spots l ())
-                  (? (! (imm? t)) ()
+                  (? !(imm? t) ()
                      (peep longs l 0) ()
-                     (! (= era (peep eras l -1))) ()
-                     (fits8 (- t (+ addr 2)))))
+                     !(era = (peep eras l -1)) ()
+                     (fits8 (t - (addr + 2)))))
             ;; pass two: splice the cached chunks -- pessimistic addresses (pa) drive the
             ;; shortening decisions, final addresses (fa) pin the labels and re-lay the pads.
             (stitch p cs pa fa era items)
-               (? (! (two? p)) (>< (rev items) labels)
+               (? !(two? p) ((rev items) >< labels)
                   (: ins <p  k <<cs  c ><cs
-                     (? (= <ins 'label)
+                     (? (<ins = 'label)
                         (: _ (pin labels (at ins 1) fa) (stitch >p >cs pa fa era items))
-                        (= <ins 'align)
+                        (<ins = 'align)
                         (: pad (pad-to be fa (at ins 1))
-                           (stitch >p >cs (+ pa k) (+ fa (tally pad)) (+ era 1)
-                                   (+ (rev pad) items)))
-                        (&& (= <ins 'jmp) (near? (at ins 1) pa era))
+                           (stitch >p >cs (pa + k) (fa + (tally pad)) (era + 1)
+                                   ((rev pad) + items)))
+                        (&& (<ins = 'jmp) (near? (at ins 1) pa era))
                         (: sc (lower-with be `('jmp8 (at ins 1)))
-                           (stitch >p >cs (+ pa k) (+ fa 2) era (+ (rev sc) items)))
-                        (&& (= <ins 'br) (near? (at ins 2) pa era))
+                           (stitch >p >cs (pa + k) (fa + 2) era ((rev sc) + items)))
+                        (&& (<ins = 'br) (near? (at ins 2) pa era))
                         (: sc (lower-with be `('br8 (at ins 1) (at ins 2)))
-                           (stitch >p >cs (+ pa k) (+ fa 2) era (+ (rev sc) items)))
-                        (stitch >p >cs (+ pa k) (+ fa k) era (+ (rev c) items)))))
+                           (stitch >p >cs (pa + k) (fa + 2) era ((rev sc) + items)))
+                        (stitch >p >cs (pa + k) (fa + k) era ((rev c) + items)))))
             (stitch prog chunks at0 at0 0 ())))
 
    ;; -- assemble PROG for TARGET. returns a tablet { 'bytes 'labels }; `holo-bytes` is the
@@ -231,7 +231,7 @@
    (label-at res name)   (peep (peep res 'labels 0) name ())
 
    ;; -- hex, for goldens and disassembly. --
-   (hex1 d)  (snip "0123456789abcdef" d (+ d 1))
-   (hex2 b)  (+ (hex1 (>> b 4)) (hex1 (& b 15)))
-   (hexs bs) (foldl (\ a b (+ a (hex2 b))) "" bs)
+   (hex1 d)  (snip "0123456789abcdef" d (d + 1))
+   (hex2 b)  ((hex1 (b >> 4)) + (hex1 (b & 15)))
+   (hexs bs) (foldl (\ a b (a + (hex2 b))) "" bs)
    (holo-hex target prog) (hexs (holo-bytes target prog)))
