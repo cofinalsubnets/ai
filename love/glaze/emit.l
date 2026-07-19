@@ -989,25 +989,6 @@
          (id? op '*) `(`('mulo A A T SC 'deopt)) ()))
    (divir tgt op) (: A (greg tgt 'acc) T (greg tgt 'tmp) SC (greg tgt 'scratch)   ; caller emits the /-by-0 guard
       (? (id? op '//) `(`('div A T A)) (id? op '%) `(`('rem A T A SC)) ()))
-   ; --- PARTIAL-GLAZE PROTOTYPE (flag-gated) -------------------------------------------------------
-   ; pgops: the ops with NO native recognizer that the bridge splices in as an in-convention CALL to
-   ; their C body (host/main.c ai_pg_dyad). () when the flag is off -> cgir rejects them exactly as
-   ; before -> the whole closure stays bytecode (current behavior, byte-identical). x64-only. NOTE:
-   ; UNARY (dummy arg) so the getenv body actually FIRES at call time -- a nullary (f) is f UNRUN.
-   (pgops _) (? (getenv "LOVE_PARTIAL_GLAZE") '(<< >>) ())
-   (pgsel op) (? (id? op '<<) 0 (id? op '>>) 1 (id? op 'min) 2 3)   ; op -> ai_pg_dyad's selector
-   ; pgbridge: with a in tmp and b in acc, call ai_pg_dyad(sel, a, b) -> acc. Spills the 5 live
-   ; convention regs (g/Ip/Hp/Sp/anchor -- all caller-saved) on the machine stack, snapshots rsp in
-   ; rbx (the one ABI callee-saved we touch, itself pushed), 16-aligns, calls, then restores rsp from
-   ; the snapshot (discarding the align pad) and pops back. No g/heap access in the callee -> no GC
-   ; Pack/reload needed. objdump-verified byte-for-byte.
-   (pgbridge tgt op) (: A (greg tgt 'acc) T (greg tgt 'tmp) G (greg tgt 'g) IP (greg tgt 'ip)
-                          HP (greg tgt 'hp) SP (greg tgt 'sp) AN (greg tgt 'anchor) SV 'r3
-      `(`('push SV) `('mov SV 'sp) `('push G) `('push IP) `('push HP) `('push SP) `('push AN)
-         `('li G (pgsel op)) `('mov IP T) `('mov HP A) `('li T (pgaddr 0))
-         `('and 'sp 'sp -16) `('callr T)
-         `('mov 'sp SV) `('sub 'sp 'sp 40)
-         `('pop AN) `('pop SP) `('pop HP) `('pop IP) `('pop G) `('pop SV)))
    ; cgir: an arith expr e over params ps -> IR ops, accumulating in acc; a param fetches from Sp[i] (by
    ; its index in ps). nested operands ride the machine stack (push acc / pop tmp); ? gets fresh mint
    ; labels; one shared deopt label. serves BOTH the leaf (ps = one param) and the n-ary lane.
@@ -1024,8 +1005,6 @@
                  ((cgir tgt ps a) + `(`('push A)) + (cgir tgt ps b) + `(`('pop T) `((bitop op) A A T)))
                (member? op '(< <= > >= =))
                  ((cgir tgt ps a) + `(`('push A)) + (cgir tgt ps b) + `(`('pop T) `('cmp T A) `('set (ccof op) A)))
-               (member? op (pgops 0))                                      ; PARTIAL GLAZE: bridge an unrecognized op to its C body
-                 ((cgir tgt ps a) + `(`('push A)) + (cgir tgt ps b) + `(`('pop T)) + (pgbridge tgt op))
                (id? op '?)
                  (: el (mint 0) en (mint 0)
                     ((cgir tgt ps a) + `(`('cmp A 0) `('br 'le el)) + (cgir tgt ps b) + `(`('jmp en) `('label el)) + (cgir tgt ps <>>>e) + `(`('label en))))

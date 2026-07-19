@@ -39,7 +39,7 @@
    ; LOWERING hook (book['welow], church + HOF) now lives PRE-EGG in love/ev.l -- the sole welow, no shadow here.
    (exprn ps e) (? (member? e ps) 1  (whole? e) 1                          ; var in frame | int literal
                    (two? e) (: op <e
-                               (? (member? op ('(+ - * // % & | ^ < <= > >= =) + (? (getenv "LOVE_PARTIAL_GLAZE") '(<< >>) ()))) (&& (exprn ps <>e) (exprn ps <>>e))
+                               (? (member? op '(+ - * // % & | ^ < <= > >= =)) (&& (exprn ps <>e) (exprn ps <>>e))
                                   (op = '?) (&& (two? >>>e) !(two? >>>>e)
                                                (exprn ps <>e) (exprn ps <>>e) (exprn ps <>>>e))
                                   0))

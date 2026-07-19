@@ -402,24 +402,6 @@ static lvm(lvm_getenv) {
 // too, so unlike the host/*.c glob nifs this one exists in the bootstrap as well.
 static lvm(lvm_getpid) { return Sp[0] = putcharm(getpid()), Ip++, Continue(); }
 
-// --- PARTIAL-GLAZE PROTOTYPE (flag-gated; see love/glaze/emit.l cgir bridge) -----------
-// pg_dyad: a stable-address, allocation-free fixnum dyadic op, called DIRECTLY from
-// emitted native code (SysV: rdi=op, rsi=a, rdx=b; untagged machine ints in and out).
-// It stands in for "the VM op's C body" that partial glazing splices in when the glaze
-// grammar has no recognizer for an op. op: 0=shl 1=shr(arith) 2=min 3=max. No g/heap
-// access, so the bridge needs no GC Pack/reload -- only the caller-saved register spill.
-// The address is a link-time constant (never GC-moved), handed to the emitter by pgaddr.
-ai_noinline intptr_t ai_pg_dyad(intptr_t op, intptr_t a, intptr_t b) {
- switch (op) {
-  case 0:  return a << b;
-  case 1:  return a >> b;
-  case 2:  return a < b ? a : b;
-  default: return a > b ? a : b; } }
-// (pgaddr x) -> the address of ai_pg_dyad as a fixnum (x ignored). The emitter reads it
-// once and embeds it as the callr target. Fixnum-safe: code addresses are < 2^62.
-static lvm(lvm_pgaddr) { return Sp[0] = putcharm((intptr_t) ai_pg_dyad), Ip++, Continue(); }
-static union u const nif_pgaddr[] = {{lvm_pgaddr}, {lvm_ret0}};
-
 static union u const
  nif_exit[] = {{lvm_exit}, {lvm_ret0}},
  nif_open[] = {{lvm_cur}, {.x = putcharm(2)}, {lvm_open}, {lvm_ret0}},
@@ -444,7 +426,6 @@ AI_NIF("runt", nif_runt);
 AI_NIF("exec", nif_exec);
 AI_NIF("getenv", nif_getenv);
 AI_NIF("getpid", nif_getpid);
-AI_NIF("pgaddr", nif_pgaddr);
 
 // --- the boot script ---------------------------------------------------
 // Everything the two builds disagree about lives in this ONE conditional
