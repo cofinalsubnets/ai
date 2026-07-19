@@ -518,9 +518,11 @@
             (p2 lvm_cond (pop c 'alt) j)))))))))
 
   ; recursive-fn ref: bake `quote code` if the closure is built, else `quote 0`
-  ; + a backpatch site `(lfd . cell)` on the scope for wire to resolve.
+  ; + a backpatch site `(lfd . box-of-cell)` on the scope for wire to resolve.
+  ; the cell rides a box (pin, barriered) -- never a chain-tail poke: a raw poke
+  ; into tenured data is the one write the precise barrier can't cover.
   (qsite site k n) (: cell (poke -1 0 (k (+ 2 n)))
-                      _ (poke 2 cell site)
+                      _ (pin (cup site) 0 cell)
                     (poke -1 lvm_quote cell))
   ; a closure CELL is a box (tablet 0) holding the closure chain (entry . imports).
   ; mkc makes one, cof reads it, cput stores into it -- the letrec* capture fixpoint and
@@ -531,7 +533,7 @@
   (cput e v) (: _ (pin (cup e) 0 v) v)
   (lz c lfd scope)(: code (cap (cof lfd))
                    p (? code (em2 lvm_quote code)
-                        (: site (link lfd 0)
+                        (: site (link lfd (tablet 0))
                            _ (pin scope 'sites (link site (scope 'sites)))
                          (qsite site)))
                    _ (push c 'stk 0)
@@ -714,7 +716,7 @@
     _ (each lams (\ e (cput e (link 0 (cup (cof e))))))
     g (weave prs)
     ; closures final -> backpatch each recorded recursive-fn ref with its text.
-    _ (each (q 'sites) (\ s (poke 0 (cap (cof (cap s))) (cup s))))
+    _ (each (q 'sites) (\ s (poke 0 (cap (cof (cap s))) (peep (cup s) 0 0))))
     _ (pin q 'sites 0)
     _ (pin c 'stk s)
     ; body-lambda analyzed AFTER inits (it takes the bindings as args; never makes sites)
