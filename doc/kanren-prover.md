@@ -1,7 +1,7 @@
 # kanren prover — search-then-certify (the next bridge rung)
 
-The verification bridge so far makes ai a proof *checker* whose work two independent
-kernels re-certify (Rocq 200/250, Lean 200/250, axiom-free). This rung makes ai a proof
+The verification bridge so far makes love a proof *checker* whose work two independent
+kernels re-certify (Rocq 200/250, Lean 200/250, axiom-free). This rung makes love a proof
 **producer**: given a goal type `T`, kanren *searches* for a term `e` with `e : T`, uu's
 kernel *checks* it, and the bridge *certifies* it (Rocq + Lean). The search is **untrusted** —
 a buggy or incomplete search cannot fake a theorem; uu's `chk` and then Rocq/Lean reject a
@@ -54,7 +54,7 @@ specialized to uu's term syntax (quoted lists; kanren vars are the holes).
    `doc/proto/datalog.l`.)
 4. **certify the found proof** — pipe a found `e` through uu's `chk` (trusted) THEN the bridge
    → Rocq + Lean. New gate `test_kanren`: kanren PROVES a stated goal, uu checks, both kernels
-   certify — end to end, ai discovers and three kernels agree. Guard it so it no-ops without
+   certify — end to end, love discovers and three kernels agree. Guard it so it no-ops without
    coqc/lean (like `test_uugen`/`test_uulean`).
 5. **scale** — a `(solve goal)` entry; iterative deepening; the corpus as the lemma DB;
    memoization; eventually a uu tactic `(auto goal) → term` usable INSIDE proofs.
@@ -77,7 +77,7 @@ specialized to uu's term syntax (quoted lists; kanren vars are the holes).
 ## Why this rung, why now
 
 Σ/Type-paths (74→200) + the Lean backend gave a wide corpus certified across two kernels.
-The frontier left is AUTONOMY — ai writing its own proofs. Start narrow with path-algebra
+The frontier left is AUTONOMY — love writing its own proofs. Start narrow with path-algebra
 `auto`: that is where the search is tractable AND the payoff (equality obligations) is highest.
 It complements, does not replace, the differential-oracle leg (`proof/rocq/extract.v`, which ties the
 model to the binary): export ties DISCOVERED laws to independent kernels. Keep the kernel small;

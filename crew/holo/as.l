@@ -42,7 +42,7 @@
                   (as-decv s))
    (as-numish? s) (&& ((tally s) > 0) (|| ((s 0) = 45) (&& ((s 0) >= 48) ((s 0) <= 57))))
 
-   ;; --- little string helpers over the byte string (ai has no split/find). ---
+   ;; --- little string helpers over the byte string (love has no split/find). ---
    (as-has? s c) ((: (g i) (? (i >= (tally s)) 0 ((s i) = c) 1 (g (i + 1)))) 0)
    (as-idx s c)  ((: (g i) (? (i >= (tally s)) -1 ((s i) = c) i (g (i + 1)))) 0)
    (as-ws? c)    (|| (c = 32) (c = 9))

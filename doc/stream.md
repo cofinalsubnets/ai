@@ -51,7 +51,7 @@ read model disagree:
    reconsidered. (`key?` already gets this right — ai.c:3663 tests
    `ungetc_buf != EOF || ai_ready(fd)`; `see` does not. The asymmetry is the bug.)
 
-2. **The `-1` EOF sentinel is un-ai.** Absence in ai is the zero point `()`, not a
+2. **The `-1` EOF sentinel is un-love.** Absence in love is the zero point `()`, not a
    magic integer; and `-1` collides with byte `0xFF`-as-`putcharm` reasoning and
    with the fact that byte `0` already nets nothing. EOF should ride the *container*
    (the stream is empty), in-band, as a value — which is exactly

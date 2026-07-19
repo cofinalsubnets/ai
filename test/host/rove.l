@@ -1,6 +1,6 @@
 ; --- test/host/rove.l: the rove engine, headless ---
 ; NOT in the test/*.l corpus (it loads a crew file and leaks its helpers).
-; the engine core is pure ai, so everything but the tty runner gates here:
+; the engine core is pure love, so everything but the tty runner gates here:
 ; delve (seeded, connected, bordered), fov (strides, walls, memory), the
 ; painter (a frame into a jug), the helm decoder, and the crawl end to end
 ; -- combat, loot, grog, the hatch, the pearl, death. the tty side (rove)

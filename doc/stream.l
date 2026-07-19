@@ -1,4 +1,4 @@
-; --- doc/stream.l: path B's coinductive byte-stream, the PURE HALF, in ai ---
+; --- doc/stream.l: path B's coinductive byte-stream, the PURE HALF, in love ---
 ; a runnable design companion -- the real `source` is a C hot.
 ; doc/stream.md is the full design; this models the algebra over an in-memory
 ; charlist producer, so it runs ANYWHERE (no fds, no pty) and pins the shape the
@@ -22,7 +22,7 @@
 
 (: forces (tablet 0)                       ; a global counter: how many times ANY
    _ (pin forces 0 0)                       ; stream cell was actually produced
-   (bump _) (pin forces 0 (+ 1 (peep forces 0 0)))   ; takes a dummy: ai has no nullary calls
+   (bump _) (pin forces 0 (+ 1 (peep forces 0 0)))   ; takes a dummy: love has no nullary calls
 
    ; --- a stream is a BOX over a producer thunk, with a force-once memo ---
    ; 'p = the producer (\ _ -> () | (head . tail-stream)); 'f = forced? ; 'v = memo.

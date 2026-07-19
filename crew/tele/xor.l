@@ -1,4 +1,4 @@
-; crew/tele/xor.l -- the flagship demo: a 2-layer MLP learns XOR, written in ai over
+; crew/tele/xor.l -- the flagship demo: a 2-layer MLP learns XOR, written in love over
 ; the pure constellation algebra (no host nif), so it runs on EVERY frontend --
 ; the host, wasm, and inle (the freestanding kernel): a neural net on bare metal.
 ;
@@ -17,7 +17,7 @@
    model (seq `((linear 2 H) tanh (linear H 1) sig))
    opt   (sgd (params model) lr)
 
-   ;; NB: these take a dummy arg -- a nullary call (f) does NOT fire in ai, it just
+   ;; NB: these take a dummy arg -- a nullary call (f) does NOT fire in love, it just
    ;; returns f (the empty-form law); a real argument is what invokes it.
    (trainstep _) (: _ (tl-reset 0) _ (zero opt)
                   loss (mse (call model X) Y) _ (back loss) _ (step opt) (tl-val loss))

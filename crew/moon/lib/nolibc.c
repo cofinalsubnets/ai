@@ -1,9 +1,9 @@
-/* crew/moon/lib/nolibc.c -- the raw-syscall libc under the gcc-free ai (rung 4).
+/* crew/moon/lib/nolibc.c -- the raw-syscall libc under the gcc-free love (rung 4).
  * Everything the host objects ask of glibc, answered straight off the Linux
  * syscall table through __ai_sys (crew/moon/lib/mksys.l lays that leaf,
  * with __sigsetjmp/siglongjmp/__ai_sigret beside it; crew/moon/lib/math/
  * carries the math floor, crew/moon/lib/math/am.c -- ours). One file, mooncc-compiled, our own linker binds it:
- *   mooncc ai.o (host objects) nolibc.o (math objects) sys.o -o ai
+ *   mooncc ai.o (host objects) nolibc.o (math objects) sys.o -o love
  * Two arches, one body: every call below speaks the modern forms BOTH tables
  * carry (openat / newfstatat / ppoll / pipe2 / dup3 / clone / the *at file
  * ops) -- aarch64's asm-generic table dropped the legacy names outright, so
@@ -13,7 +13,7 @@
  * musl does, and only sigaction needs a real translation (glibc's 152-byte
  * struct to the kernel's -- x86-64 supplies a restorer, aarch64's kernel
  * lays its own vdso return trampoline). Single-threaded by design, like
- * ai itself: errno is one int, no locks anywhere. */
+ * love itself: errno is one int, no locks anywhere. */
 #include <stddef.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -189,7 +189,7 @@ extern int main(int, char**);
 char **environ;
 static long *__auxv;
 
-/* ---- errno: one int (ai is single-threaded), kernel -errno unwrapped ---- */
+/* ---- errno: one int (love is single-threaded), kernel -errno unwrapped ---- */
 static int __errno_v;
 int *__errno_location(void) { return &__errno_v; }
 static long er(long r) {
@@ -496,7 +496,7 @@ int execvp(char const *f, char *const *av) {
   return -1; }
 
 /* ---- malloc: K&R's first-fit free list over 1MB mmap arenas. 16-byte units,
- * 16-byte alignment, coalescing free. ai mallocs pools (big, rare) and codec /
+ * 16-byte alignment, coalescing free. love mallocs pools (big, rare) and codec /
  * line buffers (small, freed) -- this shape covers both without ceremony. ---- */
 typedef struct __mhdr { struct __mhdr *next; size_t size; } __mhdr;   /* size in units */
 static __mhdr __mbase;
@@ -619,7 +619,7 @@ int unsetenv(char const *k) {
   return 0; }
 
 /* ---- stdio: FILE is a fd plus (for write streams) a flush buffer. stdout is
- * the one hot stream -- ai's fd_putc sends EVERY output byte through fputc, so
+ * the one hot stream -- love's fd_putc sends EVERY output byte through fputc, so
  * it buffers 8KB (line-flushed on a tty, glibc's shape); stderr never buffers;
  * fopen'd streams buffer 4KB. reads are unbuffered (image.c freads whole
  * files), which keeps fseek/ftell honest as plain lseek. ---- */
@@ -1160,7 +1160,7 @@ int execlp(char const *f, char const *a0, ...) {
   av[n] = 0;
   va_end(ap);
   return execvp(f, av); }
-/* system: fork, /bin/sh -c, wait. no signal juggling (ai is single-threaded). */
+/* system: fork, /bin/sh -c, wait. no signal juggling (love is single-threaded). */
 int system(char const *cmd) {
   if (!cmd) return 1;                          /* a shell is available */
   int pid = fork();

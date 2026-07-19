@@ -1,18 +1,18 @@
 # A generational nursery over the Cheney core
 
-A **young generation** over ai's copying collector — a cheap *minor* that scavenges
+A **young generation** over love's copying collector — a cheap *minor* that scavenges
 only fresh allocation, leaving the tenured set untouched, with the full collection
 demoted to a rare *major*. **Built (stage 3), AI_STAT-gated** — see "As built" below;
 the rest of this study is the reasoning that led there, kept for the why.
 
-A runnable ai model lives in [`doc/proto/gengc.l`](proto/gengc.l) — a world is
+A runnable love model lives in [`doc/proto/gengc.l`](proto/gengc.l) — a world is
 `(nur old rem roots next)`, and its asserts pin the invariants (most pointedly:
 the write barrier is *necessary*, assert 3b). The measurement that justified
 this lives in [`tools/gcstat.l`](../tools/gcstat.l), run on a `-DAI_STAT` host.
 
 ## Why
 
-`tools/gcstat.l` measured ai's churn (gauge now reports `n_seen`/`n_evac`; see
+`tools/gcstat.l` measured love's churn (gauge now reports `n_seen`/`n_evac`; see
 the `gc:` commit). Interpreted, allocation-heavy workloads run **85–94% infant
 mortality**, and the persistent live set is **recopied ~150× over a run** —
 every full collection drags the same long-lived objects through to-space again.
@@ -44,7 +44,7 @@ two-pool flip, `symbols_rebuild` + `run_finalizers` after the fixpoint.
 
 ## Generations are read from the address
 
-ai objects are header-minimal — the "drop jitba's GC tag word" commit confirmed
+love objects are header-minimal — the "drop jitba's GC tag word" commit confirmed
 a string carries no tag (its size derives from `len`). There is **no spare bit
 for an age field**, and that is fine: a generation is read from the *address*.
 `young?(p)` is a range test, `nursery_lo <= p < nursery_hi`. The model's
@@ -283,7 +283,7 @@ example to proved-in-general. `rem_complete` itself is what `gen_audit` checks
 empirically on the real heap (0 misses across the corpus).
 
 A proof that ai.c's *pointer code* (`gcp` bounds, the tagged words, the two-space
-copy) REFINES this model is the larger separate effort — the place ai's in-tree
+copy) REFINES this model is the larger separate effort — the place love's in-tree
 prover could eventually earn its keep, the same caveat `love/glaze/README.md` flags
 for a verified glaze.
 

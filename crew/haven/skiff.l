@@ -5,7 +5,7 @@
 ; at the new size and recommits: the honest wayland resize dance. loads
 ; after crew/haven/wire.l.
 ;
-;   ai -l crew/haven/wire.l -l crew/haven/skiff.l \
+;   love -l crew/haven/wire.l -l crew/haven/skiff.l \
 ;      -e '(skiff "/run/user/1000/haven-0" 320 240 12632256)'
 ;
 ; our ids: 2 registry, 3 shm, 4 compositor, 5 wm_base, 6 surface,

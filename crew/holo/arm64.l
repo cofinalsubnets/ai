@@ -50,7 +50,7 @@
    (rn r) (: e (peep arm64-regs r -1) (? (e < 0) (scare 'badreg r) e))
 
    ;; (li d imm): MOVZ the low 16 bits, then MOVK each higher nonzero 16-bit lane (hw = lane index). the
-   ;; lane extract is //% not &/>> -- a movz constant can be a full 64-bit word >= 2^63 (a BIGNUM in ai,
+   ;; lane extract is //% not &/>> -- a movz constant can be a full 64-bit word >= 2^63 (a BIGNUM in love,
    ;; e.g. the map hash mult), on which `&` drops the high limb (cf. le64). negatives normalize into [0,2^64).
    (arm64-lane u k) ((u // (k 65536)) % 65536)                                   ; the k-th 16-bit lane (65536^k via (k 65536))
    (arm64-li d imm)

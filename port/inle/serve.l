@@ -1,6 +1,6 @@
-; serve.l -- the DOCK: a localhost eval-over-socket server for steering ai.
+; serve.l -- the DOCK: a localhost eval-over-socket server for steering love.
 ;
-; The dock is where a coding agent MOORS to ai. It is bao's read/eval/write
+; The dock is where a coding agent MOORS to love. It is bao's read/eval/write
 ; filter (the shell law) behind `listen`/`accept`: forms in over a TCP socket,
 ; `show`'d values back, a welp-face so the session survives every raise. There
 ; is NO protocol to version and no SDK -- the API is the book: every global is a
@@ -32,7 +32,7 @@
 ; CONCURRENT: the accept loop `await`s the listener fd (cooperative park) and
 ; spins each client's session as its own task, so many agents moor at once.
 ; Sessions interleave through the scheduler -- parked in `sound`/`see` on their
-; own fds, and a long pure-ai computation yields periodically too. The ONE thing
+; own fds, and a long pure-love computation yields periodically too. The ONE thing
 ; that freezes the dock is a blocking C nif: `run` (fork/wait), so the heavy
 ; verbs `probe`/`gate`/`build`/`adopt` hold the whole dock while they run. That
 ; is acceptable -- they are deliberate, occasional, and want the machine anyway.
@@ -72,10 +72,10 @@
    ; --- adopt: the two-generation build + promote + re-exec -- the copying-GC /
    ; egg move at process AND filesystem scale. build the NEXT generation at a
    ; SIDE PATH `out/host/love.cand` (`make candidate`): nothing executes that name,
-   ; so the relink can never ETXTBSY, no matter who runs `ai` (a repl, a test,
+   ; so the relink can never ETXTBSY, no matter who runs `love` (a repl, a test,
    ; even the dock's own client; the --bake itself is rename-safe). gate the
-   ; candidate (`make test m=.../ai.cand`). ONLY on green PROMOTE by atomic
-   ; RENAME -- ai.cand -> ai (the image travels INSIDE the binary) plus its bake
+   ; candidate (`make test m=.../love.cand`). ONLY on green PROMOTE by atomic
+   ; RENAME -- love.cand -> love (the image travels INSIDE the binary) plus its bake
    ; stamp, then refresh the dock's stable copy -- a rename gives a NEW inode,
    ; so every process still executing the old binary keeps it, unbroken. then
    ; re-exec onto the fresh copy. a RED gate leaves the canonical binary UNTOUCHED

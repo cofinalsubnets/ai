@@ -1,6 +1,6 @@
 ; manifest -- the spreadsheet: a ship's manifest for values.
 ;
-; every cell is an ai expression, read repl-style (wrapped in parens, so
+; every cell is a love expression, read repl-style (wrapped in parens, so
 ; infix goes bare: `a1 * 2`). a cell that names other cells compiles as a
 ; LAMBDA OVER ITS DEPENDENCIES -- b1 holding "a1 * 7" becomes (\ a1 (a1 * 7))
 ; applied to a1's worth -- computed on demand, memoized, a visiting set

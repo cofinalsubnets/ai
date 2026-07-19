@@ -1,7 +1,7 @@
 ; crew/tele/device.l -- a SIM backend for tele's device seam, plus a roofline meter.
 ;
 ; tele.l owns the seam (the { gemm ew reduce transp } record + tl-use/tl-gemm/...);
-; the DEFAULT backend `tl-cpu` is ai's native array ops. this file adds `sim-dev`:
+; the DEFAULT backend `tl-cpu` is love's native array ops. this file adds `sim-dev`:
 ; the exact same math, but every kernel METERS itself -- FLOPs done, bytes touched,
 ; launches -- into `dv-stats`. `dv-roofline` then turns that tally into a time
 ; estimate for a named device (peak TFLOP/s + memory GB/s), so you can size the
@@ -57,11 +57,11 @@
          tf (* (peep spec 'tflops 0) 1e12) bw (* (peep spec 'gbps 0) 1e9)
          tc (/ f tf)  tm (/ b bw)                       ; compute-time, memory-time (seconds)
          t  (? (< tc tm) tm tc)  bound (? (< tc tm) "memory" "compute")
-         ai (? (! b) 0 (/ f b))                         ; arithmetic intensity (flop/byte)
+         love (? (! b) 0 (/ f b))                         ; arithmetic intensity (flop/byte)
          _ (puts "-- roofline on ") _ (puts (peep spec 'name "?")) _ (putc 10)
          _ (puts "   flops     = ") _ (puts (show f)) _ (putc 10)
          _ (puts "   bytes     = ") _ (puts (show b)) _ (putc 10)
          _ (puts "   launches  = ") _ (puts (show (peep dv-stats 'launch 0))) _ (putc 10)
-         _ (puts "   intensity = ") _ (puts (show ai)) _ (puts " flop/byte") _ (putc 10)
+         _ (puts "   intensity = ") _ (puts (show love)) _ (puts " flop/byte") _ (putc 10)
          _ (puts "   est time  = ") _ (puts (show (* t 1e3))) _ (puts " ms (") _ (puts bound) _ (puts "-bound)") _ (putc 10)
          t))

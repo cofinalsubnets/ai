@@ -33,7 +33,7 @@ void net_init(void);
 void net_serve(void);
 
 // The k_sources[] NIC-socket methods (stage 2e): a UDP datagram queue exposed as
-// a byte stream so ai `(slurp nic)` perceives one datagram and `(fputs nic r)
+// a byte stream so love `(slurp nic)` perceives one datagram and `(fputs nic r)
 // (fflush nic)` replies to its sender. kmain wires these into a k_sources slot +
 // a port bound to the `nic` global.
 int  nic_getc(int fd);
@@ -43,7 +43,7 @@ bool nic_ready(int fd);
 
 // nic_aim -- point the nic at an arbitrary destination (ipword = a.b.c.d packed,
 // oport its UDP port) for the next say/flush, resolving the route by ARP. lets the
-// ai brain INITIATE an outbound datagram (the `aim` nif, milestone 5). 1 = routed.
+// love brain INITIATE an outbound datagram (the `aim` nif, milestone 5). 1 = routed.
 int  nic_aim(uint32_t ipword, uint16_t oport);
 
 #define k_boot_ram_max 64

@@ -1,4 +1,4 @@
-; spec2coq: generate Coq from test/spec.l, in ai.
+; spec2coq: generate Coq from test/spec.l, in love.
 ;
 ; The GENERATED half of the verification (see proof/rocq/spec.v for the hand-written
 ; LAWS -- the half a generator structurally can't do). Each top-level (assert ..)
@@ -50,7 +50,7 @@
                  (? (id? h '+) (&& (| (lst? (e2 x)) (intv? (e2 x))) (lst? (e3 x)))  ; append / scalar prepend
                     (id? h '*) (&& (lst? (e2 x)) (intv? (e3 x))) 0)))))             ; repeat
    (listv? x) (| (arr? x) (lst? x))                     ; any collection value
-   ; the list reducers (ai surface -> coq): net -> asum, prod -> aprod, max/min, tally -> count
+   ; the list reducers (love surface -> coq): net -> asum, prod -> aprod, max/min, tally -> count
    (lop? h) (| (id? h 'net) (| (id? h 'prod) (| (id? h 'tally) (| (id? h 'max) (id? h 'min)))))
    ; a hash literal #(k v ..) = (hash k v ..): an assoc list of fixnum chains (EVEN count)
    (even? l) (? (two? l) (! (even? (cup l))) 1)
@@ -203,7 +203,7 @@
      "Definition amin (l:list Z):Z := match l with nil=>0 | x::xs=>fold_right Z.min x xs end." (string 10)
      "Fixpoint leqb (a b:list Z):bool := match a,b with nil,nil=>true | x::a',y::b'=>andb (Z.eqb x y) (leqb a' b') | _,_=>false end." (string 10)
      "Fixpoint vaddz (a b:list Z):list Z := match a,b with x::a',y::b'=>(x+y)::vaddz a' b' | _,_=>nil end." (string 10)
-     ; ai adds galaxies ELEMENTWISE only at equal length; a length mismatch answers () (net 0). the
+     ; love adds galaxies ELEMENTWISE only at equal length; a length mismatch answers () (net 0). the
      ; length guard makes the model faithful (a truncating vaddt would net the common prefix -- wrong).
      "Definition vaddt (a b:list Z):list Z := if Nat.eqb (length a) (length b) then vaddz a b else nil." (string 10)
      "Definition vquot (c:Z):list Z->list Z := map (fun e=>Z.quot e c)." (string 10)

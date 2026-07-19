@@ -1,4 +1,4 @@
-; holo -- a tiny ASSEMBLER over a neutral, low-level IR, written in ai. the IR is a flat list of
+; holo -- a tiny ASSEMBLER over a neutral, low-level IR, written in love. the IR is a flat list of
 ; instruction forms (a RISC-ish three-address surface over abstract registers r0..r14 + sp); a
 ; BACKEND lowers each form to machine-code bytes. this file is the arch-NEUTRAL half: the IR shape,
 ; the two-pass layout (assign addresses, then resolve label-relative fixups), the backend registry,
@@ -59,7 +59,7 @@
 
    ;; -- bytes, little-endian. the leaves a backend emits immediates with. byte/le16/le32 ride the fast
    ;; &/>> path (their inputs are offsets/imm32, always < 2^31, where & is exact). le64 must NOT: a movabs
-   ;; immediate can be a full 64-bit word >= 2^63 -- a BIGNUM in ai, on which `&` is broken (the high limb
+   ;; immediate can be a full 64-bit word >= 2^63 -- a BIGNUM in love, on which `&` is broken (the high limb
    ;; is dropped). so le64 normalizes negatives into [0,2^64) and slices with //% (both bignum-exact). --
    (catall ls) (foldr (+) () ls)                     ; concat a list of byte-lists
    (byte n)  (n & 255)

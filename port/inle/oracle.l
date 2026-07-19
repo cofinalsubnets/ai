@@ -1,9 +1,9 @@
-; oracle.l -- inle's milestone-5 BRAIN, in ai (the companion to oracle.py).
+; oracle.l -- inle's milestone-5 BRAIN, in love (the companion to oracle.py).
 ; inle's NETBRAIN build (port/inle/kmain.c) dials a UDP oracle at 10.0.2.2:9999
 ; on its own clock and narrates the reply (`oracle <- ...`). This is that oracle,
-; written in ai: `udp-recv` a question, ask claude over `(run curl)` -- curl does
+; written in love: `udp-recv` a question, ask claude over `(run curl)` -- curl does
 ; the TLS, so there is no TLS in the core -- and `udp-send` the answer back. Pure
-; ai + curl; no python. The wire nifs live in host/net.c (udp-bind/recv/send);
+; love + curl; no python. The wire nifs live in host/net.c (udp-bind/recv/send);
 ; the peer rides as a fixnum (host-order ipv4 << 16 | port). 10.0.2.2 is the SLIRP
 ; gateway alias for the host, so a server bound here on :9999 receives the guest's
 ; datagrams and its replies route back automatically.

@@ -280,7 +280,7 @@
    ;     reproducibility audit: a seed that doesn't match the prior hatch is a
    ;     NON-REPRODUCIBLE flag, not a silent divergence. the recipe + its output
    ;     path are opaque to hatch (it just runs an argv and hashes a file), the
-   ;     way the store is opaque to what a hunk's old/new mean; for ai the recipe
+   ;     way the store is opaque to what a hunk's old/new mean; for love the recipe
    ;     is `make`, for a test a one-line stub. config in .reef/hatch:
    ;       (hatch (recipe "make" "candidate") (out "out/host/love")) ---
    (rf-hatched _) (rf-form ".reef/hatched")                     ; ((psid arch seed time)..) newest-first | ()

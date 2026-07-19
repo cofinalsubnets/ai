@@ -221,7 +221,7 @@ static lvm(lvm_udprecv) {
  if (n < 0) goto fail;
  uintptr_t peerfix = d.peerfix;
  Pack(g);                                            // bytes + chain allocate -> Pack
- if (n > 0) {                                        // datagram -> a fresh ai string
+ if (n > 0) {                                        // datagram -> a fresh love string
   g = str0(g, (uintptr_t) n);
   if (!ai_ok(g)) return ghelp(g);
   memcpy(txt(g->sp[0]), buf, (uintptr_t) n);

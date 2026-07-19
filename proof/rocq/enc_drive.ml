@@ -3,7 +3,7 @@
    against holo's own x86-64 encoder.
 
    For every op x every (dest,src) in the 16x16 register matrix it computes the
-   reference bytes with the proven `encode`, then prints ONE ai program whose
+   reference bytes with the proven `encode`, then prints ONE love program whose
    asserts each check that holo's `holo-hex` for the same IR form is BYTE-
    IDENTICAL to the reference hex. The make recipe cats holo ahead of this output
    and runs it; "N / N PASS" means holo's reg-direct encodings are exactly the

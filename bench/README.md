@@ -1,13 +1,13 @@
-# bench/ — ai benchmark harness
+# bench/ — love benchmark harness
 
-Times a small set of numeric and list-processing workloads across **ai** and one
+Times a small set of numeric and list-processing workloads across **love** and one
 fast implementation of each comparison language, printing a side-by-side table.
 Each workload is implemented once per language, computing an identical checksum so
 the runs are verified equivalent (the `ok` column). **One implementation per
 language** — the fastest readily available — so the columns compare *languages*,
 not JIT-vs-bytecode variants of one. The lineup:
 
-- **ai** — the subject.
+- **love** — the subject.
 - **static / compiled** — `go`, `rust` (`rustc -O`), `java` (JVM, JIT).
 - **JIT** — `julia` (LLVM JIT), `luajit` (Lua, JIT), `pypy` (Python),
   `node` (JS, V8).
@@ -27,9 +27,9 @@ Java). One implementation per extension now, so a column maps to its file:
 
 ```sh
 make bench          # from the repo root, or `make` here: the default column set
-                    #   (ai go rust julia luajit pypy node)
+                    #   (love go rust julia luajit pypy node)
 make all            # every language present on this machine (a wide table)
-make chez           # one language, shown alongside ai for contrast
+make chez           # one language, shown alongside love for contrast
 make pypy           # ... any language name works as a target
 make BENCHES=fib    # restrict the workloads (then `make clean` to refresh files)
 make TIMEOUT=60 …   # per-bench wall-clock cutoff in seconds (default 30)
@@ -40,7 +40,7 @@ make clean          # remove out/bench/
 
 **Results are cached per language.** Each language writes its lines to
 `out/bench/<lang>.txt`, and that file depends on the language's bench sources (and,
-for ai, the `ai` binary). The user-facing targets just *pretty-print* those
+for love, the `love` binary). The user-facing targets just *pretty-print* those
 files — a bench is only (re)run when its result file is missing or older than the
 sources, so `make bench` reformats instantly once the files exist. Touch a source
 or `make clean` to force a re-run. The per-language run logic (extension,
@@ -60,7 +60,7 @@ errored, so stdout stays clean for the table.
 Example output (the real table is wide — one column per language; abridged slice):
 
 ```
-bench         ai ms/it    node ms/it  luajit ms/it   julia ms/it     go ms/it    rust ms/it   ok
+bench         love ms/it    node ms/it  luajit ms/it   julia ms/it     go ms/it    rust ms/it   ok
 fib               9.0938      16.5169       9.7481       10.1085       7.3516       3.9450  yes
 tak               1.2148       1.9992       1.6167        1.1960       0.8845       0.6857  yes
 closure           7.2812       1.5767      27.1555        0.0151       0.0645       0.0295  yes
@@ -75,7 +75,7 @@ arithmetic (`fib`/`tak`); the **`closure`/`sum`/`mapfilter`** columns are where
 optimizing backends fold pure loops away — `julia`, `rust`, `go` and `luajit`'s JIT
 drive them toward zero (see the `closure` note below on why this is honest only once
 the benches defeat *compile-time* evaluation); `bell` shows `–` for `luajit`/`rust`
-(no bignums); and ai's native **glaze** keeps it competitive on the benches it
+(no bignums); and love's native **glaze** keeps it competitive on the benches it
 compiles (`fib`/`float`/`strscan`/`primes`/`deforest`, plus `strcat` whose O(n²)
 build it rebuilds to an O(n) buffer) and posts ~0 on `polysum`, which it closes to
 O(1). Run `make all` for the full table, or `make html` for an interactive one.
@@ -86,14 +86,14 @@ Every language self-times only the inner workload, so interpreter startup is
 excluded from the measurement. The harness auto-scales the repetition count —
 doubling until the run clears a 200 ms floor — then reports `(reps, ms)`. The
 report divides `ms / reps` for a per-iteration time, so the chosen rep count
-cancels out and benches of very different cost stay comparable. ai's clock has
+cancels out and benches of very different cost stay comparable. love's clock has
 1 ms resolution (`(clock 0)`), which the 200 ms floor keeps under ~0.5 % error.
 
 ## Results page
 
 `make html` writes **`bench.html`** — a self-contained page (data embedded, no
 server needed) showing the same per-iteration table with the fastest cell per
-bench highlighted and the `ai` axis tinted. A **transpose** button swaps benches
+bench highlighted and the `love` axis tinted. A **transpose** button swaps benches
 and languages between the rows and columns, and the initial orientation is chosen
 from the viewport (portrait drops languages down the side). It's regenerated from
 the cached `out/bench/*.txt`, so run `make all` first for a full table; the full
@@ -112,7 +112,7 @@ or broken) shows a dotted column.
 | `polysum`   | list    | sum `k²` of the odds in `[0,N)` — same shape, pure-polynomial body, CLOSED to O(1) by the loop-closer |
 | `primes`    | numeric | count primes below 30000 by trial division                |
 | `bell`      | bignum  | Bell numbers in base 36 to 280 digits (port of `test/bell.l`) |
-| `strcat`    | string  | build a 4000-char string by single-char concatenation, then hash it — ai glazes the O(n²) accumulator loop to a native O(n) cask-fill |
+| `strcat`    | string  | build a 4000-char string by single-char concatenation, then hash it — love glazes the O(n²) accumulator loop to a native O(n) cask-fill |
 | `strscan`   | string  | rolling-hash scan over a fixed 20000-char string (read path) |
 | `hash`      | table   | mutable hash table: 10000 sparse-int-keyed insert / lookup / update ops |
 | `sort`      | sort    | merge/quick-sort 5000 LCG-random ints, hash the sorted order |
@@ -134,7 +134,7 @@ but `elixir` (functional) threads an immutable map through the loop — same res
 integer keys, sum-looks-them-up, does a read-modify-write update pass, then
 sum-looks-up again (checksum = N²). Keys are sparse (stride 97) on purpose, so
 luajit/pypy can't service them from a contiguous-integer *array* fast-path and
-must actually hash. Each language uses its native mutable table — ai `table`/
+must actually hash. Each language uses its native mutable table — love `table`/
 `put`/`get`, chez/sbcl hashtables, JS `Map`, luajit tables, julia `Dict`, go/rust
 hash maps, java's `HashMap`. The functional
 `elixir` has no mutable table, so it drops the `hash` cell.
@@ -143,25 +143,25 @@ hash maps, java's `HashMap`. The functional
 multiply stays under 2⁵³ and every language — doubles included — produces the
 identical sequence), sorts ascending, and checksums an order-dependent rolling
 hash of the result (so the checksum verifies the *ordering*, not just the
-multiset). ai uses the prel's `sort` (a list merge sort added for this);
+multiset). love uses the prel's `sort` (a list merge sort added for this);
 every other dialect uses its built-in sort, so the column reads as library sort
 quality. `tree` (and `bintrees`) is the classic binary-trees alloc/GC stress: build a perfect
 depth-16 tree (2¹⁶−1 nodes, leaves nil) and traverse counting nodes — it churns
-small two-field aggregates (cons pairs / 2-tuples / `[ai r]`) and exercises the
-collector more than any other bench. This is where allocation STRATEGY shows: ai's
+small two-field aggregates (cons pairs / 2-tuples / `[love r]`) and exercises the
+collector more than any other bench. This is where allocation STRATEGY shows: love's
 copying GC bump-allocates and **bulk-reclaims** dead nodes (a pointer-bump to allocate,
 nothing to free per object) — ideal for ephemeral churn. The naïve `Box<Tree>` in Rust
 is the opposite — a `malloc` *and* an individual `drop`/free **per node** — its worst
 case, and the only reason a GC'd language would "win" the row. So `tree.rs`/`bintrees.rs`
 use a bump **arena** (nodes in a pre-sized `Vec`, children as indices, bulk-freed at the
-end): Rust's memory model used *well*, the same bump-then-bulk shape ai's collector has —
-and it lands ahead of ai/go (Rust ~0.55 vs ai ~0.86 on `tree`). The honest reading is
-"copying GC vs. arena," both at their best, not "ai is faster at trees." `float` is mandelbrot escape counts over a
+end): Rust's memory model used *well*, the same bump-then-bulk shape love's collector has —
+and it lands ahead of love/go (Rust ~0.55 vs love ~0.86 on `tree`). The honest reading is
+"copying GC vs. arena," both at their best, not "love is faster at trees." `float` is mandelbrot escape counts over a
 64×64 grid: pure f64 `+`/`−`/`*`/`<=` (no transcendentals) over exactly
 representable constants, with an integer checksum, so it is bit-identical
-everywhere — including ai's *boxed*-float path, which is the point (it's the
+everywhere — including love's *boxed*-float path, which is the point (it's the
 only bench that touches floats; `sbcl` needs `d0` double-float literals to agree).
-`closure` stresses ai's defining feature — every value a curried unary function:
+`closure` stresses love's defining feature — every value a curried unary function:
 per iteration it builds `(adder i)` and `(twice (adder i))` and applies them, so it
 allocates and calls two closures 100000 times.
 
@@ -176,21 +176,21 @@ opaque so the call can't fold to a compile-time literal — Rust wraps the *inpu
 `std::hint::black_box`, Julia iterates a prebuilt vector — while leaving the optimizer
 free to do its real runtime work.
 
-**Apples-to-apples.** Once ai's own glaze does aggressive loop-closing, hobbling LLVM
+**Apples-to-apples.** Once love's own glaze does aggressive loop-closing, hobbling LLVM
 with *per-element* `black_box` (forcing an O(n) loop) on the closed-form benches stops
 being fair. So the recognition benches black_box only the input `n`; `rustc -O` is then
-free to apply its own SCEV, exactly as ai applies its loop-closer. The measured result
+free to apply its own SCEV, exactly as love applies its loop-closer. The measured result
 is honest both ways — and a pleasant surprise on `polysum`:
 
-- **`polysum`** (sum of the odd squares) — ai's loop-closer reparametrizes the odds to
+- **`polysum`** (sum of the odd squares) — love's loop-closer reparametrizes the odds to
   `k=2j+1` and sums by finite differences (O(1)); LLVM's SCEV *cannot* — un-hobbled, it
   still runs O(n), because the data-dependent odd filter defeats scalar-evolution. So
-  **ai genuinely wins this**, not by handicap.
-- **`closure`** (`Σ 3i`, no filter) — LLVM closes it to O(1) and **wins**; ai's glaze
+  **love genuinely wins this**, not by handicap.
+- **`closure`** (`Σ 3i`, no filter) — LLVM closes it to O(1) and **wins**; love's glaze
   only dehof-inlines the higher-order functions to a first-order loop, it doesn't reach
   its closer through them. Honestly rust's row.
 - **`deforest`** — the `% p` keeps the body non-polynomial, so *neither* compiler can
-  close it; both run an honest O(n) FUSED loop (ai deforests to one native counted loop,
+  close it; both run an honest O(n) FUSED loop (love deforests to one native counted loop,
   `rustc -O` fuses + vectorizes the iterator chain). It measures the abstraction cost of
   the functional pipeline.
 
@@ -203,7 +203,7 @@ The two string benches split the write and read paths. `strcat` builds a string
 one character at a time with each language's concatenation operator (pypy/luajit/
 lisp string-append, etc.). Written naïvely as `s = s + c`, that is an O(n²) build —
 each `+` copies the whole prefix — so it favours languages with mutable/rope-backed
-strings. ai's glaze reads that *same* `(+ s c)` accumulator loop from source and
+strings. love's glaze reads that *same* `(+ s c)` accumulator loop from source and
 rewrites it: a clean single-byte counted builder lowers to a **native cask-fill** — the
 immutable string accumulator becomes a pre-sized mutable byte buffer (a `cask`) filled
 by a native counted loop (a machine-code byte store per iteration), converted to a
@@ -211,20 +211,20 @@ string once at the end. The build drops from O(n²) to an O(n) machine-code loop
 touching the source (the output-side dual of `deforest`'s pipeline fusion); a more
 general builder — multi-char appends, irregular counters — falls back to a threaded
 `jug` (the memory output port — O(1)-amortized appends, interpreted). With the rolling hash also glazed
-via the string lane, ai's `strcat` leads the field (ahead of elixir/node/pypy). `strscan`
+via the string lane, love's `strcat` leads the field (ahead of elixir/node/pypy). `strscan`
 times only a linear rolling hash over a string built once outside the loop, isolating
-the byte-read path (ai `get`/`len`). Both fold the same polynomial hash
+the byte-read path (love `get`/`len`). Both fold the same polynomial hash
 `h = (h*31 + byte) mod 1e9+7`; taking it mod a prime keeps the checksum a 64-bit
 fixnum, so it is identical across every language (luajit's floats included) and
 doubles as the `ok` cross-check.
 
-The list benches compare *idiomatic* implementations: ai and the lisps walk
+The list benches compare *idiomatic* implementations: love and the lisps walk
 cons-cell linked lists, while pypy/node/luajit use native dynamic arrays and
 built-ins — so `sum`/`mapfilter` largely measure linked lists vs. C array
 primitives, not just the language. The numeric/recursion benches (`fib`, `tak`,
 `primes`), `closure`, and `float` are the closest apples-to-apples comparison of
 the evaluators themselves; `float` in particular isolates the floating-point path
-(ai boxes its floats, so it pays heap traffic the native-double languages do
+(love boxes its floats, so it pays heap traffic the native-double languages do
 not), and `closure` isolates closure allocation + application.
 
 One asymmetry to call out: the **`sbcl` `fib` column is type-declared** (an
@@ -240,24 +240,24 @@ mean that one cell is not the bare naive form the others use.
 `deforest` is the deforestation showcase. It is the same square/keep/sum work as
 `mapfilter`, but written as a genuine *list* pipeline read straight from source —
 `(foldl + 0 (map sq (filter odd (jot N))))` — which under a plain evaluator
-materializes three throwaway lists (the range, the odds, the squares). ai's
+materializes three throwaway lists (the range, the odds, the squares). love's
 native glaze **fuses** the whole pipeline into one counted loop with no
 intermediate allocation (the rewrite-level pass `defoliate` collapses the
 map/filter into the fold and lowers `foldl`-over-`jot` to the same loop codegen
 `fib`/`primes` use). Read the cross-language row **honestly**: it measures the
 *abstraction cost of the functional-pipeline idiom*, not a fixed algorithm — each
-column reflects how the implementation handles the intermediates (ai fuses them;
+column reflects how the implementation handles the intermediates (love fuses them;
 `luajit` has no `map`/`filter`, so its bench fuses by hand; `pypy` is
 lazy — no intermediate lists, per-element overhead; `rust`'s iterator chain fuses
 and vectorizes; `node`/the schemes allocate eagerly). The anchor is that
-ai's deforested pipeline lands near `luajit`'s *hand-written loop* — the high-level
-functional source costs what the loop costs. (The purest A/B is ai with the glaze on vs off;
+love's deforested pipeline lands near `luajit`'s *hand-written loop* — the high-level
+functional source costs what the loop costs. (The purest A/B is love with the glaze on vs off;
 we keep it always-on and watch the gate for regressions.)
 
 ## Layout
 
 ```
-bench.l          ai harness — iota1 + the (bench name work) timer
+bench.l          love harness — iota1 + the (bench name work) timer
 lib/bench.py     python harness — bench(name, work)        [pypy]
 lib/bench.ss     chez harness   — (bench name work)
 lib/bench.lisp   sbcl harness   — (bench name work)
@@ -283,7 +283,7 @@ Makefile         orchestration — per-language out/bench/<lang>.txt result file
    a missing file just drops that cell). The simplest path is to copy an existing
    bench (`fib` is the smallest) for each extension and swap in the workload. Each
    ends in a single `bench("<name>", …)` call whose thunk returns a deterministic
-   checksum identical across every language (the `ok` column checks this); `ai`
+   checksum identical across every language (the `ok` column checks this); `love`
    relies on the harness being concatenated ahead, the others
    `load`/`require`/`import`/`include` `lib/bench.*`.
 2. Add `<name>` to `BENCHES` in the `Makefile` (controls display order).
@@ -299,6 +299,6 @@ backend, guard the pure-loop benches against compile-time folding (opaque inputs
 `black_box`, a runtime-built array, a JIT warm-up) so the timing stays honest; see
 the `closure` note above.
 
-Each ai bench is concatenated after `bench.l` before being piped to `ai`,
+Each love bench is concatenated after `bench.l` before being piped to `love`,
 exactly like the `test/` corpus — a top-level `:` form with no trailing body
 leaks its bindings into global scope, so the harness names are visible.

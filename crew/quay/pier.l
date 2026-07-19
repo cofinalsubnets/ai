@@ -6,7 +6,7 @@
 ; it to the server with chunked PutImage over lux's own wire codec.
 ; keys come back as KeyPress events, translated keysym -> terminal bytes;
 ; a ConfigureNotify (lux retiling us) opens a fresh grid and tells the
-; pty; WM_DELETE or the child's exit steps away cleanly. an xterm, ai-native
+; pty; WM_DELETE or the child's exit steps away cleanly. an xterm, love-native
 ; from the socket up.
 ;
 ; run: out/host/love -l crew/lux/core.l -l crew/lux/wire.l -l crew/quay/berth.l -l crew/quay/pier.l \

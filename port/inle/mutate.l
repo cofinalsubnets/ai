@@ -1,5 +1,5 @@
 ; mutate.l -- inle's MUTATION fuzzer: a second proposer for the judge, denser than
-; fuzz.l's from-scratch random. it starts from REAL, self-contained ai expressions
+; fuzz.l's from-scratch random. it starts from REAL, self-contained love expressions
 ; (the CLAUDE.md demos) and perturbs their SYNTAX TREE -- swap an operator, tweak an
 ; int, wrap a subterm in a church apply, splice in a fresh random subtree. mutation
 ; near working code lands in the arithmetic edge-cases where bugs actually live

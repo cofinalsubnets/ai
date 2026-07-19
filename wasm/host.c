@@ -1,4 +1,4 @@
-// emscripten host shim for ai.
+// emscripten host shim for love.
 //
 // l's frontend contract (see g/g.h): the host must define ai_clock, the
 // ai_stdin/ai_stdout ports, and the ai_fd_port_vt vtable that backs any port

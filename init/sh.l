@@ -1,4 +1,4 @@
-; --- sh: a real (Unix) command shell in ai ---
+; --- sh: a real (Unix) command shell in love ---
 ; reads a line, runs real programs via spawn + wait -- inherited stdio, so output is
 ; LIVE and the command owns the terminal (not captured like `run`). this is the shell
 ; init execs on the console: the pid1 story end to end (init -> sh -> real programs).

@@ -18,7 +18,7 @@
 ; box forces the twins and `fboth` gates verdict equality. lisp keeps only the cold
 ; path: restarts, learnt-DB reduction, activity decay/rescale.
 ; Run AFTER sat.l (it reuses the leaked oracle + instances):
-;   cat crew/sat/sat.l crew/sat/flat.l | ai
+;   cat crew/sat/sat.l crew/sat/flat.l | love
 ; the story, the kernel contract, and the measured results: doc/sat-kernels.md.
 ;
 ; a literal is ENCODED: +v -> 2v, -v -> 2v+1 (neg = xor 1, var = >>1). val[v] holds

@@ -1,6 +1,6 @@
 ; --- test/host/baoedit.l: a smoke test for bao's raw-line editor (love/bao.l `edraw`) ---
 ; edraw lives in love/bao.l, now the BAKED shell core (in the host egg), so edraw is
-; a book global -- but it reads ai forms (it's the editor), so it can't be a corpus
+; a book global -- but it reads love forms (it's the editor), so it can't be a corpus
 ; test (love0 bakes the corpus and would run edraw on the test stream). edraw reads
 ; from a PORT ARG (here a (tap ..), not stdin), so the bare stdin runner drives it:
 ; the piped forms read-eval off stdin (a pipe is the bare filter) while each edraw

@@ -360,7 +360,7 @@
          '(prog ((tdef) (fn "main" () (blk ((ret (num 0))))))))
       ; cfold folds 64-bit machine PATTERNS: >> under an unsigned LEFT is LOGICAL
       ; ((uintptr_t)-1 >> 2 is max-charm, not -1 -- the arithmetic fold pinned
-      ; max-charm -1 and flipped spec.l's `word` on the cc-built ai); a signed >>
+      ; max-charm -1 and flipped spec.l's `word` on the cc-built love); a signed >>
       ; stays arithmetic; a NARROW cast masks to width, sign-extending the signed
       (= (cast "long mx = (long)((unsigned long)-1 >> 2); int main() { return 0; }")
          '(prog ((gdecl (("mx" long (num 4611686018427387903)))) (fn "main" () (blk ((ret (num 0))))))))

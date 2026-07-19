@@ -5,7 +5,7 @@
 # Per-frontend build output lives under $R/out/<frontend>/.
 R ?= .
 
-m = $R/out/host$(hsuf)/ai
+m = $R/out/host$(hsuf)/love
 a ?= $(shell uname -m)
 
 # clang is the default host/love0 compiler (every dev machine here has it; mac's
@@ -22,7 +22,7 @@ cc_user := 1
 endif
 
 # The host binary's FLAVOR. The default is the dynamic glibc build (plus
-# liblove.so, which the crew can share). STATIC=1 links `ai` fully static against
+# liblove.so, which the crew can share). STATIC=1 links `love` fully static against
 # musl -- the OPT-IN portable lane (the STATIC block in the root Makefile has
 # the whole story), demoted from Linux default 2026-07-07: valgrind emulates
 # x87 at 64 bits and musl's strtod leans on the full 80, so under memcheck

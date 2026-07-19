@@ -16,7 +16,7 @@
 # exits 0 without ever reaching zz-fin -- exit code alone green-lights a run
 # that only executed a prefix of the corpus. love0 must print TWO summaries
 # (the corpus runs under both c0 and the self-hosted ev).
-# Both gates STREAM through `tee` (the dots appear live -- ai flushes per write, so
+# Both gates STREAM through `tee` (the dots appear live -- love flushes per write, so
 # you watch progress and a stall marks a slow test) while still capturing the run for
 # the sentinel grep. The exit status rides a `.rc` file, not `$?` (the pipe's exit is
 # tee's, and /bin/sh has no pipefail), so the exit-0 AND sentinel checks both hold.
@@ -30,7 +30,7 @@ test_host: $m
 	@{ cat $t | $m; echo $$? > out/host/.test_host.rc; } | tee out/host/.test_host.out; \
 	  s=$$(cat out/host/.test_host.rc); \
 	  [ $$s -eq 0 ] && grep -q "tests pass" out/host/.test_host.out
-# Host-nif smoke tests: nifs defined in host/*.c link into `ai` but NOT love0
+# Host-nif smoke tests: nifs defined in host/*.c link into `love` but NOT love0
 # (which bakes the test/*.l corpus), so they cannot sit DIRECTLY in test/ -- love0
 # would bake them, read the nif names as missing, and fail its self-test. They
 # live under test/host/ instead: the corpus glob ($t in common.mk) is a
@@ -48,7 +48,7 @@ hostnif_tests = test/host/pty.l test/host/net.l test/host/lux.l test/host/luxui.
 # xdg-shell glue -- deliberately NOT zero-dep, it exists to be the OTHER side
 # of haven's wire. built only where wayland-scanner + libwayland live;
 # test/host/haven.l skips its smoke act when the binary is absent. pinned to the
-# canonical out/host like love0 (parse-time prereqs; it never links ai).
+# canonical out/host like love0 (parse-time prereqs; it never links love).
 smoke = out/host/haven-smoke
 xdgxml = $(shell pkg-config --variable=pkgdatadir wayland-protocols 2>/dev/null)/stable/xdg-shell/xdg-shell.xml
 $(smoke): crew/haven/smoke.c
@@ -75,7 +75,7 @@ test_hostnif: host $(smoke) $(havenkm)
 	  { [ $$r -eq 0 ] && grep -q ': ok' out/host/.test_hostnif.out; } \
 	    || { echo "FAIL $$s (exit $$r)"; exit 1; }; \
 	done
-# Runnable design companions in doc/ -- pure-ai models that pin the shape a C
+# Runnable design companions in doc/ -- pure-love models that pin the shape a C
 # design takes (doc/stream.l ~ doc/stream.md). Zero-dep (no host nifs), so unlike
 # hostnif_tests they COULD ride the corpus -- but they leak generic helper names
 # into the one global scope, so they run standalone instead. Gated only to keep
@@ -117,7 +117,7 @@ else
 test_glaze:
 	@echo "test_glaze: skipped (host arch $a is not x86_64)"
 endif
-# crew/sat/ -- the CDCL SAT solver app. Portable ai (no glaze), so it runs on every arch.
+# crew/sat/ -- the CDCL SAT solver app. Portable love (no glaze), so it runs on every arch.
 # Gate = exit 0 AND the sentinel (a reader-stop or a strict-assert scare both miss it).
 .PHONY: test_sat
 test_sat: host
@@ -136,7 +136,7 @@ test_drat: host
 	@cd crew/sat && ./dratcheck.sh || { echo "FAIL drat"; exit 1; }
 # The lux app's pure core (crew/lux/core.l): xmonad's StackSet -- the focus zipper, the
 # workspace sheaf, the floating half -- with xmonad's QuickCheck laws + a seeded
-# fuzz (crew/lux/law.l). Pure ai (no nif), so it self-tests portably; the X layers
+# fuzz (crew/lux/law.l). Pure love (no nif), so it self-tests portably; the X layers
 # (wire.l/lux.l) need connectu and are proven against Xephyr, not here. Gate = the
 # sentinel AND exit 0 (a reader-stop or strict-assert scare both miss it).
 .PHONY: test_lux
@@ -414,7 +414,7 @@ test_moon: host out/host$(hsuf)/mooncc out/host$(hsuf)/mooncc.image
 	  $(moonrun) -t arm64 -o $(ho)/.casm1a $(ho)/.casm1.c > /dev/null 2>&1 || { echo "FAIL mooncc asm arm64 compile"; exit 1; }; \
 	  printf 'int f();\nint main() { return f() + 2; }\n' > $(ho)/.mi1.c; \
 	  printf 'int f() { return 40; }\n' > $(ho)/.mi2.c; \
-	  mabs="$$PWD/$(ho)"; (cd $(ho) && $$mabs/ai --wake $$mabs/mooncc.image -e '(moon-main (cuup (cup cmdline)))' -c .mi1.c .mi2.c) > /dev/null 2>&1 || { echo "FAIL mooncc multi-input -c"; exit 1; }; \
+	  mabs="$$PWD/$(ho)"; (cd $(ho) && $$mabs/love --wake $$mabs/mooncc.image -e '(moon-main (cuup (cup cmdline)))' -c .mi1.c .mi2.c) > /dev/null 2>&1 || { echo "FAIL mooncc multi-input -c"; exit 1; }; \
 	  $$cc_g -no-pie -o $(ho)/.mi $(ho)/.mi1.o $(ho)/.mi2.o > /dev/null 2>&1 || { echo "FAIL ld multi-input objects"; exit 1; }; \
 	  $(ho)/.mi; a=$$?; \
 	  [ $$a -eq 42 ] || { echo "FAIL mooncc multi-input run (got $$a want 42)"; exit 1; }; \
@@ -468,7 +468,7 @@ test_moon: host out/host$(hsuf)/mooncc out/host$(hsuf)/mooncc.image
 	  [ $$a -eq 42 ] || { echo "FAIL ai_nifs bracket walk (two TUs packed + __start_/__stop_ synthesized, got $$a want 42)"; exit 1; }; \
 	  echo "mooncc: cc (laws + return-42 + a $$(ls test/cc/*.c | wc -l)-program gcc battery + .o link/interop + -I/-D/-o + multi-input -c + SysV varargs cross-toolchain + weak override + callee-saved rbx + guaranteed sibcalls + 16-byte stack alignment + our own static linker: multi-.o/.c link, weak strong-over, ai_nifs brackets) ok"; \
 	else echo "mooncc: cc (laws only -- x86_64 e2e skipped on $$(uname -m)) ok"; fi
-# The rung-2 self-host gate ([[ai-distro]]): compile ai.c AND every host/*.c with
+# The rung-2 self-host gate ([[love-distro]]): compile ai.c AND every host/*.c with
 # mooncc (gcc/clang only LINKS), then run the whole corpus through the all-mooncc
 # binary. Proves the compiler compiles the runtime it runs on. OPT-IN, not in
 # test_all -- it rebuilds ~14 objects + links + runs the corpus, and needs the
@@ -479,7 +479,7 @@ test_selfhost: host out/host$(hsuf)/mooncc
 	@echo SELFHOST $(ho)/love-selfhost
 	@if [ "`uname -m`" != x86_64 ]; then echo "test_selfhost: x86-64 only, skipped on `uname -m`"; exit 0; fi; \
 	  d=$(ho)/selfhost; mkdir -p $$d; \
-	  $(ho)/mooncc -D ai_tco=$(tco) -I$(ho) -I. -Iout/lib -c ai.c $$d/ai.o \
+	  $(ho)/mooncc -D ai_tco=$(tco) -I$(ho) -I. -Iout/lib -c ai.c $$d/love.o \
 	    || { echo "FAIL mooncc -c ai.c"; exit 1; }; \
 	  for f in host/*.c; do b=`basename $$f .c`; \
 	    $(ho)/mooncc -D ai_tco=$(tco) -I$(ho) -I. -Iout/lib -c $$f $$d/$$b.o \
@@ -493,12 +493,12 @@ test_selfhost: host out/host$(hsuf)/mooncc
 	  { [ $$s -eq 0 ] && grep -q "tests pass" $(ho)/.test_selfhost.out; } \
 	    || { echo "FAIL all-mooncc corpus (exit $$s)"; exit 1; }; \
 	  echo "test_selfhost: ai.c + all `ls host/*.c | wc -l` host/*.c built by mooncc, corpus passes"
-# The rung-4 gate ([[ai-distro]]): the GCC-FREE fixpoint. Everything test_selfhost
+# The rung-4 gate ([[love-distro]]): the GCC-FREE fixpoint. Everything test_selfhost
 # builds, PLUS our own raw libc -- crew/moon/lib/nolibc.c (raw-syscall wrappers, mini
 # stdio, mmap malloc), the math floor crew/moon/lib/math/am.c (ours), and sys.o (the
 # syscall trampoline + our sigsetjmp/longjmp, laid by crew/moon/lib/mksys.l) -- then
 # OUR OWN static linker (crew/holo/link.l via `mooncc a.o..`) binds them. No gcc, no
-# glibc, no ld anywhere: the whole chain is ai. Corpus green over the fresh egg.
+# glibc, no ld anywhere: the whole chain is love. Corpus green over the fresh egg.
 # In test_all (the gcc-free fixpoint is a headline invariant); skips off x86-64.
 # mksys/nolibc/math are x64. Supersedes test_selfhost's coverage (which stays
 # opt-in as the lighter gcc-links-only check).
@@ -507,7 +507,7 @@ test_raw: host out/host$(hsuf)/mooncc
 	@echo RAW $(ho)/love-raw
 	@if [ "`uname -m`" != x86_64 ]; then echo "test_raw: x86-64 only, skipped on `uname -m`"; exit 0; fi; \
 	  d=$(ho)/raw; mkdir -p $$d; \
-	  $(ho)/mooncc -D ai_tco=1 -I$(ho) -I. -Iout/lib -c ai.c $$d/ai.o \
+	  $(ho)/mooncc -D ai_tco=1 -I$(ho) -I. -Iout/lib -c ai.c $$d/love.o \
 	    || { echo "FAIL mooncc -c ai.c"; exit 1; }; \
 	  for f in host/*.c; do b=`basename $$f .c`; \
 	    $(ho)/mooncc -D ai_tco=1 -I$(ho) -I. -Iout/lib -c $$f $$d/$$b.o \
@@ -566,7 +566,7 @@ test_raw_arm64: host out/host$(hsuf)/mooncc
 	@echo RAW-ARM64 $(ho)/love-raw-a64
 	@if ! command -v qemu-aarch64 >/dev/null 2>&1; then echo "test_raw_arm64: no qemu-aarch64, skipped"; exit 0; fi; \
 	  d=$(ho)/raw-a64; mkdir -p $$d; \
-	  $(ho)/mooncc -t arm64 -D ai_tco=1 -I$(ho) -I. -Iout/lib -c ai.c $$d/ai.o \
+	  $(ho)/mooncc -t arm64 -D ai_tco=1 -I$(ho) -I. -Iout/lib -c ai.c $$d/love.o \
 	    || { echo "FAIL mooncc -t arm64 -c ai.c"; exit 1; }; \
 	  for f in host/*.c; do b=`basename $$f .c`; \
 	    $(ho)/mooncc -t arm64 -D ai_tco=1 -I$(ho) -I. -Iout/lib -c $$f $$d/$$b.o \
@@ -587,7 +587,7 @@ test_raw_arm64: host out/host$(hsuf)/mooncc
 	  tail -1 $(ho)/.test_raw_a64.out; \
 	  { [ $$s -eq 0 ] && grep -q "tests pass" $(ho)/.test_raw_a64.out; } \
 	    || { echo "FAIL raw-arm64 corpus (exit $$s)"; exit 1; }; \
-	  echo "test_raw_arm64: the gcc-free aarch64 ai -- mooncc objects, mksys-arm64, our linker, corpus under qemu"
+	  echo "test_raw_arm64: the gcc-free aarch64 love -- mooncc objects, mksys-arm64, our linker, corpus under qemu"
 # test_thumb1 -- the ELF32/EM_ARM object writer (crew/holo/obj.l objelf32) end to end,
 # and the 32-bit data model. mooncc -t thumb1 -c lays objects exercising a cross-object
 # BL (R_ARM_THM_CALL), the inline v6-M soft divide/rem, a scalar global read+write via
@@ -678,7 +678,7 @@ test_as: host
 # socket nifs in host/net.c + the pump loops in tools/ain.l). In `test_all`
 # (the thorough gate) but NOT the fast `test` -- it needs two live processes and
 # a free loopback port. It is the ONLY net gate that drives the real
-# `ai tools/ain.l` cli path: the in-process `test/host/net.l` smoke (in
+# `love tools/ain.l` cli path: the in-process `test/host/net.l` smoke (in
 # test_hostnif) pipes straight into the binary, so it covers the nifs portably
 # but can't catch an invocation regression (e.g. a stale -l preload). Override
 # the port with `make nettest PORT=NNNN`.
@@ -690,7 +690,7 @@ nettest: host
 # tools/py/ (gen_data / vmret). See tools/Makefile + tools/py/README.md.
 test_tools: host
 	@$(MAKE) -C tools
-# Machine-check proof/rocq/spec.v -- ai's headline laws (the numeral / function /
+# Machine-check proof/rocq/spec.v -- love's headline laws (the numeral / function /
 # absence core of test/spec.l) as Rocq theorems, axiom-free (every proof
 # "Closed under the global context"). This is what upgrades the executable
 # spec from DEMONSTRATED on every target to PROVED in a consistent metatheory
@@ -749,7 +749,7 @@ endif
 # ASSERTS): tools/uu2coq.l loads uu's kernel (test/uu.l), has it TYPE-CHECK a proof
 # term against its theorem, and EMITS proof/rocq/uugen.v -- the same term in Gallina, which
 # coqc re-checks independently. So a LAW (forall x, x^0 = 1 -- spec.v's const_one) is
-# proved in ai's own kernel and certified by Rocq, axiom-free. Drift-proof like gen.v:
+# proved in love's own kernel and certified by Rocq, axiom-free. Drift-proof like gen.v:
 # regenerated every run, so the internal proof and the exported one cannot diverge.
 # The skeleton of the internal-prover bridge. Needs the host binary AND coqc.
 ifeq ($(COQC),)
@@ -784,7 +784,7 @@ endif
 # test_extract: the differential oracle with a ROCQ-EXTRACTED reference. coqc
 # extracts proof/rocq/extract.v (the n-ary/CBV/weak/saturating normalizer built on
 # spec.v's PROVEN subst/shift) to OCaml; proof/rocq/oracle_drive.ml generates random
-# closed affine terms, normalizes each with the extracted `nf`, and emits an ai
+# closed affine terms, normalizes each with the extracted `nf`, and emits a love
 # program that checks ev EXTENSIONALLY agrees. So the reference the fuzzer runs
 # IS the proven definitions (up to the standard nat->int mapping) -- machine-
 # checked end to end. The hand-transcribed twin (test/oracle.l) stays in the
@@ -908,7 +908,7 @@ test_uukind: host
 	@rm -f out/host/.uukind.l.tmp
 # test_wake: the WOKEN-IMAGE lane -- the one lane no other gate runs (AI_NO_IMAGE
 # is exported for every recipe above, so every gate exercises the fresh egg; only
-# a user's direct run wakes the image). Bakes a CANDIDATE COPY (ai.wake -- the
+# a user's direct run wakes the image). Bakes a CANDIDATE COPY (love.wake -- the
 # canonical binary untouched, ETXTBSY-proof) and runs test/uu.l through the woken
 # image under a budget the wake storm cannot meet (fresh lane ~1s, the storm was
 # >90s -- doc/wake-storm.md). GREEN since the dump's dead-native revert landed

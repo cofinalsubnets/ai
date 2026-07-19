@@ -1,10 +1,10 @@
-# Porting xmonad to ai — the plan
+# Porting xmonad to love — the plan
 
-Goal: an **ai window manager with the same features** as `/home/gwen/.xmonad/xmonad.hs` —
-not the Haskell config kept alive, but a fresh, idiomatic **ai config** that does everything
+Goal: an **love window manager with the same features** as `/home/gwen/.xmonad/xmonad.hs` —
+not the Haskell config kept alive, but a fresh, idiomatic **love config** that does everything
 yours does. The DSL borrows xmonad's *vocabulary* (layouts, messages, manageHook rules,
-a keymap) because those names are good and you know them — but `crew/lux/config.l` is genuine ai,
-read and edited as ai, not a transliteration of Haskell. **Single monitor** throughout (no
+a keymap) because those names are good and you know them — but `crew/lux/config.l` is genuine love,
+read and edited as love, not a transliteration of Haskell. **Single monitor** throughout (no
 Xinerama) — the model is simpler for it. The X mechanics already work
 (the `doc/proto/{x11,lux,xsend}.l` spike ladder, rungs 1–5): raw X11 wire protocol, the
 substructure redirect, MapRequest/DestroyNotify, focus + `SetInputFocus`, Tall tiling,
@@ -50,13 +50,13 @@ Xephyr integration runs.
 
 ## 2. The DSL: how the config reads
 
-The target — `crew/lux/config.l`, an ai config with your config's features. Same vocabulary, ai
+The target — `crew/lux/config.l`, a love config with your config's features. Same vocabulary, love
 shape: `mod4` is `sup`, layouts are constructors returning closures, `|||` is a choice
 combinator, messages are symbols. Idioms that were Haskell (the inline `fib` for Dwindle's
-ratio, the `M.union . M.fromList` comprehension) are just written in ai — a constant or a
+ratio, the `M.union . M.fromList` comprehension) are just written in love — a constant or a
 `map`, whichever reads best — not preserved as Haskell:
 
-```ai
+```love
 (xmonad (. ewmh-fullscreen ewmh docks
    (config
      border-width       3
@@ -89,7 +89,7 @@ ratio, the `M.union . M.fromList` comprehension) are just written in ai — a co
                                (keys def)))))
 ```
 
-Each xmonad combinator gets an ai twin with the same name and shape. The list-comprehension
+Each xmonad combinator gets a love twin with the same name and shape. The list-comprehension
 that builds the directional keys becomes a `map`/`for` over the same `(dir keys delta)` rows.
 
 ---
@@ -97,7 +97,7 @@ that builds the directional keys becomes a `map`/`for` over the same `(dir keys 
 ## 3. API mapping — every symbol the config uses
 
 ### Config record
-| xmonad | ai | tier | note |
+| xmonad | love | tier | note |
 |---|---|---|---|
 | `borderWidth = 3` | `border-width 3` | ✓ | ConfigureWindow border |
 | `normal/focusedBorderColor` | `normal/focused-border "name"` | 1 | needs X color-name → pixel (AllocNamedColor) |
@@ -110,7 +110,7 @@ that builds the directional keys becomes a `map`/`for` over the same `(dir keys 
 | `keys` | `keys ...` | 2 | §6 |
 
 ### Contrib modules → crew/lux/ modules
-| import | provides (used here) | ai home | tier |
+| import | provides (used here) | love home | tier |
 |---|---|---|---|
 | `XMonad` core | the WM, `def`, `spawn`, `kill`, `windows`, `sendMessage` | lux.l/core.l | ✓ done |
 | `StackSet as W` | `W.sink` `W.floating` `W.member` | core.l (float half) | 2 |
@@ -138,8 +138,8 @@ that builds the directional keys becomes a `map`/`for` over the same `(dir keys 
 
 ## 4. Layouts (layout.l) — a layout is a closure, a message is a symbol
 
-The core seam, and where ai beats Haskell: xmonad needs existential types + `LayoutClass`
-to put `ResizableTall` and `Dwindle` in one `|||`; in ai a layout is just
+The core seam, and where love beats Haskell: xmonad needs existential types + `LayoutClass`
+to put `ResizableTall` and `Dwindle` in one `|||`; in love a layout is just
 
     layout : rect -> [window] -> ([(window rect)] . layout')
 

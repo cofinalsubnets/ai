@@ -51,7 +51,7 @@ static lvm(lvm_cuda_gemm) {                                  // C(m,n) = A(m,k) 
   // struct ai_vec *C = new gem-tray (m,n); cudaMemcpy D2H vec_data(C),dC; *(Sp += 1) = word(C);
  *(Sp += 1) = ai_nil; return Ip++, Continue();
 }
-static lvm(lvm_cuda_ew) {                                    // elementwise op over a,b (op = a tag, marshaled ai-side)
+static lvm(lvm_cuda_ew) {                                    // elementwise op over a,b (op = a tag, marshaled love-side)
   // dispatch a fused +/-/* kernel by the op tag in Sp[0]; broadcast a(Sp[1]), b(Sp[2]).
  *(Sp += 2) = ai_nil; return Ip++, Continue();
 }

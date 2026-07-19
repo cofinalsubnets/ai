@@ -173,7 +173,7 @@ static struct k_source k_sources[k_sources_max] = {
   [0] = { .getc = kb_getc,      .ready = kb_ready    },
   [1] = { .putc = serial_putc1, .flush = serial_flush },
   // Slot 2: the virtio-net UDP socket (net.c). getc hands one received datagram
-  // to ai, putc/flush send a reply, ready polls the RX queue (feeds ai_wait_fds).
+  // to love, putc/flush send a reply, ready polls the RX queue (feeds ai_wait_fds).
   [2] = { .getc = nic_getc, .putc = nic_putc, .flush = nic_flush, .ready = nic_ready },
 };
 
@@ -223,7 +223,7 @@ struct ai_io ai_stdout = { .ap = lvm_port_io,
 // No separate error stream; route err to the same fd as out (the console).
 struct ai_io ai_stderr = { .ap = lvm_port_io,
                          .fd = putcharm(1), .ungetc_buf = putcharm(EOF), .eof_seen = putcharm(false), };
-// The NIC socket port (fd 2 -> k_sources[2]); bound to the ai global `nic` below.
+// The NIC socket port (fd 2 -> k_sources[2]); bound to the love global `nic` below.
 static struct ai_io ai_nic = { .ap = lvm_port_io,
                          .fd = putcharm(2), .ungetc_buf = putcharm(EOF), .eof_seen = putcharm(false), };
 
@@ -441,7 +441,7 @@ static lvm(lvm_net) {
   Ip += 1;
   return Continue(); }
 
-// (aim ipword oport) -- point the nic outbound for the NEXT say/flush so the ai brain
+// (aim ipword oport) -- point the nic outbound for the NEXT say/flush so the love brain
 // can INITIATE a datagram (net.c, milestone 5). ipword packs a.b.c.d into one fixnum;
 // returns 1 if the route resolved by ARP, else 0. A 2-arg nif: this is the s2 shape's
 // op (the lvm_ret0 in nif_aim returns the result), expanded by hand to match kmain.
@@ -513,7 +513,7 @@ static struct ai_def defs[] = {
 #endif
   {"color", (intptr_t) nif_color},
   {"netserve", (intptr_t) nif_net},     // `net` is taken (the prel content measure)
-  {"nic", (intptr_t) &ai_nic},          // the virtio-net socket as an ai port
+  {"nic", (intptr_t) &ai_nic},          // the virtio-net socket as a love port
   {"aim", (intptr_t) nif_aim} };        // point the nic outbound (milestone 5)
 
 #ifdef K_TEST
@@ -629,7 +629,7 @@ void kmain(void) {
 #elif defined(NETECHO)
  // net-echo build (stage 2e gate): the agent perceives one UDP datagram off the
  // `nic` port (slurp), then acts -- writes it back to its sender (fputs+fflush).
- // an ai-driven echo server, no C echo loop. boots straight into it.
+ // a love-driven echo server, no C echo loop. boots straight into it.
  "(: (kecho _) (: d (slurp nic) _ (fputs nic d) _ (fflush nic) (kecho 0)) (kecho 0))"
 #else
  "(shell 0)"

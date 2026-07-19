@@ -24,7 +24,7 @@ set -e
 
 ho=out/host
 mc=$ho/mooncc
-ai=$ho/ai
+love=$ho/love
 M4SRC=${M4SRC:-out/dl/m4-1.4}
 
 if [ ! -f "$M4SRC/config.h" ]; then
@@ -32,7 +32,7 @@ if [ ! -f "$M4SRC/config.h" ]; then
   echo "         set M4SRC=<a ./configure'd m4-1.4 tree> to run (see tools/moon-m4.sh)."
   exit 0
 fi
-for bin in "$mc" "$ai"; do
+for bin in "$mc" "$love"; do
   [ -x "$bin" ] || { echo "moon-m4: missing $bin -- run 'make $ho/mooncc host'"; exit 1; }
 done
 
@@ -67,7 +67,7 @@ for f in crew/moon/lib/math/*.c; do
   $mc -Icrew/moon/lib/math -Icrew/moon/include -c "$f" "$d/m_$b.o" || { echo "FAIL mooncc -c $f"; exit 1; }
 done
 { cat crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/moon/lib/mksys.l
-  echo "(mksys \"$d/sys.o\")"; } | $ai || { echo "FAIL mksys sys.o"; exit 1; }
+  echo "(mksys \"$d/sys.o\")"; } | $love || { echo "FAIL mksys sys.o"; exit 1; }
 
 $mc $objs "$d/nolibc.o" "$d"/m_*.o "$d/sys.o" -o "$d/m4" || { echo "FAIL holo link m4"; exit 1; }
 echo "  linked $(wc -c < "$d/m4") bytes -> $d/m4"

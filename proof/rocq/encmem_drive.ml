@@ -4,7 +4,7 @@
 
    For every op in {ld,st} x every (data,base) in the 16x16 register matrix x a
    spread of displacements (including the disp8/disp32 boundaries and both signs)
-   it computes the reference bytes with the proven `encode_mem`, then prints an ai
+   it computes the reference bytes with the proven `encode_mem`, then prints a love
    program asserting holo's holo-hex is BYTE-IDENTICAL. "P / P PASS" means holo's
    base+disp load/store encodings -- SIB escapes, the rbp/r13 forced disp, disp
    sizing, REX.R/B -- are exactly what a machine-checked, round-tripping reference

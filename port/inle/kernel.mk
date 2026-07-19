@@ -25,7 +25,7 @@ endif
 ifdef INLE
 ksuf := -inle
 endif
-# NETECHO=1 boots into an ai-driven UDP echo server over the `nic` port (stage 2e
+# NETECHO=1 boots into a love-driven UDP echo server over the `nic` port (stage 2e
 # gate): the agent perceives a datagram with (slurp nic) and replies with
 # (fputs nic d)(fflush nic). Own suffix; normal kernel unchanged.
 ifdef NETECHO
@@ -137,7 +137,7 @@ $(k_odir)/%.o: $(R)/%.c $(k_h) out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib
 	@$(kcc) -c $< -o $@
 
 # l.o carries the version string (love_version.h); recompile it when the id changes.
-$(k_odir)/ai.o: out/lib/love_version.h
+$(k_odir)/love.o: out/lib/love_version.h
 
 $(k_odir)/%.o: $(R)/%.S $(k_h)
 	@echo AS	$@
@@ -226,7 +226,7 @@ run-headless: $(ko)/love-$a.iso $(dl)/edk2-ovmf/ovmf-code-$a.fd
 	exec $(k_qemu) -cdrom $< -display none -no-reboot
 
 # Boot the baked inle agent. INLE = heartbeat/watchdog/checkpoint demos then a serial shell
-# (no NIC); NETAGENT = the inbound ai-REPL over the wire; NETBRAIN = the outbound brain that
+# (no NIC); NETAGENT = the inbound love-REPL over the wire; NETBRAIN = the outbound brain that
 # dials an oracle on its own clock. Each (re)builds its own-suffixed iso, then boots headless
 # with serial on stdio so you watch the agent narrate in this terminal (Ctrl-C to stop).
 run-inle:
@@ -244,17 +244,17 @@ run-netagent run-netbrain:
 	@echo "$@: x86_64 only (virtio-net driver is port/inle/x86_64/net.c); host arch is $a"
 endif
 
-# Boot init AS PID 1 in a container -- the Linux altitude of "ai as the system".
+# Boot init AS PID 1 in a container -- the Linux altitude of "love as the system".
 # A private pid+user+mount namespace (unprivileged, no daemon/image/root): --pid
 # --fork makes the entrypoint pid 1, --user --map-root-user makes it root-in-ns so
-# mount works, --mount-proc gives it a fresh /proc reflecting the namespace. ai then
+# mount works, --mount-proc gives it a fresh /proc reflecting the namespace. love then
 # IS init: getpid 1, mounts the early filesystems, and reaps a reparented orphan
 # (pid 1's defining duty). (pid1 0) is the deterministic tour; swap in (perceive 0)
 # for the live signalfd supervisor. Needs unshare (util-linux) + unprivileged userns.
 .PHONY: init-container
 init-container: host
 	@command -v unshare >/dev/null || { echo "init-container: needs unshare (util-linux)"; exit 1; }
-	@echo "-- ai as PID 1 in a pid+user+mount namespace --"
+	@echo "-- love as PID 1 in a pid+user+mount namespace --"
 	unshare --pid --fork --mount-proc --user --map-root-user -- $m -l init/init.l -e "(pid1 0)"
 
 # --- headless serial test (wired into test_all; x86_64 + qemu only) ------------
@@ -294,7 +294,7 @@ out/lib/ktests.h: out/lib/ktests.l $(love0) tools/lcatv.l love/prel.l
 out/lib/inle.h: port/inle/inle.l $(love0) tools/lcatv.l love/prel.l
 	@echo AI	$@
 	@$(love0) -l love/prel.l tools/lcatv.l port/inle/inle.l > $@
-# arm64 EXECUTION validator: cross-build `ai` for aarch64 + run the corpus under
+# arm64 EXECUTION validator: cross-build `love` for aarch64 + run the corpus under
 # qemu-aarch64 (the trustworthy check for the glaze's second target -- holotest
 # proves byte encodings, this proves they run). No-ops without qemu + a cross-gcc.
 .PHONY: test_arm64
@@ -317,7 +317,7 @@ endif
 # runtime after the host and love0, exercising wasm's <data.h> override
 # (sentinel-ap data kinds, no flat code-address space). The harness evals the
 # whole corpus in one ai_eval and greps the drained output for the zz-fin
-# summary, exactly as test_host greps `cat $t | ai`. No-op when emcc or node
+# summary, exactly as test_host greps `cat $t | love`. No-op when emcc or node
 # is missing (so a plain `make test_all` stays green on a host without them).
 NODE ?= $(shell command -v node 2>/dev/null)
 EMCC ?= $(or $(shell command -v emcc 2>/dev/null),/usr/lib/emscripten/emcc)

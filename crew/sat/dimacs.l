@@ -1,7 +1,7 @@
 ; dimacs -- a DIMACS CNF reader for the sat solver, built from the PARSER COMBINATORS in the post-egg
 ; layer love/post.l (a parser is (\ s y n): a string s, a success continuation y = (rest payload), a
 ; failure continuation n = rest; payloads are lists that `seq` concatenates). post.l shares that set
-; (eps/lit/span/alt/seq/seqs/skip/many/runp) with cook; here we add only a signed-int LEAF `pint` (ai
+; (eps/lit/span/alt/seq/seqs/skip/many/runp) with cook; here we add only a signed-int LEAF `pint` (love
 ; has no regex) and the grammar. `dimacs text` -> (formula . nvars): skip `c` comment lines, read the
 ; `p cnf N M` header for N, parse the body integers, split them into clauses at each terminating 0.
 ; Standalone (parse self-tests below); when loaded AFTER crew/sat/sat.l it also self-tests parse->solve via

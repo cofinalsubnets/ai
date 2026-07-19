@@ -1,6 +1,6 @@
 ; fuzz.l -- inle's generative differential fuzzer: the judge's first CLIENT.
 ; the loop the memory keeps circling -- propose a candidate, JUDGE it, keep the
-; interesting ones -- with a LOCAL proposer (a random ai-program generator) standing
+; interesting ones -- with a LOCAL proposer (a random love-program generator) standing
 ; in for oracle.l's remote brain. same loop either way: swap `gen` for `(ask ...)`.
 ;
 ;   out/host/love -l port/inle/judge.l -l port/inle/fuzz.l -e "(fuzz 40 1)"
@@ -20,7 +20,7 @@
    (jnth l i) (? (= i 0) (cap l) (jnth (cup l) (- i 1)))  ; nth is absent here -- roll our own
    (pick l) (jnth l (rng-next (tally l)))                ; a random element of a list
 
-   ;; -- the generator: build ai DATA, depth-bounded --
+   ;; -- the generator: build love DATA, depth-bounded --
    ops '(+ - * / // % < = <= > >= |)
    ;; NB: unit params (u) -- a NULLARY define `(f) body` is `(\ body)` = QUOTE, so
    ;; `f` would be the DATA `body`, never a callable. fire each with the unit `()`.
@@ -30,7 +30,7 @@
                    (? (< k 9) k                          ; 0..8  : a small int
                       (= k 9) ()                         ; the zero point
                       "ab"))                             ; a string
-   (gen d)                                               ; -> an ai expression (data)
+   (gen d)                                               ; -> a love expression (data)
       (? (! d) (gen-atom ())
          (: k (rng-next 6)
             (? (= k 0) (gen-atom ())

@@ -2,7 +2,7 @@
 ; crew/lux/core.l by tools/wm2uu.l (kind-directed by crew/lux/sigs.l) and printed
 ; as corpus source under the model's own names. Run on the host binary:
 ;
-;   ai tools/uuwmgen.l > test/uuwm.l        (or: make uuwm)
+;   love tools/uuwmgen.l > test/uuwm.l        (or: make uuwm)
 ;
 ; test/uuwm.l is a COMMITTED artifact -- `make test_uuwm` regenerates and
 ; diffs, failing loudly if core.l moved without a refresh; test/uuwmlaw.l

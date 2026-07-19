@@ -41,7 +41,7 @@
              (ev 'ev (cap ds)))                      ; ONE datum: as-is (a leading monadic stays fused)
           ()))                                       ; no datums: nothing to run
     (bye s) (: _ (puts s) _ (putc 10) _ (flush out) (quit 0))   ; print a line to out, flush, exit 0
-    (version _) (bye (+ "love " love-version))                       ; _ arg: ai has no nullary calls
+    (version _) (bye (+ "love " love-version))                       ; _ arg: love has no nullary calls
     (usage _) (bye (+ "usage: love [-l FILE] [-e EXPR] [-v] [-h] [--] [FILE ...]\n"
                (+ "  -l, --load FILE   preload FILE (read-eval) before the program\n"
                (+ "  -e, --eval EXPR   eval EXPR as one expression (infix works)\n"

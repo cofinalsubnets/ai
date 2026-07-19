@@ -7,9 +7,9 @@ adopt + two-generation re-exec machinery) and the bootstrap (the *egg*, [`love/e
 
 ## The thesis
 
-rustup downloads a prebuilt toolchain and keeps a clean line between *installing ai*
+rustup downloads a prebuilt toolchain and keeps a clean line between *installing love*
 (for users) and *checking out the source* (for contributors). We don't want that line —
-because ai already rebuilds itself from source with **no external toolchain** (mooncc +
+because love already rebuilds itself from source with **no external toolchain** (mooncc +
 [`crew/holo/link.l`](../crew/holo/link.l) + nolibc; `make test_raw` is gcc/glibc/ld-free).
 
 So for us, **installing *is* cloning-and-hatching a local checkout.** The two acts
@@ -27,7 +27,7 @@ downstream from that.
 Naming the category, because it decides what we're copying:
 
 - **toolchain multiplexer** (rustup, ghcup, nvm, pyenv, asdf) — manages versions/channels
-  and drops PATH shims. This is *front-of-house* we may grow into later (`ai +tip …`), not
+  and drops PATH shims. This is *front-of-house* we may grow into later (`love +tip …`), not
   what we build first.
 - **source-based installer / bootstrapper** (Gentoo `emerge`, Nix, `ghcup compile`) — ships
   a seed, rebuilds on the target machine. This is the axis we're on.
@@ -72,7 +72,7 @@ rebuilds locally when the cache is cold or distrusted.
 
 Two properties make cached-by-default safe rather than a trust compromise:
 
-- **the cache is auditable.** hatch is reproducible — Stage 8 proved `cc(cc(ai))`
+- **the cache is auditable.** hatch is reproducible — Stage 8 proved `cc(cc(love))`
   byte-identical (the fixpoint, `68fe4b0c`). So anything the CDN serves can be rebuilt
   bit-for-bit locally and diffed. The network can police the cache for free; a mismatch is
   *detectable*, not a matter of trust. This is Nix's substituter story with real
@@ -116,13 +116,13 @@ Two things do **not** go away when `main` does:
 
 1. **the patch DAG itself** — dependencies / partial order, or "newest" and "on top of"
    have no meaning.
-2. **one derived default** — or a naive `ai hatch` has nothing to resolve to. It sits where
+2. **one derived default** — or a naive `love hatch` has nothing to resolve to. It sits where
    `main` sat; it's just *computed*, not *maintained*.
 
 ## Near-term: this is a personal multi-machine sync tool
 
 Public multi-user distribution is **deferred** — nothing above needs it, and everything
-above works with a population of one. The real near-term job: **move ai development between
+above works with a population of one. The real near-term job: **move love development between
 gwen's own machines cheaply.**
 
 The primitive is a **head DAG state**, not a HEAD pointer. The moment you edit on the laptop
@@ -164,7 +164,7 @@ different source of the patch set.
   reproducibility-audit. Not needed for a population of one.
 - **binary cache as a full substituter** — the default cached path is already this in
   miniature; the question of a shared, populated, garbage-collected cache is a later lever.
-- **the toolchain-multiplexer front-of-house** — `ai +release-N …`, multiple nests side by
+- **the toolchain-multiplexer front-of-house** — `love +release-N …`, multiple nests side by
   side. Grow into it if we ever want it; the ref model already accommodates it.
 
 ## Naming

@@ -1,18 +1,18 @@
-; tele -- a PyTorch-style reverse-mode autograd library, written in ai, over the
-; CONSTELLATION algebra (ai's numeric tower: a `star` scalar, a `galaxy` numeric
-; array). ai already ships the tensor -- it calls it a constellation, with
+; tele -- a PyTorch-style reverse-mode autograd library, written in love, over the
+; CONSTELLATION algebra (love's numeric tower: a `star` scalar, a `galaxy` numeric
+; array). love already ships the tensor -- it calls it a constellation, with
 ; broadcasting +/*, reductions (net), and contractions (inner). tele adds the one
 ; missing ingredient: the gradient. Stage 1 -- the autograd core.
 ;
-; the mechanism is one idea, native to ai's currying: reverse-mode AD is the
+; the mechanism is one idea, native to love's currying: reverse-mode AD is the
 ; category of LENSES. a differentiable op is not a -> b, it is a pair
 ;     forward : a -> (b , (b-bar -> a-bar))
 ; the value AND the linear backward map from the output cotangent to the input
-; cotangent. that second component is a closure -- and ai is closures all the way
+; cotangent. that second component is a closure -- and love is closures all the way
 ; down, so the lens falls out for free. `back` is the adjoint ray-trace: the same
 ; lenses, walked backward, seeded with the cotangent 1.
 ;
-; pure ai -- no host nif, so this runs on every frontend (host, kernel, wasm).
+; pure love -- no host nif, so this runs on every frontend (host, kernel, wasm).
 ; load with `-l crew/tele/tele.l` after the prel; the gradient-check gate is teletest.l.
 ;
 ; a node (a "glass") is a MUTABLE tablet { 'val 'grad 'bwd }. the galaxy VALUES it
@@ -88,7 +88,7 @@
 
    ;; -- the device seam -- tele's heavy array ops (matmul, elementwise, reduce,
    ;; transpose) route through a SWAPPABLE backend record { gemm ew reduce transp }.
-   ;; the default `tl-cpu` IS ai's native constellation algebra, so tele stands
+   ;; the default `tl-cpu` IS love's native constellation algebra, so tele stands
    ;; alone (teletest.l loads only this file). load crew/tele/device.l for the SIM +
    ;; roofline meter, or crew/tele/cuda.l for the GPU -- then (tl-use that-backend) and
    ;; every mm/add/mul/sub/sum/mean below reroutes with NO change to tele's source.

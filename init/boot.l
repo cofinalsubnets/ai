@@ -1,7 +1,7 @@
 #!/bin/love
-; --- boot.l: the initramfs /init -- ai as pid 1 on the Linux kernel ---
+; --- boot.l: the initramfs /init -- love as pid 1 on the Linux kernel ---
 ; the REAL bringup companion to init.l's (pid1 0) tour. where (pid1 0) mounts into
-; /tmp/ai-* demo paths and reaps a planted orphan to PROVE the shape, this is what the
+; /tmp/love-* demo paths and reaps a planted orphan to PROVE the shape, this is what the
 ; kernel actually execs as process 1 out of the initramfs: mount the FHS filesystems,
 ; then hand the console to init/sh.l and never exit (pid 1 leaving panics the kernel).
 ;
@@ -21,7 +21,7 @@
         (say1 (+ "  mount " (+ typ (+ " on " (+ tgt
                  (? r (+ " -> errno " (show r)) " -> ok")))))))
 
-   ; the console job: a fresh `ai` running the shell over the inherited console fds.
+   ; the console job: a fresh `love` running the shell over the inherited console fds.
    (console _) (L "/bin/love" "-l" "/lib/sh.l" "-e" "(sh 0)")
 
    ; a boot self-check: run a real userland command (kore, forked + captured) so the

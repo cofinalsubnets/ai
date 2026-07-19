@@ -1,6 +1,6 @@
-; --- inle: a self-driving agent loop, modeled in ai (a runnable sketch) ---
+; --- inle: a self-driving agent loop, modeled in love (a runnable sketch) ---
 ; the EXECUTABLE companion to crew/inle.md. the real inle is the freestanding
-; kernel (port/inle/kmain.c) grown a NIC; this file models the parts that STAY ai -- the
+; kernel (port/inle/kmain.c) grown a NIC; this file models the parts that STAY love -- the
 ; perceive->decide->act fold, the watchdog, the checkpoint -- so the shape can be
 ; run and probed on the host before any C is written. like boot/tag.l, it is a
 ; sketch -- but milestone 1 (the heartbeat loop) is REAL on both frontends: it
@@ -14,7 +14,7 @@
 ; getc/putc/ready/close vtable, ai_wait_fds() is select over fds, ai_ready() the
 ; ready probe, ai_clock()/ai_sleep() the clock. so networking is "add a virtio-net
 ; k_source slot + the IP/TCP state machine in C", and EVERYTHING BELOW is the part
-; that stays ai. a net event stream is modeled as a list (`run`); the heartbeat
+; that stays love. a net event stream is modeled as a list (`run`); the heartbeat
 ; stream (`run-beats`) is the REAL clock -- on metal the wait becomes ai_wait_fds
 ; over {socket, clock}, the merge happening in C, but the fold is identical.
 
@@ -32,10 +32,10 @@
 ; datum and tags it with its source; here we just hand it a list.
    ev-kind cap   ev-load cup
 
-; --- the agent state --- a plain 2-list (replies beats): an IMMUTABLE ai value,
+; --- the agent state --- a plain 2-list (replies beats): an IMMUTABLE love value,
 ; so show/read checkpoint it for free. (a book would NOT round-trip -- it is
 ; mutable, identity-compared, and its show reparses to nothing; the list is the
-; honest carrier of crew/inle.md's "state is an ai value, persistence is
+; honest carrier of crew/inle.md's "state is a love value, persistence is
 ; show/read".) replies = packets answered, beats = heartbeats emitted. `with`
 ; builds a fresh state, so every step is pure: the same `fresh` seeds many runs.
    fresh `(0 0)
@@ -119,7 +119,7 @@
 ; fd) and a heartbeat task BEATS on the timer (parks on a wake-time), and the kernel
 ; scheduler issues ONE ai_wait_fds over {nic-fd, the nearest wake} -- so the C floor
 ; does the select, exactly as crew/inle.md promised, with ZERO new C (cue?/key? is
-; stdin-only, so the clean single-task poll isn't reachable from ai -- two tasks let
+; stdin-only, so the clean single-task poll isn't reachable from love -- two tasks let
 ; the scheduler do the merge instead). the two tasks share ONE mutable counter cell:
 ; the immutable 2-list can't carry a live count between concurrent tasks, and under the
 ; cooperative scheduler pin/peep never yield mid-op, so the book is race-free (the

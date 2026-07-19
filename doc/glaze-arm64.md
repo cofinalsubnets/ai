@@ -121,7 +121,7 @@ are now exposed.
     FLOAT register file in `crew/asm/` (xmm/NEON + `movsd`/`addsd`/`mulsd`/`divsd`/`cvtsi2sd`/`ucomisd`/
     `movq`), which the integer-only IR doesn't model yet.
 
-  **How to add a lane** (the proven loop): prototype in scratchpad against `cat emit.l proto.l | ai`
+  **How to add a lane** (the proven loop): prototype in scratchpad against `cat emit.l proto.l | love`
   (x86 behavioral == interp); disassemble the arm64 output with `llvm-mc --disassemble
   --triple=aarch64`; integrate into `emit.l` additively; add `test/glaze-x86.l` coverage; `make
   test_glaze`; then the full `make test`. The glaze is corpus-independent (unbound under

@@ -2,13 +2,13 @@
 
 The idea: build the conventional GNU/Linux userland (the Linux-From-Scratch package
 set — bzip2, gzip, sed, grep, make, bash, coreutils, …) **with mooncc**, in LFS build
-order, as a **conventional overlay over the ai base system**. Two payoffs at once:
+order, as a **conventional overlay over the love base system**. Two payoffs at once:
 
 - each real package drives mooncc through real-world C it has never seen, growing the
   compiler the same way ai.c grew it (doc/moon.md's "gen choke list" — refuse a
   construct, add it, move on), and
 - the result is a familiar POSIX userland whose *entire toolchain underneath* is
-  ai/mooncc/holo — the "conventional overlay, ai floor" the arc is aiming at.
+  love/mooncc/holo — the "conventional overlay, love floor" the arc is aiming at.
 
 This is the RIGHT ladder. The kernel (doc/moon.md:16, "the one imported artifact") is a
 cliff — inline asm + a register allocator to bind its operands, `__attribute__` honesty,
@@ -16,7 +16,7 @@ bitfields, computed goto (see the gap table at the bottom). The LFS *userland* p
 are ordinary C: the first one is a day of header-shim + declaration work away, not a
 compiler rewrite. So climb the userland ladder first; the kernel is its far end.
 
-The base is [[ai-distro]] rung 4 — the gcc-free, glibc-free static `ai` (out/host/love-raw,
+The base is [[love-distro]] rung 4 — the gcc-free, glibc-free static `love` (out/host/love-raw,
 `make test_raw`) — booting as pid 1 on the Linux kernel via `init/boot.l` + `mk/distro.mk`
 (`make distro-run`). The overlay is these packages, laid beside kore under /usr.
 
@@ -67,7 +67,7 @@ The remaining rungs:
   the dispatch, while `cgstmt` emits each case/default label wherever it sits (`cgitems`
   handles the body, so nested emission is free). Verified: Duff's device + a nested-case /
   fallthrough / nested-switch battery are byte-identical to `gcc -O0`; `make test_moon` +
-  `make test_raw` (3453 tests, gcc-free ai) stay green. This un-parse-errors decompress.c
+  `make test_raw` (3453 tests, gcc-free love) stay green. This un-parse-errors decompress.c
   (which now advances to a codegen rung, below). "Folded case labels" in mooncc's law tail
   is a different, simpler thing (`case 1: case 2:` fallthrough).
 
@@ -460,14 +460,14 @@ revert before committing.
 
 bzip2 → gzip → less → m4 → make → sed/grep (gnulib-heavy, harder) → bash → coreutils.
 Skip the two-pass cross-toolchain ritual entirely — mooncc/holo/nolibc already ARE the
-self-hosting toolchain ([[ai-distro]]). Link initially with a foreign `ld` + the host libc
+self-hosting toolchain ([[love-distro]]). Link initially with a foreign `ld` + the host libc
 (the "gcc appears once as ld" precedent), then move packages onto nolibc/holo as their
 libc surface is filled in.
 
 ## reproduce
 
 ```
-# base (already green): ai boots as pid 1 on Linux
+# base (already green): love boots as pid 1 on Linux
 make distro-run          # or distro-smoke for the headless check
 
 # the bzip2 probe (ctype/ungetc shims now landed in crew/moon/include):
@@ -488,4 +488,4 @@ Don't start here. Fill the userland first; the extensions the last userland pack
 (more `__builtin_*`, attribute honesty) are the same ones the kernel needs — arrive there
 having already built them.
 
-Related: [[ai-distro]], doc/moon.md (the compiler), init/boot.l + mk/distro.mk (the base).
+Related: [[love-distro]], doc/moon.md (the compiler), init/boot.l + mk/distro.mk (the base).

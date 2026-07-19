@@ -19,7 +19,7 @@ CCACHE ?= $(shell command -v ccache 2>/dev/null)
 # test_love0 then races ahead of the love0 link ("out/host/love0: No such file").
 love0 = out/host/love0
 
-# every ai run UNDER make boots deterministically: the test gate must exercise the freshly-built egg
+# every love run UNDER make boots deterministically: the test gate must exercise the freshly-built egg
 # (not a stale baked image), and the bench controls glazed-vs-interp itself. So suppress the startup
 # image auto-load for all recipes. The USER's binary (run outside make) still wakes its baked image.
 export AI_NO_IMAGE := 1
@@ -43,7 +43,7 @@ include port/inle/kernel.mk
 include test/test.mk
 include mk/install.mk
 
-# `make test` is the FAST gate: just the two egg self-tests (the host binary `ai`
+# `make test` is the FAST gate: just the two egg self-tests (the host binary `love`
 # from-source under AI_NO_IMAGE, and love0 -- c0 + the self-hosted ev, twice). It does
 # NOT build the image (the --bake step), nor run coqc/lean/glaze/gc/tools, which
 # are slow and/or need extra toolchains -- those live in `make test_all` (and the
@@ -130,7 +130,7 @@ out/host/flamegraph.svg: out/host/perf.data
 repl: host
 	@exec $m
 cloc:
-	cloc --by-file ai ai.c ai.h main.c port tools test vim crew
+	cloc --by-file love ai.c ai.h main.c port tools test vim crew
 cat: clean all test
 cata: clean all test_all
 # Full clean rebuild, every frontend, all tests, then the corpus under valgrind.

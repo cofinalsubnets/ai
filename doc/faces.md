@@ -8,7 +8,7 @@ every value has a kind, and "is-it-top" is vacuous (you may as well ask `0`). So
 a single universal object, and the crew are **faces** of it — each a way the core meets a
 boundary. The *outward* faces come in **dual pairs**, glued each by *its own* universal shape
 (there is no uniform functor — "they associate by their own preferences"); the *inward* face,
-at ai's own limit, stands alone.
+at love's own limit, stands alone.
 
 **Source faces — `read` / `feel` — COMPOSE.** The two legs of `charms → top`:
 - `read : charms → forms` (the reader — already the surface primitive; parse the chars).
@@ -23,8 +23,8 @@ at ai's own limit, stands alone.
 **forks**: `bao` (the local face — the console, the shell/bridge) and `ain` (the net face —
 the wire). `local ⊔ ain` — either/or off the trunk, not a pipeline.
 
-**Help face — `gwen` — the third boundary, INWARD.** source and world are *outward* — how ai meets
-what's outside it. `gwen` faces ai's own **help**: the boundary where the core *raises* because it
+**Help face — `gwen` — the third boundary, INWARD.** source and world are *outward* — how love meets
+what's outside it. `gwen` faces love's own **help**: the boundary where the core *raises* because it
 cannot answer, and calls out. It is the **dual of the honest face** ([[honest-face]]): when help is
 missing the honest face shows the bare condition; **gwen is help PRESENT** — the answer that absence
 was missing. The runtime `help` handles conditions in a *program*; gwen handles them in the *language*
@@ -35,7 +35,7 @@ was missing. The runtime `help` handles conditions in a *program*; gwen handles 
 `inle` the **body/substrate** it sails; `cook` and `mow` the **keepers** (build the ship; tend the
 heap green — the two-space gardener).
 
-So: one object (`top` = ai, the language), three boundaries — **source** (read/feel, *compose*),
+So: one object (`top` = love, the language), three boundaries — **source** (read/feel, *compose*),
 **world** (bao/ain, *coproduct*), **help** (gwen, the inward dual of the honest face). Two gluings
 for the outward pairs, one inward face for the limit. Reflected in `content/lore.md` (lore voice)
 and `theory.html` (the "One core, faces" aside in the implementation section). Relates: [[serialize]] (the limit/colimit note over the mint-NNO).

@@ -1,5 +1,5 @@
 ; --- test/host/fs.l: smoke test for the fs nifs (host/fs.c) ---
-; rename/symlink/readlink/chmod/chown/utime/umask link into `ai` but NOT love0
+; rename/symlink/readlink/chmod/chown/utime/umask link into `love` but NOT love0
 ; (which bakes the corpus), so this runs standalone against the built binary,
 ; like test/host/init.l -- not in test/*.l. Run (assert comes from test/00-init.l):
 ;   cat test/00-init.l test/host/fs.l | out/host/love

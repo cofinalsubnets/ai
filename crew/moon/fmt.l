@@ -243,11 +243,11 @@
                          (flags >as fix (link <as acc)))
    (fmt-main as) (: f (flags as () ())                          ; run on the args AFTER the program seat
                     files <>f
-                    (? (two? files) (: _ (fmt-each files <f) (quit 0))   ; quit so ai never runs the tool's own args as scripts
+                    (? (two? files) (: _ (fmt-each files <f) (quit 0))   ; quit so love never runs the tool's own args as scripts
                        (: _ (say err "usage: moonfmt [-w] FILE ..\n") (quit 2))))
    ; the SEAT: fire fmt-main iff moonfmt sits in the program seat of the real command
-   ; line -- the positional program (dev: `ai crew/moon/fmt.l ..`), or a `-l` preload
-   ; (the installed shebang: `ai -l .../moonfmt ..`) -- taking the args after the seat.
+   ; line -- the positional program (dev: `love crew/moon/fmt.l ..`), or a `-l` preload
+   ; (the installed shebang: `love -l .../moonfmt ..`) -- taking the args after the seat.
    ; stays quiet under any other program name. (the mooncc/ain precedent.)
    (bn p) (: n (tally p) (g k r) (? (k < n) (g (k + 1) (? ((p k) = 47) (k + 1) r)) (snip p r n)) (g 0 0))
    (me? w) (: b (bn w) (|| (b = "moonfmt") (|| (b = "moonfmt.l") (b = "fmt.l"))))

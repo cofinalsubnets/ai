@@ -17,7 +17,7 @@ other means; the bake lane is closed).
 
 ## the symptom
 
-A **baked** binary (`ai --bake`, i.e. `make host` / install / the 07:54 live
+A **baked** binary (`love --bake`, i.e. `make host` / install / the 07:54 live
 binary) runs uu checking ~100× slow: `test/uu.l` alone is **0.92s** on the
 fresh-egg lane (`AI_NO_IMAGE=1`) and **>90s** through the woken image — same
 binary, same file. Reproduces at HEAD before uu2l and before the day's prel
@@ -27,7 +27,7 @@ kernel joined the boot bake.
 **No gate ever sees it**: the Makefile suppresses image auto-load for every
 recipe (the corpus must time the fresh egg, not a stale image), so `make test`
 and friends run the fresh-egg lane by construction. Only a DIRECT run — a
-user at a repl, a script calling the installed `ai` — wakes the image. That
+user at a repl, a script calling the installed `love` — wakes the image. That
 is why it survived: green gates, storming users.
 
 ## the mechanism, as far as it is pinned
@@ -83,7 +83,7 @@ Whatever the stale cell backs sits on the checker's hot path.
 ## the gate
 
 `make test_wake` (standalone, NOT in test_all yet — it is deliberately RED
-today, pinning this bug): bakes a candidate COPY (`ai.wake`, so the canonical
+today, pinning this bug): bakes a candidate COPY (`love.wake`, so the canonical
 binary is untouched and ETXTBSY can't bite), runs test/uu.l through the woken
 image with AI_NO_IMAGE explicitly unset, under a budget the storm cannot
 meet (fresh lane ~1s, storm >90s, budget 60s). Wire it into test_all when

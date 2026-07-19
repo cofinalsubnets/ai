@@ -1,6 +1,6 @@
 ; crew/kore/diff.l -- myers diff: the shortest edit script between two lists (Myers 1986,
 ; the greedy O(ND) forward pass with a trace, then the backtrack). the seed of kore --
-; the coming `diff` tool reads it, the vcs records it. pure ai (no nif); element equality
+; the coming `diff` tool reads it, the vcs records it. pure love (no nif); element equality
 ; is the generic `=`, so it diffs lines, symbols, charms, whole trees alike.
 ;
 ; the script is a list of (op x) 2-lists, op one of 'keep 'del 'add, in order: the
@@ -122,10 +122,10 @@
        `(a b ks))
    ; split at the anchors: each between-segment recurses (uniqueness reappears locally
    ; once the outer context is cut away), each anchor lands as a keep
-   (dsplit a b ai bi ps)
+   (dsplit a b love bi ps)
     (? (! (two? ps)) (patience a b)
        (: h <ps i <h j <>h e <>>h
-          na (i - ai) nb (j - bi)
+          na (i - love) nb (j - bi)
           ((patience (take na a) (take nb b)) + (link `('keep e)
                      (dsplit (drop (na + 1) a) (drop (nb + 1) b) (i + 1) (j + 1) >ps)))))
    ; the trimmed middle: anchor + split, or myers when nothing anchors

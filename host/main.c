@@ -496,7 +496,7 @@ static struct ai *boot(struct ai *g, bool argp) {
   return ai_evals_(g, runner); }                      // pass 2: corpus via the self-hosted ev
 
 #else
-// the full ai: raw terminal mode for the interactive REPL (love0 never needs
+// the full love: raw terminal mode for the interactive REPL (love0 never needs
 // it -- a build tool / self-test is non-interactive); the CLI driver is the
 // canonicalized lcat header; `rel` is the non-tty stdin runner.
 static struct termios saved_termios;
@@ -543,7 +543,7 @@ extern struct ai *image_load(char const*);
 static char const *image_dump_path = NULL;
 static bool image_bake_p = false;                        // --bake with no PATH: patch the binary itself
 // The baked post-boot image: a reserve in its own .image section (host/image_baked.c), filled by
-// `ai --bake` (the binary boots, snapshots itself, and lays the result back into its own body).
+// `love --bake` (the binary boots, snapshots itself, and lays the result back into its own body).
 // Loaded at startup when its magic validates; else a normal egg boot.
 extern uint64_t ai_baked_image[];
 extern uintptr_t ai_baked_image_len;
@@ -654,7 +654,7 @@ int main(int argc, char const **argv) {
   else if (argc >= 3 && !strcmp(argv[1], "--wake")) { image_load_path = argv[2]; argv[2] = argv[0], argv += 2, argc -= 2; }
   if (image_load_path && !(g = image_load(image_load_path))) image_load_path = NULL;   // NULL -> normal boot
   // AUTO-LOAD: with no image flag, wake the image baked into the binary's own .image section, so a
-  // plain `ai` is glazed-by-default at ~4 ms cold start instead of the ~230 ms egg eval. Opt out with
+  // plain `love` is glazed-by-default at ~4 ms cold start instead of the ~230 ms egg eval. Opt out with
   // AI_NO_IMAGE (the bench does, to control glazed-vs-interp itself). Any problem -- unbaked, stale,
   // truncated -- makes the load return NULL, so we fall through to the normal egg boot. Never wrong.
   if (!g && !image_dump_path && !image_bake_p && !getenv("AI_NO_IMAGE")) {

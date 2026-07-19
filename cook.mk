@@ -1,10 +1,10 @@
 # cook.mk -- a make-shaped front door to cook (crew/cook/cook.l + crew/cook/Cookfile).
 #
-# `make` is muscle memory; cook is the build tool written in ai. This STUB
-# bridges them: `make -f cook.mk <goal>` makes sure the ai binary exists, then
+# `make` is muscle memory; cook is the build tool written in love. This STUB
+# bridges them: `make -f cook.mk <goal>` makes sure the love binary exists, then
 # hands the goal to cook, which reads Cookfile. The real Makefile is left untouched
 # and stays the source of truth for the irreducible C bootstrap -- cook RUNS on
-# ai, so it cannot build ai; that one rung is delegated to make, and cook
+# love, so it cannot build love; that one rung is delegated to make, and cook
 # ports everything above it (see Cookfile).
 #
 # usage:  make -f cook.mk            # the default goal (all = the host build)

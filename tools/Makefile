@@ -1,6 +1,6 @@
-# Validation gates for the ai rewrites of the old Python build tools.
+# Validation gates for the love rewrites of the old Python build tools.
 #
-# Each ai tool in this directory (gen_data.l, vmret.l) must
+# Each love tool in this directory (gen_data.l, vmret.l) must
 # produce output identical to the frozen Python reference under py/ (see
 # py/README.md). These targets diff the two over every relevant build artifact
 # present in the tree -- so they only check what you've actually built. Run all
@@ -14,7 +14,7 @@ include $(R)/common.mk
 .PHONY: all test_vmret test_cook test_tele test_xor
 all: test_vmret test_cook test_tele test_xor
 
-# Build the host ai on demand (it runs the .l tools); only if it's missing.
+# Build the host love on demand (it runs the .l tools); only if it's missing.
 $(m):
 	@$(MAKE) -C $(R)/host
 
@@ -24,7 +24,7 @@ $(m):
 # expected -- the vmret signal is noise there.
 test_vmret: | $(m)
 	@echo TEST vmret.l
-	@for e in $(R)/out/host/love `find $(R)/out/free -name 'ai-*.elf' 2>/dev/null`; do \
+	@for e in $(R)/out/host/love `find $(R)/out/free -name 'love-*.elf' 2>/dev/null`; do \
 	  python3 $(R)/tools/py/vmret.py $$e > $(R)/out/host/.vmret.py 2>&1; \
 	  $(m) $(R)/tools/vmret.l $$e > $(R)/out/host/.vmret.l 2>&1; \
 	  cmp -s $(R)/out/host/.vmret.py $(R)/out/host/.vmret.l && echo "  ok   $$e" \
@@ -41,7 +41,7 @@ test_cook: | $(m)
 	@echo TEST cook.l
 	@cd $(R) && out/host/love crew/cook/cooktest.l
 
-# crew/tele/tele.l: the PyTorch-style autograd library (pure ai over the constellation
+# crew/tele/tele.l: the PyTorch-style autograd library (pure love over the constellation
 # algebra). teletest.l grad-checks every op -- the analytic gradient (from `back`)
 # vs the central finite difference -- so the oracle is self-validating. tele loads
 # as a user `-l` (NOT in the corpus), so `make test` is untouched; this is its gate.

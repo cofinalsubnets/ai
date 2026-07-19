@@ -81,7 +81,7 @@
 ;  * dechurch -- a literal church application (N f x), N a small whole numeral, f a function, is f applied
 ;    to x N times, lowered to the nested arithmetic (2 (+ i) i) -> (+ i (+ i i)) the group lane native-backs
 ;    (church is otherwise OPAQUE to the glaze -- every application rides the lisp num-ap closure, interpreted).
-;    EXACT: this IS ai's church semantics ((0 f x)=x, (1 f x)=(f x), dch-nest builds f^N innermost-out);
+;    EXACT: this IS love's church semantics ((0 f x)=x, (1 f x)=(f x), dch-nest builds f^N innermost-out);
 ;    disambiguated from POWER by "the operand is a function" (dch-fn?), so (2 5)/(2 3 4) stay exponentiation.
 ;  * dehof-deep -- inline non-recursive HOF-const bindings (the closure bench's twice/adder) inside every
 ;    LAMBDA-BODY group `:`, then dsimp beta-collapses, so a higher-order recurrence ((twice (adder i)) i)
@@ -91,7 +91,7 @@
 ; incl. the glaze-less kernel/wasm -- native-backs group code. Sound (capture-safe dsubx) + transparent.
 ; The helpers live INSIDE welow's closure (captured, never on the book), so only `welow` leaks -- no mop-list
 ; entry, no names() growth. dechurch/dsimp/dehof + the ho-* bundle are the pre-egg twin of love/glaze/auto.l's
-; (auto.l keeps its own for the autospec pipeline) -- keep them in step (ai's fixed church + HOF semantics).
+; (auto.l keeps its own for the autospec pipeline) -- keep them in step (love's fixed church + HOF semantics).
 (: welow (:
    (dquote? x) (&& (two? x) (id? (cap x) '\) (= 2 (tally x)))                                             ; (\ datum) -> a quote, never descend
    (drm ks env) (filter (\ p (! (member? (cap p) ks))) env)                                              ; drop the shadowed substitutions

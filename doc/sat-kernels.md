@@ -8,12 +8,12 @@ one kernel set per `nvars`, cached), and installed through the `nif` seam — pl
 the extended-resolution factoring ladder, reason-side VSIDS bumping, and the rephase
 wheel (below). The result is FIRST in the reference-solver field by net time across all
 eleven rows — pigeonhole, threshold random 3-SAT, and real SATLIB instances including
-the proven-UNSAT sets (ai 1618, picosat 2047, cadical 2216, kissat 3975): faster than
+the proven-UNSAT sets (love 1618, picosat 2047, cadical 2216, kissat 3975): faster than
 cadical outright on PHP(5–7), mid-field on the pure random rows (`bench/bench.html`,
 second table; `bench/satrace.sh` reproduces it).
 
 the lineage: `crew/sat/sat.l` is the readable tablet-based solver and stays the oracle —
-`crew/sat/flat.l` runs AFTER it (`cat crew/sat/sat.l crew/sat/flat.l | ai`) and gates differentially
+`crew/sat/flat.l` runs AFTER it (`cat crew/sat/sat.l crew/sat/flat.l | love`) and gates differentially
 against its DPLL baseline on every load. `make test_sat` runs the whole stack.
 
 ## the shape
@@ -70,16 +70,16 @@ restart (reduction is only sound at level 0), tracked by an O(1) learnt counter.
 
 ## the numbers (warm, all shootout verdicts correct)
 
-| ms | ai | minisat | picosat | kissat | cadical | glucose |
+| ms | love | minisat | picosat | kissat | cadical | glucose |
 |---|---|---|---|---|---|---|
 | PHP(5) | **1** | 3.9 | 2.6 | 3.6 | 4.6 | 4.0 |
 | PHP(6) | **2** | 7.5 | 5.0 | 5.5 | 5.2 | 5.8 |
 | PHP(7) | **4** | 38.5 | 25.7 | 17.3 | 8.2 | 39.9 |
 | PHP(8) | 14 | 266 | 220 | 72.1 | 12.5 | 873 |
 
-first on the pigeonhole net (ai 21, cadical 30.5): faster than cadical outright on
+first on the pigeonhole net (love 21, cadical 30.5): faster than cadical outright on
 PHP(5–7), 1.5ms behind on PHP(8). first in the whole six-row field by net time
-(**ai 156**, cadical 200, picosat 312, kissat 372, minisat 383, glucose 1013).
+(**love 156**, cadical 200, picosat 312, kissat 372, minisat 383, glucose 1013).
 
 Where the journey started (interpreted tablet solver, 2026-07-01): ~45× slower than
 minisat on PHP(7). The rungs: flatten the state (proves the layout, slower interpreted) →
@@ -127,14 +127,14 @@ stable/focused alternation on the search side.
 
 `satrace.sh` also races random 3-SAT at the threshold (m = 4.26n, five fixed-seed
 instances summed per row) — raw search with NO factorable structure, the standing guard
-against tuning the solver into a pigeonhole specialist. The instances come from ai's own
+against tuning the solver into a pigeonhole specialist. The instances come from love's own
 explicit-state RNG (`seed`/`random`, reproducible), and ONE generator text feeds both the
-DIMACS dump and ai's in-process lane, so every solver provably sees identical instances;
+DIMACS dump and love's in-process lane, so every solver provably sees identical instances;
 the verdict column carries the per-instance SAT/UNSAT signature, which matches across all
 six solvers on every run — a free differential check against five references. The two
 families pull opposite ways: cadical and kissat own PHP but their inprocessing machinery
 costs them the small random instances (dead last there), where the light classics
-(picosat 19/42ms, minisat 22/47) lead; ai places second on PHP and mid-field on random
+(picosat 19/42ms, minisat 22/47) lead; love places second on PHP and mid-field on random
 (30/78), the most even spread in the table. NB the in-tree `gen-formula` (sat.l's fuzz
 generator) is NOT a threshold generator: its LCG draws the literal sign from the low bit,
 which strictly alternates, so its instances are structurally easy and satisfiable far past
@@ -306,7 +306,7 @@ per conflict; the kernel ABI and the bench numbers are unchanged.
 ## what the remaining distance is
 
 the eleven-row net is now a statistical three-way tie at the top (picosat ~2030,
-cadical ~2220, ai ~2250 — the uf250 SAT-lottery row is the entire spread), with
+cadical ~2220, love ~2250 — the uf250 SAT-lottery row is the entire spread), with
 kissat ~4000 and the rest behind. the per-row composition, MEASURED (uuf150-01):
 
 * **the engine is no longer behind anything in the field.** per-conflict cost is at

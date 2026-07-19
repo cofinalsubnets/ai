@@ -267,7 +267,7 @@
                 (go wknames))
        ; the relaxing layout -- obj.l is tree-fresh in the kore/mooncc cats while the holo
        ; book rides the running binary's BAKE, and the build pairs them structurally (the
-       ; wake shims exec the sibling ai; crew/build.mk). a bake too old to carry laylax
+       ; wake shims exec the sibling love; crew/build.mk). a bake too old to carry laylax
        ; means a hand-mixed script/binary combo: scare LOUD, never lay quietly long.
        tp (: r laylax
              (? (lit? r) (r textforms be 0 (tablet 0) wkset)

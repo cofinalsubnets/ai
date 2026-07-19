@@ -1,4 +1,4 @@
-; sat -- a real CDCL SAT solver in ai, riding the core's mutable maps. An app: it
+; sat -- a real CDCL SAT solver in love, riding the core's mutable maps. An app: it
 ; owns crew/sat/ alone, touches no core file. A literal is a nonzero fixnum (var k true =
 ; +k, false = -k); a clause is a LIST of literals; a formula a list of clauses; an
 ; assignment a map var -> 1 (true) | -1 (false), absent = unassigned. The DPLL

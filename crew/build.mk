@@ -30,9 +30,9 @@ moonfiles = crew/kore/text.l crew/kore/core.l crew/holo/holo.l crew/holo/x64.l c
 #
 # the build-tree kore/mooncc bins are WAKE SHIMS over their sibling images -- the
 # exact shape mk/install.mk installs: `#!/bin/sh` resolving its own directory, then
-# exec'ing the SIBLING ai on the SIBLING image. the interpreter is never PATH's, so
+# exec'ing the SIBLING love on the SIBLING image. the interpreter is never PATH's, so
 # a tree-fresh cat can never run under a foreign (older-baked) binary -- the skew
-# that once laid EMPTY .text when obj.l read a `holo` book key an installed ai's
+# that once laid EMPTY .text when obj.l read a `holo` book key an installed love's
 # bake lacked. the image is anchor-checked to that binary, and make keeps cat,
 # image and shim fresh together: consistency is structural, not checked at runtime.
 # (bonus: every cold invocation -- the m4/tar builds pay dozens -- wakes in ~ms

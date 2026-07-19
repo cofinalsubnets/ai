@@ -8,7 +8,7 @@ public cut. Prior release state (Juneteenth 2026-06-19) is archived at
 
 Three features carry this release:
 
-1. **moon — the self-hosting toolchain.** ai builds itself from source with no external
+1. **moon — the self-hosting toolchain.** love builds itself from source with no external
    toolchain: `mooncc` (the C compiler, crew `moon`) + [`crew/holo/link.l`](../crew/holo/link.l)
    (our linker) + nolibc. `make test_raw` is gcc/glibc/ld-free.
 2. **reef — the vcs.** New this cut. A patch-DAG version control folded together with the
@@ -26,7 +26,7 @@ tablet, so a stray `(pin holo …)` can no longer poison a baked service. See [[
 
 | feature | state | gap to release |
 |---|---|---|
-| moon/mooncc (x64) | landed — gcc-free ai boots + passes the corpus; **rename to `moon`/`mooncc` landed 2026-07-15** (crew/moon/, moon.l, moon-main, test_moon, doc/moon.md) | polish + docs |
+| moon/mooncc (x64) | landed — gcc-free love boots + passes the corpus; **rename to `moon`/`mooncc` landed 2026-07-15** (crew/moon/, moon.l, moon-main, test_moon, doc/moon.md) | polish + docs |
 | moon (arm64) | rungs A–C landed (static exes + .o + our-linker, varargs + sibcalls, 88/88 battery 3 ways) | rung D (nolibc/mksys, the gcc-free arm64 path) about to land — **best-effort in, does NOT block** |
 | reef/vcs | **MVP landed 2026-07-14** — `record`·`sync`·`hatch`·`log`·`diff` over the content-addressed `.reef/` store (crew/reef/, sha256 in host/hash.c); `sync` unions a peer nest + re-derives the DAG + materializes; `hatch` builds the recorded source into a seed keyed by patch-set + arch (reproducibility audit); `make test_reef` gates it | the cached-fetch CDN substituter (deferred with public distribution); `cut`/`undo` reserve-the-names |
 | precedence | **landed 2026-07-14** — grip bands in prel.l opfix, corpus re-validated (3 asserts shifted, all `\|`/`&`-with-`=`), `test/precedence.l` gates it | done (the `grip` name + house=27 ship as working defaults, gwen's to bless) |
@@ -43,7 +43,7 @@ tablet, so a stray `(pin holo …)` can no longer poison a baked service. See [[
       arm64 worktree's `crew/moon/lib/` — the `crew/cc/`→`crew/moon/` rename landed here first, so that worktree
       reconciles the path on merge) is about to land and we'll try to fold it in, but the cut ships either way (see [[aicc-arm64]])
 - [ ] `doc/moon.md` reads as a release doc, not a build log — a user can compile a hello-world and know the flags
-- [ ] a headline one-liner ("a self-hosting C toolchain in ~N lines of ai; no gcc, no glibc, no ld")
+- [ ] a headline one-liner ("a self-hosting C toolchain in ~N lines of love; no gcc, no glibc, no ld")
 
 **as** — a real assembler, the front tooth of the gcc-free chain (pairs with link.l's `ld`)
 - Reads standard GNU AT&T `.s` → obj.l-shaped relocatable `.o` → link.l. New front over holo:

@@ -93,7 +93,7 @@
             (id? h 'paths_rect)  (dojr (vof en (e2 t)) (vof en (e3 t)) (vof en (e4 t)))
             (vof-spine en (vof en h) (cup t)))))
 
-   ; empty-list tests are STRUCTURAL (two?): a ai list of zeros NETS zero,
+   ; empty-list tests are STRUCTURAL (two?): a love list of zeros NETS zero,
    ; so !as would call (add n 0)'s final argument list (0) empty -- the net law.
    (vof-spine en f as)
    (? !(two? as) f (vof-spine en (vapp f (vof en (cap as))) (cup as)))
@@ -303,15 +303,15 @@
       r))
 
 ; --- uu2l: the uu-to-l leg. uu2coq and uu2lean re-CERTIFY the corpus in two
-; --- foreign kernels; uu2l runs it HOME -- a CLOSED term compiles to an ai
+; --- foreign kernels; uu2l runs it HOME -- a CLOSED term compiles to a love
 ; --- form whose value IS vof's answer (charms for nats, ('chain a b) for
-; --- pairs), at compiled-ai speed; lof (l-of, vof's fast twin) evaluates one.
+; --- pairs), at compiled-love speed; lof (l-of, vof's fast twin) evaluates one.
 ; --- UNTRUSTED by design: chk/conv never touch it, so a uu2l bug can miss a
 ; --- demo, never fake a theorem -- and the corpus asserts (vof t = lof t)
 ; --- differentially wherever both lanes are tractable. generated code has NO
 ; --- free names: the runtime kit and every global embed as live literals
 ; --- under the quote sigil, so nothing a uu binder spells can capture.
-; --- BRIDGE maps standard names to native ai (add is +, the eager-NbE O(n)
+; --- BRIDGE maps standard names to native love (add is +, the eager-NbE O(n)
 ; --- niszero is (= m 0)) -- each bridge rides the SAME differential gate.
 ; --- defn feeds SRC; a defq/axm name compiles to its own neutral, exactly
 ; --- the sealed book value.

@@ -92,7 +92,7 @@
 ;     set + arch. the recipe is a deterministic stub writing under out/ (a
 ;     default ignore, so the build output never dirties the tree); a re-hatch of
 ;     the same head with the same recipe is a reproducibility audit -- the seed
-;     must reproduce. (the real ai recipe is `make`; the shape is identical.) ---
+;     must reproduce. (the real love recipe is `make`; the shape is identical.) ---
 (: _ (rf-lay ".reef/hatch"
        (show '(hatch (recipe "sh" "-c" "mkdir -p out; printf reef-seed > out/seed.bin") (out "out/seed.bin"))))
    hid (reef-hatch ())

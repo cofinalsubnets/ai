@@ -1,5 +1,5 @@
 /* the conditional CONVERTS its arms: one flo arm makes the result flo, the
-   integer arm converts at its edge -- ai's eq lane compares
+   integer arm converts at its edge -- love's eq lane compares
    (Cp(a) ? cplx_im(a) : 0) == (Cp(b) ? cplx_im(b) : 0) and the charm side
    rode the int arm straight into a double compare. + a negative float
    literal in a global image (folds through the unary neg). */

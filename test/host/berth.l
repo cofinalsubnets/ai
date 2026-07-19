@@ -72,7 +72,7 @@
 (: (find h n i) (? (< (+ i (tally n)) (+ (tally h) 1))
                   (? (= n (snip h i (+ i (tally n)))) 1 (find h n (+ i 1)))
                   0)
- ; (the octal escapes ride through TWO ai readers before sh: hence \\\\)
+ ; (the octal escapes ride through TWO love readers before sh: hence \\\\)
  md (mind `("out/host/love" "-l" "crew/quay/berth.l"
             "-e" "(berth (L \"sh\" \"-c\" \"printf 'x\\\\342\\\\224\\\\200y\\\\303\\\\251z'; sleep 1\"))"))
  outb (slurp (cup md))

@@ -1,5 +1,5 @@
-; kanren-count -- SAT model-counting that falls out of ai's GENERIC RING, as an expressiveness
-; demo (NOT the solver -- see sat.l for the real CDCL engine; NOT a bench -- it's ai-only and
+; kanren-count -- SAT model-counting that falls out of love's GENERIC RING, as an expressiveness
+; demo (NOT the solver -- see sat.l for the real CDCL engine; NOT a bench -- it's love-only and
 ; exponential). A CNF formula is literally a PRODUCT of SUMS of unification literals: `*` is the
 ; semiring product (conjunction), `+` the sum (disjunction), over kanren's `===`/`var`/`load`
 ; (kanren lives in the prel). The solution STREAM is counted tail-recursively (scount), never

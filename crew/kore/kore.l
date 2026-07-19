@@ -76,7 +76,7 @@
              'vi vi-main
              'env env-main 'sleep sleep-main
              'kill kill-main 'xargs xargs-main)
-   (usage _) (: _ (say err "kore -- the ai multi-call toolbox
+   (usage _) (: _ (say err "kore -- the love multi-call toolbox
 usage: kore TOOL ARGS..     (or symlink a tool's name to kore)
   diff OLD NEW       unified diff, patience hunks (0 same / 1 differ / 2 trouble)
   nc HOST PORT       netcat; nc -l PORT listens
@@ -107,7 +107,7 @@ usage: kore TOOL ARGS..     (or symlink a tool's name to kore)
                a)
    ; me?: is this seat word kore itself, or a tool name (the symlink lane)? the
    ; dispatch fires only when it is -- so a `-l` preload that seats a flag (the bake
-   ; loads the cat as `ai -l .kore-cat.l -e ..`) stays quiet, like moon.l's me?.
+   ; loads the cat as `love -l .kore-cat.l -e ..`) stays quiet, like moon.l's me?.
    (me? w) (: b (bn w) (|| (b = "kore") (|| (b = "kore.l") (applets (intern b)))))
    ; kore-main is the ONE leaked global: the baked kore.image wakes to it
    ; (--wake kore.image -e '(kore-main (link "kore" (cuup (cup cmdline))))' -- the
@@ -123,6 +123,6 @@ usage: kore TOOL ARGS..     (or symlink a tool's name to kore)
                  f (? (two? t) (applets (intern <t)) ())
                  _ (? f (: _ (f >t) (quit 0)) ())
                  (usage ())))))))
-; the SEAT: file mode (cat | ai) dispatches on the real command line; the -l bake
+; the SEAT: file mode (cat | love) dispatches on the real command line; the -l bake
 ; preload seats a flag, not kore, so me? is false and kore-main returns quietly.
 (kore-main >cmdline)

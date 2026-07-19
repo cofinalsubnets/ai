@@ -45,7 +45,7 @@ float am_sinf(float), am_cosf(float), am_atan2f(float, float), am_sqrtf(float),
 // Bignum limbs are native-word-width where a double-width integer is available for
 // the limb products and the Knuth divmod q-hat step -- the host and the 64-bit
 // kernels: 64-bit limbs do a quarter the limb-ops of 32-bit limbs on the same
-// number (schoolbook mul/div are O(limbs^2)), the difference between ai and a
+// number (schoolbook mul/div are O(limbs^2)), the difference between love and a
 // 64-bit-digit BigInt. The 32-bit wasm shim (no __int128) keeps 32-bit limbs with
 // a uint64_t accumulator. ai_dlimb is the unsigned double-limb (products, carries),
 // ai_sdlimb the signed one (subtract / divmod borrows). limb_clz counts a limb's
@@ -322,7 +322,7 @@ static ai_inline word coin_die(word x) { return ((struct ai_coin*) x)->die; }
 static ai_inline word coin_load(word x) { return ((struct ai_coin*) x)->payload; }
 // die slots (fixnum keys into the descriptor map). NAME is a symbol for show;
 // ADD/MUL/APPLY are closures run INSIDE the VM (+/* and apply are lvm handlers, so
-// they can call ai code). net/=/</show/tally default over the payload in pure C. HOT,
+// they can call love code). net/=/</show/tally default over the payload in pure C. HOT,
 // if truthy, makes the die's coins lit? (a reference value); absent -> the coin is
 // fresh DATA (not lit?), like a rational -- a value, not a reference.
 enum { DIE_NAME = 0, DIE_ADD = 1, DIE_MUL = 2, DIE_APPLY = 3, DIE_HOT = 4 };
@@ -1153,7 +1153,7 @@ static ai_inline void evac_data(struct ai *g, word const *const p0, word const*c
 // unconditionally sound.
 //
 // young?: a heap pointer allocated since the last collection -- in [minor, hp).
-// The ADDRESS is the generation (ai objects carry no age bit).
+// The ADDRESS is the generation (love objects carry no age bit).
 static ai_inline bool ai_young(struct ai *g, word p) {
  return lamp(p) && ptr(p) >= g->minor && ptr(p) < g->hp; }
 static bool gen_remembered(struct ai *g, word obj) {
@@ -5943,7 +5943,7 @@ static lvm(lvm_mul_rep) {
  return sym ? Ap(lvm_intern, g) : (Ip++, Continue()); }
 
 // `*` CARTESIAN lane: chain * chain -> the ordered cartesian product, the semiring
-// product whose `+` is `cat`. Each pair is a proper 2-list (ai bj), so the product
+// product whose `+` is `cat`. Each pair is a proper 2-list (love bj), so the product
 // of an m-list and an n-list is an (m*n)-list of pairs -- tally is the homomorphism
 // (tally(a*b) = tally a * tally b), and the outer loop ranges the LEFT operand so
 // right-distributivity (a+b)*c = a*c + b*c holds on the nose (left-distributivity
@@ -5966,7 +5966,7 @@ static lvm(lvm_mul_cart) {
   for (word lb = b; chainp(lb); lb = B(lb), idx++) {
    struct ai_chain *p0 = pc + 2 * idx, *p1 = p0 + 1;
    ini_chain(p1, A(lb), ZeroPoint);                                  // (bj)
-   ini_chain(p0, av, word(p1));                                      // (ai bj)
+   ini_chain(p0, av, word(p1));                                      // (love bj)
    ini_chain(spine + idx, word(p0), idx + 1 < pairs ? word(spine + idx + 1) : ZeroPoint); } }
  return *++Sp = word(spine), Ip++, Continue(); }
 
@@ -6790,9 +6790,9 @@ static ai_noinline int mag_sub(ai_limb *r, ai_limb const *a, int na, ai_limb con
 static ai_noinline void mag_mul(ai_limb *r, ai_limb const *a, int na, ai_limb const *b, int nb) {
  for (int i = 0; i < na + nb; i++) r[i] = 0;
  for (int i = 0; i < na; i++) {
-  ai_dlimb carry = 0; ai_limb ai = a[i];          // ai stays a limb so ai*b[j] is the hardware 64x64->128 (not a 128x128 __multi3)
+  ai_dlimb carry = 0; ai_limb love = a[i];          // love stays a limb so love*b[j] is the hardware 64x64->128 (not a 128x128 __multi3)
   for (int j = 0; j < nb; j++) {
-   ai_dlimb s = (ai_dlimb) ai * b[j] + r[i+j] + carry;
+   ai_dlimb s = (ai_dlimb) love * b[j] + r[i+j] + carry;
    r[i+j] = (ai_limb) s; carry = s >> limb_bits; }
   r[i+nb] = (ai_limb) carry; } }
 
@@ -7264,9 +7264,9 @@ lvm(lvm_bmul) {
  ai_limb *la = A->limb, *lb = B->limb, *rl = (ai_limb*) txt(buf_str(Sp[1]));
  int end = min(i + max(1, bmul_chunk / nb), na);
  for (; i < end; i++) {                           // schoolbook outer loop, one chunk of rows
-  ai_dlimb carry = 0; ai_limb ai = la[i];         // limb-typed so ai*lb[j] is the hardware 64x64->128, not a 128x128 multiply
+  ai_dlimb carry = 0; ai_limb love = la[i];         // limb-typed so love*lb[j] is the hardware 64x64->128, not a 128x128 multiply
   for (int j = 0; j < nb; j++) {
-   ai_dlimb t = (ai_dlimb) ai * lb[j] + rl[i+j] + carry;
+   ai_dlimb t = (ai_dlimb) love * lb[j] + rl[i+j] + carry;
    rl[i+j] = (ai_limb) t, carry = t >> limb_bits; }
   rl[i+nb] = (ai_limb) carry; }
  Sp[0] = putcharm(i);                               // persist progress before any yield/GC
@@ -7925,8 +7925,8 @@ static intptr_t cmp3(struct ai *g, word a, word b) {
   if (Cp(a) || Cp(b)) {                                    // both scalars -- complex: (re, im) lexicographic
    ai_flo_t ar = Cp(a) ? cplx_re(a) : toflo(a), br = Cp(b) ? cplx_re(b) : toflo(b);
    if (ar != br) return ar < br ? -1 : 1;
-   ai_flo_t ai = Cp(a) ? cplx_im(a) : 0, bi = Cp(b) ? cplx_im(b) : 0;
-   return ai < bi ? -1 : ai > bi ? 1 : 0; }
+   ai_flo_t love = Cp(a) ? cplx_im(a) : 0, bi = Cp(b) ? cplx_im(b) : 0;
+   return love < bi ? -1 : love > bi ? 1 : 0; }
   if (flop(a) || flop(b)) { ai_flo_t av = toflo(a), bv = toflo(b); return av < bv ? -1 : av > bv ? 1 : 0; }
   return ai_big_cmp(a, b); }                                // exact fix/box/big tower
  if (strp(a)) return bytes_cmp(txt(a), len(a), txt(b), len(b));
@@ -8436,24 +8436,24 @@ static ai_inline void cplx_parts(word x, ai_flo_t *re, ai_flo_t *im) {
  if (Cp(x)) *re = cplx_re(x), *im = cplx_im(x);
  else *re = toflo(x), *im = 0; }
 
-// (ar,ai) `vop` (br,bi) in components: the one set of complex formulas, shared
+// (ar,love) `vop` (br,bi) in components: the one set of complex formulas, shared
 // by the scalar lane (cplx_fill) and the packed array lane (cbin_fill).
-static ai_inline void cplx_op(int vop, ai_flo_t ar, ai_flo_t ai, ai_flo_t br, ai_flo_t bi,
+static ai_inline void cplx_op(int vop, ai_flo_t ar, ai_flo_t love, ai_flo_t br, ai_flo_t bi,
                              ai_flo_t *re, ai_flo_t *im) {
  switch (vop) {
-  case vop_sub: *re = ar - br; *im = ai - bi; break;
-  case vop_mul: *re = ar * br - ai * bi; *im = ar * bi + ai * br; break;
+  case vop_sub: *re = ar - br; *im = love - bi; break;
+  case vop_mul: *re = ar * br - love * bi; *im = ar * bi + love * br; break;
   case vop_quot: { ai_flo_t d = br * br + bi * bi;   // (ac+bd)/(c^2+d^2) + ...
-   *re = (ar * br + ai * bi) / d; *im = (ai * br - ar * bi) / d; break; }
-  default: *re = ar + br; *im = ai + bi; } }        // vop_add
+   *re = (ar * br + love * bi) / d; *im = (love * br - ar * bi) / d; break; }
+  default: *re = ar + br; *im = love + bi; } }        // vop_add
 
 // Fill the rank-0 complex box v with a `vop` b. All the &-taking lives in this
 // ai_noinline helper so the lvm wrapper keeps its trailing tail call; no
 // allocation inside, so the operand pointers can't move under us.
 static ai_noinline void cplx_fill(struct ai_cplx *v, word a, word b, int vop) {
- ai_flo_t ar, ai, br, bi, re, im;
- cplx_parts(a, &ar, &ai); cplx_parts(b, &br, &bi);
- cplx_op(vop, ar, ai, br, bi, &re, &im);
+ ai_flo_t ar, love, br, bi, re, im;
+ cplx_parts(a, &ar, &love); cplx_parts(b, &br, &bi);
+ cplx_op(vop, ar, love, br, bi, &re, &im);
  cplx_set(v, re, im); }
 
 // The complex arithmetic lane. Reached from the arith slow paths when either
@@ -8497,12 +8497,12 @@ static ai_noinline void cbin_fill(struct ai_vec *r, word a, word b, int op, bool
  for (uintptr_t p = 0; p < n; p++) {
   intptr_t oa = 0, ob = 0;
   for (uintptr_t j = 0; j < R; j++) oa += idx[j] * ca[j], ob += idx[j] * cb[j];
-  ai_flo_t ar, ai, br, bi, re, im;
-  cbin_part(aarr, va, sar, sai, oa, &ar, &ai);
+  ai_flo_t ar, love, br, bi, re, im;
+  cbin_part(aarr, va, sar, sai, oa, &ar, &love);
   cbin_part(barr, vb, sbr, sbi, ob, &br, &bi);
-  if (cmp) vec_put_int(r, p, (ar == br && ai == bi) ? 1 : 0);
+  if (cmp) vec_put_int(r, p, (ar == br && love == bi) ? 1 : 0);
   else {
-   cplx_op(op, ar, ai, br, bi, &re, &im);
+   cplx_op(op, ar, love, br, bi, &re, &im);
    rf[2*p] = re; rf[2*p+1] = im; }
   odo_step(idx, R, r->shape); } }
 

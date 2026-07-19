@@ -26,7 +26,7 @@ ISA.
 in Rocq for a slice of the ISA, with `<slice>_roundtrip_ok` proving `decode (encode i) = Some i`
 over the slice's domain by `vm_compute` -- the domain is finite, so the exhaustive check IS the
 proof (the gen.v style), axiom-free (`Print Assumptions` stays "Closed under the global context").
-the reference `encode` extracts to OCaml (the extract.v pattern), and a driver emits an ai program
+the reference `encode` extracts to OCaml (the extract.v pattern), and a driver emits a love program
 asserting holo's `holo-hex` is BYTE-IDENTICAL to the proven reference. byte-exact is valid here
 because each slice picks a domain where holo's encoding is the canonical one. narrow surface, no
 trusted disassembler -- this rung checks holo against a machine-checked oracle.
@@ -67,7 +67,7 @@ the loop, ~an afternoon per slice:
    reflexivity. Qed.` then `Print Assumptions` to confirm axiom-free.
 3. **extract** `encode` to OCaml (`Extraction "enc<slice>_ref.ml" encode`).
 4. **differential driver** (enc<slice>_drive.ml): enumerate the domain, compute reference hex from
-   the extracted encoder, emit an ai program asserting holo's `holo-hex` is byte-identical; print
+   the extracted encoder, emit a love program asserting holo's `holo-hex` is byte-identical; print
    `<name>-oracle: P / T PASS`.
 5. **wire** into the `test_encver` recipe (another coqc + ocamlopt + drive + grep), and negative-
    test it (corrupt one expected byte, confirm the grep would fail).

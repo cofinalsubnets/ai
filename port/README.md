@@ -1,4 +1,4 @@
-# port -- the freestanding targets of the ai lisp
+# port -- the freestanding targets of the love lisp
 
 This tree holds every non-host target. The core freestanding kernel is
 `inle/` (the kernel grown into a self-driving agent -- a ship in port):

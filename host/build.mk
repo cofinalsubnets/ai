@@ -33,14 +33,14 @@ hcc = $(host_cc) $(ai_cflags) -Dai_tco=$(tco) -fpic -I$(ho) -I. -Iout/lib
 ifeq ($(shell uname -s),Darwin)
 so_archive = -Wl,-force_load,$(ho)/liblove.a       # ld64's whole-archive
 # the host contract (ai_clock, ai_fd_port_vt, ai_stdin/out/err -- defined in
-# host/main.c, linked into `ai` itself, NOT the archive) is UNRESOLVED in the .so
+# host/main.c, linked into `love` itself, NOT the archive) is UNRESOLVED in the .so
 # by design: the loading executable provides it. GNU ld allows that by default;
 # ld64 rejects undefined symbols in a dylib unless told to defer them.
 so_undef = -Wl,-undefined,dynamic_lookup
 else
 so_archive = -Wl,--whole-archive $(ho)/liblove.a -Wl,--no-whole-archive
 endif
-# STATIC=1 links a fully static `ai` against musl (and skips liblove.so, which a
+# STATIC=1 links a fully static `love` against musl (and skips liblove.so, which a
 # static build can't produce) -- the OPT-IN portable-binary lane (was briefly
 # the Linux default; demoted 2026-07-07, the why lives in common.mk's flavor
 # block): the binary runs on ANY Linux distro regardless of
@@ -93,10 +93,10 @@ dock: host
 # heap (the glaze baked in, x86-64), and lays it back into the binary's OWN .image section --
 # host/image.c copies the exe, pwrites the blob at the section's file offset, and atomically
 # renames over the original (no objcopy/objdump, ETXTBSY-proof: a new inode, so anyone still
-# executing keeps the old one). A plain `ai` then wakes it at ~4 ms cold start (glazed by
+# executing keeps the old one). A plain `love` then wakes it at ~4 ms cold start (glazed by
 # default) instead of eval'ing the egg (~230 ms). The load is an OPTIMIZATION -- main.c falls
 # back to a normal egg boot on any mismatch, so a stale bake is never fatal, only slower.
-# (~1.5 s to bake: the glaze self-tests native-compile; paid once per ai rebuild, not per run.)
+# (~1.5 s to bake: the glaze self-tests native-compile; paid once per love rebuild, not per run.)
 # The .baked STAMP carries the dependency (the bake mutates the binary itself); a static
 # pattern so the CANDIDATE bakes by the same recipe at its side path.
 $(ho)/love.baked $(ho)/love.cand.baked: %.baked: %
@@ -107,7 +107,7 @@ $(ho)/love.baked $(ho)/love.cand.baked: %.baked: %
 
 # candidate: build + bake the NEXT GENERATION at the side path out/host/love.cand.
 # nothing executes that name, so the in-place bake can never hit ETXTBSY -- a
-# rebuild succeeds no matter who is running `ai` (a repl, a test, the dock's own
+# rebuild succeeds no matter who is running `love` (a repl, a test, the dock's own
 # client). gate it with `make test m=$(ho)/love.cand` (m routes the whole corpus;
 # love0 is independent), then promote on green with an ATOMIC RENAME (a new inode:
 # executing processes keep the old one) -- the dock's `adopt` does exactly this.
@@ -158,7 +158,7 @@ $(ho)/%.o: $(R)/%.c $(ai_h) $(ho)/.hostcc
 	@$(hcc) -c $< -o $@
 
 # l.o carries the version string (love_version.h); relink it when the id changes.
-$(ho)/ai.o $(ho)/0/ai.o: out/lib/love_version.h
+$(ho)/love.o $(ho)/0/love.o: out/lib/love_version.h
 # host/main.o bakes the lcat lib headers inline (egg + prel/ev/cli/bao -- bao is the
 # baked shell core now, subsuming the old repl.h). Now that it rides the host/*.c
 # glob (compiled once, not recompiled on every link, as the old inline `$(hcc)

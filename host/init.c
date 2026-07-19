@@ -206,7 +206,7 @@ static lvm(lvm_posix_signal) {
  Sp += 1; return Ip++, Continue(); }
 
 
-// copy an ai string into a NUL-terminated C buffer; false on non-string / too long.
+// copy a love string into a NUL-terminated C buffer; false on non-string / too long.
 static bool str_cbuf(ai_word x, char *buf, size_t cap) {
  if (!ai_strp(x)) return false;
  struct ai_str *s = (struct ai_str*) x;
@@ -386,14 +386,14 @@ static lvm(lvm_newns) { Sp[0] = putcharm(ENOSYS); return Ip++, Continue(); }
 
 // --- the general POSIX fs surface (the posix_ symbol namespace; doc/posix.md L0,
 // staging step 1) -- these serve any program, not just the supervisor, so their C
-// symbols wear the posix_ prefix; the ai names stay the plain POSIX words.
+// symbols wear the posix_ prefix; the love names stay the plain POSIX words.
 // (stat path)    -> (size mtime mode) | () -- absence (or unreadability) is nothing.
 //                   size in bytes, mtime in MILLISECONDS (the (clock t) scale), mode
-//                   the raw st_mode charm: kind reads off the S_IFMT bits in ai
+//                   the raw st_mode charm: kind reads off the S_IFMT bits in love
 //                   ((& mode 61440): 32768 file, 16384 dir, 40960 link) and the
 //                   permission bits ride along.
 // (readdir path) -> the entry names, a list of strings ("." and ".." dropped), or ()
-//                   on failure. NO order promised (readdir order, prepended) -- sort in ai.
+//                   on failure. NO order promised (readdir order, prepended) -- sort in love.
 // (unlink path)  -> () ok | a POSITIVE errno | EINVAL misuse (the mkdir convention:
 //                   an effect op nets truthy exactly when something went wrong).
 // (lseek fd off whence) -> the new offset | -errno | -1 misuse (the value-op
@@ -456,7 +456,7 @@ static lvm(lvm_posix_unlink) { Sp[0] = host_posix_unlink(Sp[0]); return Ip++, Co
 // (setenv name val) -> () | positive errno | EINVAL misuse; a NON-STRING val UNSETS
 // (the absence lane: (setenv n ()) clears n from the environment).
 // (environ _)       -> the environment as a list of "NAME=value" strings (the raw
-//                      POSIX shape -- split at the first '=' in ai; no order promised).
+//                      POSIX shape -- split at the first '=' in love; no order promised).
 ai_noinline static ai_word host_posix_setenv(ai_word nw, ai_word vw) {
  char n[1024], v[4096];
  if (!str_cbuf(nw, n, sizeof n)) return putcharm(EINVAL);

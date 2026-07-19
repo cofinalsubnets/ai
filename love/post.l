@@ -9,7 +9,7 @@
 ; First tenant: gw.js-style PARSER COMBINATORS. A parser is (\ s y n) over a string s, with a SUCCESS
 ; continuation y = (\ rest payload) and a FAILURE continuation n = (\ rest); payloads are lists that
 ; `seq` concatenates. The leaves are `lit` (a literal prefix), `one` (one char by predicate) and `span`
-; (a maximal run) -- ai has no regex. crew/cook/cook.l grew this set (kept private to dodge the old "leak
+; (a maximal run) -- love has no regex. crew/cook/cook.l grew this set (kept private to dodge the old "leak
 ; collides with egg globals" worry -- now only `sat`/$ actually collide, and none of these do); it and
 ; crew/sat/dimacs.l now share THIS copy. `parse` requires the whole input consumed; `runp` is the lenient
 ; twin (keeps the payload, ignores trailing slack).
@@ -134,7 +134,7 @@
 (: (revcat l acc) (? (! (two? l)) acc (revcat (cup l) (link (cap l) acc))))
 
 ; bake -- snapshot the LIVE session to an image file: (bake "x.image") -> 1 | ().
-; wake it with `ai --wake x.image prog.l args..`: the woken session carries every
+; wake it with `love --wake x.image prog.l args..`: the woken session carries every
 ; global pinned before the bake (an app loaded warm -- its per-run load vanishes).
 ; a native (glazed) closure cannot serialize, so the glaze compile cache empties
 ; first (its entries re-JIT lazily in the woken session); the host nif (a rebind

@@ -6,13 +6,13 @@ settles by probing the built `kore`. last trued up 2026-07-06.
 
 ## the arc
 
-the distro plan (the ai-native POSIX environment over the Linux kernel) climbs
+the distro plan (the love-native POSIX environment over the Linux kernel) climbs
 three rungs, each independently shippable: **kore** (this one -- the busybox
 clone), a **vim clone** over cb + bao's edln/edraw seeds, and a **chibicc-class
 C compiler** last, scoped to *compiles ai.c*, never the kernel. the pieces that
 already existed -- cook (make), sh.l/bao (shell), holo (assembler), the terminal
 stack, init.l (pid 1) -- mean kore is the gap between the posix-pid1
-container and a livable system. the distro shape: kernel + static `ai` + .l
+container and a livable system. the distro shape: kernel + static `love` + .l
 files, busybox's multi-call trick natively.
 
 ## kore, the multi-call toolbox
@@ -21,7 +21,7 @@ ONE catted script (`out/host/kore`, `bin/kore` installs): the Makefile cats
 
     text.l core.l fs.l re.l sed.l proc.l diff.l ain.l cook.l asbook.l elf.l kore.l   (korefiles)
 
-behind a `#!/usr/bin/env -S ai` shebang. kore.l loads LAST and dispatches off the
+behind a `#!/usr/bin/env -S love` shebang. kore.l loads LAST and dispatches off the
 program seat of `cmdline` -- `kore TOOL ARGS..`, or symlink a tool's name to kore
 and argv[0] picks it (how the distro will shadow at will). the registry is a
 tablet, so tool names never collide with the globals they call (the `mkdir`
@@ -141,4 +141,4 @@ whitespace-splits stdin (quote-blind, documented) onto the command's tail
    none block the distro; add them when a real script wants them.
 
 after kore: the vim clone (rung 2), then the C compiler (rung 3) -- see the
-ai-distro arc. the multi-call `kore` is already the shape the distro boots with.
+love-distro arc. the multi-call `kore` is already the shape the distro boots with.

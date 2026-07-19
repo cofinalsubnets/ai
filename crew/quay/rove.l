@@ -11,7 +11,7 @@
 ; down -- pure state in, pure state out, one key per turn.
 ;
 ; run: out/host/love -l crew/quay/rove.l -e '(rove ())'
-; the engine core is pure ai (delve/fov/paint/crawl-* run headless, gated by
+; the engine core is pure love (delve/fov/paint/crawl-* run headless, gated by
 ; test/host/rove.l); only rove itself ties the tty (raw/winsize/cue? ride
 ; host/pty.c), so rove never joins the corpus.
 

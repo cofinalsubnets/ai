@@ -218,7 +218,7 @@ with no table row defaults to infix-at-two ([`prel.l:448`](../love/prel.l)), so
 `(< 0 (&& x (< x 10)))` under the flat right-fold, a latent mis-grouping. The two
 rows (`&& ||` at grip 30, the logical band) don't *add* infix; they **pin the
 grip below comparison** so the same expression groups `(&& (< 0 x) (< x 10))` —
-what infix `&&` should mean. It's live but unused (zero infix `&&`/`||` in ai
+what infix `&&` should mean. It's live but unused (zero infix `&&`/`||` in love
 source — every use is prefix `(&& a b)`), so the fix changes no existing parse.
 
 This composes with the macro for free **because opfix and macro expansion are
@@ -270,8 +270,8 @@ with arithmetic or comparison, and any unparenthesized `><`-with-band expression
 
 **Audited 2026-07-14 (line-local greps over `*.l`):** the risky shapes barely
 occur. Bare mixed arithmetic (`a * b + c`) — **0 sites**. Genuine infix
-`&&`/`||` — **0 sites** (every ai use is prefix `(&& a b)`; the raw grep's 156
-hits were all C `&&`, comments, or string literals). ai code parenthesizes
+`&&`/`||` — **0 sites** (every love use is prefix `(&& a b)`; the raw grep's 156
+hits were all C `&&`, comments, or string literals). love code parenthesizes
 mixed grouping aggressively — a habit the flat rule already trained — so the
 same-grip idioms above carry the weight and the precedence bands touch almost
 nothing. The greps are line-local, so a multi-line infix expression could hide;

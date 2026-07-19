@@ -18,7 +18,7 @@
 ; rebind; njit-loop/njit-loop-n call the captured base-ev -> no jit<->ev re-entry. Load AFTER
 ; love/glaze/emit.l (uses emit/cgv/ld-x/ld-i/epilogue/loopcode/nat). ⚠ x86-64.
 (: sfuel (tablet 0))   ; autospec's unfold-fuel -- its OWN global (a sibling-captured value-local in the letrec below misses in the hatched ev; smix re-seeds it per specialization, so the shared tablet is safe)
-(: glaze-loaded? (lit? (peep book 'glaze 0))   ; RE-LOAD detector, read BEFORE this load defglob's anything: the `glaze` MODULE book on the book => the glaze is installed (the file is being cat'd on top of the baked glaze; export.l pinned the book). Used at the `ev` rebind below to make a re-load IDEMPOTENT -- keep the baked glaze, don't reinstall -- so `cat auto.l prog | ai` just runs prog. (Loading the compiler's own source through itself otherwise recompiles its helpers wrong; tracked separately.)
+(: glaze-loaded? (lit? (peep book 'glaze 0))   ; RE-LOAD detector, read BEFORE this load defglob's anything: the `glaze` MODULE book on the book => the glaze is installed (the file is being cat'd on top of the baked glaze; export.l pinned the book). Used at the `ev` rebind below to make a re-load IDEMPOTENT -- keep the baked glaze, don't reinstall -- so `cat auto.l prog | love` just runs prog. (Loading the compiler's own source through itself otherwise recompiles its helpers wrong; tracked separately.)
    base-ev (: G (peep book 'glaze 0) (? (lit? G) (G 'base-ev) ev))   ; the PURE interpreter, captured ONCE: first load -> ev (interpreter); a RE-LOAD (glaze cat'd on the baked glaze) has ev=auto-ev already, so take the interpreter out of the MODULE book (else base-ev becomes the glaze and autospec's static fold re-enters it)
    arch (intern love-arch)                ; the host CPU as the assembler target ('x64 / 'arm64); glaze loads only on these
    x86? (id? arch 'x64)                 ; gates the still-x86-only lanes (float result, counted loops, float grids)
@@ -580,7 +580,7 @@
    ;     N times: ((N f) x) = f^N(x). Lower it to the nested application at compile time:
    ;     (2 (+ i) i) -> (i + i + i). Pure arithmetic the group lane glazes -- where church is
    ;     otherwise OPAQUE to the glaze (every application dispatches through the lisp `num-ap` closure,
-   ;     so it stays interpreted). EXACT -- this IS ai's church semantics: (0 f x)=x (0=const-1->1=id),
+   ;     so it stays interpreted). EXACT -- this IS love's church semantics: (0 f x)=x (0=const-1->1=id),
    ;     (1 f x)=(f x), and dch-nest builds f^N innermost-out. Disambiguated from POWER by "the operand
    ;     is a function": (2 i)/(2 5)/(2 3 4) carry a NON-function operand (a numeral, or tally /= 2) so
    ;     dch-fn? is false -> left as exponentiation/the tower. A lambda operand is beta-collapsed by
@@ -1187,10 +1187,10 @@
                                   (id? op '+) (: a (loT2 (op2 e 0) env nm) b (loT2 (op2 e 1) env nm) (link (mkadd <a <b) (mkadd >a >b)))
                                   (id? op '-) (: a (loT2 (op2 e 0) env nm) b (loT2 (op2 e 1) env nm) (link (mksub <a <b) (mksub >a >b)))
                                   (id? op '*) (: a (loT2 (op2 e 0) env nm)
-                                                 (? ((op2 e 0) = (op2 e 1))                                       ; SQUARING (z*z): im = 2*ar*ai, ONE product (not ar*ai + ai*ar); also better ILP than the M+M chain
-                                                    (: ar <a ai >a (link (mksub (mkmul ar ar) (mkmul ai ai)) (mkmul (mkmul 2.0 ar) ai)))
-                                                    (: b (loT2 (op2 e 1) env nm) ar <a ai >a br <b bi >b
-                                                       (link (mksub (mkmul ar br) (mkmul ai bi)) (mkadd (mkmul ar bi) (mkmul ai br))))))
+                                                 (? ((op2 e 0) = (op2 e 1))                                       ; SQUARING (z*z): im = 2*ar*love, ONE product (not ar*love + love*ar); also better ILP than the M+M chain
+                                                    (: ar <a love >a (link (mksub (mkmul ar ar) (mkmul love love)) (mkmul (mkmul 2.0 ar) love)))
+                                                    (: b (loT2 (op2 e 1) env nm) ar <a love >a br <b bi >b
+                                                       (link (mksub (mkmul ar br) (mkmul love bi)) (mkadd (mkmul ar bi) (mkmul love br))))))
                                   (id? op '?) (: c (loR (op2 e 0) env nm) a (loT (op2 e 1) env nm) b (loT (op2 e 2) env nm)
                                                  (link `('? c <a <b) `('? c >a >b)))
                                   (link e e))))

@@ -707,7 +707,7 @@
 
    ; a constant-expression folder (for _Static_assert): an integer | () if the
    ; expression is not a compile-time constant. sizeof/enum already folded to num.
-   ; values are 64-bit machine PATTERNS (ai's shifts and bitops wrap at the word,
+   ; values are 64-bit machine PATTERNS (love's shifts and bitops wrap at the word,
    ; so charms/suns fold like the hardware); a NARROW cast masks to its width
    ; (sign-extending the signed ones), and >> under an unsigned LEFT goes LOGICAL
    ; via mask -- (uintptr_t)-1 >> 2 is max-charm, not -1 (the arithmetic-shift

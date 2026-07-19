@@ -1,6 +1,6 @@
 ; judge.l -- inle's local VERIFIER, the companion to oracle.l's remote brain.
 ; oracle.l ASKS the model (a question out over UDP/curl); judge.l SCORES what the
-; model writes back: given a candidate ai program, it grades a LADDER of signals and
+; model writes back: given a candidate love program, it grades a LADDER of signals and
 ; returns one verdict + two scalar lenses. this is the reward oracle an RL loop
 ; hangs off AND the filter a differential fuzzer hangs off -- the same object, read
 ; two ways (the polarities are opposite on purpose).
@@ -9,7 +9,7 @@
 ;
 ; the ladder, cheapest first:
 ;   parses  -- the reader accepts every form (in-process, via `sound`; no eval)
-;   runs    -- host `ai -e` completes with no scare / missing-nom / overlay clash
+;   runs    -- host `love -e` completes with no scare / missing-nom / overlay clash
 ;   hung    -- ... or it ran past a wall-clock cap (an infinite loop -- a real bug)
 ;   agree   -- host and love0 (the self-hosted bootstrap) print the SAME output
 ; the run/hang/agree rungs execute the candidate in a SUBPROCESS under `timeout`, so
@@ -18,7 +18,7 @@
 ; (kernel-tco1-gc, glaze-intparam-guard were both target divergences).
 ;
 ; NB: relative binary paths -> run from the repo root. one `-e` form per candidate
-; (a `:` block counts as one). pure ai + the `run`/`timeout` shell-out inle already
+; (a `:` block counts as one). pure love + the `run`/`timeout` shell-out inle already
 ; uses for curl -- no new nif.
 
 (: (bytes-of s) (map (\ i (s i)) (jot (tally s)))         ; a string's byte colist (for `tap`)

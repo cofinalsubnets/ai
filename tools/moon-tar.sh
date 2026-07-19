@@ -19,7 +19,7 @@ set -e
 
 ho=out/host
 mc=$ho/mooncc
-ai=$ho/ai
+love=$ho/love
 TARSRC=${TARSRC:-out/dl/tar-1.13}
 
 if [ ! -f "$TARSRC/config.h" ]; then
@@ -27,7 +27,7 @@ if [ ! -f "$TARSRC/config.h" ]; then
   echo "          set TARSRC=<a ./configure'd tar-1.13 tree> to run (see tools/moon-tar.sh)."
   exit 0
 fi
-for bin in "$mc" "$ai"; do
+for bin in "$mc" "$love"; do
   [ -x "$bin" ] || { echo "moon-tar: missing $bin -- run 'make $ho/mooncc host'"; exit 1; }
 done
 command -v tar  >/dev/null 2>&1 || { echo "moon-tar: no system tar to verify against -- skipped"; exit 0; }
@@ -63,7 +63,7 @@ for f in crew/moon/lib/math/*.c; do
   $mc -Icrew/moon/lib/math -Icrew/moon/include -c "$f" "$d/m_$b.o" || { echo "FAIL mooncc -c $f"; exit 1; }
 done
 { cat crew/kore/text.l crew/kore/core.l crew/kore/asbook.l crew/holo/elf.l crew/holo/obj.l crew/moon/lib/mksys.l
-  echo "(mksys \"$d/sys.o\")"; } | $ai || { echo "FAIL mksys sys.o"; exit 1; }
+  echo "(mksys \"$d/sys.o\")"; } | $love || { echo "FAIL mksys sys.o"; exit 1; }
 
 $mc $objs "$d/nolibc.o" "$d"/m_*.o "$d/sys.o" -o "$d/tar" || { echo "FAIL holo link tar"; exit 1; }
 echo "  linked $(wc -c < "$d/tar") bytes -> $d/tar"
@@ -73,7 +73,7 @@ tarbin=$(cd "$d" && pwd)/tar
 "$tarbin" --version >/dev/null 2>&1 || { echo "FAIL tar --version"; exit 1; }
 
 w=$d/work; rm -rf "$w"; mkdir -p "$w/src/sub"
-printf 'hello from ai-tar\n'          > "$w/src/a.txt"
+printf 'hello from love-tar\n'          > "$w/src/a.txt"
 printf 'second file, some content\n'  > "$w/src/sub/b.txt"
 head -c 4096 /dev/urandom             > "$w/src/blob.bin"
 ln -s a.txt "$w/src/link"

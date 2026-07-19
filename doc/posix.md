@@ -1,9 +1,9 @@
-# posix — a POSIX OS layer for ai user programs
+# posix — a POSIX OS layer for love user programs
 
-A design map. The goal: ai user programs (and the ai shell) get a real POSIX
+A design map. The goal: love user programs (and the love shell) get a real POSIX
 environment — files, processes, pipes, signals, sockets — so people can write real
 apps. The guiding decision (user, 2026-06-17): **don't reimplement POSIX; expose
-the one already under us.** On the host, ai is already a Unix process — the OS layer
+the one already under us.** On the host, love is already a Unix process — the OS layer
 isn't something to build, it's something to *surface*. And it's **host-agnostic**:
 target the POSIX standard, not a kernel, so the same nifs run on Linux, a BSD, or
 macOS (apt — `ain` is an OpenBSD `nc` clone).
@@ -26,7 +26,7 @@ backends swap underneath.
 
 ### L0 — ride the host Unix (the killer feature)
 
-ai-the-host-process already calls `read`/`write`/`malloc`. L0 widens that to the
+love-the-host-process already calls `read`/`write`/`malloc`. L0 widens that to the
 POSIX surface as nifs, exactly like ain's `connect`/`listen`/`accept`:
 
 > every host nif is `host_X` (an `ai_noinline` syscall worker) + `lvm_X` (the VM
@@ -34,12 +34,12 @@ POSIX surface as nifs, exactly like ain's `connect`/`listen`/`accept`:
 > (auto-globbed — no ai.c/ai.h/main.c edit; main.c is core). The fd→port path is
 > free: `ai_io_alloc(g,fd)` wraps any fd as a port with a close finalizer, and
 > read/write then come free via getc/putc. The general-POSIX nifs wear the
-> `posix_` C-symbol prefix (host/init.c: `lvm_posix_stat` &c); the ai names stay
+> `posix_` C-symbol prefix (host/init.c: `lvm_posix_stat` &c); the love names stay
 > the plain POSIX words.
 
-The payoff: **the ai shell becomes a real shell whose external commands are the
+The payoff: **the love shell becomes a real shell whose external commands are the
 host's programs.** `(exec "ls" '("-l"))`, a `(pipe)` between two `(fork)`ed children,
-job control — ai runs `ls`/`grep`/`git` and pipes between them. "Use the host Unix as
+job control — love runs `ls`/`grep`/`git` and pipes between them. "Use the host Unix as
 the shell substrate" — you get a usable Unix without writing one.
 
 Gating mirrors ain: host-only `#ifdef`; the kernel (`kmain.c`) and wasm don't link
@@ -64,9 +64,9 @@ so L2 grows from there. Largest effort; post-everything.
 
 ## The concept → primitive map
 
-Most POSIX concepts already have an ai shape — L0 just wires them to the host:
+Most POSIX concepts already have a love shape — L0 just wires them to the host:
 
-| POSIX                          | ai surface / backing                                   |
+| POSIX                          | love surface / backing                                   |
 |--------------------------------|--------------------------------------------------------|
 | process / thread               | **task** — `spawn`/`wait`/`done?`/`chill` (the cooperative scheduler) |
 | `fork`/`exec`/`waitpid`/`_exit`| new L0 nifs; `exec` over the host `execve`             |
@@ -100,7 +100,7 @@ Two mappings are the elegant ones, and both are *already built*:
    or `()` for absence; `lseek` rides the raw-fd `openfd` lane (ports buffer).
 2. **process nifs** — `fork`/`exec`/`waitpid`/`_exit`/`pipe`/`dup2`/`kill`. The core of
    "use the host as a shell."
-3. **the shell uses it** — extend the ai shell (#8 cli.l → shell.l, #10) to run external
+3. **the shell uses it** — extend the love shell (#8 cli.l → shell.l, #10) to run external
    programs: PATH lookup, `fork`+`exec`, pipelines, redirection, `$?`/exit codes,
    env. *This is the "Linux/BSD as a shell" deliverable.*
 4. **signals → conditions + job control** — DONE: `(signal sig disp)` (sigaction
@@ -127,17 +127,17 @@ Sockets are already covered by ain; fold them in as the network slice.
 
 ## Open questions
 
-- **`fork` semantics** — ai's heap is a two-space copying GC; `fork` is a host-process
-  primitive (copy-on-write at the OS level), orthogonal to the ai heap (the child gets
+- **`fork` semantics** — love's heap is a two-space copying GC; `fork` is a host-process
+  primitive (copy-on-write at the OS level), orthogonal to the love heap (the child gets
   its own address space from the kernel). Confirm the GC and the forked child coexist
   — likely fine since `fork` copies the whole process, but exec-after-fork is the safe
-  pattern; a fork *without* exec (two live ai VMs) needs thought.
+  pattern; a fork *without* exec (two live love VMs) needs thought.
 - **task vs process** — keep them distinct: a **task** is an in-VM green thread
   (`spawn`/`chill`); a **process** is a host pid (`fork`/`kill pid`). Never cross them
   (the `chill` task vs `kill` process split is already the plan).
 - **portability spread** — POSIX is the target, but readdir/stat struct layouts and
   errno values differ across Linux/*BSD/mac. Wrap at the call boundary (the `call_X`
-  worker normalizes), surface a stable ai shape.
+  worker normalizes), surface a stable love shape.
 - **L0 vs L1 timing** — L0 (libc) ships fastest and is what proves the API. L1
   (freestanding) is a backend swap, do it once the surface settles.
 

@@ -191,7 +191,7 @@
        (heq (apon (apon s0 pb) qb) (apon (apon s0 cq) cp))
        (heq (apon (apon s0 pb) qb) '(u c w e))))
 
- ; the elements are FORMS, not lines -- the ai-native grain: a hunk swaps a whole
+ ; the elements are FORMS, not lines -- the love-native grain: a hunk swaps a whole
  ; definition and nothing above cares what an element IS.
  _ (: fs '((f a) (g b) (main ()))
       fp (hunk 1 '((g b)) '((g c) (h d)))

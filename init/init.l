@@ -1,12 +1,12 @@
-; --- init: a service supervisor modeled in ai (a runnable sketch) ---
-; the EXECUTABLE companion to the "ai as pid 1" idea -- the Tier-1 init (runit/s6/
+; --- init: a service supervisor modeled in love (a runnable sketch) ---
+; the EXECUTABLE companion to the "love as pid 1" idea -- the Tier-1 init (runit/s6/
 ; dinit class: own unit format, no D-Bus), the Linux-altitude sibling of inle
 ; (port/inle/inle.l, the freestanding-kernel altitude). SAME program, same shape:
 ; a perceive->decide->act supervisor with a watchdog over checkpointable state. inle
 ; drives green tasks + a NIC; init drives PROCESSES + signals over the host kernel's
 ; stack. the supervisor IS inle's watchdog (supervise/mission) generalized to N units.
 ;
-; like inle.l and boot/tag.l this is a SKETCH -- it models the parts that STAY ai so
+; like inle.l and boot/tag.l this is a SKETCH -- it models the parts that STAY love so
 ; the shape runs and is probed on the host. there are now TWO lanes:
 ;   (demos 0) -- the MODELED supervisor: a deterministic tour where a "service" is a
 ;     green task and a crash is a `scare` the watchdog `help` welps to () (the SAME
@@ -26,12 +26,12 @@
 ; the non-blocking waitpid reaper (spawn/hear). REMAINING: signalfd (SIGCHLD/SIGTERM
 ; become perceive events, merged with timers by ai_wait_fds exactly like {nic, clock}),
 ; mount (early /proc, /sys, devtmpfs), and the cgroup-v2 writes. everything BELOW that
-; is this file -- the dependency graph, the restart policy, the checkpoint -- already ai.
+; is this file -- the dependency graph, the restart policy, the checkpoint -- already love.
 
 (: (note s) (: _ (puts s) (puts "\n"))               ; the narrator: a line to the console
 
    ; --- a unit is an IMMUTABLE list (name kind cmd restart deps) --- show/read
-   ; checkpoints it for free (the inle.md rule: state is an ai value, persistence is
+   ; checkpoints it for free (the inle.md rule: state is a love value, persistence is
    ; show/read). `kind` is 'oneshot (a real argv for `run`) or 'service (a thunk modeling
    ; the long-running process). `restart` is 'no | 'on-fail | 'always (systemd's Restart=).
    ; `deps` is the After= list -- names that must be up before this one starts.
@@ -215,25 +215,25 @@
      (: e (newns 0)
         _ (note (? e "-- pid1 bringup: (no unpriv userns here; a real pid1 is root) --"
                      "-- pid1 bringup: private user+mount ns (root-in-ns) --"))
-        _ (try-mount "tmpfs" "/tmp/ai-run"  "tmpfs")       ; works unprivileged -> proves mount
-        _ (try-mount "proc"  "/tmp/ai-proc" "proc")        ; needs a pid-ns too -> EPERM here
+        _ (try-mount "tmpfs" "/tmp/love-run"  "tmpfs")       ; works unprivileged -> proves mount
+        _ (try-mount "proc"  "/tmp/love-proc" "proc")        ; needs a pid-ns too -> EPERM here
         _ (note "-- cgroup-v2: mkdir a group, write a pid to cgroup.procs --")
-        _ (: d "/sys/fs/cgroup/ai.demo"
+        _ (: d "/sys/fs/cgroup/love.demo"
              _ (mkdir d 493)
              r (cg-write (+ d "/cgroup.procs") (+ (show (getpid 0)) "\n"))
              (note (+ "  place self in " (+ d (? (id? r 'ok) " -> ok" " -> needs root / a delegated subtree")))))
         0))
 
 ; --- BOOT AS PID 1 (a container) ------------------------------------------------
-; the milestone the file is named for: ai running as process 1. launch it in a
+; the milestone the file is named for: love running as process 1. launch it in a
 ; private pid+user+mount namespace -- `make init-container`, or any runtime that
-; makes the entrypoint pid 1 (docker/systemd-nspawn). then ai IS init:
+; makes the entrypoint pid 1 (docker/systemd-nspawn). then love IS init:
 ;   * getpid is 1.
 ;   * mount works -- we are root in a PID namespace, so proc mounts cleanly (the
 ;     EPERM in boot-system was the no-pid-ns case; here every mount is `ok`).
-;   * ai REAPS REPARENTED ORPHANS -- pid 1's defining duty. when a process's parent
+;   * love REAPS REPARENTED ORPHANS -- pid 1's defining duty. when a process's parent
 ;     dies the kernel reparents its children to pid 1, which must waitpid them or
-;     they leak as zombies forever. (hear _) is waitpid(-1), so ai harvests a pid it
+;     they leak as zombies forever. (hear _) is waitpid(-1), so love harvests a pid it
 ;     NEVER SPAWNED. run NOT as pid 1, the orphan reparents elsewhere and never shows.
 ; (pid1 0) is the deterministic proof tour; (perceive 0) is the live supervisor
 ; (park on the signalfd, restart per policy, SIGTERM -> graceful shutdown).
@@ -258,17 +258,17 @@
 
    (pid1 _)
      (: me (getpid 0)
-        _ (note (+ "-- ai as PID " (+ (show me)
+        _ (note (+ "-- love as PID " (+ (show me)
                   (? (= me 1) " -- a real init --" " (NOT pid 1: use `make init-container`) --"))))
         _ (note "-- mount the early filesystems (root in a pid-ns -> proc mounts) --")
-        _ (mount1 "tmpfs" "/tmp/ai-run"  "tmpfs")
-        _ (mount1 "proc"  "/tmp/ai-proc" "proc")
+        _ (mount1 "tmpfs" "/tmp/love-run"  "tmpfs")
+        _ (mount1 "proc"  "/tmp/love-proc" "proc")
         pids (tablet 0)
         _ (note "-- spawn a child that orphans a grandchild, then hear (pid 1's duty) --")
         p (spawn (L "sh" "-c" "(sleep 0.2; exit 7) & exit 0"))    ; parent exits 0; grandchild orphaned
         _ (pin pids p 'orphan-parent)
         n (hear-tour pids 0 2 800)                                ; parent settles fast; the orphan after its sleep
-        _ (note (+ "-- reaped " (+ (show n) " children, one a reparented orphan -- ai supervised pid 1 --")))
+        _ (note (+ "-- reaped " (+ (show n) " children, one a reparented orphan -- love supervised pid 1 --")))
         0))
 
 ; --- the demos, as a CALLABLE function (not auto-run) ---
@@ -287,7 +287,7 @@
         (unit 'brittle 'service (svc 'brittle 9)  'no      ())                  ; crashes, Restart=no -> failed
         (unit 'hello   'oneshot (L "echo" "-n" "init: a real child says hi")
                                                   'no      (L 'app)))           ; a REAL forked child, after app
-      _   (note "-- ai-init: bring up the unit graph (deps first; services modeled, oneshot real) --")
+      _   (note "-- love-init: bring up the unit graph (deps first; services modeled, oneshot real) --")
       reg (boot units)
       _   (note "-- final state (the checkpoint -- a show/read-able value) --")
       _   (each (snap reg (map u-name units))

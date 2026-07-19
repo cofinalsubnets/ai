@@ -6,13 +6,13 @@
 # Stage-1 socket nif (connect/listen/accept/shutdown) plus the two .l pump loops
 # and their teardown.
 #
-#   sh test/net/loopback.sh <ai-binary> [port]
+#   sh test/net/loopback.sh <love-binary> [port]
 #
 # Exits 0 + prints "nettest: PASS" on a clean round-trip; nonzero + a diff on any
 # mismatch, error, or hang (bounded by a readiness deadline).
 set -u
 
-AI="${1:?usage: loopback.sh <ai-binary> [port]}"
+AI="${1:?usage: loopback.sh <love-binary> [port]}"
 PORT="${2:-7390}"
 AK="tools/ain.l"   # prel is baked into the egg -- no -l love/prel.l preload
 

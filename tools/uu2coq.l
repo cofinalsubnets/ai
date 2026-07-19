@@ -1,4 +1,4 @@
-; uu2coq: ai's internal proof corpus, exported to Rocq -- AT SCALE. The PROOF half
+; uu2coq: love's internal proof corpus, exported to Rocq -- AT SCALE. The PROOF half
 ; of the verification bridge (cf. tools/spec2coq.l, which exports concrete ASSERTS).
 ;
 ; This SWEEPS test/uu.l: it loads uu's kernel (so every defn there is type-checked
@@ -185,7 +185,7 @@
        "(* === bridge: uu's nat ops ARE Coq's standard ones, so the laws above land on" (string 10)
        "   Nat.add / Nat.mul -- the operations spec.v's own laws speak. uu_add_std/uu_mul_std" (string 10)
        "   (induction over the shared recursion) tie them to the standard vocabulary, by which" (string 10)
-       "   the headline arithmetic laws are RESTATED on Nat.* and discharged FROM ai's exports. *)" (string 10)
+       "   the headline arithmetic laws are RESTATED on Nat.* and discharged FROM love's exports. *)" (string 10)
        "Lemma paths_to_eq : forall (A : Type) (a b : A), paths a b -> a = b." (string 10)
        "Proof. intros A a b p; destruct p; reflexivity. Qed." (string 10)
        "Lemma uu_add_std : forall n m, uu_add n m = Nat.add n m." (string 10)

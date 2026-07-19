@@ -2,7 +2,7 @@
 ; (crew/lux/layout.l), the manageHook (crew/lux/manage.l), the keymap (crew/lux/keys.l), and EWMH
 ; (crew/lux/ewmh.l) over the X protocol (crew/lux/wire.l), configured by crew/lux/config.l.
 ; Concatenate them:
-;   cat crew/lux/{core,layout,wire,ewmh,manage,keys,config,lux}.l | ai
+;   cat crew/lux/{core,layout,wire,ewmh,manage,keys,config,lux}.l | love
 ; (against `Xephyr :7 -ac`, or a real server with lux-auth set). Rung 8: the
 ; driver reads the CONFIG -- border width and colors (focused/normal pixels),
 ; workspaces, the layout stack, hooks, keymap, startup spawns -- and runs until
@@ -150,9 +150,9 @@
           _ (line (+ "lux: view " (+ (show t) (+ " " (show (wsrow sh2))))))
           sh2))
    (msg-or old new) (? new new old)                                              ; keep the old layout when a message is unhandled (())
-   (lux-self u)                                                                   ; our script path, either argv shape: plain `ai lux`
+   (lux-self u)                                                                   ; our script path, either argv shape: plain `love lux`
     (: (go m) (? (! (two? m)) (cap argv)                                         ; gives (script ..); the -l shebang gives the RAW OS
-                 (= (cap m) "-l") (? (two? (cup m)) (caup m) (cap argv))         ; argv (ai -l script ..) -- take the -l operand
+                 (= (cap m) "-l") (? (two? (cup m)) (caup m) (cap argv))         ; argv (love -l script ..) -- take the -l operand
                  (go (cup m)))
        (go argv))
 

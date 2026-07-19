@@ -5,7 +5,7 @@
    For every dest in the 16-register file x a spread of immediates hitting all
    three forms (b8 imm32 zero-extend / C7 imm32 sign-extend / movabs imm64) and
    their range boundaries, it computes the reference bytes with the proven
-   `encode_li`, then prints an ai program asserting holo's holo-hex is BYTE-
+   `encode_li`, then prints a love program asserting holo's holo-hex is BYTE-
    IDENTICAL. "P / P PASS" means holo's immediate-load FORM CHOICE + serialization
    is exactly what the machine-checked reference produces.
 

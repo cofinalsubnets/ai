@@ -2,7 +2,7 @@
 // a cask, read and written in place -- peek/poke-class honesty, the caller
 // keeps its layouts straight) and an OFFSET mmap (a DRM dumb buffer maps at
 // the magic offset MAP_DUMB hands back; plain mapfd is pinned to 0).
-// crew/haven/drm.l speaks the actual DRM vocabulary in ai over these two.
+// crew/haven/drm.l speaks the actual DRM vocabulary in love over these two.
 // Self-contained host nif file: auto-globbed + AI_NIF-registered, no core
 // edit -- the same discipline as net.c/pty.c/haven.c.
 //

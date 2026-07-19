@@ -1,6 +1,6 @@
 ; crew/lux/law.l -- xmonad's QuickCheck properties for crew/lux/core.l, in exact arithmetic,
 ; plus a seeded fuzz. Reads the LEAKED globals from crew/lux/core.l (concatenate them:
-; `cat test/00-init.l crew/lux/core.l crew/lux/law.l | ai`, the `make test_lux` gate). Split
+; `cat test/00-init.l crew/lux/core.l crew/lux/law.l | love`, the `make test_lux` gate). Split
 ; into small independent top-level `:` forms -- each self-contained, nothing new
 ; leaks, and no single form grows big enough to stress the whole-form compiler.
 

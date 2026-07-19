@@ -6,7 +6,7 @@
 ; binary computes the math" = not slop.)
 ;
 ; The reference is a direct transcription of spec.v's shift/subst, evaluated under
-; ai's OWN strategy: N-ARY closures (nested lambdas collapse to one arity-n closure)
+; love's OWN strategy: N-ARY closures (nested lambdas collapse to one arity-n closure)
 ; with CBV, weak (no reduction under a binder) and SATURATING (a beta step fires only
 ; when all n args are present; an under-applied closure is held unreduced -- exactly
 ; as ev shows ((B A) stays (B A) until the 2nd arg lands).
@@ -14,7 +14,7 @@
 ; Terms are random CLOSED AFFINE lambda terms (each bound var used <=1 => strongly
 ; normalizing, so both ev and the reference terminate). Comparison is EXTENSIONAL:
 ; both results are applied to distinct marker symbols (a symbol applied is const-1,
-; so no church-numeral blowup), grounding away the only legitimate difference -- ai
+; so no church-numeral blowup), grounding away the only legitimate difference -- love
 ; holding a partial application lazily vs the reference materializing the equal
 ; closure. This is representation-independent and robust at every term size; a
 ; deliberately wrong subst index (a mutation test) drops it well below 100%, so it
@@ -37,7 +37,7 @@
       (= (dtag t) 1) (dlam (tsubst (+ j 1) (tshift 1 0 s) (dbody t)))
       (dapp (tsubst j s (dfun t)) (tsubst j s (darg t))))
 
- ; CBV / n-ary / weak / saturating evaluation -- ai's strategy
+ ; CBV / n-ary / weak / saturating evaluation -- love's strategy
  (darity t) (? (= (dtag t) 1) (+ 1 (darity (dbody t))) 0)
  (rebuild t args) (? !args t (rebuild (dapp t (cap args)) (cup args)))
  (apply-n t args n) (? (< n 1) t (apply-n (tsubst 0 (cap args) (dbody t)) (cup args) (- n 1)))
@@ -52,7 +52,7 @@
       (rebuild t args))
  (teval t) (evs 4000 t 0)
 
- ; render de Bruijn -> ai \-expression (binder names = de Bruijn LEVELS, capture-free)
+ ; render de Bruijn -> love \-expression (binder names = de Bruijn LEVELS, capture-free)
  lam-sym (cap '(\ x))
  (vname i) (intern (+ "v" (show i)))
  (render d t)

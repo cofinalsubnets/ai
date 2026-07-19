@@ -3,9 +3,9 @@
 ; amplification (how many times the live set gets recopied) on real workloads.
 ;
 ; needs a -DAI_STAT host (gauge's stat cells read 0 otherwise). build one, then:
-;   clang ... -DAI_STAT ... -o /tmp/ai-stat ai.c host/*.c -lm
-;   cat tools/gcstat.l | /tmp/ai-stat                                   ; interpreted
-;   cat love/glaze/emit.l love/glaze/auto.l tools/gcstat.l | /tmp/ai-stat   ; glazed (x86-64)
+;   clang ... -DAI_STAT ... -o /tmp/love-stat ai.c host/*.c -lm
+;   cat tools/gcstat.l | /tmp/love-stat                                   ; interpreted
+;   cat love/glaze/emit.l love/glaze/auto.l tools/gcstat.l | /tmp/love-stat   ; glazed (x86-64)
 ;
 ; gauge 0 -> @(len heap stack n_gc max_len max_heap n_seen n_evac):
 ;   mortality = (n_seen - n_evac)/n_seen ; copy-amp = n_evac/max_heap.

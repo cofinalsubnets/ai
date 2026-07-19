@@ -1,4 +1,4 @@
-; uu2lean: ai's internal proof corpus, exported to LEAN 4 -- the SECOND backend of
+; uu2lean: love's internal proof corpus, exported to LEAN 4 -- the SECOND backend of
 ; the verification bridge (cf. tools/uu2coq.l, the Rocq leg). Same uu.l, same
 ; dependency-closure machinery; a DIFFERENT kernel re-checks the SAME proof terms.
 ;

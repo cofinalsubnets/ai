@@ -1,5 +1,5 @@
 // host/image_baked.c -- the in-binary slot for the post-boot heap image (doc/snapshot.md).
-// A fixed reserve in its own .image section, filled POST-LINK by the Makefile: `ai` dumps its own
+// A fixed reserve in its own .image section, filled POST-LINK by the Makefile: `love` dumps its own
 // warmed heap and `objcopy --update-section .image=...` patches the bytes back in. The binary then
 // loads ITS OWN dump at startup (main.c) -- identical layout by construction, so the codec's
 // same-binary +delta relocation just works. Sentinel-initialized (not {0}) so the reserve lands in

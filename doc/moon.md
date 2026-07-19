@@ -1,10 +1,10 @@
 # moon (mooncc) -- rungs 3-4 of the distro, the C compiler + gcc-free seam: THE PLAN
 
-the plan of record for the chibicc-class C compiler, written in ai, emitting
+the plan of record for the chibicc-class C compiler, written in love, emitting
 through the holo books. drafted 2026-07-06; stage 0 LANDED the same day
 (crew/moon/{lex,parse,gen,cc}.l + law.l, `make test_moon` -- the gcc
 differential is born). trued up as stages land. cc is its OWN app `mooncc`
-(a catted `#!/usr/bin/env -S ai -l` script, NOT baked into the kore cat -- so a
+(a catted `#!/usr/bin/env -S love -l` script, NOT baked into the kore cat -- so a
 cc edit rebuilds only mooncc, never kore, and no kore rebuild in another session can
 tear the compiler mid-run); it was `kore cc` through 7c-iii part 1.
 
@@ -12,7 +12,7 @@ tear the compiler mid-run); it was `kore cc` through 7c-iii part 1.
 
 `cc` compiles **ai.c** -- and eventually the whole out/host build (ai.h's
 inline world, host/*.c) -- into objects the system linker accepts, on x86-64
-first, arm64 by parity. the closure it buys: ai-in-ai compiles the compiler
+first, arm64 by parity. the closure it buys: love-in-love compiles the compiler
 that compiles ai.c, so userland is fully self-hosting and the KERNEL is the
 one imported artifact.
 
@@ -54,22 +54,22 @@ unchanged. a foreign .o (gcc's .comment/.eh_frame zoo) scares off honestly
 ifunc/TLS tarpit and stays OFF the ladder. the whole 84-program battery
 passes linked through it (compile -c, link, run, gcc differential), weak
 default/override and the nif bracket walk are gated in test_moon, and the full
-14-object selfhost set (585KB ai.o included) links in under a second --
+14-object selfhost set (585KB love.o included) links in under a second --
 refusing at `sqrt`, the first libm undef, which is exactly rung 4's seam:
 the raw-syscall host + in-tree sin/cos/log, and gcc is gone entirely.
 
-**LADDER RUNG 4 LANDED 2026-07-12: THE GCC-FREE ai.** the standalone chain is
+**LADDER RUNG 4 LANDED 2026-07-12: THE GCC-FREE love.** the standalone chain is
 now entirely ours -- mooncc compiles ai.c + host/*.c + our own libc, mksys lays
 the machine tail, and crew/holo/link.l binds them: no gcc, no glibc, no ld.
 three new pieces under crew/moon/lib/:
   * `nolibc.c` -- the raw libc. ~90 wrappers straight off the x86-64 syscall
     table (through the one `__ai_sys` trampoline), a mini stdio (a FILE is a
     fd plus a flush buffer; stdout line-buffers 8KB, the one formatter speaks
-    %s/%d/%u/%x/%c/%p with the l/z widths -- no floats, ai prints its own),
+    %s/%d/%u/%x/%c/%p with the l/z widths -- no floats, love prints its own),
     a K&R first-fit malloc over 1MB mmap arenas, dirent over getdents64 (the
     kernel record IS `struct dirent`), the glibc-152B-to-kernel-32B sigaction
     fold with our own restorer, a numeric getaddrinfo (localhost + dotted
-    quad), env/exec/termios/pty. single-threaded like ai: errno is one int,
+    quad), env/exec/termios/pty. single-threaded like love: errno is one int,
     no locks. strtol/strtod keep libc/str.c's bodies (the rung-4 differential
     measured them corpus-green against glibc's).
   * `mksys.l` -- lays sys.o, the four things C cannot say: the 7-slot syscall
@@ -118,7 +118,7 @@ the subset is not "C11-ish" by taste -- it is measured off the target:
   flat via sibling-call optimization (ai_tco=1). BUT love0 already builds and
   passes the whole corpus with -Dai_tco=0 -- the return-based mode -- so
   guaranteed sibcalls are a PERFORMANCE stage, not a correctness gate. the
-  first cc-built ai runs ai_tco=0; a later stage adds guaranteed tail calls
+  first cc-built love runs ai_tco=0; a later stage adds guaranteed tail calls
   (direct + indirect, the lvm shape) and flips ai_tco=1.
 
 ## the architecture (crew/moon/, every piece pure and lawed)
@@ -185,7 +185,7 @@ two ideas to keep warm as the stages climb, neither committed yet:
   observation that seeds it: this compiler's core IS B-shaped already --
   one word type, typeless 64-bit registers, C's types a checking-and-
   conversion layer the stage-2b work laid ON TOP of the word core (sized
-  memory ops at the edges, words in the middle). ai itself is B-kin the
+  memory ops at the edges, words in the middle). love itself is B-kin the
   same way (the word is the one basic type). so the basement may want to
   become a real, nameable layer: the typeless word language cc's gen
   already speaks internally, possibly with its own thin surface syntax --
@@ -327,8 +327,8 @@ two ideas to keep warm as the stages climb, neither committed yet:
    a bare TOP-LEVEL fn-pointer array int (*t[n])(..) = {..} (ptop lays its own
    declarators, doesn't route through pdtor -- the struct-wrapped table works,
    which is what ai.c uses). battery at 56.
-   ENV TRAP paid: a catted app is `#!/usr/bin/env -S ai` + the cat, so bare
-   `mooncc` runs on the PATH `ai` -- a STALE install mis-runs it (missing baked
+   ENV TRAP paid: a catted app is `#!/usr/bin/env -S love` + the cat, so bare
+   `mooncc` runs on the PATH `love` -- a STALE install mis-runs it (missing baked
    core like holo callr) and the heap grows unboundedly; the make gate is safe
    (m defaults to ./out/host/love). probe cc with `./out/host/love out/host/mooncc`,
    never a bare `mooncc`, until `make install` refreshes the PATH binary.
@@ -362,7 +362,7 @@ two ideas to keep warm as the stages climb, neither committed yet:
    gate: every host/*.c compiles; ai.c compiles.
    THE GEM LANE (6a) LANDED 2026-07-06: the `double` type as a first-class
    scalar riding the xmm register file. float literals lex (12.5, .5, 2., 1e9,
-   3.14e-2, an f/F/l/L suffix consumed) into a 'flo token carrying an ai gem;
+   3.14e-2, an f/F/l/L suffix consumed) into a 'flo token carrying a love gem;
    the value lives in f0 (its TYPE is the flag -- 'double vs the integer lane's
    r0), materialized by fbits, the compile-time IEEE-754 encoder ported from the
    glaze (the 52-bit mantissa makes frac*2^52 exact). the whole value path:
@@ -582,7 +582,7 @@ two ideas to keep warm as the stages climb, neither committed yet:
    `dimval` helper threaded into `adims`/`pdtor` -- ai.h's kind matrices are `[KN][KN]`).
    gate: 75-arr2d.c (row-major layout, `[i][j]` access, nested-brace + `[]`-inferred
    globals, gcc = cc = 18); law.l goldens the nested + enum-dim types. AND cc SPLIT OUT OF kore INTO ITS OWN
-   APP `mooncc`: a catted `#!/usr/bin/env -S ai -l` script (u-floor + asbook + elf/obj +
+   APP `mooncc`: a catted `#!/usr/bin/env -S love -l` script (u-floor + asbook + elf/obj +
    crew/moon/{lex,cpp,parse,gen,cc}.l) whose tail SEAT in moon.l fires moon-main -- so a cc
    edit rebuilds only mooncc, never the whole kore cat, and a parallel kore rebuild can no
    longer tear the compiler mid-run. `make test_moon` and `make install` both target mooncc.
@@ -620,7 +620,7 @@ two ideas to keep warm as the stages climb, neither committed yet:
    + law goldens.
    THE LIST CLEARED (2026-07-08, same day, commit by commit) -- **`mooncc -c ai.c`
    COMPILES END TO END: all 611 functions + the data tail, a ~514KB relocatable
-   ai.o.** the rest of the tail as it fell: ENUM-CONSTANT SHADOWING (a local named
+   love.o.** the rest of the tail as it fell: ENUM-CONSTANT SHADOWING (a local named
    `N` was folded to `enum { N = 13 }`'s value -- a silent read miscompile; locals
    now shadow enum constants like the typedef shadow, the constant PULLED for the
    block and re-pinned at `}`); FOLDING IMAGES (a scalar initializer that cfolds is
@@ -644,8 +644,8 @@ two ideas to keep warm as the stages climb, neither committed yet:
    (`lvm_t lvm_ret0, lvm_cur;` registers sigs, lays NO storage -- it laid duplicate
    .data symbols, the 7d link's first wall). gates: 78-enumshadow 79-tables
    80-manyargs 81-builtins 82-znvalue (gcc = cc = 42 each) + laws.
-   **7d LANDED (2026-07-08): the cc-built ai BOOTS the egg and passes the WHOLE
-   CORPUS -- 2831 tests green.** the recipe: `mooncc -c ai.c ai.o` (with
+   **7d LANDED (2026-07-08): the cc-built love BOOTS the egg and passes the WHOLE
+   CORPUS -- 2831 tests green.** the recipe: `mooncc -c ai.c love.o` (with
    `#define ai_tco 0` prepended -- cc emits no sibcalls, so the VM takes the
    trampoline dispatch, the same lane love0 exercises every gate) + gcc host
    objects built `-Dai_tco=0` + libc. the corpus was the differential oracle
@@ -676,10 +676,10 @@ two ideas to keep warm as the stages climb, neither committed yet:
    rbx interop check. unions by value stay refused; running the cc build at
    ai_tco=1 (`make vmret`-honest sibcalls) is stage 8's flat-stack rung.
 8. **the fixpoint + the flat stack** (2026-07-08):
-   (a) THE FIXPOINT LANDED -- `cc(cc(ai))` is BYTE-IDENTICAL to `cc(ai)`. the
-   cc-built ai (tco=0), running mooncc, compiles ai.c to an object bit-for-bit
+   (a) THE FIXPOINT LANDED -- `cc(cc(love))` is BYTE-IDENTICAL to `cc(love)`. the
+   cc-built love (tco=0), running mooncc, compiles ai.c to an object bit-for-bit
    the same as the host-built mooncc does. self-hosting is a closed loop:
-   `cmp aiA.o aiB.o` where aiB.o = ai-cc0 compiling ai.c. (the self-hosted
+   `cmp aiA.o aiB.o` where aiB.o = love-cc0 compiling ai.c. (the self-hosted
    compile is ~6x slower -- 24s vs 4s -- because the cc build runs the pure
    interpreter, no glaze; correctness, not speed, is the fixpoint's claim.)
    (b) GUARANTEED SIBCALLS LANDED -- a RET-position call tail-JUMPS: the
@@ -729,8 +729,8 @@ two ideas to keep warm as the stages climb, neither committed yet:
    16), not an 8-byte push -- rsp stays 16-aligned at every call. register
    call-args ride 16-byte cells too (a later arg may hold a call);
    overflow args keep their 8-byte packing (the callee reads them packed,
-   and their targets are ai-internal, never a libc movaps path). WITH IT:
-   the cc-built ai runs `run`/`fork`, and the whole 2831-test corpus passes
+   and their targets are love-internal, never a libc movaps path). WITH IT:
+   the cc-built love runs `run`/`fork`, and the whole 2831-test corpus passes
    at ai_tco=1 with the glaze live. `test_moon` guards it with a
    `g=id(fork())` program whose child dies iff the stack is skewed. benches
    vs gcc are the flat-stack tail.
@@ -790,11 +790,11 @@ sticks to the neutral surface, and no new assembler exists anywhere.
   random well-typed int expressions/statements, both compilers, compare.
   csmith-class whole-program fuzz is a stretch goal.
 * `make test_moon` gates laws + differential battery; stage 7 adds the
-  corpus-under-cc-ai run to test_all.
+  corpus-under-cc-love run to test_all.
 
 ## size and pacing
 
-chibicc is ~8k lines of C with tests; in ai, with the assembler/ELF layers
+chibicc is ~8k lines of C with tests; in love, with the assembler/ELF layers
 already standing in holo, the compiler proper should land around 4-6k lines
 (cpp ~1k, parse+types ~2k, gen ~1k, lex+driver ~500). the memory's estimate
 stands: a year of evenings at full scope -- but stage 7 is reachable well
@@ -805,12 +805,12 @@ already a lawed calculator-to-ELF; stage 4 compiles real single-file C).
 
 `make install` no longer ships the cat as `bin/mooncc`. The compiler bakes WARM
 into `lib/love/mooncc.image` (the live bake nif, doc/snapshot.md) and `bin/mooncc`
-is a three-line sh shim: `ai --wake mooncc.image -e "(moon-main (cuup (cup
+is a three-line sh shim: `love --wake mooncc.image -e "(moon-main (cuup (cup
 cmdline)))" "$@"`. The whole-cat re-eval that every compile used to pay
 (~1.5 s wall) is paid once, at bake: `mooncc -c ai.c` 4.3 → 2.8 s wall, and a
 small-file compile drops 0.77 s → 0.02 s -- gcc-class invocation latency.
 The image is binary-specific (anchor-checked) and installs from the same
-build as `bin/ai` (strip keeps vaddrs, so the stripped install wakes it);
+build as `bin/love` (strip keeps vaddrs, so the stripped install wakes it);
 a mismatched pair falls back to a fresh boot with no moon-main, so never mix
 builds by hand. The repo cat `out/host/mooncc` is unchanged -- probe with
 `./out/host/love out/host/mooncc`, as ever.

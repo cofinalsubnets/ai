@@ -3,7 +3,7 @@
 ; num? guard) compiled into uu terms over a nat-coded carrier, so test/uukindlaw.l
 ; proves the semilattice laws OF THE ACTUAL ANALYSIS, not a hand transcription. Run:
 ;
-;   ai tools/kinds2uu.l > test/uukind.l        (or: make uukind)
+;   love tools/kinds2uu.l > test/uukind.l        (or: make uukind)
 ;
 ; the ENCODING is derived from kinds.l's own `rank`: each kind symbol takes its
 ; rank as its nat code (bot 0 .. top 5), and `str` -- the incomparable branch, off

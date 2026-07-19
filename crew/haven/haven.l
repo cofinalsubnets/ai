@@ -7,7 +7,7 @@
 ; draws, the layout places, and X shows it. loads after crew/lux/{core,
 ; wire,layout}.l + crew/quay/pier.l + crew/haven/wire.l:
 ;
-;   ai -l crew/lux/core.l -l crew/lux/wire.l -l crew/lux/layout.l \
+;   love -l crew/lux/core.l -l crew/lux/wire.l -l crew/lux/layout.l \
 ;      -l crew/quay/pier.l -l crew/haven/wire.l -l crew/haven/haven.l \
 ;      -e '(haven "/run/user/1000/haven-0" () () 800 600)'
 ;

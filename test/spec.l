@@ -1,4 +1,4 @@
-; ai spec -- the executable semantic spec AND the language reference: each section states its
+; love spec -- the executable semantic spec AND the language reference: each section states its
 ; laws in the comment and proves them in the asserts below, on every target. the workflow
 ; narrative -- how to work here, the traps, the vocabulary, the architecture -- lives in
 ; CLAUDE.md; deeper rationale in doc/ (doc/measures.md the net/tally design). it runs in the
@@ -170,7 +170,7 @@
  !(5 = ()) (() < 5))                                    ; = and < stay strict: () keeps the floor
 
 ; --- list*list is the cartesian product --- the semiring product whose `+` is cat: each
-; pair a proper 2-list (ai bj), so `tally` is the homomorphism (tally(a*b)=ta*tb). infix `*`
+; pair a proper 2-list (love bj), so `tally` is the homomorphism (tally(a*b)=ta*tb). infix `*`
 ; is right-associative, so a*b*c nests right. RIGHT-distributivity ((a+b)*c=a*c+b*c) holds on
 ; the nose (the outer loop ranges the LEFT operand); LEFT-distributivity holds only up to a
 ; permutation (intrinsic to ordered pairs -- same multiset, different order). `net` is NOT the

@@ -1,11 +1,11 @@
 #!/usr/bin/env -S love -l
-; cook -- ai make
+; cook -- love make
 ;
-; ai reads the `#!` hashbang line above as a line comment (ai.c: `#!` runs to
+; love reads the `#!` hashbang line above as a line comment (ai.c: `#!` runs to
 ; end of line, like `;`), so loading this file as a library is unaffected -- the
 ; same line serves the OS as a shebang. with the file marked executable and a `cook`
 ; symlink to it on PATH (the user installs that), running `cook Cookfile [ticket]`
-; execs `ai -l <this-file> Cookfile [ticket]`: the -l loads cook, then Cookfile runs.
+; execs `love -l <this-file> Cookfile [ticket]`: the -l loads cook, then Cookfile runs.
 ;
 ; (this tool was first written as tools/bake.l; it was renamed to crew/cook/cook.l so
 ; the file name does not collide with the OTHER, unrelated sense of "bake" in this
@@ -26,20 +26,20 @@
 ;             a subprocess via the host `run` nif, or a THUNK (any lit?), called as
 ;             (step 0) for its effect. an empty step list is legal (a pure aggregate).
 ;
-; file ages come from stat(1) -- ai has no stat nif, but it has `run`, and that
+; file ages come from stat(1) -- love has no stat nif, but it has `run`, and that
 ; is enough. a missing file and a phony item both read as the ZERO POINT (nil):
 ; ageless, hence ancient, hence always rebuilt. the FIRST recipe declared is the
 ; default ticket, exactly as in make. drive it with (cook item) -- to cook an item
 ; is to prep it up to date by following its recipe over fresh ingredients.
 ;
 ; usage:  cook [-f FILE] [--emit] [recipe ..]  (with the symlink installed)
-;     or:  ai -l crew/cook/cook.l [-f FILE] [recipe ..]
-; A Cookfile is ordinary ai source that lays out the recipes (recipe ..) then
+;     or:  love -l crew/cook/cook.l [-f FILE] [recipe ..]
+; A Cookfile is ordinary love source that lays out the recipes (recipe ..) then
 ; drives them: (cook-all 0) builds every recipe named on the command line (or the
 ; default when none), and (cook (ticket 0)) builds just the first. cook can ALSO
 ; read a real Makefile directly: ONLY a file NAMED like one (Makefile, makefile,
 ; GNUmakefile, *.mk -- makefilep) is read as make; every other recipe file (Cards.l,
-; Cookfile, or a -f FILE) is ai source. See "importing a Makefile" at the foot of
+; Cookfile, or a -f FILE) is love source. See "importing a Makefile" at the foot of
 ; this file. The first rule is the default ticket either way.
 
 ; the combinators live in the `parse` MODULE book (love/post.l): bind the shared set --
@@ -219,7 +219,7 @@
 ; is built on the PARSER COMBINATORS (after the gw.js style) now shared from the
 ; post-egg layer love/post.l: a parser is (\ s y n) over a string s, with a success
 ; continuation y = rest parsed and a failure continuation n = rest; the parsed
-; payload is a list that `seq` concatenates. ai has no regex, so the leaves are
+; payload is a list that `seq` concatenates. love has no regex, so the leaves are
 ; `lit` (a literal prefix), `one` (one char by predicate) and `span` (a maximal
 ; run); alt/seq/opt/many build the rest. The import is reasonably GNU-make-
 ; compatible: recursive $(VAR) expansion and substitution refs, the common
@@ -679,9 +679,9 @@
    ; the build file may be named explicitly (the first arg word) or DISCOVERED in
    ; the cwd; the SEAT at the bottom already stripped the program head + -l chain.
    (exists? p) (: q (open p "r") (? q 1 0))     ; a one-shot probe (the fd dies with the process)
-   ; discovery precedence: an ai-native recipe file wins over a Makefile -- a
+   ; discovery precedence: a love-native recipe file wins over a Makefile -- a
    ; legacy Cards.l first, then a Cookfile, then a Makefile. Only a Makefile-named
-   ; file (makefilep) is ever read as make; Cards.l and Cookfile are ai source.
+   ; file (makefilep) is ever read as make; Cards.l and Cookfile are love source.
    ; (a dummy param: a nullary (f) would be \ with one operand = quote.)
    (discover _) ((: (g ps) (? (two? ps) (? (exists? <ps) <ps (g >ps)) 0))
                '("Cards.l" "Cookfile" "Makefile"))
@@ -729,7 +729,7 @@
                    + "  -v, --version     print the version and exit\n"
                    + "  -h, --help        print this help and exit\n"
                    + "  RECIPE ...        the items to build (default: the first recipe declared)\n"
-                   + "a Makefile (Makefile/makefile/GNUmakefile/*.mk) is imported and cooked; any other build file is a Cookfile of ordinary ai source."))
+                   + "a Makefile (Makefile/makefile/GNUmakefile/*.mk) is imported and cooked; any other build file is a Cookfile of ordinary love source."))
    (need-arg h r) (? (two? r) 0 (: _ (say err ("cook: " + h + " needs an argument")) _ (put err 10) (quit 2)))
    (parse-args ws)             ; -> a tablet: 'file, 'emit, 'help, 'ver, 'pos (the recipe words, in order)
    ((: (loop ws opt) (? (! (two? ws)) opt

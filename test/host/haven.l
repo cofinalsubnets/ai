@@ -24,7 +24,7 @@
 ; unlinked before haven binds. the CAMP: every child pid enlists as it spawns,
 ; and a failed claim STRIKES the camp before exiting -- an assert naps straight
 ; out of file mode, so cleanup must ride in front of it (Xvfb catches SIGHUP,
-; it survives our death; the ai children die with their pty).
+; it survives our death; the love children die with their pty).
 (: xv (mind `("Xvfb" "-displayfd" "1" "-screen" "0" "640x480x24" "-nolisten" "tcp"))
    (wfx p) (: g2 (gather p) (? (two? g2) g2 (: _ (rest 2) (wfx p))))
    camp #()

@@ -11,7 +11,7 @@
 ; the pattern-rule tests build real files and check they appear.
 
 (: dir "/tmp/cooktest"
-   ai  "out/host/love"                          ; run from the project root (where make runs)
+   love  "out/host/love"                          ; run from the project root (where make runs)
 
    ; -- a tiny assert harness (this file is standalone, not in the corpus) --
    pass (tablet 0) fail (tablet 0)
@@ -31,12 +31,12 @@
    ; run cook on a fixture Makefile, return its captured stdout.
    (run-cook src tgt)
    (: _ (write-file (+ dir "/Makefile") src)
-       r (run `(ai "-l" "crew/cook/cook.l" (+ dir "/Makefile") tgt))
+       r (run `(love "-l" "crew/cook/cook.l" (+ dir "/Makefile") tgt))
        (? (two? r) (cup r) ""))
    ; --emit a fixture Makefile, return the generated Cookfile text (stdout).
    (run-emit src)
    (: _ (write-file (+ dir "/Makefile") src)
-       r (run `(ai "-l" "crew/cook/cook.l" "--emit" (+ dir "/Makefile")))
+       r (run `(love "-l" "crew/cook/cook.l" "--emit" (+ dir "/Makefile")))
        (? (two? r) (cup r) ""))
 
    _ (sh (+ "rm -rf " (+ dir "; mkdir -p " dir)))
@@ -51,8 +51,8 @@
                       "\techo \"E1[$(h_o)]\""
                       "\techo \"E2[$(suf)]\""
                       "\techo \"E3[$R/$(ho)]\"")) "all")
-   _ (ok "nested-paren + pattern subst-ref" (has ev "E1[out/host/ai.o out/host/data.o]"))
-   _ (ok "suffix subst-ref"                 (has ev "E2[./ai.o ./data.o]"))
+   _ (ok "nested-paren + pattern subst-ref" (has ev "E1[out/host/love.o out/host/data.o]"))
+   _ (ok "suffix subst-ref"                 (has ev "E2[./love.o ./data.o]"))
    _ (ok "single-char $R + $(VAR)"          (has ev "E3[./out/host]"))
 
    ; ---------------------------------------------------------------- functions
@@ -160,7 +160,7 @@
                         (+ dir "/e/out.txt:") "\techo HI > $@")))
    _ (write-file (+ dir "/e/Cookfile") emc)
    _ (sh (+ "rm -f " (+ dir "/e/out.txt")))
-   _ (run `(ai "-l" "crew/cook/cook.l" (+ dir "/e/Cookfile") "all"))
+   _ (run `(love "-l" "crew/cook/cook.l" (+ dir "/e/Cookfile") "all"))
    _ (ok "emit: round-trip cooks the emitted Cookfile" (= 0 (cap (sh (+ "test -f " (+ dir "/e/out.txt"))))))
 
    ; ---------------------------------------------------------------- summary

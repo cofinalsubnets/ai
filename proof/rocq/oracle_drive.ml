@@ -3,10 +3,10 @@
 
    Generates random closed AFFINE de Bruijn terms (each bound var used <=1 =>
    strongly normalizing), normalizes each with the extracted `nf`, and prints
-   one ai program: render helpers + an (assert ...) whose every line checks that
+   one love program: render helpers + an (assert ...) whose every line checks that
    ev's reduction of the term EXTENSIONALLY agrees with the extracted reference's
    normal form (apply both to marker symbols, then compare -- representation-
-   independent, see test/oracle.l). The ai binary runs the emitted program;
+   independent, see test/oracle.l). The love binary runs the emitted program;
    green means the binary computes what the machine-checked reference says. *)
 
 open Normalizer   (* tm = Var of int | Lam of tm | App of tm*tm ; nf : int->tm->tm *)
@@ -38,13 +38,13 @@ let rec gen g sc =
 
 let gen_closed g = fst (gen g [])
 
-(* --- serialize a de Bruijn term as the ai tagged chain (0 n)/(1 b)/(2 f a) --- *)
+(* --- serialize a de Bruijn term as the love tagged chain (0 n)/(1 b)/(2 f a) --- *)
 let rec ser = function
   | Var n -> Printf.sprintf "(0 %d)" n
   | Lam b -> Printf.sprintf "(1 %s)" (ser b)
   | App (f, a) -> Printf.sprintf "(2 %s %s)" (ser f) (ser a)
 
-(* the ai-side consumer: render de Bruijn -> \-expr, ground via marker symbols,
+(* the love-side consumer: render de Bruijn -> \-expr, ground via marker symbols,
    compare ev of the term against ev of the (extracted) normal form *)
 let prelude = {ai|
 (: (dtag t) (cap t)  (dn t) (caup t)  (dbody t) (caup t)

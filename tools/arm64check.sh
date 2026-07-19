@@ -1,5 +1,5 @@
 #!/bin/sh
-# arm64check.sh -- the aarch64 EXECUTION validator. Cross-builds `ai` for aarch64
+# arm64check.sh -- the aarch64 EXECUTION validator. Cross-builds `love` for aarch64
 # (reusing the native love0-generated headers in out/lib) and RUNS a test corpus
 # under qemu-aarch64. apps/asm/asmtest.l proves the arm64 byte ENCODINGS; this proves
 # they RUN -- the only trustworthy check for the glaze's second target, since the
@@ -8,7 +8,7 @@
 # Needs qemu-aarch64 (qemu-user) + an aarch64 cross-gcc with a static libc. Point
 # AARCH64_CC at it, or let the auto-find try the usual names + the local Nerves
 # toolchain. No-ops (exit 0, a note) when either is missing -- like test_kernel /
-# test_wasm. ai does its own write(2)-based I/O, so it is unaffected by the
+# test_wasm. love does its own write(2)-based I/O, so it is unaffected by the
 # static-glibc printf-vararg quirk seen under qemu.
 #
 # Args: $1.. = the .l files to run (default: the corpus). The gate is the
@@ -41,7 +41,7 @@ for f in ai.c host/*.c crew/moon/lib/math/am.c; do
   o=$O/$(basename "$f" .c).o
   $GCC $CF -c "$f" -o "$o"
 done
-$GCC -static -o $O/ai $O/*.o 2>/dev/null || $GCC -static -o $O/ai $O/*.o
+$GCC -static -o $O/love $O/*.o 2>/dev/null || $GCC -static -o $O/love $O/*.o
 
 # the corpus (or the files named on the command line), under qemu. Mirror common.mk's
 # $t EXACTLY: 00-init, spec, then uu.l HOISTED to 3rd (uu's test files uukind/uukindlaw
@@ -56,7 +56,7 @@ if [ $# -gt 0 ]; then set -- "$@"; DEFAULT_CORPUS=; else DEFAULT_CORPUS=1
   set -- test/00-init.l test/spec.l test/uu.l $(ls test/*.l | LC_ALL=C sort | grep -vE '00-init|spec\.l|glaze-x86|uu\.l') test/arm64/callout.l
 fi
 echo "AARCH64 qemu run ($(echo "$@" | wc -w) files)"
-cat "$@" | AI_NO_IMAGE=1 "$QEMU" $O/ai > $O/.out 2>&1; r=$?
+cat "$@" | AI_NO_IMAGE=1 "$QEMU" $O/love > $O/.out 2>&1; r=$?
 tail -1 $O/.out
 # the default corpus must print "tests pass" AND each test/arm64/*.l sentinel (explicit-args runs skip the sentinel check)
 if [ -n "$DEFAULT_CORPUS" ]; then sent='test/arm64/callout:'; else sent=''; fi

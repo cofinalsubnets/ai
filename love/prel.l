@@ -1,7 +1,7 @@
 ;;; book is present in prelude
 ;;; definitions in this file must not use infix notation
 ;;; FIXME move ev support functions to ev where possible
-; prel.l -- ai prel: data + function + macro definitions.
+; prel.l -- love prel: data + function + macro definitions.
 ; ┌─── PRE-OPERATORS ZONE: here down to the `operators` table (~the `(: operators ...)`
 ; │    form below) is compiled by the bootstrap c0 BEFORE opfix/the operators table exist,
 ; │    AND before the church `add`/`mul` hooks are installed (num-ap block). So this zone is
@@ -41,7 +41,7 @@
    ;    clears. `(from 'holo)` answers an OPAQUE accessor closure over the module -- (from 'holo
    ;    'assemble) currys to a member, (from 'holo 'keys) introspects, (from ()) lists the
    ;    registered names, a missing module answers () (the presence guard); the raw tablet stays
-   ;    closure-private. all take an operand (ai has no nullary fns -- fire with the unit). --
+   ;    closure-private. all take an operand (love has no nullary fns -- fire with the unit). --
    (enter nm) (: F (tablet 0) _ (pin F 31337 (link (books ()) nm)) _ (setbook (link F (books ()))) ())
    (use m)    (: b (? (book? m) m
                       (: r (peep (mods ()) m ()) (? (nil? r) (scare (\ no-module) m) r)))
@@ -761,7 +761,7 @@
 ; the UNIFIER is the compiler-grade core (a future relational rewrite layer sits
 ; on `unify`/`walk`); the SEARCH half (streams, `query`, `===`) is its userland
 ; face. `unify s u v` is PURE -- a substitution or `ufail` -- with NO occurs
-; check: ai's own values are non-well-founded (a chain is a mu-type, the book
+; check: love's own values are non-well-founded (a chain is a mu-type, the book
 ; holds the book), so a self-referential binding is welcome -- it's a rational
 ; tree, and `walk_star` mu-marks a back-edge to reify it without looping. a goal
 ; is (\ s stream); est/=== unify, + interleaves (disjunction), * binds

@@ -1336,7 +1336,7 @@
                           ; while the REMAINING args evaluate (a later arg may hold a
                           ; nested call, and the SysV ABI wants rsp%16==0 at it). an
                           ; overflow arg keeps its 8-byte push -- the callee reads the
-                          ; overflow block packed, and its target is ai-internal (never
+                          ; overflow block packed, and its target is love-internal (never
                           ; a libc movaps-on-rbp path), so a stray eval-time skew is moot.
                           rpush (aval + (spush 'r0))
                           ; an overflow arg: x64 pushes 8 bytes (deepest first); arm64
@@ -1608,7 +1608,7 @@
 
    ; r3 (rbx) is CALLEE-SAVED under SysV and gen leans on it (callr park, the
    ; overflow builtins, va_arg's walk) -- an optimized gcc caller keeps LIVE
-   ; LOCALS in rbx across our calls (the ai boot died in main's argv fold: its
+   ; LOCALS in rbx across our calls (the love boot died in main's argv fold: its
    ; loop bound rode ebx straight through gxr). every fn owns frame slot -8 for
    ; it: the prologue stores, this shared epilogue reloads.
    epi `(`('ld 'r3 'r4 -8) `('mov 'sp 'r4) `('pop 'r4) `('ret))
@@ -4099,7 +4099,7 @@
                              (: _ (puts (+ ";; cgfn refuses " (<>f + "\n"))) ())))   ; cause unknown: today's note + a bare bad
                        ; fn-start alignment to EVEN (2): a function's address can
                        ; ride into the heap as an object's ap (the lvm_* dispatch
-                       ; kind), and the ai image codec's pointer/fixnum discriminator
+                       ; kind), and the love image codec's pointer/fixnum discriminator
                        ; is PARITY -- every pointer even, every fixnum odd (ai.c
                        ; img_encode). an odd-addressed fn pointer reads back as a
                        ; fixnum and the woken heap desyncs. WIDER alignment was built

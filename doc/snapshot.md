@@ -3,7 +3,7 @@
 Goal: **boot from a serialized heap image instead of evaluating the corpus.** Today `boot()`
 (host/main.c) hands `ai_evals_` the egg+prel+ev+post+asm+bao SOURCE string and the self-hosted
 compiler MATERIALIZES the whole runtime at startup — measured **~233 ms cold start** (the setup-row
-bench, ai 2nd-worst). The snapshot makes that ~instant: dump the post-boot heap ONCE at build time,
+bench, love 2nd-worst). The snapshot makes that ~instant: dump the post-boot heap ONCE at build time,
 embed it in the binary, and at startup `mmap`+relocate it in with no eval. (LANDED — see the
 Status section below; this stays as the `--bake`/`--wake` design-of-record.)
 
@@ -12,7 +12,7 @@ Status section below; this stays as the `--bake`/`--wake` design-of-record.)
 1. **Cold start ~233 ms → near-zero** for the WHOLE runtime (every script run, every repl, every
    bench wall-clock). This is the standalone win; it pays off even with no glaze.
 2. **The glaze bake becomes free.** Adding `love/glaze/emit.l`+`auto.l` to the boot corpus costs
-   ~+810 ms today (it is ~2000 lines of ai + ~50 native-compiling asserts, all eval'd at startup —
+   ~+810 ms today (it is ~2000 lines of love + ~50 native-compiling asserts, all eval'd at startup —
    measured). Inside a snapshot it is precompiled: **always-on transparent JIT, zero startup cost,
    like luajit** — which is exactly what the bake needs (and why the naive bake was abandoned).
 3. **The GC-footprint tax goes away.** The image lives in an out-of-pool IMMORTAL region (extend
@@ -42,7 +42,7 @@ Load is a single linear pass over the blob (relocate offsets + re-resolve the lv
 
 **Phase 0 — SPIKE: prove the round-trip (de-risk before committing).**
 Two debug nifs: `(image-dump path)` walks reachable-from-`book`, writes the blob; `(image-load path)`
-reads it, relocates, installs `book`. Dump after a normal boot; in a FRESH `ai`, load it and run a
+reads it, relocates, installs `book`. Dump after a normal boot; in a FRESH `love`, load it and run a
 handful of forms (`(+ 1 2)`, a captured closure, a map lookup, a bignum, a twin). · GATE: loaded heap
 == eval'd heap on those forms. · GO/NO-GO: if relocation + lvm_* re-resolution round-trips cleanly,
 proceed; if the pointer graph has a kind that won't serialize (a live port/task, a W^X toast), scope
@@ -57,7 +57,7 @@ run test/spec.l against a loaded image == against a booted one (2693 pass).
 out-of-pool region the collector skips (extend `gcp`'s out-of-pool check). · GATE: a full GC after
 load leaves the image intact (the image is never copied); spec green; valgrind clean (`make valg`).
 
-**Phase 3 — Build integration.** Build step: `ai --bake` (boot fully, lay the image into the binary's own .image section; `ai --bake PATH` writes a plain file instead).
+**Phase 3 — Build integration.** Build step: `love --bake` (boot fully, lay the image into the binary's own .image section; `love --bake PATH` writes a plain file instead).
 Embed via `objcopy`/a linked C array → `image.o`. `boot()`: if the image stamp matches this binary,
 `image-load` it; else FALL BACK to eval'ing the egg (so a stale/missing image is never fatal). Image
 is arch+build-specific → a Makefile dep on prel/ev/post/asm + the binary. · GATE: `out/host/love`
@@ -68,7 +68,7 @@ boots from the image; cold start measured (target <20 ms, from 233); spec+love0 
 assert-free glaze to the boot corpus BEFORE the dump, x86-64-gated. The snapshot is taken with the
 glaze loaded and `ev` already rebound to `auto-ev`, but BEFORE any closure is natively compiled (no
 W^X arenas to serialize — natives JIT lazily at first `ev`, as today). Remove run.sh's glazed list;
-the bench just runs `ai bench.l`. · GATE: test_glaze green; ALL bench checksums unchanged; cold start
+the bench just runs `love bench.l`. · GATE: test_glaze green; ALL bench checksums unchanged; cold start
 still <20 ms; every bench glazes transparently.
 
 **Phase 5 — Cross-arch + cleanup.** aarch64 host → its own image (no glaze). wasm/kernel → keep the
@@ -95,11 +95,11 @@ Relates: the egg (love/egg.l, the double-sat), [[glaze-float]] (the bake this un
 
 ## Status — landed (Phases 0–4 + cross-arch + the host/core split)
 
-The snapshot ships. A plain `ai` wakes the image baked into its own .image section (laid by `make host`'s `--bake` step; found
+The snapshot ships. A plain `love` wakes the image baked into its own .image section (laid by `make host`'s `--bake` step; found
 via `/proc/self/exe`) and boots a **glaze-baked** runtime in **~4–12 ms** instead of the ~230 ms egg eval
 — the native JIT is always-on, no flags. Opt out with `AI_NO_IMAGE` (the Makefile exports it for all
 recipes so the gate tests the fresh egg and the bench controls glaze itself). A bad/stale/cross-arch image
-→ `image_load` NULL → normal boot, never wrong. The bench cold-start row reflects it (ai 12 ms vs egg 230).
+→ `image_load` NULL → normal boot, never wrong. The bench cold-start row reflects it (love 12 ms vs egg 230).
 
 Departures from the original plan above, worth noting:
 - **No reloc tables.** The blob is self-describing: every pointer-bearing word is RANGE-encoded in place
@@ -122,9 +122,9 @@ Departures from the original plan above, worth noting:
 ## The live bake — (bake path), a nif (landed 2026-07-13)
 
 `(bake "x.image")` snapshots the RUNNING session to an image file, mid-eval — no quiescent
-point required — and answers 1 | (); the session rides on. Wake it with `ai --wake x.image
+point required — and answers 1 | (); the session rides on. Wake it with `love --wake x.image
 prog.l args..`: the woken book carries every global pinned before the bake, so an app loaded
-warm (`ai -l app -e '(bake "app.image")'`) never pays its load again — the mooncc image took
+warm (`love -l app -e '(bake "app.image")'`) never pays its load again — the mooncc image took
 `mooncc -c ai.c` from ~3.7 s to ~2.4 s, the whole per-run load tax. Three seams make mid-eval
 dumping honest where the boot bake could assume purity:
 
@@ -153,7 +153,7 @@ the boot bake. Smoke: boot/bake.l (test_hostnif) round-trips a pinned marker thr
 1. **A per-arch aarch64 glaze emitter — make the aarch64 image GLAZED too** ("even on an MCU, try"). The
    aarch64 host image works (cross-built + qemu-tested) but is glaze-LESS: the glaze emits x86-64 machine
    code, so `main.c` gates the dump-time glaze load on `__x86_64__`. The recognizers (`love/glaze/auto.l`)
-   are arch-NEUTRAL (they analyze ai source); only the codegen (`love/glaze/emit.l` — `cgv`/`cgn`/
+   are arch-NEUTRAL (they analyze love source); only the codegen (`love/glaze/emit.l` — `cgv`/`cgn`/
    `loopcode`/the SSE/register layer) is x86. The `crew/asm/` assembler already has an arm64 backend
    (`crew/asm/arm64.l`, emits bytes as DATA), so the scope is a parallel arm64 instruction-selection path in
    emit.l + an arch dispatch in `auto-ev`'s `njit`, then dump a glazed aarch64 image. Biggest payoff for

@@ -399,7 +399,7 @@
    ; raw the tty BEFORE reading: the editor (edraw/edline) is the sole echo, so
    ; the kernel's cooked-mode echo must be off or every line doubles. main.c only
    ; raws on the no-arg path (replp = !argp); the bin/bao launch passes argv
-   ; (ai -l bao.l -e "(bao 0)"), so argp is set and that raw_mode never fires --
+   ; (love -l bao.l -e "(bao 0)"), so argp is set and that raw_mode never fires --
    ; the shell owns it here instead, covering the launcher AND a manual -e launch.
    ; deferred through (ev 'raw) like `wrap`'s host nifs: the bare nom is inert at
    ; bake (no missing-name on the kernel/wasm bakes, where shell is never called),
@@ -458,7 +458,7 @@
 
    ; --- the raw-line editor (bao's own line reader) ---
    ; repl's `edline` is wrong for wrapping a host program: it parses the buffer
-   ; as ai forms (submits only when it reads complete) and prints its own `> `. a
+   ; as love forms (submits only when it reads complete) and prints its own `> `. a
    ; wrapped program (bash, python) wants the RAW bytes, submitted on Enter no
    ; matter what. So bao reads its own line -- reusing the PURE zipper primitives
    ; (edleft/edright/edbsp/eddel/edhome/edend/revcat/edrender, all in/out-free for
@@ -555,7 +555,7 @@
         (loop () () 0 ()))
 
    ; (bao a) -- the interactive entry the host frontend launches. `(bao 0)` is
-   ; exactly the baked shell (an arg is taken: ai has no nullary calls); `(bao 'test)`
+   ; exactly the baked shell (an arg is taken: love has no nullary calls); `(bao 'test)`
    ; runs the private unit battery (boot/baotest.l gates it -- the selftest stays
    ; closure-private, off the book). `wrap` is reachable from the bao prompt; the
    ; editor-as-line-reader (edraw) and the debug `help` are the later modes (crew/bao.md).
@@ -680,6 +680,6 @@
 
 ; bao.l is DEFINE-ONLY -- loading it (egg-bake or `-l love/bao.l`) installs the shell
 ; core but does NOT launch. The frontend launches: host/main.c evals `(bao 0)` on a
-; tty (so `ai` on a terminal is the bao shell), a pipe stays the bare stdin runner
+; tty (so `love` on a terminal is the bao shell), a pipe stays the bare stdin runner
 ; `(reads in)`, and the kernel calls `(shell 0)`. Define-only is what makes bao
 ; loadable for tests (load the defs, read piped forms with the bare reader).

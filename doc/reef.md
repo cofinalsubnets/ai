@@ -14,7 +14,7 @@ gated by `make test_reef`; a hunk is test/patch.l's proven `chg` at file grain
   same content) is silent.
 - **`hatch [CMD..]`** is the derivation — the local-rebuild path of §2. It hatches
   the *recorded* state (a dirty tree refuses), runs the nest's build recipe (`CMD..`
-  or a `.reef/hatch` config `(hatch (recipe ..) (out PATH))`; for ai the recipe is
+  or a `.reef/hatch` config `(hatch (recipe ..) (out PATH))`; for love the recipe is
   `make`), fingerprints the output as the **seed**, and ledgers `(psid arch seed
   time)` in `.reef/hatched` keyed by the patch-set id (`sha256` of the sorted tips
   = the head DAG state). So re-hatching the same head with the same recipe is a

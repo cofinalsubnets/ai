@@ -191,11 +191,11 @@ static void tx_send(uint8_t const *frame, unsigned len) {
     __sync_synchronize();
   nic.tx.last_used = nic.tx.used->idx; }
 
-// --- the ai stream surface (stage 2e) ----------------------------------------
+// --- the love stream surface (stage 2e) ----------------------------------------
 // A queue of received UDP datagrams (the k_sources[] NIC socket). RX enqueues
-// each payload + its peer; nic_getc hands the bytes to ai (blocking, with a -1
+// each payload + its peer; nic_getc hands the bytes to love (blocking, with a -1
 // between datagrams so `slurp` reads exactly one); fputs+fflush build a reply
-// datagram back to the peer of the datagram currently being read. So an ai agent
+// datagram back to the peer of the datagram currently being read. So a love agent
 // does `(slurp nic)` to perceive and `(fputs nic r) (fflush nic)` to act.
 #define DQ      8
 #define DG_MAX  1472                   // max UDP payload over standard ethernet
@@ -205,7 +205,7 @@ static int dq_head, dq_tail;           // ring [head, tail) of pending datagrams
 static int cur_pos;                    // read cursor within dgq[dq_head]
 static bool cur_open;                  // a datagram is mid-read by nic_getc
 static struct { uint16_t dport, sport; uint8_t mac[6], ip[4]; } reply;  // fflush target
-static uint8_t txq[DG_MAX];            // ai's outgoing payload, filled by nic_putc
+static uint8_t txq[DG_MAX];            // love's outgoing payload, filled by nic_putc
 static unsigned txn;
 
 // build + transmit one UDP datagram (dmac/dip/dport = peer, sport = our port).
@@ -324,7 +324,7 @@ static void net_poll(void) {
 
 // resolve `ip` to a MAC: cached -> done; else ARP and poll the RX ring across a few
 // timer ticks until the reply lands. false on timeout (the caller treats that as no
-// route -- aim returns 0 and the ai brain's say/flush quietly send nothing).
+// route -- aim returns 0 and the love brain's say/flush quietly send nothing).
 static bool arp_resolve(uint8_t const *ip, uint8_t *mac) {
   if (arp_find(ip, mac)) return true;
   for (int tries = 0; tries < 50; tries++) {
@@ -336,11 +336,11 @@ static bool arp_resolve(uint8_t const *ip, uint8_t *mac) {
   return false; }
 
 // (aim ipword oport) -- point the nic's reply target at an ARBITRARY destination for
-// the NEXT say/flush, so the ai brain can INITIATE a datagram, not just answer a
+// the NEXT say/flush, so the love brain can INITIATE a datagram, not just answer a
 // sender. we send to the GATEWAY's MAC but the destination IP (SLIRP NATs every
 // off-subnet datagram through 10.0.2.2), with a fixed source port so the NAT'd reply
 // returns addressed to us and the RX path enqueues it for slurp. ipword packs the
-// dotted address a.b.c.d as one 32-bit fixnum (the ai side's `ip4`). returns 1 if a
+// dotted address a.b.c.d as one 32-bit fixnum (the love side's `ip4`). returns 1 if a
 // route resolved, 0 on ARP timeout (or no NIC).
 #define OUR_SPORT 5555
 int nic_aim(uint32_t ipword, uint16_t oport) {
