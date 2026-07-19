@@ -1,11 +1,10 @@
-/* the shared stylesheet for the love site (repl, language comparison, technical
-   discussion). base theme tokyo-night: periwinkle on polar-night blue, bitmap-VGA
-   feel, green = a kept answer; the crew fly the name space in aurora teal/cyan; the
-   bao-shell + chip + crew + glossary components folded in. one sheet, every page. */
+/* the stylesheet for index.html. tokyo-night: periwinkle on polar-night blue,
+   green = a kept answer; the crew fly the name space in aurora teal/cyan.
+   IBM Plex Mono reads the prose, the DOS/V bitmap runs the terminal and code. */
 
-/* self-hosted DOS/V bitmaps from the int10h Oldschool PC Font Pack (8x16 cells,
-   crisp at 16px native): DOS/V TWN16 for the body text, DOS/V re. PRC16 (CP437-
-   remapped) for the repl. © VileR, int10h.org, CC BY-SA 4.0. */
+/* the DOS/V bitmap, 8x16 cells, crisp at 16px native (so 32px is a clean 2x):
+   re. PRC16 (CP437-remapped) for the repl and code, TWN16 as the body fallback
+   if Plex fails. (c) VileR, int10h.org, CC BY-SA 4.0. */
 @font-face {
   font-family: "Web437 DOS/V TWN16";
   src: url("fonts/Web437_DOS-V_TWN16.woff2") format("woff2"),
@@ -18,94 +17,85 @@
        url("fonts/Web437_DOS-V_re_PRC16.woff") format("woff");
   font-display: swap;
 }
+/* (c) IBM, SIL OFL 1.1. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("fonts/IBMPlexMono-Regular.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: #04060e; color: #a9b1d6;
-  font-family: "Web437 DOS/V TWN16", "Px437 IBM VGA8", "Px437 IBM VGA 9x16",
-               "ModernDOS 8x16", "PxPlus IBM VGA8", "DejaVu Sans Mono",
-               ui-monospace, Menlo, Consolas, monospace;
+  background: #04060e; color: #c0caf5;
+  font-family: "IBM Plex Mono", "Web437 DOS/V TWN16", monospace;
   font-size: 32px; line-height: 1.5;
-  font-variant-ligatures: none; text-rendering: optimizeSpeed;
-  -webkit-font-smoothing: none; font-smooth: never;
   max-width: 54em; margin: 0 auto; padding: 2em 1em 5em;
 }
 
-h1 { font-size: 2.2em; font-weight: normal; letter-spacing: .04em; }
-h2 { font-size: 1.15em; font-weight: normal; color: #737aa2;
-     margin: 2.4em 0 .6em; border-bottom: 1px solid #3b4261; padding-bottom: .3em; }
-h3 { font-size: 1em; font-weight: normal; color: #9aa5ce; margin: 1.6em 0 .5em; }
-h4 { font-size: 1em; font-weight: normal; color: #737aa2; margin: 1.2em 0 .3em; }
-h2 a, h3 a { color: inherit; }
-h2 a:hover, h3 a:hover { text-decoration: none; }
-h2 a:hover::after, h3 a:hover::after { content: " #"; color: #545c7e; }
-details.dump > summary { cursor: pointer; list-style: none; }
-details.dump > summary::-webkit-details-marker { display: none; }
-details.dump > summary > h3 { display: inline-block; }
-details.dump > summary > h3::before { content: "\25B8\00a0"; color: #545c7e; }
-details.dump[open] > summary > h3::before { content: "\25BE\00a0"; }
+/* --- text --- */
+h1 { font-size: 2.2em; font-weight: bold; letter-spacing: .04em; }
+h1#love_title { text-align: center; }
+h2 { font-size: 1.15em; font-weight: bold; margin: 2.4em 0 .6em;
+     border-bottom: 1px solid #3b4261; padding-bottom: .3em; }
+h3, h4 { font-size: 1em; font-weight: bold; }
+h3 { margin: 1.6em 0 .5em; }
+h4 { margin: 1.2em 0 .3em; }
+h2 a, h3 a, .glossary dt a { color: inherit; }
+h2 a:hover, h3 a:hover, .glossary dt a:hover { text-decoration: none; }
+h2 a:hover::after, h3 a:hover::after,
+.glossary dt a:hover::after { content: " #"; color: #545c7e; }
 
-p { margin: .7em 0; text-align: justify; hyphens: auto; }
 a { color: #7aa2f7; text-decoration: none; }
 a:hover { text-decoration: underline; }
-.dim { color: #565f89; }
 strong { color: #c0caf5; font-weight: 600; }
 em { color: #9aa5ce; }
+hr { border: none; border-top: 1px solid #3b4261; margin: 2.4em 0; }
+
+p { margin: .7em 0; }
+ul, ol { margin: .7em 0 .7em 1.4em; }
+li { margin: .35em 0; }
+/* the reading copy: sentences in Plex at a size meant for a proportioned face,
+   not for the body's 2x bitmap cell. code inside a sentence joins them -- at any
+   size matching Plex it lands off the 16px cell and renders ragged. */
+p, li, dd { font-family: "IBM Plex Mono", monospace; font-size: 24px;
+            line-height: 1.65; text-align: justify; hyphens: auto; }
+p code, li code, dd code { font-family: inherit; font-size: 1em; }
 
 code { color: #a9b1d6; background: #1f2335; border: 1px solid #292e42;
        border-radius: 3px; padding: .05em .35em; white-space: pre-wrap;
-       font-family: "Web437 DOS/V re. PRC16", "Px437 IBM VGA8", ui-monospace, monospace; }
+       font-family: "Web437 DOS/V re. PRC16", monospace; }
 pre { background: #16161e; border: 1px solid #3b4261; border-radius: 6px;
       padding: .9em 1em; margin: 1em 0; overflow-x: auto; line-height: 1.5; }
-pre code { background: none; border: none; padding: 0; white-space: pre; color: #9aa5ce; }
-
-/* a theorem name: the green of a proved answer, popping against the blue */
-.thm { color: #9ece6a; background: #1d2b16; border: 1px solid #2d4222;
-       border-radius: 3px; padding: .02em .35em; }
-
-/* a numbered law: the callout boxes that carry the propositions */
-.law { background: #1f2335; border-left: 2px solid #3b4261;
-       border-radius: 0 4px 4px 0; padding: .55em .9em; margin: 1em 0;
-       text-align: justify; hyphens: auto; }
-.law .n { color: #7aa2f7; }
-.ev { color: #565f89; }
+pre code { white-space: pre; color: #9aa5ce; }
+pre code, td code, dd code { background: none; border: none; padding: 0; }
 
 table { border-collapse: collapse; width: 100%; margin: 1.1em 0; font-size: .93em; }
 th, td { border: 1px solid #3b4261; padding: .35em .6em; text-align: left;
          vertical-align: top; }
 th { color: #737aa2; font-weight: normal; background: #1f2335; }
-td code { background: none; border: none; padding: 0; }
 
-ul, ol { margin: .7em 0 .7em 1.4em; }
-li { margin: .35em 0; text-align: justify; hyphens: auto; }
-
-hr { border: none; border-top: 1px solid #3b4261; margin: 2.4em 0; }
-
-/* chrome: subtitle, lead, table of contents, top nav. */
-.sub { color: #565f89; font-size: .9em; margin: .4em 0 1.6em;
-       text-align: left; hyphens: none; }
-.lead { color: #9aa5ce; margin: .7em 0 1.6em; }
-.toc { color: #737aa2; font-size: .92em; line-height: 2;
-       text-align: left; hyphens: none; }
-.toc a { color: #737aa2; }
-.toc a:hover { color: #7aa2f7; }
-.topnav { font-size: .85em; margin-bottom: 1.4em; text-align: left; hyphens: none; }
+/* --- chrome --- */
+.topnav { margin-bottom: 1.4em; text-align: center; hyphens: none; }
 .topnav a { color: #7aa2f7; }
-.topnav .here { color: #a9b1d6; }    /* the current page: named, not linked */
 footer { margin-top: 3.5em; color: #414868; font-size: .85em;
          border-top: 1px solid #3b4261; padding-top: 1em; }
-.blue { color: #7aa2f7; } .red { color: #f7768e; } .grn { color: #9ece6a; }
+.blue { color: #7aa2f7; } .red { color: #f7768e; }
 
-/* --- the live bao shell --- */
+/* --- the terminal boxes: the live bao shell (#term) and the quay tty app
+   screen (#app). same chrome; the id-level display:flex would out-specify the
+   UA [hidden] rule, so hiding is restored at matching specificity. --- */
+#term, #app {
+  background: #000000; border: 1px solid #34406e; border-radius: 6px;
+  box-shadow: 0 0 30px -4px rgba(122,162,247,.28), 0 0 90px -22px rgba(122,162,247,.22);
+  padding: .8em; margin-top: 1em; display: flex; flex-direction: column;
+  font-family: "Web437 DOS/V re. PRC16", monospace;
+}
+#term[hidden], #app[hidden] { display: none; }
+#term { position: relative; color: #ffffff; cursor: text;
+        height: 24em; font-size: 32px; line-height: 1; }
+#app { outline: none; height: 80vh; }
 #status { color: #565f89; font-size: .9em; margin-top: .2em; }
-#term { position: relative; background: #000000; color: #ffffff; border: 1px solid #34406e;
-        box-shadow: 0 0 30px -4px rgba(122,162,247,.28), 0 0 90px -22px rgba(122,162,247,.22);
-        border-radius: 6px; padding: .8em; margin-top: 1em; height: 24em;
-        display: flex; flex-direction: column; cursor: text;
-        font-family: "Web437 DOS/V re. PRC16", "Px437 IBM VGA8", ui-monospace, monospace;
-        font-size: 32px; line-height: 1; }
-#term[hidden] { display: none; }   /* display:flex would else out-specify [hidden] */
 /* output and input share one scroll region, so the prompt flows directly under
    the last line of output (a real terminal) rather than pinned to the box floor. */
 #scroll { flex: 1; overflow-y: auto; }
@@ -114,34 +104,23 @@ footer { margin-top: 3.5em; color: #414868; font-size: .85em;
          background: #1f2335; border: 1px solid #3b4261; border-radius: 4px;
          color: #565f89; font: inherit; font-size: .8em; padding: .1em .5em; cursor: pointer; }
 #clear:hover { border-color: #7aa2f7; color: #c0caf5; }
-.in  { color: #aaaaaa; } .in::before { content: "> "; color: #555555; }
+#row { display: flex; align-items: flex-start; }
+.in { color: #aaaaaa; }
+.in::before, #row::before { content: "> "; color: #555555; }
+#row::before { white-space: pre; }
 .ans { color: #55ff55; }
 .cnd { color: #ff55ff; }
-#row { display: flex; align-items: flex-start; }
-#row::before { content: "> "; color: #555555; white-space: pre; }
 #cmd { flex: 1; background: none; border: none; outline: none; resize: none;
        color: #ffffff; font: inherit; line-height: inherit; overflow: hidden; }
-
-/* --- the app screen (quay tty apps) --- the container chrome only; every
-   colour and glyph inside is the app's own ANSI, parsed to spans by the driver.
-   line-height:1 + the bitmap cell font make a true monospace grid. */
-#app { background: #000000; border: 1px solid #34406e; border-radius: 6px;
-       box-shadow: 0 0 30px -4px rgba(122,162,247,.28), 0 0 90px -22px rgba(122,162,247,.22);
-       padding: .8em; margin-top: 1em; outline: none; height: 80vh;
-       display: flex; flex-direction: column;
-       font-family: "Web437 DOS/V re. PRC16", "Px437 IBM VGA8", ui-monospace, monospace; }
-/* the id-level display:flex would out-specify the UA [hidden] rule, leaving the
-   box stuck visible -- restore hiding at matching specificity. */
-#app[hidden] { display: none; }
-/* flex:1 + min-height:0 give #screen a bounded box the driver measures and
-   fills with a cell grid; overflow:hidden clips any sub-cell rounding. */
+/* #screen is a <pre>: flex:1 + min-height:0 give it a bounded box the driver
+   measures and fills with a cell grid, and the resets undo the pre chrome. */
 #screen { flex: 1; min-height: 0; overflow: hidden;
           background: none; border: none; border-radius: 0; padding: 0; margin: 0;
           color: #ffffff; font: inherit; line-height: 1; white-space: pre; }
 #appbar { flex-shrink: 0; color: #565f89; font-size: .8em; margin-top: .6em; }
 #appbar b { color: #7aa2f7; font-weight: normal; }
 
-/* --- chips (runnable examples) + the crew roster --- */
+/* --- chips (runnable examples) + the crew roster + the glossary --- */
 .chip { display: inline-block; background: #1f2335; border: 1px solid #3b4261;
         border-radius: 4px; padding: .15em .55em; margin: .18em .25em .18em 0;
         color: #a9b1d6; cursor: pointer; white-space: pre; }
@@ -152,53 +131,24 @@ footer { margin-top: 3.5em; color: #414868; font-size: .85em;
 .crew { margin: .9em 0; }
 .crew dt { margin-top: .7em; color: #7dcfff; }
 .crew dt a { font-weight: 600; }
-.crew dd { margin: 0 0 0 1.4em; color: #737aa2; font-size: .92em; }
+.crew dd { margin: 0 0 0 1.4em; color: #737aa2; }
 .crew dt + dd { color: #73daca; }
-
-/* --- the reference --- */
-.ref dt { color: #c0caf5; font-weight: 600; margin-top: .85em; }
-.ref dt code { font-weight: normal; }
-.ref dt a { color: inherit; }
-.ref dt a:hover { text-decoration: none; }
-.ref dt a:hover::after { content: " #"; color: #545c7e; }
-.ref dd { margin: .1em 0 0 1.4em; color: #737aa2; font-size: .94em; }
-.ref dd code { background: none; border: none; padding: 0; }
-.ref .chip { margin: .15em .1em; }
-.ref .ans { color: #565f89; }   /* the "; answer" beside a cheat-sheet chip (scoped: the terminal's .ans stays green) */
-
-/* --- glossary --- */
 .glossary dt { color: #c0caf5; font-weight: 600; margin-top: .85em; }
 .glossary dt code { font-weight: normal; }
-/* dt self-links: same look as the h2 anchors */
-.glossary dt a { color: inherit; }
-.glossary dt a:hover { text-decoration: none; }
-.glossary dt a:hover::after { content: " #"; color: #545c7e; }
-.glossary dd { margin: .1em 0 0 1.4em; color: #737aa2; font-size: .94em;
-               text-align: justify; hyphens: auto; }
-.glossary dd code { background: none; border: none; padding: 0; }
-/* a word wears its color: the color words in their hue, nothing/() the deep
-   slate blue-grey of the floor. */
-.hi.red { color: #ff3b6b; }
-.hi.green { color: #34ff9e; }
-.hi.blue { color: #3a9dff; }
-.hi.gray { color: #565f89; }
+.glossary dd { margin: .1em 0 0 1.4em; }
 
-.hi.red a { color: #ff3b6b; }
-.hi.green a { color: #34ff9e; }
-.hi.blue a { color: #3a9dff; }
-.hi.gray a { color: #565f89; }
-/* the color words' glossary entries wear their color too */
-#g-green { color: #34ff9e; } #g-red { color: #ff3b6b; } #g-blue { color: #3a9dff; }
+/* a word wears its color */
+.hi.red, .hi.red a, #g-red { color: #ff3b6b; }
+.hi.green, .hi.green a, #g-green { color: #34ff9e; }
+.hi.blue, .hi.blue a, #g-blue { color: #3a9dff; }
+.hi.gray, .hi.gray a { color: #565f89; }
 
-/* --- mobile --- the 2x desktop size (32px) overflows a phone, so drop back to
-   the 16px native cell: still a crisp 1x bitmap (2-3x on a HiDPI phone), and the
-   em-based sizes (terminal, headings, chips) scale down with it. plus the usual
-   small-screen hygiene: left-align the justified prose (rivers read badly when
-   narrow), break long tokens, keep wide tables inside the viewport. */
+/* --- mobile --- 32px overflows a phone, so drop to the 16px native cell: a
+   crisp 1x bitmap in the terminal, and the em-based sizes scale with it. */
 @media (max-width: 768px) {
   body { font-size: 16px; padding: 1.4em .8em 4em; overflow-x: clip; }
   #term { font-size: 16px; }
-  p, li, .law, .glossary dd { text-align: left; }
+  p, li, dd { font-size: 17px; }
   code { overflow-wrap: anywhere; }
   td { word-break: break-word; }
 }
