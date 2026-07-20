@@ -65,7 +65,9 @@
 ;   parallel: lux (the X11 window manager, crew/lux/), inle (the freestanding kernel, port/inle/),
 ;   reef (the patch-set vcs, crew/reef/ + host/hash.c -- doc/reef.md, `make test_reef`), moon (the C
 ;   compiler in love, crew/moon/ -- compiles love.c + all host/*.c and holo links them, no gcc/glibc/ld:
-;   `make test_raw`). apps
+;   `make test_raw`), rune (the symbolic algebra engine, crew/rune/ -- exact multivariate polys +
+;   Q[x]/(m) on the q coin; polys STRIKE AS COINS (die + - *, net-mode 1: !p is "zero poly");
+;   its gate test/host/rune.l verifies the 2026 jacobian-conjecture disproof whole). apps
 ;   add nifs through the host/*.c glob + AI_NIF (no core edit); love.c/love.h/host/main.c are CORE -- an
 ;   app session needing a core change stops and asks the core thread, never reaches in. the runnable
 ;   ones install on PATH via `make install`.
