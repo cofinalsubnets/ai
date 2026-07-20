@@ -178,12 +178,15 @@
 ; the monadic words behind the glued sigils (the valence law; see opfix and
 ; book['monadics] below). net is the CONTENT MEASURE as a value -- + turned
 ; inward: a number is its own net (phase intact, exact), an array sums its
-; cells, a list the nets of its spine, and everything else is non-negative
-; so its net IS its sat. prod is the product twin; negate/reciprocal/fraction the
-; dyadics turned inward; bit the truth bit (the Iverson bracket, !!).
+; cells, a list the nets of its spine, a coin its payload's net SIGNED (or its
+; tally, when the die pins net-mode 1 in slot 6 -- lockstep with the C truth
+; path), and everything else is non-negative so its net IS its sat. prod is the
+; product twin; negate/reciprocal/fraction the dyadics turned inward; bit the
+; truth bit (the Iverson bracket, !!).
 (: (net x) (? (tray? x) (asum x)
               (constellation? x) x
               (two? x) (foldl (\ a e (+ a (net e))) 0 x)
+              (coin? x) (? (= 1 (-> (die-of x) 6 0)) (tally x) (net (load x)))
               (sat x))
    (prod x) (? (tray? x) (aprod x)
                (two? x) (foldl (\ a e (* a (prod e))) 1 x)
@@ -726,6 +729,11 @@
 ; net/=/</show default over the payload in the C core, so $/truth, value-equality, sort
 ; and the (name payload) show form all work with no extra ceremony. plus/times take
 ; payloads. (ring 'z5 plus times) / (monoid 'z5 plus) -> a constructor: payload -> coin.
+; `-` rides slot 5 for a die that pins it (ring/monoid pin none; q pins its own):
+; unpinned, coin subtraction answers (), the undefined-op law. slot 6 is the NET
+; MODE, a fixnum: absent/0 nets the payload (the hom); 1 nets by TALLY -- the
+; count, never negative -- so a die over signed content (a ledger, a polynomial)
+; can make its coins' truth read "has any", not "sums green".
 ; LIVES HERE, below the #(..) `hash` macro: a macro must precede its use in the prel,
 ; since the bootstrap c0 is a single forward pass (no macro hoist). slot 0 = show-name.
 (: (ring name plus times) (:
@@ -736,19 +744,34 @@
    (monoid name plus) (ring name plus 0))                        ; a monoid is a ring with no product
 
 ; --- rationals: an exact field shipped as a coin over a reduced (num den) payload ---
-; +/* cross-multiply and reduce; = is payload equality after reduction (so (q 2 4) =
+; +/*/- cross-multiply and reduce; = is payload equality after reduction (so (q 2 4) =
 ; (q 1 2)); show is (q (num den)), which reads back since q also accepts the 2-list. a
 ; coin nets its payload, so a rational's net is its (num den) sum -- truth/sort go by
-; representation, not value (a map payload would net by presence instead). `reduce` is
-; local plumbing; q is the only name this leaks.
+; representation, not value (a map payload would net by presence instead). a method
+; gets RAW operands, so it OWNS its domain: ok? admits a star or an (n d) of stars
+; (an integer rides cap/mint: (cap 7) is 7, (caup 7) the unit), and anything else
+; answers () -- the undefined-op law, and the fence that keeps a foreign operand (a
+; chain of coins, say) from dragging gcd into a loop. `reduce`/`ok?` are local
+; plumbing; q is the only name this leaks.
 (: q (: reduce (\ n d (? (= 0 n) (L 0 1)                        ; gcd out, sign on num, den > 0
                         (: g (gcd (abs n) (abs d)) s (? (< d 0) -1 1)
                            (L (// (* s n) g) (// (* s d) g)))))
+        (ok? v) (? (star? v) 1
+                   (two? v) (&& (star? (cap v)) (star? (caup v)))
+                   0)
         st #(0 'q)
         _ (pin st 1 (\ a b (: x (load a) y (load b)             ; (n1 d1) + (n2 d2)
-              (coin st (reduce (+ (* (cap x) (caup y)) (* (cap y) (caup x))) (* (caup x) (caup y)))))))
+              (? (&& (ok? x) (ok? y))
+                 (coin st (reduce (+ (* (cap x) (caup y)) (* (cap y) (caup x))) (* (caup x) (caup y))))
+                 ()))))
         _ (pin st 2 (\ a b (: x (load a) y (load b)             ; (n1 d1) * (n2 d2)
-              (coin st (reduce (* (cap x) (cap y)) (* (caup x) (caup y)))))))
+              (? (&& (ok? x) (ok? y))
+                 (coin st (reduce (* (cap x) (cap y)) (* (caup x) (caup y))))
+                 ()))))
+        _ (pin st 5 (\ a b (: x (load a) y (load b)             ; (n1 d1) - (n2 d2)
+              (? (&& (ok? x) (ok? y))
+                 (coin st (reduce (- (* (cap x) (caup y)) (* (cap y) (caup x))) (* (caup x) (caup y))))
+                 ()))))
         (\ n (? (two? n) (coin st (reduce (cap n) (caup n)))    ; (q (n d)) -- the show form
                 (\ d (coin st (reduce n d)))))))               ; (q n d) -- the ergonomic curried form
 

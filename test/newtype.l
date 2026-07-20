@@ -13,6 +13,9 @@
    sm (monoid 'sm (\ x y (+ x y)))
    smp (sm 2)
    smq (sm 3)
+   ; a COUNTED kind -- net-mode 1 (slot 6): nets by tally, not by content
+   cntd #(0 'cnt 6 1)
+   (cnt p) (coin cntd p)
    (assert
     ; --- what a coin IS ---
     (coin? a)                      ; a is a coin
@@ -70,6 +73,14 @@
     ; --- tally delegates to the payload ---
     (= 3 (tally (sm (L 7 8 9))))   ; a coin over a 3-list tallies its payload
 
+    ; --- net-mode 1 (slot 6): net by TALLY -- truth reads "has any", never "sums green" ---
+    (= 2 (sat (cnt (L 1 -5))))     ; content sums -4; the COUNT is 2
+    (nil? (nil? (cnt (L -3))))     ; red content, still true: one element is SOMETHING
+    (nil? (cnt ()))                ; an empty payload counts 0 -> nothing
+    (= 0 (sat (cnt ())))
+    (= 3 (net (L (cnt (L 1)) (cnt (L 1 1)))))   ; counts flow through the list sum: 1+2
+    (= -4 (net (sm (L 1 -5))))     ; mode absent: the payload hom, signed, as ever
+
     ; --- rationals (q): a multi-field coin; +/*/=/show all work. (a coin nets its
     ;     payload, so q's truth/sort go by representation, not value -- not asserted.) ---
     (= (q 5 6) (+ (q 1 2) (q 1 3)))    ; 1/2 + 1/3 = 5/6
@@ -77,6 +88,22 @@
     (= (q 1 2) (q 2 4))                ; reduced on construction
     (= (q 1 2) (q (L 1 2)))            ; the 2-list form (what show reads back)
     (= "(q (1 2))" (show (q 2 4)))     ; show is reduced + reparsable
+
+    ; --- `-` rides slot 5: q pins it (cross-multiply, reduce); the unit still rides ---
+    (= (q 1 6) (- (q 1 2) (q 1 3)))    ; 1/2 - 1/3 = 1/6
+    (= (q -1 1) (- (q 1 2) (q 3 2)))   ; goes red exactly
+    (= (q 1 2) (- (q 3 2) 1))          ; an integer rides cap/mint, either side
+    (= (q 1 2) (- 1 (q 1 2)))
+    (= (q 1 2) (- (q 1 2) ()))         ; () is the do-nothing operand for - too
+    (= (q 1 2) (- () (q 1 2)))         ; ... either side (the op never happens)
+    (nil? (- a (z5 1)))                ; a die without slot 5 -> nil, like a monoid's *
+    (nil? (- a (sm 3)))                ; distinct dies never combine
+
+    ; --- a method OWNS its domain: off it (no star / (n d)-of-stars face), () ---
+    (nil? (+ (q 1 2) (L (q 1 1) (q 0 1))))   ; a chain of coins is not an (n d)
+    (nil? (* (q 1 2) (L 'x)))                ; nor a chain of symbols
+    (nil? (- (q 1 2) "s"))                   ; nor text
+    (= (q 1 1) (+ (q 1 2) (L 1 2)))          ; ... but a bare (n d) of stars reads as n/d
 
     ; --- a coin's lit?-ness is its die's call: fresh DATA by default ---
     (nil? (lit? (q 1 2)))          ; a rational is DATA -- a value, not a reference (like a number)

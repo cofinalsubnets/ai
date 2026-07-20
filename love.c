@@ -169,7 +169,7 @@ lvm_t lvm_kcall,
  lvm_putn, lvm_gauge,    lvm_clock, lvm_apof, lvm_seal, lvm_books, lvm_setbook, lvm_mods,
  lvm_nilp,  lvm_putc, lvm_mint, lvm_nomctor, lvm_intern, lvm_chainp,
  lvm_pin, lvm_peep, lvm_fputx, lvm_buf, lvm_bufnew, lvm_bcopy,
- lvm_coin, lvm_coinmk, lvm_load, lvm_dieof, lvm_coinp, lvm_add_coin, lvm_mul_coin,   // newtypes: a coin (die + payload), a typed hot riding KHot
+ lvm_coin, lvm_coinmk, lvm_load, lvm_dieof, lvm_coinp, lvm_add_coin, lvm_mul_coin, lvm_sub_coin,   // newtypes: a coin (die + payload), a typed hot riding KHot
  lvm_charmp,  lvm_nomp,   lvm_namep,  lvm_strp,   lvm_tabp, lvm_band,   lvm_bor,  lvm_real,  lvm_flop,
  lvm_sin, lvm_cos, lvm_log, lvm_pow,   // sqrt/exp/tan/atan/atan2 are derived (numeral/complex forms), not nifs
  // Step 7 -- complex (kernel/cplx.c). lvm_cplx_bin (declared apart, below) is
@@ -321,8 +321,12 @@ static ai_inline word coin_load(word x) { return ((struct ai_coin*) x)->payload;
 // ADD/MUL/APPLY are closures run INSIDE the VM (+/* and apply are lvm handlers, so
 // they can call love code). net/=/</show/tally default over the payload in pure C. HOT,
 // if truthy, makes the die's coins lit? (a reference value); absent -> the coin is
-// fresh DATA (not lit?), like a rational -- a value, not a reference.
-enum { DIE_NAME = 0, DIE_ADD = 1, DIE_MUL = 2, DIE_APPLY = 3, DIE_HOT = 4 };
+// fresh DATA (not lit?), like a rational -- a value, not a reference. NET is a MODE
+// fixnum, not a closure (ai_net is pure C under every truth test and must never
+// re-enter the VM): mode 1 nets by the COUNT, so truth reads "has any" even when
+// the payload's content sums red (a signed ledger, a polynomial's coefficients).
+enum { DIE_NAME = 0, DIE_ADD = 1, DIE_MUL = 2, DIE_APPLY = 3, DIE_HOT = 4, DIE_SUB = 5,
+       DIE_NET = 6 };   // net MODE, a fixnum: absent/0 = net of payload; 1 = net by TALLY (the count)
 // read a die slot, or () if absent / the die is not a map.
 static ai_inline word die_get(struct ai *g, word die, intptr_t slot) {
  return tabp(die) ? ai_mapget(g, nil, putcharm(slot), die) : nil; }
@@ -446,6 +450,7 @@ static ai_inline struct ai_zn zn(ai_flo_t re, ai_flo_t im) {
 static ai_inline bool zn_nonpos(struct ai_zn z) {      // <= 0 in the total order
   return z.re < 0 || (z.re == 0 && z.im <= 0); }
 static struct ai_zn ai_net(struct ai *, word);         // fwd: aggregates sum their elements
+static intptr_t ai_count(struct ai *, word);           // fwd: tally's C body (net-mode 1 reads it)
 static ai_inline bool ai_nilp(struct ai *g, word x) {
   if (x == nil || x == EmptyString) return true;
   if (charmp(x)) return getcharm(x) < 0;                 // 0 is nil (caught above); negatives false
@@ -2463,8 +2468,9 @@ static lvm(lvm_mulh) {
  dst[0] = fa, dst[1] = h, dst[2] = ga, dst[3] = ret;
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 
-// --- coin +/* : run the die's ADD/MUL closure over the two operands ----------
-// Reached from the KHot lane when either operand is a coin (so coin + number, coin +
+// --- coin +/*/- : run the die's ADD/MUL/SUB closure over the two operands ----
+// Reached from the KHot lane -- and from lvm_sub's own coin check, `-` having no
+// kind matrix -- when either operand is a coin (so coin + number, coin +
 // chain, coin + coin all land here). One operand is a coin: ITS die's method runs,
 // `(\ a b ...)`, computing the result via numap_drive -- the same frame lvm_addh uses
 // for church-add. The method gets the RAW operands, so a coin + a non-coin is the
@@ -2490,6 +2496,8 @@ static lvm(lvm_coin_op, intptr_t slot) {
  return Sp = dst, Ip = (union u*) numap_drive, Continue(); }
 lvm(lvm_add_coin) { return Ap(lvm_coin_op, g, DIE_ADD); }
 lvm(lvm_mul_coin) { return Ap(lvm_coin_op, g, DIE_MUL); }
+// `-` has no kind matrix; lvm_sub intercepts coins itself and lands here.
+lvm(lvm_sub_coin) { return Ap(lvm_coin_op, g, DIE_SUB); }
 
 // applying a coin: run the die's APPLY closure as `((f self) arg)`; absent, a coin
 // is an opaque handle (const-1), like a cask/port. self is the value at Ip (the apply
@@ -2958,7 +2966,10 @@ static struct ai_zn ai_net(struct ai *g, word x) {
     for (uintptr_t i = 0; i < b->len; i++) t += (uint8_t) b->bytes[i];
     return zn(t, 0); }
   if (tabp(x)) return zn((ai_flo_t) map_len(x), 0);              // table: key count
-  if (coinp(x)) return ai_net(g, coin_load(x));                // a coin nets its payload (the monoid hom)
+  if (coinp(x)) {                                              // a coin nets its payload (the monoid hom) --
+    if (die_get(g, coin_die(x), DIE_NET) == putcharm(1))       // unless the die pins net-mode 1: net by TALLY,
+      return zn((ai_flo_t) ai_count(g, coin_load(x)), 0);      // the COUNT -- never negative, so truth is "has any"
+    return ai_net(g, coin_load(x)); }
   if (!datp(x)) return zn(1, 0);                                // opaque but present (fn / port): truthy
   switch (typ(x)) {
     default: return zn(1, 0);                                   // unknown present data kind -> truthy
@@ -5486,14 +5497,6 @@ lvm(lvm_link) {
 #define avm_unit(a, b) \
  if (mintp(a)) return *++Sp = b, Ip++, Continue(); \
  if (mintp(b)) return *++Sp = a, Ip++, Continue()
-#define avm_ovf(op, builtin) lvm(lvm_##op) { \
- word a = Sp[0], b = Sp[1]; \
- if (charmp(a) && charmp(b)) { intptr_t t; \
-  if (!builtin((intptr_t) getcharm(a), (intptr_t) getcharm(b), &t) && \
-      t >= fix_min && t <= fix_max) \
-   return *++Sp = putcharm(t), Ip++, Continue(); } \
- avm_unit(a, b); \
- return Ap(lvm_##op##n, g); }
 #define avm_div(op, c_op) lvm(lvm_##op) { \
  word a = Sp[0], b = Sp[1]; \
  if (charmp(a) && charmp(b)) { \
@@ -5548,7 +5551,18 @@ static lvm(lvm_quotn) {
  if (!ai_ok(g)) return ghelp(g);
  return Unpack(g), Continue(); }
 
-avm_ovf(sub, __builtin_sub_overflow)
+// `-`: fixnum fast path, the () unit, then coins (the die's SUB method, slot 5 --
+// `-` has no kind matrix, so the coin interception the +/* matrices route through
+// lvm_addh/lvm_mulh lives right here), then the numeric slow lane.
+lvm(lvm_sub) {
+ word a = Sp[0], b = Sp[1];
+ if (charmp(a) && charmp(b)) { intptr_t t;
+  if (!__builtin_sub_overflow((intptr_t) getcharm(a), (intptr_t) getcharm(b), &t) &&
+      t >= fix_min && t <= fix_max)
+   return *++Sp = putcharm(t), Ip++, Continue(); }
+ avm_unit(a, b);
+ if (coinp(a) || coinp(b)) return Ap(lvm_sub_coin, g);
+ return Ap(lvm_subn, g); }
 // lvm_mul + its kind matrix live after the `+` string lane (they reuse add_name /
 // stringrank for the symbol-repetition case), below.
 
@@ -7726,16 +7740,20 @@ static intptr_t cmp3(struct ai *g, word a, word b) {
 // 1) beside $'s net (every generator weighs itself). a string or buf counts
 // its charms, a list its spine, an array its cells, a map its keys, a symbol
 // its spelling; a scalar counts nothing. this is what "length" always was.
+// the COUNT -- how many, never how much. One C body shared by lvm_tally and
+// ai_net's DIE_NET mode-1 lane.
+static intptr_t ai_count(struct ai *g, word l) {
+ while (coinp(l)) l = coin_load(l);                  // a coin tallies its payload
+ if (strp(l)) return (intptr_t) len(l);
+ if (bufp(l)) return (intptr_t) len(buf_str(l));
+ if (tabp(l)) return (intptr_t) map_len(l);
+ if (arrp(l)) return (intptr_t) vec_nelem(vec(l));
+ if (nomp(l)) { struct ai_str *nm = add_name(g, l); return nm ? (intptr_t) len(nm) : 0; }  // a sym counts its spelling; a bare mint / the core: 0
+ intptr_t n = 0;
+ while (chainp(l)) n++, l = B(l);
+ return n; }
 lvm(lvm_tally) {
- word l = Sp[0]; intptr_t n = 0;
- if (strp(l)) n = (intptr_t) len(l);
- else if (bufp(l)) n = (intptr_t) len(buf_str(l));
- else if (tabp(l)) n = (intptr_t) map_len(l);
- else if (arrp(l)) n = (intptr_t) vec_nelem(vec(l));
- else if (nomp(l)) { struct ai_str *nm = add_name(g, l); n = nm ? (intptr_t) len(nm) : 0; }  // a sym counts its spelling; a bare mint / the core: 0
- else if (coinp(l)) { Sp[0] = coin_load(l); return Ap(lvm_tally, g); }   // a coin tallies its payload
- else while (chainp(l)) n++, l = B(l);
- Sp[0] = putcharm(n);
+ Sp[0] = putcharm(ai_count(g, Sp[0]));
  return Ip++, Continue(); }
 
 lvm(lvm_sort) {
