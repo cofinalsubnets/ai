@@ -2488,51 +2488,50 @@
    ; a register DIES on the straight-line suffix when an insn overwrites it
    ; before any read -- a label/branch/call/unknown op ends the certainty
    (dies? rd l)
-    (? (! (two? l)) ()
+    (? !(two? l) ()
        (: f <l
-          (? (! (two? f)) ()
+          (? !(two? f) ()
              (: rs (rdsp f)
                 (? (id? rs 'bar) ()
                    (member? rd <rs) ()
                    (member? rd <>rs) 1
                    (dies? rd >l))))))
    (addrf1 fs)
-    (? (! (two? fs)) ()
+    (? !(two? fs) ()
        (: f <fs r >fs
           nx (? (two? r) <r ())
           ; a leax feeding the very next full-word/byte load THROUGH its dest
           ; IS the indexed load: one SIB insn (base/index read at the leax's
           ; seat, so they may alias an overwritten or dying dest)
-          lx (? (! (&& (two? f) (&& (<f = 'leax)
-                        (&& (two? nx) (member? <nx '(ld ldu1)))))) ()
-                (! (id? <>>nx <>f)) ()
-                (! (&& (charm? <>>>nx) (charm? (nthr f 5)))) ()
+          lx (? !(two? f && <f = 'leax && two? nx  && member? <nx '(ld ldu1)) ()
+                !(id? <>>nx <>f) ()
+                !(&& (charm? <>>>nx) (charm? (nthr f 5))) ()
                 `((? (<nx = 'ld) 'ldx 'ldxb) <>nx <>>f <>>>f (nthr f 4)
                   ((nthr f 5) + <>>>nx)))
           hit (? (two? lx) ()
-                 (! (&& (two? f) (&& (two? nx) (member? <nx ldops9)))) ()
-                 (! (id? <>>nx <>f)) ()               ; the load's base is f's dest
-                 (! (charm? <>>>nx)) ()
+                 !(two? f && two? nx  && member? <nx ldops9) ()
+                 !(id? <>>nx <>f) ()               ; the load's base is f's dest
+                 !(charm? <>>>nx) ()
                  (member? <f '(lea lean))
                   (? (charm? <>>>f) `(<>>f (<>>>f + <>>>nx)) ())
                  (<f = 'add)
-                  (? (&& (charm? <>>>f) (&& (! (id? <>>f 'sp)) (fits32? (<>>>f + <>>>nx))))
+                  (? (charm? <>>>f && !(id? <>>f 'sp) && fits32? (<>>>f + <>>>nx))
                      `(<>>f (<>>>f + <>>>nx)) ())
                  (<f = 'mov) `(<>>f <>>>nx)
                  ())
           (? (two? lx)
-              (? (|| (id? <>nx <>f) (dies? <>f >r)) (link lx (addrf1 >r))
-                 (! (|| (id? <>f <>>f) (id? <>f <>>>f)))
-                  (link f (link lx (addrf1 >r)))
-                 (! (|| (id? <>nx <>>f) (id? <>nx <>>>f)))
-                  (link lx (link f (addrf1 >r)))
-                 (link f (addrf1 r)))
+              (? (id? <>nx <>f || dies? <>f >r) (lx >< addrf1 >r)
+                 !(id? <>f <>>f || id? <>f <>>>f)
+                  (f >< lx >< addrf1 >r)
+                 !(id? <>nx <>>f || id? <>nx <>>>f)
+                  (lx >< f >< addrf1 >r)
+                 (f >< addrf1 r))
              (two? hit)
               (: nl `(<nx <>nx <hit <>hit)
-                 (? (|| (id? <>nx <>f) (dies? <>f >r)) (link nl (addrf1 >r))
-                    (! (id? <>f <hit)) (link f (link nl (addrf1 >r)))
-                    (link nl (link f (addrf1 >r)))))
-             (link f (addrf1 r)))))
+                 (? (id? <>nx <>f || dies? <>f >r) (nl >< addrf1 >r)
+                    !(id? <>f <hit) (f ><  nl >< addrf1 >r)
+                    (nl >< f >< addrf1 >r)))
+             (f >< addrf1 r))))
    (addrfold fs) (addrf1 (addrf1 fs))
 
    ; store-forward: a full-word frame store followed by ITS OWN reload reads the
@@ -2540,40 +2539,39 @@
    ; reload into a mov (the same-register form drops it). the narrow loads
    ; (ld4 ..) keep their memory round-trip: they re-extend, a different value.
    (stld fs)
-    (? (! (two? fs)) ()
+    (? !(two? fs) ()
        (: f <fs r >fs
-          (? (! (&& (two? r) (&& (two? f) (&& (<f = 'st) (<>f = 'r4)))))
-             (link f (stld r))
+          (? !(two? r && two? f && <f = 'st && <>f = 'r4)
+             (f >< stld r)
              (: nx <r
                 rX <>>>f
-                (? (! (&& (two? nx) (&& (<nx = 'ld)
-                          (&& (<>>nx = 'r4) (<>>>nx = <>>f)))))
-                   (link f (stld r))
+                (? !(two? nx && <nx = 'ld && <>>nx = 'r4 && <>>>nx = <>>f)
+                   (f >< stld r)
                    (: rY <>nx
-                      (? (rY = rX) (link f (stld >r))
-                         (link f (link `('mov rY rX) (stld >r))))))))))
+                      (? (rY = rX) (f >< stld >r)
+                         (f >< `('mov rY rX) >< stld >r))))))))
 
    ; -- aggregate initializers: ('init (item..)), items plain | ('dfield
    ; name val) | ('didx n val), nesting for arrays of structs. shared bits: --
-   (aggish? ty) (|| (arr? ty) (stru? ty))
+   (aggish? ty) (arr? ty || stru? ty)
    (elval it) (? (member? <it '(dfield didx)) <>>it it)   ; the value of an item
-   (fidx fields name) (: (go l i) (? (! (two? l)) 0 ((cap (cap l)) = name) i (go >l (i + 1)))
+   (fidx fields name) (: (go l i) (? !(two? l) 0 (<<l = name) i (go >l (i + 1)))
                           (go fields 0))
-   (nthfield fields i) (: (go l k) (? (! (two? l)) 'bad (k < 1) <l (go >l (k - 1)))
+   (nthfield fields i) (: (go l k) (? !(two? l) 'bad (k < 1) <l (go >l (k - 1)))
                            (go fields i))
 
    ; -- brace elision (C 6.7.9): a flat run of items fills a nested subaggregate whose
    ; brace was omitted -- int a[2][2] = {1,2,3,4} means {{1,2},{3,4}}. we NORMALIZE the
    ; init tree up front (wrapping each elided run in an explicit ('init ..)), so the layout
    ; code below only ever sees fully-braced inits. idempotent on an already-braced tree. --
-   (initval? v) (&& (two? v) (<v = 'init))
+   (initval? v) (two? v && <v = 'init)
    (unelide g ty ini)                               ; normalize ini against ty
-    (? (! (initval? ini)) ini                        ; a scalar / non-brace: nothing to nest
-       (! (aggish? ty)) ini                           ; a brace on a scalar type: leave (layout unwraps/scares)
+    (? !(initval? ini) ini                        ; a scalar / non-brace: nothing to nest
+       !(aggish? ty) ini                           ; a brace on a scalar type: leave (layout unwraps/scares)
        (: pr (normfill g ty <>ini) `('init <pr)))     ; <pr = normed items; <>pr (excess) dropped
-   (redesig dh dk v) (link dh (link dk (link v ())))   ; ('didx k v) | ('dfield k v)
+   (redesig dh dk v) `(dh dk v)   ; ('didx k v) | ('dfield k v)
    (normelt g ty desig dh dk val l)                 ; one element of type ty from item stream l -> (item rest)
-    (? (&& (aggish? ty) (! (initval? val)))          ; ELIDE: fill ty from the run starting at val
+    (? (aggish? ty && !(initval? val))          ; ELIDE: fill ty from the run starting at val
         (: pr (normfill g ty (link val >l))
            w `('init <pr)
            `((? desig (redesig dh dk w) w) <>pr))

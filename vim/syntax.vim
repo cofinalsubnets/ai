@@ -1,4 +1,4 @@
-" vim syntax for l lisp (.l)
+" vim syntax for love (.l)
 " based on lisp.vim by Charles E Campbell <http://www.drchip.org/astronaut/vim/index.html#SYNTAX_LISP>
 if exists("b:current_syntax")
   finish
@@ -14,39 +14,73 @@ syn iskeyword @,33,37,38,42-43,45-47,48-57,58,60-63,92,94-95,124,126
 " The three special forms: : (letrec*/seq), ? (cond), \ (lambda/quote)
 syn keyword LoveForm : ? \\
 
-" Built-in functions (C nifs) + prel functions
+" The surface vocabulary, curated from (names ()) -- probe the binary and
+" re-curate on a rename. bare punct operators (+ - * / < <= ...) are NOT
+" keywords: the sigil matches below own every punct run, so the glued/spaced
+" valence shows in the colour.
+" chains & lists
 syn keyword LoveFunc link cap cup caap caup cuap cuup
 syn keyword LoveFunc caaap caaup cauap cauup cuaap cuaup cuuap cuuup
-syn keyword LoveFunc id co const flip
-syn keyword LoveFunc map foldl foldr foldl1 foldr1 filter init last each all any cat catmap
-syn keyword LoveFunc rev take drop part zip ldel assq memq lidx sort sortsplit merge msort jot
-syn keyword LoveFunc + - * / % < <= = >= > <- -> idp inc dec abs gcd modpow int
-syn keyword LoveFunc << >> & \| ^
-syn keyword LoveFunc pin pull peep tablet mint gauge
-syn keyword LoveFunc sin cos log pow re im conj arg twin
-syn keyword LoveFunc nump intp powg num-ap numfn randint net prod neg recip frac bit
-syn keyword LoveFunc chainp strp symp tabp lamp hotp packp bigp widep trayp comp flop fixp nilp non atomp unip gemp crestp
-syn keyword LoveFunc arr array arank alen ashape atype asum aprod amax amin aall iota
-syn keyword LoveFunc a-rank a-shape a-type a-dim
-syn keyword LoveFunc string snip intern nom mint tally slurp show sip pad page
-syn keyword LoveFunc tablet keys dig sat non peep pin pull buf blit missing
-syn keyword LoveFunc spin peek poke seek snip chainp trayp unip
-syn keyword LoveFunc fgetc fungetc feof fputc fputs fputbn fputx fflush read
-syn keyword LoveFunc putc puts putn putx getc read in out dot
-syn keyword LoveFunc ev call-cc yield spawn wait sleep done? hush key?
-syn keyword LoveFunc help scare scare? more? eof?
-syn keyword LoveFunc rand randf rand-next randf-next rng-seed rng-get rng-set
-syn keyword LoveFunc open close run getenv exit
-syn keyword LoveFunc clock gauge assert love-version argv cmdline
-syn keyword LoveSigilWord non twin sat
+syn keyword LoveFunc rest rev init last take drop part zip cat revcat catmap
+syn keyword LoveFunc map filter each all any foldl foldr foldl1 foldr1
+syn keyword LoveFunc merge sort sortby jot iota unfold gather spread assoc member?
+syn keyword LoveFunc ring stack monoid inner outer
+" combinators & application
+syn keyword LoveFunc id co const flip compose ap apof apover tap wrap ev call-cc
+" numbers & math (power IS application; sine/cosine/log the transcendental nifs)
+syn keyword LoveFunc abs gcd modpow int negate reciprocal fraction min max
+syn keyword LoveFunc sine cosine tangent log re im conj arg twin gem num-ap
+" the two measures & truth (net how much, tally how many; sat the one clamp)
+syn keyword LoveFunc net prod tally sat saturate bit
+syn keyword LoveFunc nil? zero? one? two? empty? whole?
+" the celestial predicates
+syn keyword LoveFunc charm? sun? big? gem? twin? star? galaxy? constellation?
+syn keyword LoveFunc atom? nom? name? string? tray? book? hot? lit? id? coin? cue? back?
+" randomness
+syn keyword LoveFunc rand randf random seed coin rng-get rng-set
+" trays & galaxies
+syn keyword LoveFunc array rank shape tier aall gem-tray star-tray twin-tray top-tray
+syn keyword LoveFunc blit blitrow pour shore gauge
+" strings & mints
+syn keyword LoveFunc string snip intern nom mint slurp show sip parse parsed reads
+" books & tablets
+syn keyword LoveFunc tablet keys dig pin pull peep missing names pinw peepw
+syn keyword LoveFunc cask jug freeze var mind
+" modules (the registry: enter/leave seals a layer, use splices, from reaches in)
+syn keyword LoveFunc enter leave seal use from
+" control (help/welp, missing, apcap)
+syn keyword LoveFunc welp scare scare? more? apcap ufail ufail? err die-of catch quit
+" tasks & sound
+syn keyword LoveFunc spawn twirl wait await still fires fired? reply hear listen sound
+" i/o & ports
+syn keyword LoveFunc read getc putc puts putn putx putbn put print say dot in out
+syn keyword LoveFunc flush open close openfd fdclose lseek pipe eof?
+syn keyword LoveFunc mapfd mapfdo mapin mapout
+" the posix crew
+syn keyword LoveFunc run exec getenv setenv environ argv cmdline clock
+syn keyword LoveFunc chdir cwd mkdir rmdir unlink rename symlink hardlink readlink readdir
+syn keyword LoveFunc stat chmod chown umask utime mount newns getpid
+syn keyword LoveFunc signal sigfd sigtake ioctl winsize setwinsize ttyfg ptyecho spawnio
+syn keyword LoveFunc memfd sha256 accept connect connectu
+syn keyword LoveFunc udp-bind udp-send udp-recv wl-send wl-recv
+" display & the shell core
+syn keyword LoveFunc see unsee gaze glass screen font scribe raw wet swig runt unmap
+syn keyword LoveFunc edraw edln shell bao
+" logic (kanren)
+syn keyword LoveFunc kanren unify var
+" tools & images
+syn keyword LoveFunc glaze bake load uu overlay overlay-set overlay-off
+syn keyword LoveFunc love-version love-arch love-tco
+" cuda
+syn keyword LoveFunc cuda-avail cuda-gemm cuda-ew cuda-transp cuda-reduce
 
 " Macros (head-symbol rewrites installed with ::)
-syn keyword LoveMacro :: L list do begin progn let if cond quote tuple hash
-syn keyword LoveMacro && \|\| :- ?- >>= <=<
+syn keyword LoveMacro :: L list do begin progn let if cond quote tuple hash pins
+syn keyword LoveMacro assert suite && \|\| :- ?- >>= <=< zz et vel
 
-" Constants: booleans (1/0), the tier-spine array element-kind codes, e pi i
-syn keyword LoveConst true false e pi tau i ieee-inf ieee-nan
-syn keyword LoveConst Z R C O
+" Constants (the exact circle constants; born the hatch time;
+" max-charm/min-charm the fixnum rails)
+syn keyword LoveConst true false e pi tau i born max-charm min-charm
 
 " Quoted atoms: 'foo   (' is one-operand \ = quote)
 syn match LoveAtomMark "'"
@@ -55,14 +89,20 @@ syn match LoveAtom "'[^ \t\n()`',;#\"]\+" contains=LoveAtomMark
 " Reader mark: ` is the list ctor (evaluates each element)
 syn match LoveListCtor "`"
 
-" Operator sigils: a run of operator chars that LEADS a token -- standalone
-" (+ 1 2), or glued to its datum as a monadic ($x, +'(…), <>x). The negative
-" lookbehind for a name char (alnum/_) keeps punct that lives INSIDE a name from
-" lighting up (the kebab/?/! law: rand-next, done?, max-charm stay plain), and
-" LoveNumber/LoveFloat -- defined after this -- still win the sign/decimal of -3, 2.5,
-" .5 by definition order. (the valence law: glued is monadic; the runtime tables
-" are book['operators] / book['monadics].)
-syn match LoveSigil "[A-Za-z0-9_]\@<![@#$~.!?%^*+/<>=-]\+"
+" Operator sigils -- a punct run that LEADS a token. The reader splits only a
+" leading run; punct inside a name is just the name (rand-next, done?, a*b
+" stay plain -- the lookbehind enforces it). The valence law gives a leading
+" run two lives, and the colour shows which:
+"   SPACED -- dyadic/infix, or the operator as a value: (+ 1 2), a + b, (+)
+"   GLUED  -- monadic, fused to its datum: $x  !x  <>v  +'(1 2 3)  ~(0 0)
+" glued means the FULL run touches a datum start (anything but whitespace,
+" the closers, and more sigil chars -- the last so the greedy run can't
+" backtrack and split itself: spaced != stays one dyad). the mono match is
+" defined after the dyad so it wins when glued, and LoveNumber/LoveFloat --
+" later still -- keep the sign/decimal of -3, .5.
+" (the runtime tables: love/prel.l operators/monadics, book-private post-egg.)
+syn match LoveSigilDyad "[A-Za-z0-9_]\@<![@#$~.!?%^*+/<>=|&-]\+"
+syn match LoveSigilMono "[A-Za-z0-9_]\@<![@#$~.!?%^*+/<>=|&-]\+\ze[^ \t),;@#$~.!?%^*+/<>=|&-]"
 
 " Numbers (integer / bignum literals, possibly negative)
 syn match LoveNumber "\<-\?\d\+\>"
@@ -87,8 +127,8 @@ syn match LoveParenError ")"
 syn sync lines=100
 
 hi def link LoveAtomMark       Delimiter
-hi def link LoveSigil          Special
-hi def link LoveSigilWord      Operator
+hi def link LoveSigilDyad      Operator
+hi def link LoveSigilMono      Special
 hi def link LoveAtom           Identifier
 hi def link LoveComment        Comment
 hi def link LoveCommentTodo    Todo
@@ -106,7 +146,7 @@ hi def link LoveBool           Boolean
 " Rainbow parentheses — each nesting level gets its own colour.
 " Each region contains the cluster plus the next level; level 9 wraps to 0.
 " Toggle with \r (or :LoveRainbow) — controlled by g:love_rainbow (default: 1).
-syn cluster LoveListCluster contains=LoveAtom,LoveAtomMark,LoveConst,LoveComment,LoveCommentTodo,LoveFunc,LoveNumber,LoveFloat,LoveSymbol,LoveForm,LoveString,LoveMacro,LoveListCtor,LoveSigil
+syn cluster LoveListCluster contains=LoveAtom,LoveAtomMark,LoveConst,LoveComment,LoveCommentTodo,LoveFunc,LoveNumber,LoveFloat,LoveForm,LoveString,LoveMacro,LoveListCtor,LoveSigilDyad,LoveSigilMono
 
 if !exists("g:love_rainbow")
   let g:love_rainbow = 0
