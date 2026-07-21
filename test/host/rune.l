@@ -637,7 +637,21 @@
  ((simp '(sqrt (** x 2))) = '(sqrt (** x 2)))         ; bare: x may be red -- stays
  ((simp '(sqrt (** (exp y) 2))) = '(exp y))           ; manifest positivity needs no fact
  ((simp '(sqrt (** pi 2))) = 'pi)
- ((assume () '(/ x x)) = '(/ x x)))                   ; the empty context IS simp
+ ((assume () '(/ x x)) = '(/ x x))                    ; the empty context IS simp
+ ((expandc '((nz x)) '(* (+ a b) (/ x x)))
+  = '(+ a b))                                         ; facts reach through EXPANSION:
+                                                      ; the cancellation fires before
+                                                      ; distribution ever grows it
+ ((expand '(* (+ a b) (/ x x)))
+  = '(+ (* a (/ x x)) (* b (/ x x))))                 ; ... which bare expand cannot
+ ((expandc '((pos y)) '(* (sqrt (** y 2)) (+ y 1)))
+  = '(+ (** y 2) y))                                  ; the root collapses, THEN grows
+ (1 = (derivc '((nz x)) '(/ (* v x) x) 'v))           ; facts reach the DERIVATIVE:
+                                                      ; the input cancels to v first
+ ((deriv '(/ (* v x) x) 'v)
+  = '(/ (** x 2) (** x 2)))                           ; ... bare deriv answers honestly:
+                                                      ; it cannot know x is nonzero
+ (1 = (derivc '((pos u)) '(sqrt (** u 2)) 'u)))       ; ... and positivity opens roots
 
 ; --- symbolic d: the derivative as a rule set, the guard doing the base case --
 ; (d a v) -> 0 rides the matcher's GUARDED rule (fires only when a is free? of

@@ -722,8 +722,10 @@
 ; pi/e, exp, roots/products/sums of positives, even powers of nonzeros, or a
 ; declared pos). nz? is the empty-context face. `glaws` builds the guarded
 ; rules over a context; laws = ulaws + (glaws ()), so bare simp certifies
-; only the MANIFEST -- x/x stays -- while (assume c t) simps t with the
-; declared facts in force: (assume '((nz x)) '(/ x x)) is 1. `xlaws`
+; only the MANIFEST -- x/x stays -- while the c-family carries declared
+; facts through every driver: (simpc c t) -- assume is its given name --
+; (expandc c t), (derivc c t v); the plain simp/expand/deriv are their
+; empty-context faces: (assume '((nz x)) '(/ x x)) is 1. `xlaws`
 ; adds the GROWING rules on top: distribution and the log/exp splits. simp
 ; never expands; `expand` does (each pass pushes a * inside a +, or a log/exp
 ; through its operand, so that fixpoint lands too -- collected on the way).
@@ -830,23 +832,25 @@
           (rule '(a) '(+ (** (sin a) 2) (** (cos a) 2)) 1)
           (rule '(a) '(+ (** (cos a) 2) (** (sin a) 2)) 1))
    laws (ulaws + (glaws ()))
-   xlaws (laws + `((rule '(a b c) '(* a (+ b c)) '(+ (* a b) (* a c)))
-                   (rule '(a b c) '(* (+ a b) c) '(+ (* a c) (* b c)))
-                   (rule '(a b c) '(* a (- b c)) '(- (* a b) (* a c)))
-                   (rule '(a b c) '(* (- a b) c) '(- (* a c) (* b c)))
-                   (rule '(a b) '(log (* a b)) '(+ (log a) (log b)))
-                   (rule '(a b) '(log (/ a b)) '(- (log a) (log b)))
-                   (rule '(a b) '(log (** a b)) '(* b (log a)))
-                   (rule '(a b) '(exp (+ a b)) '(* (exp a) (exp b)))
-                   (rule '(a b) '(exp (- a b)) '(/ (exp a) (exp b)))
-                   (rule '(a b) '(sin (+ a b))
-                         '(+ (* (sin a) (cos b)) (* (cos a) (sin b))))
-                   (rule '(a b) '(sin (- a b))
-                         '(- (* (sin a) (cos b)) (* (cos a) (sin b))))
-                   (rule '(a b) '(cos (+ a b))
-                         '(- (* (cos a) (cos b)) (* (sin a) (sin b))))
-                   (rule '(a b) '(cos (- a b))
-                         '(+ (* (cos a) (cos b)) (* (sin a) (sin b))))))
+   grows `((rule '(a b c) '(* a (+ b c)) '(+ (* a b) (* a c)))
+                (rule '(a b c) '(* (+ a b) c) '(+ (* a c) (* b c)))
+                (rule '(a b c) '(* a (- b c)) '(- (* a b) (* a c)))
+                (rule '(a b c) '(* (- a b) c) '(- (* a c) (* b c)))
+                (rule '(a b) '(log (* a b)) '(+ (log a) (log b)))
+                (rule '(a b) '(log (/ a b)) '(- (log a) (log b)))
+                (rule '(a b) '(log (** a b)) '(* b (log a)))
+                (rule '(a b) '(exp (+ a b)) '(* (exp a) (exp b)))
+                (rule '(a b) '(exp (- a b)) '(/ (exp a) (exp b)))
+                (rule '(a b) '(sin (+ a b))
+                      '(+ (* (sin a) (cos b)) (* (cos a) (sin b))))
+                (rule '(a b) '(sin (- a b))
+                      '(- (* (sin a) (cos b)) (* (cos a) (sin b))))
+                (rule '(a b) '(cos (+ a b))
+                      '(- (* (cos a) (cos b)) (* (sin a) (sin b))))
+                (rule '(a b) '(cos (- a b))
+                      '(+ (* (cos a) (cos b)) (* (sin a) (sin b)))))
+   (xlawsc c) ((ulaws + (glaws c)) + grows)
+   xlaws (xlawsc ())
    (fold1 t) (? (nom? t) t
                 !(two? t) t
                 !(3 = tally t) t
@@ -869,7 +873,8 @@
                    z (fold1 (rw1 rs y))
                    (z = y ? y (simpw rs z)))
    (simp t) (simpw laws t)
-   (assume c t) (simpw (ulaws + (glaws c)) t))
+   (simpc c t) (simpw (ulaws + (glaws c)) t)
+   assume simpc)
 
 ; --- collect: the commutative collect -----------------------------------------
 ; + and * are commutative and associative, and - is + wearing a sign, so
@@ -968,7 +973,8 @@
                         ('- = <u) (tsum u)
                         ('* = <u) (tprod u)
                         u)))
-   (expand t) (simp (collect (simpw xlaws t))))
+   (expandc c t) (simpc c (collect (simpw (xlawsc c) t)))
+   (expand t) (expandc () t))
 
 ; --- symbolic d: the derivative as a rule set --------------------------------
 ; the term head `d` -- (d t v) -- reduces by dlaws: sum/product/quotient rules
@@ -1001,7 +1007,8 @@
            (rule '(a v) '(d (acos a) v) '(- 0 (/ (d a v) (sqrt (- 1 (** a 2))))))
            (rule '(a v) '(d (exp a) v) '(* (exp a) (d a v)))
            (rule '(a v) '(d (log a) v) '(/ (d a v) a)))
-   (deriv t v) (simp (collect (simp (rewrite dlaws `('d (simp t) v))))))
+   (derivc c t v) (simpc c (collect (simpc c (rewrite dlaws `('d (simpc c t) v)))))
+   (deriv t v) (derivc () t v))
 
 ; --- unfix: terms back to the infix surface ----------------------------------
 ; the inverse of opfix, as a FORM: unfix renders a core term as low-paren
