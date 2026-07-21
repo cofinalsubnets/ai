@@ -217,10 +217,13 @@
           (rule '(a) '(+ (* (sin a) (sin a)) (* (cos a) (cos a))) 1))
    xlaws (laws + `((rule '(a b c) '(* a (+ b c)) '(+ (* a b) (* a c)))
                    (rule '(a b c) '(* (+ a b) c) '(+ (* a c) (* b c)))
+                   (rule '(a b c) '(* a (- b c)) '(- (* a b) (* a c)))
+                   (rule '(a b c) '(* (- a b) c) '(- (* a c) (* b c)))
                    (rule '(a b) '(log (* a b)) '(+ (log a) (log b)))
                    (rule '(a b) '(log (/ a b)) '(- (log a) (log b)))
                    (rule '(a b) '(log (** a b)) '(* b (log a)))
-                   (rule '(a b) '(exp (+ a b)) '(* (exp a) (exp b)))))
+                   (rule '(a b) '(exp (+ a b)) '(* (exp a) (exp b)))
+                   (rule '(a b) '(exp (- a b)) '(/ (exp a) (exp b)))))
    (fold1 t) (? (nom? t) t
                 !(two? t) t
                 !(3 = tally t) t
@@ -245,15 +248,19 @@
    (simp t) (simpw laws t))
 
 ; --- collect: the commutative collect -----------------------------------------
-; + and * are commutative and associative, so collect canonicalizes each
-; +/* spine, bottom-up: flatten, split every element into (c u) -- ground
-; coefficient and core -- sort the cores by their RENDERED key (purely
-; syntactic, deterministic, equal cores land adjacent: a sum by show-string,
-; where compounds carry the paren and lead, so higher terms come first; a
-; product noms-first, so variables precede function forms), merge equal cores
-; summing coefficients exactly, and refold -- the constant last in a sum, the
-; coefficient first in a product. so (* y x) meets (* x y), and the binomial
-; expand lands x^2 + 2xy + y^2. expand runs it; simp stays order-preserving.
+; + and * are commutative and associative, and - is + wearing a sign, so
+; collect canonicalizes each +/-/* spine, bottom-up: flatten (sflat carries
+; the sign through every -, so subtraction IS a signed addend), split every
+; element into (c u) -- ground coefficient and core -- sort the cores by
+; their RENDERED key (purely syntactic, deterministic, equal cores land
+; adjacent: a sum by show-string, where compounds carry the paren and lead,
+; so higher terms come first; a product noms-first, so variables precede
+; function forms), merge equal cores summing coefficients exactly, and
+; refold: green terms first (constant last), then each red term SUBTRACTED
+; in order, so the sign returns to the surface as - ; a lone ground red
+; stays the signed star, a pure negation stays (- 0 u). so (* y x) meets
+; (* x y), the binomial expand lands x^2 + 2xy + y^2, and (x+y)(x-y)
+; cancels to x^2 - y^2. expand runs it; simp stays order-preserving.
 (: (spine o t) (? (nom? t) `(t)
                   (&& (two? t) (3 = tally t) (o = <t))
                   ((spine o <>t) + (spine o <>(>t)))
@@ -267,6 +274,13 @@
                  (star? t) `(t 1)
                  (&& (two? t) (3 = tally t) ('* = <t) (star? <>t)) `(<>t <>(>t))
                  `(1 t))
+   (sone s t) (: p (csplit t) `((cnorm (s * <p)) <>p))
+   (sflat s t) (? (nom? t) `((sone s t))
+                  (&& (two? t) (3 = tally t) ('+ = <t))
+                  ((sflat s <>t) + (sflat s <>(>t)))
+                  (&& (two? t) (3 = tally t) ('- = <t))
+                  ((sflat s <>t) + (sflat (0 - s) <>(>t)))
+                  `((sone s t)))
    (cmerge ps) (? (0 = tally ps) ()
                   (0 = tally >ps) ps
                   (: p <ps r <(>ps)
@@ -275,12 +289,19 @@
    (cone p) (: c <p u <>p
                (? (u = 1) c (c = 1) u `('* c u)))
    (refold o xs) ((1 = tally xs) ? <xs `(o <xs (refold o >xs)))
-   (tsum t) (: ps (cmerge (tsort (\ p r ((show <>p) < (show <>r)))
-                                 (map csplit (spine '+ t))))
+   (tsum t) (: ps (cmerge (tsort (\ p r ((show <>p) < (show <>r))) (sflat 1 t)))
                ks (filter (\ p !(<p = 0)) ps)
-               xs (map cone ((filter (\ p !(<>p = 1)) ks)
-                             + (filter (\ p (<>p = 1)) ks)))
-               ((0 = tally xs) ? 0 (refold '+ xs)))
+               gs (filter (\ p !(<p < 0)) ks)
+               ns (filter (\ p (<p < 0)) ks)
+               (clast l) ((filter (\ p !(<>p = 1)) l) + (filter (\ p (<>p = 1)) l))
+               xs (map cone (clast gs))
+               ys (map cone (map (\ p `((cnorm (0 - <p)) <>p)) (clast ns)))
+               (dsub a l) ((0 = tally l) ? a (dsub `('- a <l) >l))
+               (? (0 = tally ks) 0
+                  (0 = tally ns) (refold '+ xs)
+                  (&& (0 = tally xs)
+                      (0 = tally (filter (\ p !(<>p = 1)) ns))) <(<ns)
+                  (dsub ((0 = tally xs) ? 0 (refold '+ xs)) ys)))
    (tmul xs) (? (0 = tally xs) 1 (cnorm (<xs * (tmul >xs))))
    (tprod t) (: fs (spine '* t)
                 c (tmul (filter star? fs))
@@ -295,6 +316,7 @@
                   (: u (map collect t)
                      (? !(3 = tally u) u
                         ('+ = <u) (tsum u)
+                        ('- = <u) (tsum u)
                         ('* = <u) (tprod u)
                         u)))
    (expand t) (simp (collect (simpw xlaws t))))

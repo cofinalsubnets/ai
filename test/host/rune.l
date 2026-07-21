@@ -280,6 +280,12 @@
                                                       ; (* y x) met (* x y) and collected
  ((expand '(* (+ x 1) (+ x 1)))
   = '(+ (* x x) (+ (* 2 x) 1)))                       ; ... x^2 + 2x + 1, the constant last
+ ((expand '(* (+ x y) (- x y))) = '(- (* x x) (* y y)))   ; the difference of squares:
+ ((expand '(* (- x y) (+ x y))) = '(- (* x x) (* y y)))   ; ... the cross terms cancel
+ ((expand '(* (+ x 1) (- x 1))) = '(- (* x x) 1))
+ ((expand '(* (- x y) (- x y)))
+  = '(- (+ (* x x) (* y y)) (* 2 (* x y))))           ; (x-y)^2: the red term subtracted last
+ ((expand '(exp (- x y))) = '(/ (exp x) (exp y)))     ; an exp splits a difference
  (49 = (expand '(* (+ 3 4) (+ 3 4))))                 ; ground folds before it distributes
  ((expand '(log (* x y))) = '(+ (log x) (log y)))     ; a log splits a product
  ((expand '(log (/ (* x y) z))) = '(- (+ (log x) (log y)) (log z)))
@@ -289,9 +295,11 @@
  ((expand '(log (exp (+ x y)))) = '(+ x y)))          ; the splits meet the cancellations
 
 ; --- collect: the commutative collect ----------------------------------------
-; + and * spines canonicalize: flatten, sort the cores by rendered key, merge
-; equal cores summing coefficients exactly, refold. purely syntactic order,
-; so equal terms MEET whatever their spelling; - and / are left alone.
+; +/-/* spines canonicalize: flatten (- carries its sign through, so
+; subtraction is a signed addend), sort the cores by rendered key, merge
+; equal cores summing coefficients exactly, refold -- red terms return to
+; the surface as -. purely syntactic order, so equal terms MEET whatever
+; their spelling; / is left alone.
 (assert
  ((collect '(+ y x)) = '(+ x y))                      ; a sum sorts...
  ((collect '(* y x)) = '(* x y))                      ; ... a product too
@@ -304,7 +312,12 @@
   = '(+ (* 2 x) 1))                                   ; exact halves merge whole
  ((collect '(* 3 (* x 2))) = '(* 6 x))                ; ground factors gather up front
  ((collect '(* x (* 2 (* y (* 3 z))))) = '(* 6 (* x (* y z))))
- ((collect '(- (+ y x) z)) = '(- (+ x y) z))          ; - is not commutative: untouched
+ ((collect '(- (+ y x) z)) = '(- (+ x y) z))          ; - rides the flatten as a sign
+ ((collect '(- x (- x y))) = 'y)                      ; ... and cancels through nesting
+ ((collect '(+ (- 0 y) 3)) = '(- 3 y))                ; a red term crosses the sum
+ ((collect '(- 0 y)) = '(- 0 y))                      ; pure negation round-trips
+ ((collect '(- 2 5)) = -3)                            ; a lone ground red is the signed star
+ ((collect '(- (+ x y) (+ y x))) = 0)                 ; all of it cancels
  ((collect 'x) = 'x))
 
 ; --- conditional laws: the guard door, open ----------------------------------
