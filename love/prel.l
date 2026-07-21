@@ -765,9 +765,13 @@
 
 ; --- rationals: an exact field shipped as a coin over a reduced (num den) payload ---
 ; +/*/- cross-multiply and reduce; = is payload equality after reduction (so (q 2 4) =
-; (q 1 2)); show is (q (num den)), which reads back since q also accepts the 2-list. a
-; coin nets its payload, so a rational's net is its (num den) sum -- truth/sort go by
-; representation, not value (a map payload would net by presence instead). a method
+; (q 1 2)); show is (q (num den)), which reads back since q also accepts the 2-list.
+; the die declares its coins STARS (slot 7: numerals power through *, the surface net
+; answers the coin ITSELF) and pins net-mode 2 (slot 6, RATIO): the C truth path
+; reads n/d with the sign EXACT, so a rational's color is its VALUE's -- (q -1 2) is
+; nothing, $ ceils the magnitude, the subtract-and-test sign idiom holds. ORDER is
+; untouched: coin-coin still compares payloads, cross-kind still bands (the exact
+; value-compare lane is the open remainder of the open-stars design). a method
 ; gets RAW operands, so it OWNS its domain: ok? admits a star or an (n d) of stars
 ; (an integer rides cap/mint: (cap 7) is 7, (caup 7) the unit), and anything else
 ; answers () -- the undefined-op law, and the fence that keeps a foreign operand (a
@@ -783,7 +787,8 @@
         (ok? v) (? (nstar? v) 1
                    (two? v) (&& (nstar? (cap v)) (nstar? (caup v)))
                    0)
-        st #(0 'q 7 1)                                          ; slot 7: a rational IS a star
+        st #(0 'q 7 1 6 2)                                      ; slot 7: a rational IS a star;
+                                                                ; slot 6 mode 2: C truth by VALUE
         _ (pin st 1 (\ a b (: x (load a) y (load b)             ; (n1 d1) + (n2 d2)
               (? (&& (ok? x) (ok? y))
                  (coin st (reduce (+ (* (cap x) (caup y)) (* (cap y) (caup x))) (* (caup x) (caup y))))

@@ -116,6 +116,18 @@
     (nil? ((/ 1 2) (q 4 1)))           ; a non-whole exponent off the tower: ()
     (nil? (coin? (2 (sm 3))))          ; an UNflagged coin still composes (a closure)
 
+    ; --- net-mode 2 (RATIO): a rational's TRUTH is its VALUE's sign, exactly ---
+    (nil? (q -1 2))                    ; a negative rational IS nothing: red by value
+    (nil? (nil? (q 1 2)))              ; a positive one is something
+    (nil? (q 0 5))                     ; zero is the blue floor
+    (= 1 (sat (q 1 2)))                ; $ ceils the magnitude: 1/2 -> 1
+    (= 2 (sat (q 3 2)))                ; ceil 3/2
+    (= 0 (sat (q -7 2)))               ; ... and clamps red to the floor
+    (nil? (! (- (q 1 2) (q 1 3))))     ; the subtract-and-test sign idiom HOLDS: 1/2 - 1/3 is green
+    (! (- (q 1 3) (q 1 2)))            ; ... and 1/3 - 1/2 is red: nothing
+    (nil? (nil? (q 1 (1000 10))))      ; a 10^1000 denominator underflows the double --
+    (nil? (q -1 (1000 10)))            ; ... the sign survives it, both ways
+
     ; --- rung 2: a declared star SELF-NETS, so the vocabulary follows the flag ---
     (= (q 1 2) (net (q 1 2)))          ; net answers the coin ITSELF (the fixpoint, by declaration)
     (star? (q 1 2))                    ; ... so star? holds with no coin branch of its own

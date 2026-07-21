@@ -324,9 +324,12 @@ static ai_inline word coin_load(word x) { return ((struct ai_coin*) x)->payload;
 // fresh DATA (not lit?), like a rational -- a value, not a reference. NET is a MODE
 // fixnum, not a closure (ai_net is pure C under every truth test and must never
 // re-enter the VM): mode 1 nets by the COUNT, so truth reads "has any" even when
-// the payload's content sums red (a signed ledger, a polynomial's coefficients).
+// the payload's content sums red (a signed ledger, a polynomial's coefficients);
+// mode 2 nets an (n d)-of-reals payload as the RATIO n/d with the sign exact, so
+// a rational's truth is its VALUE's sign, not its representation's.
 enum { DIE_NAME = 0, DIE_ADD = 1, DIE_MUL = 2, DIE_APPLY = 3, DIE_HOT = 4, DIE_SUB = 5,
-       DIE_NET = 6,    // net MODE, a fixnum: absent/0 = net of payload; 1 = net by TALLY (the count)
+       DIE_NET = 6,    // net MODE, a fixnum: absent/0 = net of payload; 1 = net by TALLY (the
+                       // count); 2 = RATIO (an (n d)-of-reals payload nets n/d, sign exact)
        DIE_STAR = 7 }; // truthy = the die's coins are NUMERIC: numeral application powers them
                        // through their own * (prel num-ap reads this slot; C never does)
 // read a die slot, or () if absent / the die is not a map.
@@ -2968,9 +2971,20 @@ static struct ai_zn ai_net(struct ai *g, word x) {
     for (uintptr_t i = 0; i < b->len; i++) t += (uint8_t) b->bytes[i];
     return zn(t, 0); }
   if (tabp(x)) return zn((ai_flo_t) map_len(x), 0);              // table: key count
-  if (coinp(x)) {                                              // a coin nets its payload (the monoid hom) --
-    if (die_get(g, coin_die(x), DIE_NET) == putcharm(1))       // unless the die pins net-mode 1: net by TALLY,
-      return zn((ai_flo_t) ai_count(g, coin_load(x)), 0);      // the COUNT -- never negative, so truth is "has any"
+  if (coinp(x)) {                                              // a coin nets its payload (the monoid hom), unless
+    word mode = die_get(g, coin_die(x), DIE_NET);              // its die pins a net MODE.
+    if (mode == putcharm(1))                                   // mode 1: net by TALLY, the COUNT -- never negative,
+      return zn((ai_flo_t) ai_count(g, coin_load(x)), 0);      // so truth is "has any"
+    if (mode == putcharm(2)) {                                 // mode 2: RATIO -- an (n d)-of-reals payload nets
+      word p = coin_load(x);                                   // n/d, the SIGN exact (value truth for rationals):
+      if (chainp(p) && chainp(B(p))) {                         // the division's sign is IEEE-true, and the two
+        struct ai_zn n = ai_net(g, A(p)), d = ai_net(g, A(B(p)));  // loss lanes below restore it from the
+        if (n.im == 0 && d.im == 0 && d.re != 0) {             // components' own exact signs.
+          ai_flo_t s = (n.re < 0) != (d.re < 0) ? -1.0 : 1.0;
+          ai_flo_t v = n.re / d.re;
+          if (v != v) v = s;                                   // inf/inf (two giant bignums): sign carries
+          else if (v == 0 && n.re != 0) v = s * 1e-300;        // underflow: a live sign never reads as the floor
+          return zn(v, 0); } } }                               // a malformed payload falls through to the hom
     return ai_net(g, coin_load(x)); }
   if (!datp(x)) return zn(1, 0);                                // opaque but present (fn / port): truthy
   switch (typ(x)) {
