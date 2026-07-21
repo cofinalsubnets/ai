@@ -368,8 +368,14 @@
  (1 = (simp '(sin (asin 1))))                         ; asin 1 -> pi/2 -> sin -> 1: the
                                                       ; table closes on itself
  (1 = (simp '(/ pi pi)))                              ; pi is manifestly nonzero
- (1 = (expand `('sin `('* 'pi (q 1 2))))))            ; a backwards spelling reaches the
+ (1 = (expand `('sin `('* 'pi (q 1 2)))))             ; a backwards spelling reaches the
                                                       ; table through collect
+ (1 = (simp '(log e)))                                ; e enters: log e = 1
+ ((simp '(exp 1)) = 'e)                               ; ... and exp 1 answers e
+ ((simp '(** e x)) = '(exp x))                        ; a power of e IS exp
+ ((simp '(** e 2)) = '(exp 2))                        ; ... exact, never a gem
+ ((simp '(log (** e x))) = 'x)                        ; log e^x = x, through the bridge
+ (1 = (simp '(/ e e))))                               ; e is manifestly nonzero
 
 ; --- expand: the growing laws -- distribution and the log/exp splits ---------
 ; xlaws rides the same driver on top of laws, so every expansion is folded
@@ -504,6 +510,8 @@
   = '(/ 1 (** (cos x) 2)))                        ; ... so sin/cos derives as tan
  (0 = (deriv 'pi 'x))                             ; pi is a constant: it differentiates
  ((deriv '(* pi x) 'x) = 'pi)                     ; away, and rides as a coefficient
+ ((deriv '(** e x) 'x) = '(exp x))                ; THE law: d e^x = e^x
+ ((deriv '(** e (* 2 x)) 'x) = '(* 2 (exp (* 2 x))))
  ((deriv '(** x x) 'x) = '(d (** x x) x))         ; a symbolic exponent fails the
                                                   ; guard and stays, honestly
  ((deriv '(f x) 'x) = '(d (f x) x))               ; an unknown derivative stays symbolic

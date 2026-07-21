@@ -267,7 +267,7 @@
 ; keeps its term. `simpw` drives a rule table + fold bottom-up to a
 ; fixpoint, the same shape as rewrite (noms are atoms, never walked into);
 ; simp is its laws face, expand its xlaws face -- through collect (below).
-(: (nz? t) (? (nom? t) ((t = 'pi) ? 1 ())
+(: (nz? t) (? (nom? t) (((t = 'pi) || (t = 'e)) ? 1 ())
               (star? t) !(0 = (sat (t * t)))
               (two? t) (? (<t = 'exp) 1
                           (<t = '**) (nz? <>t)
@@ -296,6 +296,9 @@
           (rule '(a) '(exp (log a)) 'a)
           (rule () '(exp 0) 1)
           (rule () '(log 1) 0)
+          (rule () '(log e) 1)
+          (rule () '(exp 1) 'e)
+          (rule '(a) '(** e a) '(exp a))
           (rule () '(sin 0) 0)
           (rule () '(cos 0) 1)
           (rule () '(tan 0) 0)
