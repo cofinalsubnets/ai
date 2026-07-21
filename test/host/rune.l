@@ -351,7 +351,25 @@
  ((simp '(sin (asin x))) = 'x)                        ; the arc inverses cancel
  ((simp '(cos (acos x))) = 'x)
  ((simp '(asin (- 0 x))) = '(- 0 (asin x)))           ; asin is odd
- (1 = (simp '(/ (sqrt (exp y)) (sqrt (exp y))))))     ; nz? climbs sqrt to exp
+ (1 = (simp '(/ (sqrt (exp y)) (sqrt (exp y)))))      ; nz? climbs sqrt to exp
+ (0 = (simp '(sin pi)))                               ; pi enters: the value table
+ (-1 = (simp '(cos pi)))
+ (0 = (simp '(sin (* 2 pi))))                         ; ... the full turn
+ (1 = (simp `('sin `('* (q 1 2) 'pi))))               ; ... the quarter turns, angles
+ (0 = (simp `('cos `('* (q 1 2) 'pi))))               ;     spelled coefficient-first
+ ((simp `('sin `('* (q 1 4) 'pi))) = `('* (q 1 2) '(sqrt 2)))
+ ((simp `('sin `('* (q 1 6) 'pi))) = (q 1 2))         ; ... the schoolbook halves
+ ((simp `('cos `('* (q 1 3) 'pi))) = (q 1 2))
+ ((simp '(asin 1)) = `('* (q 1 2) 'pi))               ; the arcs answer IN pi
+ ((simp '(acos -1)) = 'pi)
+ ((simp '(atan 1)) = `('* (q 1 4) 'pi))
+ (0 = (simp '(asin 0)))
+ (0 = (simp '(acos 1)))
+ (1 = (simp '(sin (asin 1))))                         ; asin 1 -> pi/2 -> sin -> 1: the
+                                                      ; table closes on itself
+ (1 = (simp '(/ pi pi)))                              ; pi is manifestly nonzero
+ (1 = (expand `('sin `('* 'pi (q 1 2))))))            ; a backwards spelling reaches the
+                                                      ; table through collect
 
 ; --- expand: the growing laws -- distribution and the log/exp splits ---------
 ; xlaws rides the same driver on top of laws, so every expansion is folded
@@ -484,6 +502,8 @@
  (1 = (deriv '(** (sqrt x) 2) 'x))                ; the INPUT simps first...
  ((deriv '(/ (sin x) (cos x)) 'x)
   = '(/ 1 (** (cos x) 2)))                        ; ... so sin/cos derives as tan
+ (0 = (deriv 'pi 'x))                             ; pi is a constant: it differentiates
+ ((deriv '(* pi x) 'x) = 'pi)                     ; away, and rides as a coefficient
  ((deriv '(** x x) 'x) = '(d (** x x) x))         ; a symbolic exponent fails the
                                                   ; guard and stays, honestly
  ((deriv '(f x) 'x) = '(d (f x) x))               ; an unknown derivative stays symbolic
