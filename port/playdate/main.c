@@ -144,6 +144,7 @@ static void *pd_alloc(struct ai *g, void *p, size_t n) {
 int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg) {
   if (event != kEventInit) return 0;
   K.pd = pd;
+  pd->system->logToConsole("love: init");
   clockfp = pd->system->getCurrentTimeMilliseconds;
   cb_open(kcb, NROWS, NCOLS);
   kcb->flag |= cb_lnm | cb_wrap;   // console discipline + autowrap the long forms
@@ -153,8 +154,12 @@ int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg) {
     cb_putc(kcb, *s);
   blit();
   struct ai *g = ai_defn(ai_ini_m(pd_alloc), defs, countof(defs));
-  // bound the collector well under the device's 16 MB (the Appel knob)
-  if (ai_ok(g)) ai_core_of(g)->budget = (8u << 20) / sizeof(ai_word);
+  pd->system->logToConsole("love: core %s", ai_ok(g) ? "up" : "FAILED");
+  // bound the collector to a QUARTER of the device's 16 MB (the Appel knob,
+  // teensy's law): a major resize holds old and new pools at once, so the
+  // transient peak is double the budget -- 8 MB here, and the simulator
+  // emulates the device heap exactly (a budget of half OOMed it).
+  if (ai_ok(g)) ai_core_of(g)->budget = (4u << 20) / sizeof(ai_word);
   K.g = ai_evals_(g, "("
 #include "egg.h"
     ai_egg_pre
@@ -168,6 +173,10 @@ int eventHandler(PlaydateAPI *pd, PDSystemEvent event, uint32_t arg) {
     " "
 #include "cas.h"
     "0)");
+  pd->system->logToConsole("love: boot eval status %d", (int) ai_code_of(K.g));
   if (ai_ok(K.g))
     pd->system->setUpdateCallback(k_update, NULL);
+  else if (ai_code_of(K.g) == ai_status_scare)
+    ai_scare_face_(K.g),          // the condition lands on the cb...
+    blit();                       // ...and freezes on the LCD
   return 0; }
