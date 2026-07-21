@@ -146,6 +146,68 @@
                     (: c (mgcd (mcont x) (mcont y))
                        (pmonic (pmul (mlift c 0) (go (mpp x) (mpp y))))))))
 
+; --- rational roots: factorization's first rung ------------------------------
+; the rational root theorem over the squarefree split: pint clears the
+; denominators (roots are scale-blind), candidates are +-n/d for n a divisor
+; of the constant and d of the lead, peval tests each EXACTLY (powers by
+; application, the sum cnormed), a hit divides out through pquot and the
+; part is squarefree so every hit is simple. proots answers the rational
+; roots WITH multiplicity (psff carries it), ascending; pfac the factor
+; list -- a leading constant when the lead is not 1, then monic factors,
+; each (x - r) once per multiplicity, rootless remainders kept whole --
+; whose pmul-fold is p EXACTLY. a rootless remainder of degree 2 or 3 is
+; thereby CERTIFIED irreducible over Q (a factor would be linear); degree
+; 4 up it just has no rational roots, honestly.
+(: (pden c) (coin? c ? <>(load c) 1)
+   (pint f) (: cs (filter (\ m (coin? (mco m))) f)
+               (? (0 = tally cs) f
+                  (pint (pmul `((link (pden (mco <cs)) '(0))) f))))
+   (divs n) (: m ((n < 0) ? (0 - n) n)
+               (go i acc) (? ((i * i) > m) acc
+                             (0 = (% m i))
+                             (go (i + 1) (link i (link (cnorm (q m i)) acc)))
+                             (go (i + 1) acc))
+               (go 1 ()))
+   (flat ls) (? (0 = tally ls) () (<ls + (flat >ls)))
+   (peval f r) (? (0 = tally f) 0
+                  (cnorm ((mco <f * ((<(mkey <f)) r)) + (peval >f r))))
+   (plast f) (? (0 = tally >f) <f (plast >f))
+   (plin r) `((link 1 '(1)) (link (cnorm (0 - r)) '(0)))
+   (rroots f) (: g (pint f)
+                 (? (|| (0 = tally g) (0 = (pdeg g))) ()
+                    (0 < <(mkey (plast g)))
+                    (link 0 (rroots (pquot g `((link 1 '(1))))))
+                    (: cds (: ns (divs (mco (plast g)))
+                              ds (divs (mco <g))
+                              rs (flat (map (\ nn (map (\ dd (cnorm (q nn dd))) ds)) ns))
+                              (rs + (map (\ r (cnorm (0 - r))) rs)))
+                       (go cs h acc)
+                       (? (0 = tally cs) acc
+                          (&& (0 < (pdeg h)) (0 = (peval h <cs)))
+                          (go >cs (pquot h (plin <cs)) (link <cs acc))
+                          (go >cs h acc))
+                       (sort (go cds g ())))))
+   (proots p) (: fs (psff (load p))
+                 (go i r) (? (0 = tally r) ()
+                             ((flat (map (\ x (i (link x) ())) (rroots <r)))
+                              + (go (i + 1) >r)))
+                 (sort (go 1 fs)))
+   (pfac p) (: x (load p)
+               (? (0 = tally x) ()
+                  (0 = (pdeg x)) `(x)
+                  (: c (mco <x)
+                     (dstrip g rs) (? (0 = tally rs) g
+                                      (dstrip (pquot g (plin <rs)) >rs))
+                     (go i r) (? (0 = tally r) ()
+                                 (: rs (rroots <r)
+                                    rem (dstrip <r rs)
+                                    one ((map plin rs)
+                                         + ((0 = (pdeg rem)) ? () `(rem)))
+                                    ((flat (map (\ z (i (link z) ())) one))
+                                     + (go (i + 1) >r))))
+                     ((c = 1) ? (go 1 (psff x))
+                        (link (pconst 1 c) (go 1 (psff x))))))))
+
 ; --- the poly coin: polynomials first-class under the generic ops ----------
 ; strike a CANONICAL monomial list (the engine's own output) and the surface
 ; arrives whole: + - * run padd/psub/pmul through the die (slots 1/5/2), =

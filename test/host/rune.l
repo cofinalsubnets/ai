@@ -125,6 +125,38 @@
  ((mgcd (poly (pmul u1 u2)) (poly (pmul u1 u3))) = u1)   ; the coin faces load
  ((mgcd (pmul g1 g2) (pmul g1 g3)) = g1))        ; arity 1 rides pgcd, same answer
 
+; --- rational roots: factorization's first rung ------------------------------
+; proots answers the rational roots with multiplicity, ascending; pfac the
+; factor list whose pmul-fold IS p. a rootless remainder of degree 2 or 3 is
+; certified irreducible over Q -- and the disproof's modulus m is exactly
+; that: a rootless cubic, so Q[x]/(m) really is a field.
+(: (refac fs) (? (0 = tally fs) (gc 1) (pmul <fs (refac >fs))))
+(assert
+ ((proots (pmul g1 g2)) = `(-2 -1))              ; the roots, ascending
+ ((proots (pmul g1 g1)) = `(-1 -1))              ; multiplicity rides psff
+ ((proots (pmul gx g1)) = `(-1 0))               ; the zero root joins in
+ ((proots (padd (pmul (gc 2) gx) (gc 1))) = `((q -1 2)))   ; a coin root, exact
+ ((proots (padd (pmul (gc 6) (pmul gx gx)) (padd (pmul (gc 5) gx) (gc 1))))
+  = `((q -1 2) (q -1 3)))                        ; 6x^2+5x+1: both fractions found
+ ((proots (pmul (gc 3) (pmul g1 g2))) = `(-2 -1)); roots are unit-blind
+ ((proots (padd (pmul gx gx) (gc -2))) = ())     ; x^2-2: no rational roots
+ ((proots gm) = ())                              ; m is a ROOTLESS CUBIC: irreducible
+                                                 ; over Q, so Q[x]/(m) is a field --
+                                                 ; the disproof's B section, certified
+                                                 ; a fourth way
+ ((proots ()) = ())
+ ((pfac (pmul g1 g2)) = `(g2 g1))                ; the monic split, roots ascending
+ ((pfac (pmul (gc 6) (pmul g1 g2)))
+  = `((gc 6) g2 g1))                             ; the lead rides as a constant factor
+ ((pfac (padd (pmul gx gx) (gc -2)))
+  = `((padd (pmul gx gx) (gc -2))))              ; an irreducible quadratic keeps whole
+ ((pfac gm) = `((gc 129) (pmonic gm)))           ; m: its unit, and itself
+ ((pfac (poly (pmul g1 g1))) = `(g1 g1))         ; the coin face loads
+ (: big (pmul (gc 6) (pmul gm (pmul g1 (pmul g1 g2))))
+    ((refac (pfac big)) = big)))                 ; THE reconstruction law: constant,
+                                                 ; irreducible cubic, squared linear,
+                                                 ; simple linear -- rebuilt exactly
+
 ; --- Q[x y z]: coefficients are stars -- integers or ratio coins ------------
 ; cnorm keeps them canonical: an integer-VALUED coin demotes to its integer,
 ; so Z[x..] sits inside Q[x..] structurally -- halves that sum whole land
