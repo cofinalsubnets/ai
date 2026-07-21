@@ -335,7 +335,16 @@
  ((simp '(** 2 -1)) = (q 1 2))                        ; a negative exponent folds into Q too
  ((simp '(** 2 -3)) = (q 1 8))
  ((simp `('** (q 2 3) -2)) = (q 9 4))                 ; ... the die's own reciprocal power
- ((simp '(** 0 -2)) = '(** 0 -2)))                    ; zero has no reciprocal: the term stays
+ ((simp '(** 0 -2)) = '(** 0 -2))                     ; zero has no reciprocal: the term stays
+ ((simp '(/ (sin x) (cos x))) = '(tan x))             ; tan by definition
+ ((simp '(tan (atan x))) = 'x)                        ; ... and through its inverse
+ (0 = (simp '(sin 0)))                                ; the trig ground points
+ (1 = (simp '(cos 0)))
+ (0 = (simp '(tan 0)))
+ ((simp '(sin (- 0 x))) = '(- 0 (sin x)))             ; parity: sin is odd...
+ ((simp '(cos (- 0 x))) = '(cos x))                   ; ... cos is even
+ (1 = (simp '(+ (** (sin y) 2) (** (cos y) 2))))      ; pythagoras, powered
+ (1 = (simp '(+ (** (cos u) 2) (** (sin u) 2)))))     ; ... either order
 
 ; --- expand: the growing laws -- distribution and the log/exp splits ---------
 ; xlaws rides the same driver on top of laws, so every expansion is folded
@@ -354,6 +363,18 @@
  ((expand '(* (- x y) (- x y)))
   = '(- (+ (** x 2) (** y 2)) (* 2 (* x y))))         ; (x-y)^2: the red term subtracted last
  ((expand '(exp (- x y))) = '(/ (exp x) (exp y)))     ; an exp splits a difference
+ ((expand '(sin (+ x y)))
+  = '(+ (* (cos x) (sin y)) (* (cos y) (sin x))))     ; angle addition, collected
+ ((expand '(cos (+ x y)))
+  = '(- (* (cos x) (cos y)) (* (sin x) (sin y))))
+ ((expand '(sin (- x y)))
+  = '(- (* (cos y) (sin x)) (* (cos x) (sin y))))
+ ((expand '(cos (- x y)))
+  = '(+ (* (cos x) (cos y)) (* (sin x) (sin y))))
+ ((deriv (expand '(sin (+ x y))) 'x)
+  = (expand '(cos (+ x y))))                          ; THE commuting square: expand
+ ((deriv (expand '(cos (+ x y))) 'x)
+  = (expand '(- 0 (sin (+ x y)))))                    ; then differentiate, either order
  (49 = (expand '(* (+ 3 4) (+ 3 4))))                 ; ground folds before it distributes
  ((expand '(log (* x y))) = '(+ (log x) (log y)))     ; a log splits a product
  ((expand '(log (/ (* x y) z))) = '(- (+ (log x) (log y)) (log z)))
@@ -395,6 +416,9 @@
  ((collect '(- 0 y)) = '(- 0 y))                      ; pure negation round-trips
  ((collect '(- 2 5)) = -3)                            ; a lone ground red is the signed star
  ((collect '(- (+ x y) (+ y x))) = 0)                 ; all of it cancels
+ ((collect '(* (- 0 x) y)) = '(- 0 (* x y)))          ; a negated FACTOR is a sign
+ ((collect '(* (- 0 x) (- 0 y))) = '(* x y))          ; ... two of them cancel
+ ((collect '(+ (* (- 0 x) y) (* x y))) = 0)           ; ... and the sign reaches the sum
  ((collect 'x) = 'x))
 
 ; --- conditional laws: the guard door, open ----------------------------------
@@ -439,6 +463,9 @@
  ((deriv '(** x 3) 'x) = '(* 3 (** x 2)))         ; the power rule
  ((deriv '(** (sin x) 2) 'x) = '(* 2 (* (cos x) (sin x))))   ; ... with the chain
  ((deriv '(* (- x 1) (+ x 1)) 'x) = '(* 2 x))     ; product rule + collect: the whole road
+ ((deriv '(tan x) 'x) = '(/ 1 (** (cos x) 2)))    ; the tan rule
+ ((deriv '(tan (* 2 x)) 'x) = '(/ 2 (** (cos (* 2 x)) 2)))
+ ((deriv '(atan x) 'x) = '(/ 1 (+ (** x 2) 1)))   ; ... and its inverse's
  ((deriv '(** x x) 'x) = '(d (** x x) x))         ; a symbolic exponent fails the
                                                   ; guard and stays, honestly
  ((deriv '(f x) 'x) = '(d (f x) x))               ; an unknown derivative stays symbolic
