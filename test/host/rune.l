@@ -276,15 +276,15 @@
  ((expand '(* x (+ y z))) = '(+ (* x y) (* x z)))     ; a * pushes inside a +
  ((expand '(* (+ x y) z)) = '(+ (* x z) (* y z)))     ; ... either side
  ((expand '(* (+ x y) (+ x y)))
-  = '(+ (* x x) (+ (* 2 (* x y)) (* y y))))           ; THE binomial: x^2 + 2xy + y^2 --
-                                                      ; (* y x) met (* x y) and collected
+  = '(+ (** x 2) (+ (* 2 (* x y)) (** y 2))))         ; THE binomial: x^2 + 2xy + y^2 --
+                                                      ; collected, powered, degree-ordered
  ((expand '(* (+ x 1) (+ x 1)))
-  = '(+ (* x x) (+ (* 2 x) 1)))                       ; ... x^2 + 2x + 1, the constant last
- ((expand '(* (+ x y) (- x y))) = '(- (* x x) (* y y)))   ; the difference of squares:
- ((expand '(* (- x y) (+ x y))) = '(- (* x x) (* y y)))   ; ... the cross terms cancel
- ((expand '(* (+ x 1) (- x 1))) = '(- (* x x) 1))
+  = '(+ (** x 2) (+ (* 2 x) 1)))                      ; ... x^2 + 2x + 1, the constant last
+ ((expand '(* (+ x y) (- x y))) = '(- (** x 2) (** y 2)))  ; the difference of squares:
+ ((expand '(* (- x y) (+ x y))) = '(- (** x 2) (** y 2)))  ; ... the cross terms cancel
+ ((expand '(* (+ x 1) (- x 1))) = '(- (** x 2) 1))
  ((expand '(* (- x y) (- x y)))
-  = '(- (+ (* x x) (* y y)) (* 2 (* x y))))           ; (x-y)^2: the red term subtracted last
+  = '(- (+ (** x 2) (** y 2)) (* 2 (* x y))))         ; (x-y)^2: the red term subtracted last
  ((expand '(exp (- x y))) = '(/ (exp x) (exp y)))     ; an exp splits a difference
  (49 = (expand '(* (+ 3 4) (+ 3 4))))                 ; ground folds before it distributes
  ((expand '(log (* x y))) = '(+ (log x) (log y)))     ; a log splits a product
@@ -296,11 +296,20 @@
 
 ; --- collect: the commutative collect ----------------------------------------
 ; +/-/* spines canonicalize: flatten (- carries its sign through, so
-; subtraction is a signed addend), sort the cores by rendered key, merge
-; equal cores summing coefficients exactly, refold -- red terms return to
-; the surface as -. purely syntactic order, so equal terms MEET whatever
-; their spelling; / is left alone.
+; subtraction is a signed addend), sort, merge equal cores summing
+; coefficients exactly, refold -- red terms return to the surface as -,
+; repeated factors POWER-COLLECT into (** u n), and sums order by degree
+; descending. structural order, so equal terms MEET whatever their
+; spelling; / is left alone.
 (assert
+ ((collect '(* x x)) = '(** x 2))                     ; repeated factors power up...
+ ((collect '(* x (* x x))) = '(** x 3))               ; ... across the assoc nesting
+ ((collect '(* x (** x 2))) = '(** x 3))              ; a factor joins its power
+ ((collect '(* (** x 2) (** x 3))) = '(** x 5))       ; powers merge, exponents add
+ ((collect '(* (exp y) (exp y))) = '(** (exp y) 2))   ; any base powers up
+ ((collect '(* x (** x -1))) = '(* x (** x -1)))      ; a red exponent NEVER merges:
+                                                      ; x might be 0, and 0**0 is no 1
+ ((collect '(* y (* x x))) = '(* (** x 2) y))         ; powers ride the base's sort seat
  ((collect '(+ y x)) = '(+ x y))                      ; a sum sorts...
  ((collect '(* y x)) = '(* x y))                      ; ... a product too
  ((collect '(+ (* y x) (* x y))) = '(* 2 (* x y)))    ; (* y x) meets (* x y)

@@ -251,15 +251,17 @@
 ; + and * are commutative and associative, and - is + wearing a sign, so
 ; collect canonicalizes each +/-/* spine, bottom-up: flatten (sflat carries
 ; the sign through every -, so subtraction IS a signed addend), split every
-; element into (c u) -- ground coefficient and core -- sort the cores by
-; their RENDERED key (purely syntactic, deterministic, equal cores land
-; adjacent: a sum by show-string, where compounds carry the paren and lead,
-; so higher terms come first; a product noms-first, so variables precede
-; function forms), merge equal cores summing coefficients exactly, and
-; refold: green terms first (constant last), then each red term SUBTRACTED
-; in order, so the sign returns to the surface as - ; a lone ground red
-; stays the signed star, a pure negation stays (- 0 u). so (* y x) meets
-; (* x y), the binomial expand lands x^2 + 2xy + y^2, and (x+y)(x-y)
+; element into (c u) -- ground coefficient and core -- sort, merge equal
+; cores summing coefficients exactly, and refold: green terms first
+; (constant last), then each red term SUBTRACTED in order, so the sign
+; returns to the surface as - ; a lone ground red stays the signed star, a
+; pure negation stays (- 0 u). a product also POWER-COLLECTS: repeated
+; factors merge into (** u n), exponents whole and >= 1 only (x * x**-1
+; never folds -- x might be 0), summed through the same pair merge. the
+; orders are structural and deterministic: a product sorts bases noms-first
+; (variables precede function forms); a sum sorts by DEGREE descending (vks
+; counts a core's factors, powers weighted) then the sorted factor-string,
+; so the binomial expand lands x^2 + 2xy + y^2 in that order, and (x+y)(x-y)
 ; cancels to x^2 - y^2. expand runs it; simp stays order-preserving.
 (: (spine o t) (? (nom? t) `(t)
                   (&& (two? t) (3 = tally t) (o = <t))
@@ -289,7 +291,18 @@
    (cone p) (: c <p u <>p
                (? (u = 1) c (c = 1) u `('* c u)))
    (refold o xs) ((1 = tally xs) ? <xs `(o <xs (refold o >xs)))
-   (tsum t) (: ps (cmerge (tsort (\ p r ((show <>p) < (show <>r))) (sflat 1 t)))
+   (vks t) (? (nom? t) `((show t))
+              (&& (two? t) (3 = tally t) ('* = <t))
+              ((vks <>t) + (vks <>(>t)))
+              (&& (two? t) (3 = tally t) ('** = <t)
+                  (whole? <>(>t)) (0 < <>(>t)))
+              (<>(>t) (+ (vks <>t)) ())
+              `((show t)))
+   (tcat l) (? (0 = tally l) "" (<l + (tcat >l)))
+   (vkey t) (tcat (tsort (\ a b (a < b)) (vks t)))
+   (slt p r) (: da (tally (vks <>p)) db (tally (vks <>r))
+                (? (db < da) 1 (da < db) 0 ((vkey <>p) < (vkey <>r))))
+   (tsum t) (: ps (cmerge (tsort slt (sflat 1 t)))
                ks (filter (\ p !(<p = 0)) ps)
                gs (filter (\ p !(<p < 0)) ks)
                ns (filter (\ p (<p < 0)) ks)
@@ -303,10 +316,17 @@
                       (0 = tally (filter (\ p !(<>p = 1)) ns))) <(<ns)
                   (dsub ((0 = tally xs) ? 0 (refold '+ xs)) ys)))
    (tmul xs) (? (0 = tally xs) 1 (cnorm (<xs * (tmul >xs))))
+   (esplit f) (? (nom? f) `(1 f)
+                 (&& (two? f) (3 = tally f) ('** = <f)
+                     (whole? <>(>f)) (0 < <>(>f)))
+                 `(<>(>f) <>f)
+                 `(1 f))
+   (eone p) (: n <p u <>p ((n = 1) ? u `('** u n)))
    (tprod t) (: fs (spine '* t)
                 c (tmul (filter star? fs))
-                us (tsort (\ a b ((tkey a) < (tkey b)))
-                          (filter (\ f !(star? f)) fs))
+                us (map eone (cmerge (tsort (\ p r ((tkey <>p) < (tkey <>r)))
+                                            (map esplit
+                                                 (filter (\ f !(star? f)) fs)))))
                 (? (0 = tally us) c
                    (c = 0) 0
                    (c = 1) (refold '* us)
