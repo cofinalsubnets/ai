@@ -153,6 +153,68 @@
                      z (rw1 rs y)
                      (? (z = y) y (rewrite rs z))))
 
+; --- laws + fold: the shipped simplifier -------------------------------------
+; `laws` is the core identity table -- units, annihilators, inverses, and the
+; pythagorean identity -- every rule strictly shrinking, so the fixpoint lands.
+; fold1 computes a GROUND ring node: (op a b) for op in + - * with both
+; operands stars (the open star: integers, gems, q coins, poly coins alike)
+; folds to its value, cnormed so an integer-valued coin lands the integer.
+; division and powers stay symbolic -- the RING folds; (/ 1 2) as a gem would
+; trade exactness away. `simp` drives laws + fold bottom-up to a fixpoint,
+; the same shape as rewrite (noms are atoms, never walked into).
+(: laws `((rule '(a) '(+ a 0) 'a)
+          (rule '(a) '(+ 0 a) 'a)
+          (rule '(a) '(* a 1) 'a)
+          (rule '(a) '(* 1 a) 'a)
+          (rule '(a) '(* a 0) 0)
+          (rule '(a) '(* 0 a) 0)
+          (rule '(a) '(- a 0) 'a)
+          (rule '(a) '(- a a) 0)
+          (rule '(a) '(/ a 1) 'a)
+          (rule '(a) '(- 0 (- 0 a)) 'a)
+          (rule '(a) '(+ (* (sin a) (sin a)) (* (cos a) (cos a))) 1))
+   (fold1 t) (? (nom? t) t
+                (nil? (two? t)) t
+                (nil? (3 = tally t)) t
+                (nil? (member? (cap t) '(+ - *))) t
+                (: a (caup t) b (caup (cup t))
+                   (? (&& (star? a) (star? b))
+                      (cnorm (? ((cap t) = '+) (a + b) ((cap t) = '-) (a - b) (a * b)))
+                      t)))
+   (simp t) (: y (? (nom? t) t (two? t) (map simp t) t)
+               z (fold1 (rw1 laws y))
+               (? (z = y) y (simp z))))
+
+; --- unfix: terms back to the infix surface ----------------------------------
+; the inverse of opfix, as a FORM: unfix renders a core term as low-paren
+; infix source -- a value, not text; show prints it, ev runs it, and
+; (opfix (unfix t)) = t is the round-trip law the gate asserts over a corpus.
+; the grammar, probed: bands are C-like (* / above + -, ** above both), the
+; fold within a band is right-associative, application binds tightest. so a
+; LEFT child wraps at its parent's band and below ((- (- 10 4) 3) renders
+; ((10 - 4) - 3)), a RIGHT child wraps only strictly below it (the fold IS
+; right-associative), an application splices bare unless its head is an
+; operator, and application arguments wrap whenever compound. `operators` is
+; mopped post-egg, so ugrip carries the bands rune renders; an op off the
+; table stays prefix, which reads back unchanged.
+(: ugrip '((+ 1) (- 1) (* 2) (/ 2) (** 3))
+   (glook o gs) (? (0 = tally gs) ()
+                   ((cap (cap gs)) = o) (caup (cap gs))
+                   (glook o (cup gs)))
+   (ophead? x) (? (nom? (cap x)) (? (glook (cap x) ugrip) 1 0) 0)
+   (infix3? t) (? (3 = tally t) (ophead? t) 0)
+   (uxw x) (? (nom? x) x (two? x) (unfix x) x)
+   (uxs x g) (? (nom? x) (L x)
+                (nil? (two? x)) (L x)
+                (infix3? x) (? ((glook (cap x) ugrip) < g) (L (unfix x)) (unfix x))
+                (ophead? x) (L (unfix x))
+                (unfix x))
+   (unfix t) (? (nom? t) t
+                (nil? (two? t)) t
+                (infix3? t) (: g (glook (cap t) ugrip)
+                               ((uxs (caup t) (g + 1)) + (L (cap t)) + (uxs (caup (cup t)) g)))
+                (link (uxw (cap t)) (map uxw (cup t)))))
+
 ; --- the field Q[x]/(m) ----------------------------------------------------
 (: (vmax a b) (? (a < b) b a)
    (vpad v n) (? (n = 0) ()

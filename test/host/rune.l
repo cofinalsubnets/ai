@@ -201,7 +201,7 @@
 ; patterns are terms with kanren vars; unify matches, so a var shared across
 ; positions is a nonlinear pattern, and a coin literal matches by VALUE. the
 ; term language is pemit's own, so rules rewrite compiled-poly source too.
-(: simp `((rule '(a) '(+ a 0) 'a)
+(: srules `((rule '(a) '(+ a 0) 'a)
           (rule '(a) '(+ 0 a) 'a)
           (rule '(a) '(* a 1) 'a)
           (rule '(a) '(* 1 a) 'a)
@@ -212,17 +212,50 @@
    dbl (rule '(a) '(+ a a) '(* 2 a))
    hlf (rule '(a) `('* 'a (q 1 2)) `('/ 'a 2)))
 (assert
- ((rewrite simp '(+ x 0)) = 'x)
- ((rewrite simp '(* (+ x 0) 1)) = 'x)                    ; inner rewrite feeds the root
- ((rewrite simp '(+ (* x 0) (* 1 y))) = 'y)              ; two rules meet at the root
- ((rewrite simp '(sin (* x 0))) = '(sin 0))              ; rewrites under ANY head
- ((rewrite simp '(- (+ x y) (+ x y))) = 0)               ; NONLINEAR: one var, two positions
- ((rewrite simp '(- (+ x y) (+ x z))) = '(- (+ x y) (+ x z)))   ; ... agree, or no match
- ((rewrite simp '(+ (* (sin t) (sin t)) (* (cos t) (cos t)))) = 1)  ; pythagoras, structurally
+ ((rewrite srules '(+ x 0)) = 'x)
+ ((rewrite srules '(* (+ x 0) 1)) = 'x)                    ; inner rewrite feeds the root
+ ((rewrite srules '(+ (* x 0) (* 1 y))) = 'y)              ; two rules meet at the root
+ ((rewrite srules '(sin (* x 0))) = '(sin 0))              ; rewrites under ANY head
+ ((rewrite srules '(- (+ x y) (+ x y))) = 0)               ; NONLINEAR: one var, two positions
+ ((rewrite srules '(- (+ x y) (+ x z))) = '(- (+ x y) (+ x z)))   ; ... agree, or no match
+ ((rewrite srules '(+ (* (sin t) (sin t)) (* (cos t) (cos t)))) = 1)  ; pythagoras, structurally
  ((match '(+ 1 2) '(+ 1 3)) = ())                        ; a miss is ()
  ((rw1 `(dbl) '(+ (sin u) (sin u))) = '(* 2 (sin u)))    ; the bound var fills the template
  ((rw1 `(hlf) `('* 'z (q 2 4))) = '(/ z 2))              ; a coin literal matches by VALUE
  ((rw1 `((rule '(a b) '(+ a b) '(+ b a))) (pemit (padd rx ry) '(x y z)))
   = '(+ y x)))                                           ; terms ARE pemit's language
+
+; --- the simplifier: laws + ground folding, bottom-up to a fixpoint ----------
+; the shipped `laws` table plus fold1 (a ground + - * node computes, cnormed);
+; division never folds -- exactness is kept symbolic.
+(assert
+ (6 = (simp '(+ (* 2 3) (* x 0))))                    ; fold meets annihilation
+ (0 = (simp '(- (* 3 4) (* 4 3))))                    ; folds, then x - x
+ ((simp `('+ 'x `('* 2 (q 1 2)))) = '(+ x 1))         ; a coin folds and DEMOTES to its integer
+ (0 = (simp '(* (+ 1 2) (- x x))))
+ ((simp '(sin (+ 0 x))) = '(sin x))                   ; simplifies under any head
+ ((simp '(/ x 1)) = 'x)                               ; division simplifies by law...
+ ((simp '(/ 1 2)) = '(/ 1 2))                         ; ... but never folds to a gem
+ (1 = (simp '(+ (* (sin (+ y 0)) (sin y)) (* (cos y) (cos y))))))  ; the inner fix
+                                                      ; opens pythagoras at the root
+
+; --- unfix: terms back to the infix surface, as FORMS ------------------------
+; low-paren infix source values: show prints them, ev runs them, and
+; (opfix (unfix t)) = t is the round-trip law, over the corpus below.
+(: tcorp `('(+ (* 2 x) 1) '(* 2 (+ x 1)) '(- (- 10 4) 3) '(- 10 (- 4 3))
+           '(+ (sin x) 1) '(* 2 (sin (+ x 1))) '(f (+ x 1) y) '(+ (f x y) 1)
+           '(* (** 2 x) (+ y 1)) `('+ 'x (q 1 2)) '(f (g x) y) '(* (+ a b) (+ c d))
+           (pemit (padd (pmul rx rx) ry) '(x y z))))
+(assert
+ ((unfix '(+ (* 2 x) 1)) = '(2 * x + 1))
+ ((unfix '(* 2 (+ x 1))) = '(2 * (x + 1)))            ; a looser right child wraps
+ ((unfix '(- (- 10 4) 3)) = '((10 - 4) - 3))          ; a left child wraps at its own band
+ ((unfix '(- 10 (- 4 3))) = '(10 - 4 - 3))            ; ... the right rides the fold bare
+ ((unfix '(+ (sin x) 1)) = '(sin x + 1))              ; application binds tightest
+ ((unfix '(f (+ x 1) y)) = '(f (x + 1) y))            ; compound arguments wrap
+ ((unfix (pemit (padd (pmul rx rx) ry) '(x y z))) = '(x * x + y))   ; a poly, rendered
+ ((unfix 'x) = 'x)
+ (all (\ t ((opfix (unfix t)) = t)) tcorp)            ; THE round-trip law
+ (7 = (ev (unfix '(+ (* 2 3) 1)))))                   ; the rendered form is love source: it runs
 
 (puts "rune: ok")
