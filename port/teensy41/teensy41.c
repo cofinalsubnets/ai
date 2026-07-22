@@ -1,103 +1,35 @@
-// Teensy 4.1 bare-metal arch backend (no Teensyduino core): the FlexSPI boot
-// image the i.MX RT1062 ROM walks (config block + IVT + boot data), the crt0
-// startup, a minimal CCM clock bring-up, the LPUART6 console, GPT1 as the
-// millisecond timer, and a thin GPIO layer for the on-board LED. Plays the
-// role of arch/<arch>/arch.c for the freestanding kernel, but for a Cortex-M7
-// booting XIP from QSPI flash. The FlexSPI/IVT/boot-data blocks and the LUT
-// are lifted from the i.MX RT1060 Reference Manual (Serial NOR boot) and
-// PJRC's cores/teensy4 bootdata.c; treat them as the verify-first surface.
+// Teensy 4.1 bare-metal arch backend (no Teensyduino core): CCM clock
+// bring-up, the LPUART6 console, GPT1 as the millisecond timer, and a thin
+// GPIO layer for the on-board LED -- the C half, compiled by mooncc. The
+// ROM-facing boot image (FlexSPI config block + IVT + boot data + vectors),
+// the crt0, the HardFault shim, and the barrier/wfi/bkpt helpers live in
+// boot.S: exact flash sections and bare instructions, gas-assembled. The
+// FlexSPI/IVT lore (wrong-offset first-silicon stories) rides boot.S now.
 #include "../../love.h"
 #include "teensy41.h"
 
-// Linker-provided bounds (teensy41.lds).
+// Linker-provided bounds (teensy41.lds) + the boot.S vector table.
 extern uint32_t __data_start__[], __data_end__[], __data_load__[];
-extern uint32_t __bss_start__[], __bss_end__[], __stack_top__[];
-extern uint32_t __image_size__[];          // boot_data.length (bytes in flash)
-extern void *const vectors[];              // ARM vector table (for VTOR)
+extern uint32_t __bss_start__[], __bss_end__[];
+extern void *const vectors[];
 
 int main(void);
-void cstartup(void);
-
-// --- the FlexSPI boot image (flash offset 0x000 / 0x1000) ----------------
-// 1. FlexSPI Configuration Block at 0x60000000: tells the ROM how to talk to
-//    the QSPI NOR (pad type, clock, and the LUT for the quad read at 0xEB).
-//    448 meaningful bytes inside a 512-byte block (RT1060 RM 9.6.3.1).
-// Field offsets are the RM's (9.6.3.1) and every value below is byte-for-byte
-// PJRC's bootdata.c (except sflashA1Size, which is the 4.1's 8 MB) -- the block
-// that boots this exact hardware. First silicon contact (2026-07-04, red LED
-// 9-blink = ARM DAP init error) was caused by these fields sitting at WRONG
-// offsets (deviceType at 0x18 instead of 0x44, size at 0x20 instead of 0x50,
-// LUT at 0xA0 instead of 0x80): the ROM read deviceType=0 and refused the boot.
-__attribute__((section(".flashconfig"), used))
-const uint32_t flexspi_nor_config[128] = {
-  [0x00 / 4] = 0x42464346u,   // "FCFB" tag
-  [0x04 / 4] = 0x56010000u,   // version V1.0
-  [0x0C / 4] = 0x00020101u,   // readSampleClkSrc=1, csHold=1, csSetup=2, colAddrWidth=0
-  [0x44 / 4] = 0x00030401u,   // deviceType=1 (NOR), sflashPadType=4 (quad), serialClkFreq=3 (60 MHz)
-  [0x50 / 4] = 0x00800000u,   // sflashA1Size = 8 MB (Teensy 4.1)
-  // lookupTable[0..1]: the quad-IO read the ROM XIPs through --
-  // CMD 0xEB (1 pad), RADDR 24 bits (4 pads), DUMMY 6 cycles, READ (4 pads).
-  [0x80 / 4] = 0x0A1804EBu,
-  [0x84 / 4] = 0x26043206u,
-};
-
-// 2. Image Vector Table at 0x60001000 -- the ROM finds it at the fixed serial
-//    NOR offset, validates the header, and jumps to `entry` (our startup).
-//    Address fields are uintptr_t (pointer-width = 4 bytes on the thumbv7em
-//    target) so the link-time-constant initialisers below need no truncating
-//    cast; the IVT stays a packed 8-word block.
-struct ivt { uint32_t hdr; uintptr_t entry; uint32_t rsv1; uintptr_t dcd, boot, self, csf; uint32_t rsv2; };
-extern const struct ivt image_vector_table;
-struct boot_data { uintptr_t start, length, plugin; };
-
-__attribute__((section(".bootdata"), used))
-const struct boot_data boot_data = {
-  FLASH_BASE, (uintptr_t) __image_size__, 0 };
-
-__attribute__((section(".ivt"), used))
-const struct ivt image_vector_table = {
-  .hdr   = 0x432000D1u,                  // tag 0xD1, len 0x0020, ver 0x43 (= PJRC's)
-  .entry = (uintptr_t) cstartup,         // ROM jumps here
-  .dcd   = 0,
-  .boot  = (uintptr_t) &boot_data,
-  .self  = (uintptr_t) &image_vector_table,
-  .csf   = 0 };
 
 // --- fault diagnostics ----------------------------------------------------
 // ARMv7E-M HardFault: capture the stacked exception frame so an attached SWD
-// debugger lands on a known address. CFSR/HFSR live at the SCB but the frame
-// pointer alone localises most faults (pc = the faulting instruction).
+// debugger lands on a known address. boot.S's isr_hardfault selects the
+// active stack and branches here with the frame in r0.
 volatile struct ai_fault {
   uint32_t r0, r1, r2, r3, r12, lr, pc, psr, sp, magic;
 } ai_fault;
 
-__attribute__((used)) void hardfault_report(uint32_t *frame) {
+void hardfault_report(uint32_t *frame) {
   ai_fault.r0  = frame[0]; ai_fault.r1 = frame[1]; ai_fault.r2 = frame[2];
   ai_fault.r3  = frame[3]; ai_fault.r12 = frame[4]; ai_fault.lr = frame[5];
   ai_fault.pc  = frame[6]; ai_fault.psr = frame[7];
   ai_fault.sp  = (uint32_t)(uintptr_t) frame;
   ai_fault.magic = 0xFA017EDu;
-  for (;;) __asm volatile("bkpt 0"); }
-
-__attribute__((naked)) void isr_hardfault(void) {
-  __asm volatile(
-    "tst lr, #4        \n"   // EXC_RETURN bit 2: which SP was active
-    "ite eq            \n"
-    "mrseq r0, msp     \n"
-    "mrsne r0, psp     \n"
-    "b hardfault_report\n"); }
-
-static void default_handler(void) { for (;;) __asm volatile("wfi"); }
-
-// --- crt0 / startup -------------------------------------------------------
-// The ROM jumps to `entry` (= reset_handler) with a ROM-provided SP. Establish
-// our own stack first, then fall into the C startup. reset_handler is the IVT
-// entry; cstartup does the real work once SP is ours.
-__attribute__((naked, used, noreturn, section(".startup")))
-void cstartup(void) {
-  __asm volatile(
-    "ldr sp, =__stack_top__ \n"
-    "b   cmain              \n"); }
+  for (;;) arm_bkpt(); }
 
 // --- caches ----------------------------------------------------------------
 // XIP with the caches off fetches EVERY instruction over the 60 MHz QSPI: the
@@ -115,26 +47,27 @@ void cstartup(void) {
 #define SCB_DCISW   0xE000EF60u
 
 static void caches_init(void) {
-  __asm volatile("dsb; isb");
+  arm_dsb_isb();
   REG(SCB_ICIALLU) = 0;
-  __asm volatile("dsb; isb");
+  arm_dsb_isb();
   REG(SCB_CCR) |= 1u << 17;                      // I-cache on
-  __asm volatile("dsb; isb");
+  arm_dsb_isb();
   REG(SCB_CSSELR) = 0;                           // select the L1 D-cache
-  __asm volatile("dsb");
+  arm_dsb();
   uint32_t ccsidr = REG(SCB_CCSIDR);
   uint32_t sets = (ccsidr >> 13) & 0x7FFFu, ways = (ccsidr >> 3) & 0x3FFu;
   for (uint32_t s = 0; s <= sets; s++)
     for (uint32_t w = 0; w <= ways; w++)
       REG(SCB_DCISW) = (w << 30) | (s << 5);
-  __asm volatile("dsb");
+  arm_dsb();
   REG(SCB_CCR) |= 1u << 16;                      // D-cache on
-  __asm volatile("dsb; isb"); }
+  arm_dsb_isb(); }
 
-__attribute__((used, noreturn)) void cmain(void) {
+// boot.S's cstartup established our stack and falls in here.
+void cmain(void) {
   // FPU on (CP10/CP11 full access) before any float-typed code runs.
   REG(SCB_CPACR) |= (0xFu << 20);
-  __asm volatile("dsb; isb");
+  arm_dsb_isb();
   caches_init();
   // .data from its flash load address into OCRAM2; zero .bss.
   for (uint32_t *s = __data_load__, *d = __data_start__; d < __data_end__; ) *d++ = *s++;
@@ -143,28 +76,7 @@ __attribute__((used, noreturn)) void cmain(void) {
   clocks_init();
   serial_init();
   main();
-  for (;;) __asm volatile("wfi"); }
-
-// --- ARM vector table (in flash; VTOR points here) ------------------------
-// The ROM does not use this -- it boots via the IVT -- but the CPU needs it
-// for exceptions once we are running. vectors[0] is the initial SP value
-// (also loaded by cstartup); the ROM-jump path makes the SP word advisory.
-__attribute__((section(".vectors"), used))
-void *const vectors[] = {
-  (void *) __stack_top__,   // 0  initial SP
-  cstartup,                 // 1  reset
-  default_handler,          // 2  NMI
-  isr_hardfault,            // 3  HardFault
-  default_handler,          // 4  MemManage
-  default_handler,          // 5  BusFault
-  default_handler,          // 6  UsageFault
-  0, 0, 0, 0,               // 7..10 reserved
-  default_handler,          // 11 SVCall
-  default_handler,          // 12 DebugMon
-  0,                        // 13 reserved
-  default_handler,          // 14 PendSV
-  default_handler,          // 15 SysTick
-};
+  for (;;) arm_wfi(); }
 
 // --- clocks ---------------------------------------------------------------
 // Scaffold policy: leave the ARM core on the ROM's clock and only set up the

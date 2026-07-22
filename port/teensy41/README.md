@@ -15,10 +15,15 @@ cd port/teensy41 && make            # -> $R/out/teensy41/love.hex
 make flash                           # teensy_loader_cli --mcu=TEENSY41 -w -v ...
 ```
 
-Standalone (`R := ../..`): it touches no file in the main tree, pulls shared
-vars from `common.mk`, and delegates the host interpreter + the `out/lib/*.h`
-lcat headers back to the root Makefile. Needs a thumbv7em-capable `clang`
-(+ `llvm-objcopy`), or set `KCC=arm-none-eabi-gcc` with `OBJCOPY=arm-none-eabi-objcopy`.
+Compiled END TO END by **mooncc** (`out/host/mooncc -t thumb2`, built by the
+root Makefile): love.c, the am math floor, libc, and the port's own C all go
+through the repo's compiler; only `boot.S` (the ROM-facing FlexSPI/IVT/vector
+blocks + crt0 + the barrier helpers) is gas-assembled and `arm-none-eabi-ld`
+links. No libgcc -- mooncc's thumb2 lanes are self-contained. The build also
+verifies the boot image (FCFB tag at 0, IVT at 0x1000, a thumb-bit entry);
+the qemu cousin `port/mps2/` proves the same runtime end to end under
+emulation (`make test_mps2`). Needs `arm-none-eabi-gcc` (as/ld) and
+`llvm-objcopy` or `arm-none-eabi-objcopy`.
 
 ## Console
 

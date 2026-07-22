@@ -116,3 +116,9 @@ void gpio_init(unsigned pin);
 void gpio_set_dir(unsigned pin, int out);
 void gpio_put(unsigned pin, int hi);
 int  gpio_get(unsigned pin);
+
+// the asm helpers (boot.S) -- mooncc has no inline asm on thumb2
+void arm_dsb_isb(void);
+void arm_dsb(void);
+void arm_wfi(void);
+void arm_bkpt(void);

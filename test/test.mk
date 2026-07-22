@@ -718,6 +718,20 @@ test_mps2: host out/host$(hsuf)/mooncc
 	  timeout 300 qemu-system-arm -M mps2-an500 -semihosting -nographic -kernel out/mps2/love.elf </dev/null; a=$$?; \
 	  [ $$a -eq 42 ] || { echo "FAIL love-on-M7 boot (got $$a, want 42 = the egg hatched + the driver laws held; 98 = fault, 1 = a law failed)"; exit 1; }; \
 	  echo "test_mps2: love (all-mooncc thumb2) boots on qemu Cortex-M7 -- egg baked on-device, laws hold, exit 42"
+# test_teensy41 -- the REAL-METAL cousin's build gate: the whole teensy41 port
+# (love.c + am + libc + the arch backend) compiled by mooncc -t thumb2, linked
+# against the XIP flash map, and the ROM-facing boot image VERIFIED (FCFB tag
+# at flash 0, IVT at 0x1000, thumb-bit entry -- the fields whose mislayout
+# cost first silicon its boot). No RT1062 emulation exists, so the runtime
+# itself is proven by test_mps2 (same CPU, same compiler, same runtime); the
+# silicon flash stays a human step (make -C port/teensy41 flash).
+.PHONY: test_teensy41
+test_teensy41: host out/host$(hsuf)/mooncc
+	@echo TEENSY41 out/teensy41/love.hex
+	@if ! command -v arm-none-eabi-gcc >/dev/null 2>&1 || ! command -v arm-none-eabi-ld >/dev/null 2>&1; then \
+	   echo "test_teensy41: no arm-none-eabi toolchain, skipped"; exit 0; fi; \
+	  $(MAKE) -C port/teensy41 || { echo "FAIL teensy41 build (the boot-image verify is inside)"; exit 1; }; \
+	  echo "test_teensy41: love (all-mooncc thumb2) links against the XIP flash map, boot image verified"
 # moon-tar -- the userland cousin of test_raw: build GNU tar 1.13 (a real third-
 # party GNU package) with mooncc + nolibc + the holo linker, no gcc/glibc/ld, and
 # prove the binary RUNS -- cf/xf + czf/xzf roundtrips byte-identical + system-tar

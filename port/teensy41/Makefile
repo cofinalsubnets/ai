@@ -1,80 +1,87 @@
-# Teensy 4.1 (i.MX RT1062) build. Run from the project root via `make -C
-# port/teensy41`, or directly via `cd port/teensy41 && make`. Standalone:
-# it touches no file in the main tree -- it points R at a love checkout, pulls
-# the shared vars from common.mk, and delegates the lcat lib headers back to
-# the root Makefile on demand. Output lands in $(R)/out/teensy41/.
+# Teensy 4.1 (i.MX RT1062) build -- love compiled END TO END by mooncc.
+# Run from the project root via `make -C port/teensy41` (needs out/host/mooncc,
+# built by the root Makefile). Every C file -- love.c, the am math floor,
+# libc, teensy41.c, main.c -- goes through `mooncc -t thumb2`; boot.S (the
+# ROM-facing FlexSPI/IVT/vector blocks + crt0 + the asm helpers) is
+# arm-none-eabi-gcc-assembled and arm-none-eabi-ld links against
+# teensy41.lds. No libgcc: mooncc's thumb2 lanes are self-contained (zero
+# __aeabi_*). mooncc's system include dir is CWD-relative, so every compile
+# runs from $(R). Output lands in $(R)/out/teensy41/.
 #
-# Freestanding thumbv7em build of the love runtime + the arch backend here,
-# booting XIP from the 8 MB FlexSPI NOR behind the FlexSPI config block + IVT
-# (teensy41.c) and packed into a .hex for teensy_loader_cli / the Teensy Loader
-# GUI. Mirrors the kernel build: the lcat lib headers shared from out/lib. The
-# M7 has a double-precision FPU, so this build is hard-float (-mfpu=fpv5-d16);
-# the compiler-rt / libgcc archive (te_rt) supplies the 64-bit / soft-helper
-# __aeabi_* libcalls.
+# The default target also VERIFIES the boot image: FCFB tag at flash offset
+# 0, IVT header at 0x1000, and a thumb-bit entry pointing into .startup --
+# the exact fields whose mislayout cost first silicon its boot.
 R := ../..
-include $(R)/common.mk
-
-KCC ?= clang
-CCACHE ?= $(shell command -v ccache 2>/dev/null)
-o = $(R)/out/teensy41
-
-te_triple = -target thumbv7em-none-eabi -mcpu=cortex-m7 -mthumb
-te_fpu = -mfloat-abi=hard -mfpu=fpv5-d16
-te_cppflags = -I. -I$(R) -I$(R)/out/lib -I$(R)/libc
-te_cc = $(CCACHE) $(KCC) $(te_triple) $(te_fpu) $(ai_cflags) -nostdinc -ffreestanding \
-  -fno-lto -fno-PIC -ffunction-sections -fdata-sections -Dai_tco=0 $(te_cppflags)
-te_rt := $(shell f=$$($(KCC) $(te_triple) $(te_fpu) -print-libgcc-file-name 2>/dev/null); \
-  [ -e "$$f" ] && echo "$$f" || \
-  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb $(te_fpu) -print-libgcc-file-name 2>/dev/null)
-
-te_h = $(love_h) $(wildcard *.h)
-lib_h = $(R)/out/lib/egg.h $(R)/out/lib/prel.h $(R)/out/lib/ev.h $(R)/out/lib/bao.h
-
-# Local arch sources (teensy41.c, main.c) stay rooted in cwd; the shared runtime
-# (love.c, libc/) carries the $(R)/ prefix. Local rule is listed first so this
-# main.c wins the object-name race against the top-level host main.c.
-te_local_c = $(wildcard *.c)
-te_shared_c = $(love_c) $(c_c)
-te_local_o = $(te_local_c:%.c=$(o)/%.o)
-te_shared_o = $(te_shared_c:$(R)/%.c=$(o)/%.o)
-te_o = $(te_local_o) $(te_shared_o)
-
+o = out/teensy41
+MOONCC = out/host/mooncc
+AS = arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16
+LD = arm-none-eabi-ld
 OBJCOPY ?= $(shell command -v llvm-objcopy 2>/dev/null || echo arm-none-eabi-objcopy)
 
+te_cc = $(MOONCC) -t thumb2 -D ai_tco=1 -D __STDC_HOSTED__=0 -I. -Iout/lib
+lib_h = out/lib/egg.h out/lib/prel.h out/lib/ev.h out/lib/bao.h out/lib/love_version.h
+
+objs = $(R)/$(o)/love.o $(R)/$(o)/am.o $(R)/$(o)/mem.o $(R)/$(o)/str.o \
+  $(R)/$(o)/ctype.o $(R)/$(o)/teensy41.o $(R)/$(o)/main.o $(R)/$(o)/boot.o
+
 .PHONY: teensy41 flash clean
-teensy41: $(o)/love.hex
+teensy41: $(R)/$(o)/love.hex
 default: teensy41
 
 clean:
-	rm -rf $(o)
+	rm -rf $(R)/$(o)
 
-# Delegate to the root: the lcat lib headers are produced by the root's own
-# rules (on the bootstrap interpreter love0), built on demand so a standalone
-# `make -C port/teensy41` works from a clean tree.
-$(lib_h):
-	@$(MAKE) -C $(R) out/lib/$(@F)
+# the lcat lib headers come from the root's own rules (on love0), on demand
+$(addprefix $(R)/,$(lib_h)):
+	@$(MAKE) -C $(R) $(patsubst $(R)/%,%,$@)
 
-# Local arch sources (listed before the shared rule, see above).
-$(o)/%.o: %.c $(te_h) $(lib_h)
-	@echo CC	$@
-	@mkdir -p $(dir $@)
-	@$(te_cc) -c $< -o $@
-# Shared runtime + libc.
-$(o)/%.o: $(R)/%.c $(te_h) $(lib_h)
-	@echo CC	$@
-	@mkdir -p $(dir $@)
-	@$(te_cc) -c $< -o $@
+$(R)/$(o)/love.o: $(R)/love.c $(R)/love.h $(addprefix $(R)/,$(lib_h))
+	@echo MOON	$@
+	@mkdir -p $(R)/$(o)
+	@cd $(R) && $(te_cc) -c love.c $(o)/love.o
 
-$(o)/love.elf: $(te_o) teensy41.lds
+$(R)/$(o)/am.o: $(R)/crew/moon/lib/math/am.c
+	@echo MOON	$@
+	@mkdir -p $(R)/$(o)
+	@cd $(R) && $(MOONCC) -t thumb2 -Icrew/moon/lib/math -Icrew/moon/include -c crew/moon/lib/math/am.c $(o)/am.o
+
+$(R)/$(o)/%.o: $(R)/libc/%.c $(R)/love.h
+	@echo MOON	$@
+	@mkdir -p $(R)/$(o)
+	@cd $(R) && $(te_cc) -c libc/$*.c $(o)/$*.o
+
+$(R)/$(o)/teensy41.o: teensy41.c teensy41.h $(R)/love.h
+	@echo MOON	$@
+	@mkdir -p $(R)/$(o)
+	@cd $(R) && $(te_cc) -c port/teensy41/teensy41.c $(o)/teensy41.o
+
+$(R)/$(o)/main.o: main.c teensy41.h $(R)/love.h $(addprefix $(R)/,$(lib_h))
+	@echo MOON	$@
+	@mkdir -p $(R)/$(o)
+	@cd $(R) && $(te_cc) -c port/teensy41/main.c $(o)/main.o
+
+$(R)/$(o)/boot.o: boot.S
+	@echo AS	$@
+	@mkdir -p $(R)/$(o)
+	@$(AS) -c boot.S -o $@
+
+$(R)/$(o)/love.elf: $(objs) teensy41.lds
 	@echo LD	$@
-	@$(KCC) $(te_triple) $(te_fpu) -nostdlib -fuse-ld=lld -Wl,--gc-sections \
-	  -Wl,-T,teensy41.lds $(te_o) $(te_rt) -o $@
+	@$(LD) -T teensy41.lds $(objs) -o $@
 
 # .hex (Intel HEX) is what teensy_loader_cli / the Teensy Loader GUI flash.
-$(o)/love.hex: $(o)/love.elf
+# The .bin is the verification surface: byte offsets ARE flash offsets.
+$(R)/$(o)/love.hex: $(R)/$(o)/love.elf
 	@echo HEX	$@
 	@$(OBJCOPY) -O ihex -R .eh_frame $< $@
+	@$(OBJCOPY) -O binary $< $(R)/$(o)/love.bin
+	@python3 -c "import sys,struct; b=open('$(R)/$(o)/love.bin','rb').read(); \
+	  fcfb=struct.unpack_from('<I',b,0)[0]; ivt=struct.unpack_from('<I',b,0x1000)[0]; \
+	  entry=struct.unpack_from('<I',b,0x1004)[0]; \
+	  ok = fcfb==0x42464346 and ivt==0x432000D1 and (entry&1)==1 and 0x60000000<entry<0x60800000; \
+	  print('boot image: FCFB@0 %08x IVT@1000 %08x entry %08x --'%(fcfb,ivt,entry), 'ok' if ok else 'BAD'); \
+	  sys.exit(0 if ok else 1)" || { echo "FAIL boot image layout"; exit 1; }
 
 # Flash a connected Teensy 4.1 (tap the on-board button to enter the bootloader):
-flash: $(o)/love.hex
-	teensy_loader_cli --mcu=TEENSY41 -w -v $(o)/love.hex
+flash: $(R)/$(o)/love.hex
+	teensy_loader_cli --mcu=TEENSY41 -w -v $(R)/$(o)/love.hex

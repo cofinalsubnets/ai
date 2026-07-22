@@ -23,9 +23,9 @@
 // WFE on -- a tight poll keeps (key)/timed sleeps re-checking readiness. Same
 // shape as the host's poll_wait, minus the kernel.
 void ai_sleep(uintptr_t ms) {
-  if (!ms) { for (;;) __asm volatile("wfi"); }   // infinite: park (reset to exit)
+  if (!ms) { for (;;) arm_wfi(); }   // infinite: park (reset to exit)
   uintptr_t start = ai_clock();
-  while (ai_clock() - start < ms) __asm volatile("nop"); }
+  while (ai_clock() - start < ms) ; }
 
 bool ai_ready(int fd) { return fd == 0 ? serial_rx_ready() : fd >= 0; }
 
@@ -35,8 +35,7 @@ void ai_wait_fds(int const *fds, int n, uintptr_t ms) {
   uintptr_t start = ai_clock();
   for (;;) {
     for (int i = 0; i < n; i++) if (ai_ready(fds[i])) return;
-    if (ms && ai_clock() - start >= ms) return;
-    __asm volatile("nop"); } }
+    if (ms && ai_clock() - start >= ms) return; } }
 
 // --- port vtable ----------------------------------------------------------
 // Both ports ride LPUART6; the fd is nominal (>= 0 so the dispatcher routes
@@ -186,7 +185,7 @@ void free(void *p) {
 // headroom for the stack under __stack_top__; if the self-hosting double-bake
 // OOMs on real silicon, shrink the budget, move the arena to PSRAM
 // (0x70000000), or trim the egg.
-static uint8_t pool[384 * (1 << 10)] __attribute__((aligned(8)));
+static uintptr_t pool[384 * (1 << 10) / sizeof(uintptr_t)];   // word-typed: naturally aligned (mooncc parses no post-declarator attribute)
 
 int main(void) {
   // first light: the LED comes on before any love runs, so a board with no
