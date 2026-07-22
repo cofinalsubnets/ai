@@ -7725,17 +7725,41 @@ static ai_inline bool ratio_iview(word x, intptr_t *n, intptr_t *d) {
   return *n = toint(nn), *d = toint(dd), *d != 0; }
  if (charmp(x) || widep(x)) return *n = toint(x), *d = 1, true;
  return false; }
+#if !defined(__SIZEOF_INT128__)
+// word x word -> double-word magnitude product from half-word partials -- the exact
+// cross-multiply for builds without __int128 (mooncc's love-raw; any width).
+static ai_inline void ratio_mag_mul(uintptr_t a, uintptr_t b, uintptr_t *hi, uintptr_t *lo) {
+ const int h = (int) (sizeof(uintptr_t) * 4);
+ uintptr_t mask = ((uintptr_t) 1 << h) - 1;
+ uintptr_t a0 = a & mask, a1 = a >> h, b0 = b & mask, b1 = b >> h;
+ uintptr_t p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1;
+ uintptr_t mid = (p00 >> h) + (p01 & mask) + (p10 & mask);
+ *lo = (p00 & mask) | (mid << h);
+ *hi = p11 + (p01 >> h) + (p10 >> h) + (mid >> h); }
+#endif
 static ai_inline bool ratio_xcmp(intptr_t n1, intptr_t d1, intptr_t n2, intptr_t d2, intptr_t *c) {
+ intptr_t s = (d1 < 0) != (d2 < 0) ? -1 : 1;
 #if defined(__SIZEOF_INT128__)
  __int128 l = (__int128) n1 * d2, r = (__int128) n2 * d1;
+ return *c = l == r ? 0 : (l < r ? -s : s), true;
 #else
- intptr_t lim = (intptr_t) 1 << 30;
- if (n1 >= lim || n1 <= -lim || d1 >= lim || d1 <= -lim ||
-     n2 >= lim || n2 <= -lim || d2 >= lim || d2 <= -lim) return false;
- int64_t l = (int64_t) n1 * d2, r = (int64_t) n2 * d1;
+ // exact sign + magnitude: |n1|*|d2| vs |n2|*|d1| as double-word pairs, signs on top.
+ uintptr_t la = n1 < 0 ? (uintptr_t) 0 - (uintptr_t) n1 : (uintptr_t) n1;
+ uintptr_t lb = d2 < 0 ? (uintptr_t) 0 - (uintptr_t) d2 : (uintptr_t) d2;
+ uintptr_t ra = n2 < 0 ? (uintptr_t) 0 - (uintptr_t) n2 : (uintptr_t) n2;
+ uintptr_t rb = d1 < 0 ? (uintptr_t) 0 - (uintptr_t) d1 : (uintptr_t) d1;
+ uintptr_t lhi, llo, rhi, rlo;
+ ratio_mag_mul(la, lb, &lhi, &llo);
+ ratio_mag_mul(ra, rb, &rhi, &rlo);
+ bool zl = !(lhi | llo), zr = !(rhi | rlo);
+ bool sl = !zl && ((n1 < 0) != (d2 < 0)), sr = !zr && ((n2 < 0) != (d1 < 0));
+ intptr_t cl;                                     // -1/0/1 of l - r, signs first then magnitudes
+ if (sl != sr) cl = sl ? -1 : 1;
+ else { intptr_t cm = lhi != rhi ? (lhi < rhi ? -1 : 1) : llo != rlo ? (llo < rlo ? -1 : 1) : 0;
+        cl = sl ? -cm : cm; }
+ return *c = cl == 0 ? 0 : (cl < 0 ? -s : s), true;
 #endif
- intptr_t s = (d1 < 0) != (d2 < 0) ? -1 : 1;
- return *c = l == r ? 0 : (l < r ? -s : s), true; }
+}
 // 3-way total-order comparator (-1/0/1); the recursive engine for the chain case.
 // Floats collapse NaN to "equal" here (a structural total order can't carry IEEE
 // unorderedness); the scalar lane below keeps NaN unordered at the top level. hash
