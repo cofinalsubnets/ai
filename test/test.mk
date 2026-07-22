@@ -637,6 +637,45 @@ test_thumb1: host out/host$(hsuf)/mooncc
 	  timeout 30 qemu-system-arm -M microbit -semihosting -nographic -kernel $$d/t1.elf </dev/null; a=$$?; \
 	  [ $$a -eq 127 ] || { echo "FAIL thumb1 -c link+run (got $$a, want 127 = addto(40+50) then addto(-17/5 + -17%%5)=85 + s->x=30 + arr[3]=12; a wrong struct offset misreads s->x, a wrong leax scale/base misreads arr[3])"; exit 1; }; \
 	  echo "test_thumb1: mooncc -t thumb1 -c -> ELF32/EM_ARM (R_ARM_THM_CALL + soft divide + la/R_ARM_ABS32 + 32-bit struct layout + leax indexed array vs gcc), ld binds, runs on qemu Cortex-M0"
+# test_thumb2 -- the thumb1 gate's ARMv7E-M twin, ON THE DEVICE CPU (qemu mps2-an500 is a
+# Cortex-M7 -- the Teensy 4.1 / Playdate silicon). the featured lane is `la`, thumb2's
+# MOVW/MOVT absolute pair (movw16/movt16 -> R_ARM_THM_MOVW_ABS_NC/MOVT_ABS): every binding
+# shape rides once -- a global fn's address (own FUNC symbol, thumb bit in st_value), a
+# STATIC fn's (the .text section symbol, thumb bit in the in-field addend -- a miss there
+# faults the BLX), a string literal (.data section + offset baked into the imm16 scatter),
+# and a global var. same qemu-stdin trap as thumb1: </dev/null or qemu hangs to timeout.
+.PHONY: test_thumb2
+test_thumb2: host out/host$(hsuf)/mooncc
+	@echo THUMB2 $(ho)/thumb2
+	@if ! command -v arm-none-eabi-gcc >/dev/null 2>&1 || ! command -v arm-none-eabi-ld >/dev/null 2>&1 || ! command -v qemu-system-arm >/dev/null 2>&1; then \
+	   echo "test_thumb2: no arm-none-eabi toolchain / qemu-system-arm, skipped"; exit 0; fi; \
+	  d=$(ho)/thumb2; mkdir -p $$d; rm -f $$d/*.o; \
+	  { printf 'int acc = 40;\n'; \
+	    printf 'int f1(void){ return 30; }\n'; \
+	    printf 'int f2(void){ return 12; }\n'; \
+	    printf 'static int sf(void){ return 5; }\n'; \
+	    printf 'int callidx(int i){ int (*a[2])(void) = {f1,f2}; return i ? a[1]() : a[0](); }\n'; \
+	    printf 'int callsf(void){ int (*p)(void) = sf; return p(); }\n'; \
+	    printf 'char *msg(void){ return "AZ"; }\n'; \
+	    printf 'int addacc(int x){ acc = acc + x; return acc; }\n'; } > $$d/lib.c; \
+	  $(ho)/mooncc -t thumb2 -c $$d/lib.c  $$d/lib.o  || { echo "FAIL mooncc -t thumb2 -c lib"; exit 1; }; \
+	  { echo 'int callidx(int); int callsf(void); char *msg(void); int addacc(int);'; \
+	    echo 'int run(void){ return callidx(0) + callidx(1) + msg()[1] + addacc(3) + callsf(); }'; } > $$d/harness.c; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -ffreestanding -O2 -c $$d/harness.c -o $$d/harness.o || { echo "FAIL gcc harness"; exit 1; }; \
+	  { echo '.syntax unified'; echo '.cpu cortex-m7'; echo '.thumb'; \
+	    echo '.section .vectors,"a"'; echo '.word 0x20004000'; echo '.word _start+1'; \
+	    echo '.text'; echo '.thumb_func'; echo '.global _start'; echo '_start:'; \
+	    echo '  bl run'; echo '  ldr r1, =0x20026'; echo '  push {r0}'; echo '  push {r1}'; \
+	    echo '  mov r1, sp'; echo '  movs r0, #0x20'; echo '  bkpt 0xAB'; echo '  b .'; } > $$d/start.S; \
+	  { echo 'MEMORY'; echo '{'; echo '  FLASH (rx) : ORIGIN = 0, LENGTH = 256K'; \
+	    echo '  RAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 16K'; echo '}'; \
+	    echo 'SECTIONS'; echo '{'; echo '  .text : { KEEP(*(.vectors)) *(.text*) *(.rodata*) } > FLASH'; \
+	    echo '  .data : { *(.data*) } > RAM'; echo '  .bss : { *(.bss*) } > RAM'; echo '}'; } > $$d/link.ld; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -c $$d/start.S -o $$d/start.o || { echo "FAIL as start.S"; exit 1; }; \
+	  arm-none-eabi-ld -T $$d/link.ld $$d/start.o $$d/harness.o $$d/lib.o -o $$d/t2.elf || { echo "FAIL ld thumb2 objects"; exit 1; }; \
+	  timeout 30 qemu-system-arm -M mps2-an500 -semihosting -nographic -kernel $$d/t2.elf </dev/null; a=$$?; \
+	  [ $$a -eq 180 ] || { echo "FAIL thumb2 -c link+run (got $$a, want 180 = fnptr 30+12 + 'Z' 90 + addacc 43 + static-fn 5; a missing thumb bit on the static fn faults the BLX, a bad section addend misreads the string)"; exit 1; }; \
+	  echo "test_thumb2: mooncc -t thumb2 -c -> ELF32/EM_ARM (la via R_ARM_THM_MOVW_ABS_NC/MOVT_ABS: fn-ptr array, static fn, string, global), ld binds, runs on qemu Cortex-M7"
 # moon-tar -- the userland cousin of test_raw: build GNU tar 1.13 (a real third-
 # party GNU package) with mooncc + nolibc + the holo linker, no gcc/glibc/ld, and
 # prove the binary RUNS -- cf/xf + czf/xzf roundtrips byte-identical + system-tar

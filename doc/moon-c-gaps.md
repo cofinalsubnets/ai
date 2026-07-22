@@ -210,12 +210,16 @@ all four targets; the `obj32-data-reloc-unsupported` scare is gone with the `.re
 The struct-layout miscompile is fixed too: the probe now emits `adds r0, r0, #0x4` where it
 read `#0x8`.
 
+The thumb2 `la` gap is **fixed**: `la` lowers to the MOVW/MOVT absolute pair (movw16/movt16
+fixups → R_ARM_THM_MOVW_ABS_NC/MOVT_ABS, section-bound addends baked in-field, a static fn's
+thumb bit riding the addend), gated end-to-end by `make test_thumb2` (qemu Cortex-M7).
+
 What remains, both loud scares, never silent:
 
-- **thumb2 has no `la` lane.** `int g(void){ int (*a[2])(void) = {f,f}; return a[0](); }` fails
-  `;; bad-op la` on thumb2 while **succeeding on thumb1**. The literal-pool `la` landed
-  thumb1-only, so thumb2 cannot take a local's address. An odd inversion — thumb2 has
-  MOVW/MOVT and shouldn't need a pool at all, it needs its own materialisation lane.
+- **thumb2 `leax`.** A variable-index array (`garr[i] = v`, local or global) hits
+  `;; bad-op leax` — thumb2 never got an leax lane (the constant-index forms fold and
+  compile). Unlike v6-M it HAS hardware scaled-index addressing (`LDR Rt,[Rn,Rm,LSL #n]`),
+  so its lane is an encoder, not a synthesis like thumb1's LSLS+ADDS.
 - **thumb1 `leax`.** The indexed-call variant (`a[i]()` over a local array) hits
   `;; lea-range (r0 r4 8)` — the known scaled-indexed-address gap.
 

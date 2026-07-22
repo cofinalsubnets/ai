@@ -418,7 +418,11 @@
       ;; reaches `top`, both fixed 32-bit T3 landing byte-exact on their labels.
       `("t2.loop"    "01eb0000b0eb020f00f0068001f20101b1eb020f7ff4f6af7047"
                       '((add r0 r1 r0) (label top) (cmp r0 r2) (br eq done)
-                        (add r1 r1 1) (cmp r1 r2) (br ne top) (label done) (ret))))
+                        (add r1 r1 1) (cmp r1 r2) (br ne top) (label done) (ret)))
+      ;; la: the MOVW/MOVT absolute pair (movw16/movt16 fixups, always both) -- x at +16, so
+      ;; movw #16 ; movt #0, twice (r0 then r7). the thumb2 answer to a64's adrp+add.
+      `("t2.la"      "40f21000c0f2000040f21007c0f2000741424300"
+                      '((la r0 x) (la r7 x) (label x) (raw (65 66 67 0)))))
    _ (foldl (\ _ t (chk2 (at t 0) (at t 1) 'thumb2 (at t 2))) 0 t2tests)
 
    ;; -- the thumb1 backend (crew/holo/thumb1.l): the SAME neutral IR, a FOURTH target -- ARMv6-M

@@ -58,6 +58,10 @@
                                ; the -4 compensates -- gas emits the identical fff7feff for `bl sym`). the
                                ; linker folds S-P into the imm bits and needs the opcode there already.
                                (member? k '(b bcc bl)) (patch-with be k off off w (fix-a x))
+                               ; a surviving movw16/movt16 (thumb2 la) holds its base encoding with a
+                               ; zero imm16 -- absolute, so no pipeline addend; bakemw below re-encodes
+                               ; the section-relative addend into the field when the target binds one.
+                               (member? k '(movw16 movt16)) (patch-with be k 0 off w (fix-a x))
                                (o-zeros w))
                        ; carry the byte just BEFORE the field (bacc's head, reversed) -- the
                        ; x64 opcode: E8/E9 (call/jmp) vs a lea's modrm, so reltext can tell a
@@ -71,6 +75,8 @@
    (o-take l n) (? !(two? l) () (n < 1) () (<l >< (o-take >l (n - 1))))
    (o-drop l n) (? (n < 1) l !(two? l) l (o-drop >l (n - 1)))
    (o-put32 bytes off val) (catall `((o-take bytes off) (le32 val) (o-drop bytes (off + 4))))
+   ; splice pre-encoded bytes (a re-encoded instruction) in at OFF -- the movw16/movt16 addend bake.
+   (o-putbs bytes off bs) (catall `((o-take bytes off) bs (o-drop bytes (off + (tally bs)))))
 
    ; the externals: labels referenced by a relocation but defined in NO
    ; section -- each needs an UNDEF symbol. unique, first-seen order.
@@ -108,6 +114,8 @@
    (arm32? t) (member? t arm32-targets)
    r-thm-call 10                                    ; R_ARM_THM_CALL   ((S+A)|T) - P  (a thumb BL to a symbol)
    r-arm-abs32 2                                     ; R_ARM_ABS32      S + A           (la's pooled address word)
+   r-thm-movw 47                                    ; R_ARM_THM_MOVW_ABS_NC  (S+A)|T, low 16   (thumb2 la)
+   r-thm-movt 48                                    ; R_ARM_THM_MOVT_ABS     S+A, high 16
    ; a 16-byte ELF32 symbol entry (name value size info other shndx) and an 8-byte REL entry.
    (o-sym32 nameoff bind typ shndx value)
     (catall `((le32 nameoff) (le32 value) (le32 0) `(((bind << 4) | typ) 0) (le16 shndx)))
@@ -160,7 +168,30 @@
                          (: r <rs
                             (go >rs (? (id? <>r 'abs32) (: sl (a32loc <>>r <>>>r) (o-put32 bs <r <>sl)) bs))))
            (go rs bytes))
-       tbytes (bakeabs tbytes0 trel)
+       ; a movw16/movt16 (thumb2 la) target -> (symidx addend). the shape of a32loc, but the fixup's
+       ; aux is Rd (not an addend), so the addend starts at 0; a section-bound target carries its
+       ; offset as the addend instead -- and a .text-bound one (a static fn: no symbol of its own)
+       ; carries the THUMB BIT in it too, since a section symbol's T is 0 and BLX needs bit 0.
+       (mwloc lbl)
+        (? (o-has? globidx lbl) `((peep globidx lbl 0) 0)
+           (o-has? fnidx lbl)   `((peep fnidx lbl 0) 0)
+           (o-has? dlabels lbl) `(2 (peep dlabels lbl 0))
+           (o-has? nlabels lbl) `(3 (peep nlabels lbl 0))
+           (o-has? tlabels lbl) `(1 ((peep tlabels lbl 0) | 1))
+           `((peep extidx lbl 0) 0))
+       ; REL keeps the addend IN the imm16 scatter: re-encode each section-bound movw16/movt16 with
+       ; its half of the addend (patch-with does the scatter; the linker adds S on top).
+       (bakemw bytes rs)
+        (: (go rs bs)
+            (? !(two? rs) bs
+               (: r <rs
+                  (go >rs (? (member? <>r '(movw16 movt16))
+                             (: sl (mwloc <>>r)
+                                (? (<>sl = 0) bs
+                                   (o-putbs bs <r (patch-with be <>r <>sl 0 4 <>>>r))))
+                             bs))))
+           (go rs bytes))
+       tbytes (bakemw (bakeabs tbytes0 trel) trel)
        dbytes (bakeabs dbytes0 drel)
        symnames (funcnames + globnames + (map (\ s (string s)) exts))
        str (o-strtab symnames)
@@ -199,6 +230,9 @@
                                 (go >rs ((o-rel32 off sym r-thm-call) >< acc)))
                             (id? k 'abs32)
                              (: sl (a32loc lbl aux) (go >rs ((o-rel32 off <sl r-arm-abs32) >< acc)))
+                            (member? k '(movw16 movt16))
+                             (: sl (mwloc lbl)
+                                (go >rs ((o-rel32 off <sl (? (id? k 'movw16) r-thm-movw r-thm-movt)) >< acc)))
                             (scare 'obj32-text-reloc k))))
                   (go trel ()))
        ntrel (tally trel)

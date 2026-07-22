@@ -43,19 +43,22 @@
    (t32 w) ((le16 (w >> 16)) + (le16 (w & 65535)))
 
    ;; (li d imm): MOVW the low 16, then MOVT the high 16 if nonzero. imm normalizes into [0,2^32).
-   (thumb-movw d imm16)                                       ; MOVW Rd, #imm16  (T3)
-      (: dn (rn d)
-         hw1 (0xF240 | ((((imm16 >> 11) & 1) << 10) | ((imm16 >> 12) & 15)))    ; i (bit11), imm4 (bits15:12)
+   ;; the shared scatter (i/imm4/imm3/imm8) takes the hw register NUMBER -- `patch` reuses it below.
+   (thumb-mw16 base dn imm16)                                 ; base 0xF240 = MOVW (T3), 0xF2C0 = MOVT (T1)
+      (: hw1 (base | ((((imm16 >> 11) & 1) << 10) | ((imm16 >> 12) & 15)))      ; i (bit11), imm4 (bits15:12)
          hw2 ((((imm16 >> 8) & 7) << 12) | ((dn << 8) | (imm16 & 255)))         ; imm3 (bits10:8), Rd, imm8
          (t32 ((hw1 << 16) | hw2)))
-   (thumb-movt d imm16)                                       ; MOVT Rd, #imm16  (T1) -- sets the top halfword
-      (: dn (rn d)
-         hw1 (0xF2C0 | ((((imm16 >> 11) & 1) << 10) | ((imm16 >> 12) & 15)))
-         hw2 ((((imm16 >> 8) & 7) << 12) | ((dn << 8) | (imm16 & 255)))
-         (t32 ((hw1 << 16) | hw2)))
+   (thumb-movw d imm16) (thumb-mw16 0xF240 (rn d) imm16)      ; MOVW Rd, #imm16
+   (thumb-movt d imm16) (thumb-mw16 0xF2C0 (rn d) imm16)      ; MOVT Rd, #imm16 -- sets the top halfword
    (thumb-li d imm)
       (: u (? (imm < 0) (imm + 4294967296) imm) lo (u & 65535) hi ((u >> 16) & 65535)
          ((thumb-movw d lo) + (? (hi = 0) () (thumb-movt d hi))))
+
+   ;; (la d lbl): materialize lbl's absolute address -- MOVW the low half, MOVT the high, each its
+   ;; own 4-byte fixup (movw16/movt16, aux = Rd's hw number; patch scatters the resolved half in).
+   ;; always BOTH (a fixup's size is fixed before the address is known). a .o leaves the pair as
+   ;; R_ARM_THM_MOVW_ABS_NC / R_ARM_THM_MOVT_ABS (obj.l); v6-M has no MOVW/MOVT and pools instead.
+   (thumb-la d label) (: dn (rn d) `((fix 4 'movw16 label dn) (fix 4 'movt16 label dn)))
 
    (thumb-mov d s) (: dn (rn d) sn (rn s) (t32 (0xEA4F0000 | ((dn << 8) | sn))))   ; MOV.W Rd, Rm (ORR Rd,Rn=15,Rm)
 
@@ -204,6 +207,7 @@
             (member? op '(shlv shrv sarv)) (thumb-shiftv op (at ins 1) (at ins 2))
             (op = 'lea)  (thumb-lea  (at ins 1) (at ins 2) (at ins 3))
             (op = 'lean) (thumb-lea  (at ins 1) (at ins 2) (at ins 3))
+            (op = 'la)   (thumb-la   (at ins 1) (at ins 2))
             (op = 'push) (thumb-push (at ins 1))
             (op = 'pop)  (thumb-pop  (at ins 1))
             (op = 'neg)  (thumb-neg  (at ins 1))
@@ -250,6 +254,10 @@
                hw1 (0xF000 | ((s << 10) | ((aux << 6) | imm6)))
                hw2 (0x8000 | ((j1 << 13) | ((j2 << 11) | imm11)))
                (t32 ((hw1 << 16) | hw2)))
+            ; la's absolute halves (aux = Rd): internal resolve scatters the address in; a .o keeps
+            ; the pair relocated (obj.l fills the base encoding with the in-field addend instead).
+            (kind = 'movw16) (thumb-mw16 0xF240 aux (target & 65535))
+            (kind = 'movt16) (thumb-mw16 0xF2C0 aux ((target >> 16) & 65535))
             (scare 'badfix kind)))
 
    thumb2 (tablet 0)
