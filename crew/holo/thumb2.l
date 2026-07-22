@@ -139,14 +139,16 @@
                  (thumb-pop 'r7) (thumb-pop 'r6) (thumb-pop 'r5) (thumb-pop 'r4)))
 
    ;; loads/stores. LDR/STR Rt,[Rn,#imm12] (T3, positive 0..4095) else the T4 8-bit signed offset
-   ;; (a frame slot's small negative). the FAR lane (offsets past that, via an r12 materialize) is
-   ;; M1-deferred -- trivial-function frames stay well inside. disp is a raw byte offset.
+   ;; (a frame slot's small negative), else the FAR lane: r12 (IP, the unnamed temp) carries
+   ;; base+off and the access rides [r12, #0]. disp is a raw byte offset.
+   (thumb-mem-far bn off)                                    ; r12 = off ; r12 += Rbn
+      ((thumb-li 'r12 off) + (t32 ((0xEB0C << 16) | (0x0C00 | bn))))
    (thumb-mem-r lbase ubase dt bn off)                       ; dt/bn already encodings
       (? (&& (off >= 0) (off <= 4095))
          (t32 (((ubase | bn) << 16) | ((dt << 12) | off)))
          (&& (off >= -255) (off < 0))
          (t32 (((lbase | bn) << 16) | ((dt << 12) | (0xC00 | (0 - off)))))   ; T4: P=1 U=0 W=0 = 0b1100, imm8=|off|
-         (scare 'mem-range off))
+         ((thumb-mem-far bn off) + (t32 (((ubase | 12) << 16) | (dt << 12)))))   ; far: [r12, #0]
    (thumb-mem lbase ubase d base off) (thumb-mem-r lbase ubase (rn d) (rn base) off)
    ;; the word ops (`ld`/`st`) are 32-bit here (a 32-bit target's word); the sized family follows.
    (thumb-ld d base off)  (thumb-mem 0xF850 0xF8D0 d base off)   ; LDR.W  (T4 neg / T3 pos)
@@ -233,6 +235,61 @@
       (: cc (peep thumb-cc cond -1) _ (? (cc < 0) (scare 'badcc cond) 0)
          (catall `((thumb-movw d 0) (t16 (0xBF08 | (cc << 4))) (thumb-movw d 1))))
 
+   ;; -- scalar-double VFP (moon rung 4): f0..f15 -> d0..d15 (fpv5-d16, the M7's FPU). the IR
+   ;; keeps the SSE mnemonics two-address (d = op(d, s)); VFP is three-address, so d repeats as
+   ;; the first source. the single-precision views ride S[2n] -- always EVEN, the low half of
+   ;; Dn, so the odd-register encoding bits never arise. d15 (S30) is the converters' scratch:
+   ;; f15 is RESERVED on this target. movqxr/movqrx move a GP PAIR (a 64-bit pattern on a
+   ;; 32-bit target): the named gp register is the LOW word, register+1 the high -- one VMOV.
+   ;; every encoding below was checked against llvm-mc --triple=thumbv7em-none-eabihf. --
+   thumb-fregs (tablet 0)
+   _ (foldl (\ _ i (pin thumb-fregs (intern ("f" + (show i))) i)) 0 (jot 16))
+   (frn r) (: e (peep thumb-fregs r -1) (? (e < 0) (scare 'badfreg r) e))
+   (t2-fp3 hi lo d m) (: dn (frn d) mn (frn m) (t32 (((hi | dn) << 16) | ((dn << 12) | (lo | mn)))))
+   (thumb-addsd d m) (t2-fp3 0xEE30 0xB00 d m)                ; VADD.F64 Dd, Dd, Dm
+   (thumb-subsd d m) (t2-fp3 0xEE30 0xB40 d m)                ; VSUB.F64
+   (thumb-mulsd d m) (t2-fp3 0xEE20 0xB00 d m)                ; VMUL.F64
+   (thumb-divsd d m) (t2-fp3 0xEE80 0xB00 d m)                ; VDIV.F64
+   (thumb-movsd d m) (: dn (frn d) mn (frn m) (t32 ((0xEEB0 << 16) | ((dn << 12) | (0xB40 | mn)))))
+   (thumb-ucomisd a b)                                        ; VCMP.F64 Da, Db ; VMRS APSR_nzcv
+      (: an (frn a) bn (frn b)                                ;   (flags land like a64 fcmp: unordered -> V)
+         ((t32 ((0xEEB4 << 16) | ((an << 12) | (0xB40 | bn)))) + (t32 0xEEF1FA10)))
+   ;; int <-> double through the target's own S view (VMOV S[2f],Rg is one word since 2f>>1 = f).
+   (thumb-cvtxsd base f g)                                    ; VMOV S[2f], Rg ; VCVT.F64.{S,U}32 Df, S[2f]
+      (: fn (frn f) gn (rn g)
+         ((t32 (((0xEE00 | fn) << 16) | ((gn << 12) | 0xA10)))
+          + (t32 ((0xEEB8 << 16) | ((fn << 12) | (base | fn))))))
+   (thumb-cvtsi2sd f g) (thumb-cvtxsd 0xBC0 f g)              ; signed
+   (thumb-cvtui2sd f g) (thumb-cvtxsd 0xB40 f g)              ; unsigned (t32 has no 64-bit widen dodge)
+   (thumb-cvtsdxi hi g f)                                     ; VCVT.{S,U}32.F64 S30, Df ; VMOV Rg, S30
+      (: gn (rn g) fn (frn f)
+         ((t32 ((hi << 16) | (0xFBC0 | fn)))
+          + (t32 ((0xEE1F << 16) | ((gn << 12) | 0xA10)))))
+   (thumb-cvttsd2si g f) (thumb-cvtsdxi 0xEEBD g f)           ; toward zero, signed
+   (thumb-cvttsd2ui g f) (thumb-cvtsdxi 0xEEBC g f)           ; toward zero, unsigned
+   (thumb-movqxr f glo)                                       ; VMOV Df, Rlo, Rlo+1 (the pair in)
+      (: fn (frn f) gn (rn glo)
+         (t32 (((0xEC40 | (gn + 1)) << 16) | ((gn << 12) | (0xB10 | fn)))))
+   (thumb-movqrx glo f)                                       ; VMOV Rlo, Rlo+1, Df (the pair out)
+      (: gn (rn glo) fn (frn f)
+         (t32 (((0xEC50 | (gn + 1)) << 16) | ((gn << 12) | (0xB10 | fn)))))
+   ;; VLDR/VSTR: imm8 words, 4-aligned, +-1020; past that the r12 far build (as thumb-mem).
+   (thumb-fmem pbase nbase lo tn bn off)
+      (: _ (? (0 = (off % 4)) 0 (scare 'fmem-align off))
+         u (? (off < 0) (0 - off) off)
+         (? (u <= 1020)
+            (t32 ((((? (off < 0) nbase pbase) | bn) << 16) | ((tn << 12) | (lo | (u >> 2)))))
+            ((thumb-mem-far bn off) + (t32 (((pbase | 12) << 16) | ((tn << 12) | lo))))))
+   (thumb-stsd base off s) (thumb-fmem 0xED80 0xED00 0xB00 (frn s) (rn base) off)   ; VSTR Ds
+   (thumb-ldsd d base off) (thumb-fmem 0xED90 0xED10 0xB00 (frn d) (rn base) off)   ; VLDR Dd
+   (thumb-stss base off s) (thumb-fmem 0xED80 0xED00 0xA00 (frn s) (rn base) off)   ; VSTR S[2s]
+   (thumb-ldss d base off) (thumb-fmem 0xED90 0xED10 0xA00 (frn d) (rn base) off)   ; VLDR S[2d]
+   (thumb-cvtss2sd d s) (: dn (frn d) sn (frn s) (t32 ((0xEEB7 << 16) | ((dn << 12) | (0xAC0 | sn)))))   ; VCVT.F64.F32 Dd, S[2s]
+   (thumb-cvtsd2ss d s) (: dn (frn d) sn (frn s) (t32 ((0xEEB7 << 16) | ((dn << 12) | (0xBC0 | sn)))))   ; VCVT.F32.F64 S[2d], Ds
+   (thumb-smull dl dh a b)                                    ; SMULL RdLo, RdHi, Rn, Rm (T1)
+      (: ln (rn dl) hn (rn dh) an (rn a) bn (rn b)
+         (t32 (((0xFB80 | an) << 16) | ((ln << 12) | ((hn << 8) | bn)))))
+
    ;; control. B/BL carry a scrambled pc-relative offset in a bitfield; the fixup stashes the cond (or 0)
    ;; in aux and `patch` builds the whole 4-byte word. an unconditional B (jmp) rides T4, a conditional
    ;; one (br) rides T3, and BL (call) rides T1 -- all 32-bit, all 4-byte fixups.
@@ -250,7 +307,26 @@
             (op = 'cmp)  (thumb-cmp  (at ins 1) (at ins 2))
             (op = 'imul) (thumb-imul (at ins 1) (at ins 2) (at ins 3))
             (op = 'umull) (thumb-umull (at ins 1) (at ins 2) (at ins 3) (at ins 4))
+            (op = 'smull) (thumb-smull (at ins 1) (at ins 2) (at ins 3) (at ins 4))
             (op = 'mla)  (thumb-mla  (at ins 1) (at ins 2) (at ins 3) (at ins 4))
+            (op = 'addsd) (thumb-addsd (at ins 1) (at ins 2))
+            (op = 'subsd) (thumb-subsd (at ins 1) (at ins 2))
+            (op = 'mulsd) (thumb-mulsd (at ins 1) (at ins 2))
+            (op = 'divsd) (thumb-divsd (at ins 1) (at ins 2))
+            (op = 'movsd) (thumb-movsd (at ins 1) (at ins 2))
+            (op = 'ucomisd) (thumb-ucomisd (at ins 1) (at ins 2))
+            (op = 'cvtsi2sd) (thumb-cvtsi2sd (at ins 1) (at ins 2))
+            (op = 'cvtui2sd) (thumb-cvtui2sd (at ins 1) (at ins 2))
+            (op = 'cvttsd2si) (thumb-cvttsd2si (at ins 1) (at ins 2))
+            (op = 'cvttsd2ui) (thumb-cvttsd2ui (at ins 1) (at ins 2))
+            (op = 'movqxr) (thumb-movqxr (at ins 1) (at ins 2))
+            (op = 'movqrx) (thumb-movqrx (at ins 1) (at ins 2))
+            (op = 'stsd) (thumb-stsd (at ins 1) (at ins 2) (at ins 3))
+            (op = 'ldsd) (thumb-ldsd (at ins 1) (at ins 2) (at ins 3))
+            (op = 'stss) (thumb-stss (at ins 1) (at ins 2) (at ins 3))
+            (op = 'ldss) (thumb-ldss (at ins 1) (at ins 2) (at ins 3))
+            (op = 'cvtss2sd) (thumb-cvtss2sd (at ins 1) (at ins 2))
+            (op = 'cvtsd2ss) (thumb-cvtsd2ss (at ins 1) (at ins 2))
             (op = 'clz)  (thumb-clz  (at ins 1) (at ins 2))
             (op = 'udivll) (t2-udivmod 'div)
             (op = 'uremll) (t2-udivmod 'rem)

@@ -661,28 +661,42 @@ test_thumb2: host out/host$(hsuf)/mooncc
 	  $(ho)/mooncc -t thumb2 -c $$d/lib.c  $$d/lib.o  || { echo "FAIL mooncc -t thumb2 -c lib"; exit 1; }; \
 	  { echo 'int callidx(int); int callsf(void); char *msg(void); int addacc(int);'; \
 	    echo 'int run(void){ return callidx(0) + callidx(1) + msg()[1] + addacc(3) + callsf(); }'; } > $$d/harness.c; \
-	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -ffreestanding -O2 -c $$d/harness.c -o $$d/harness.o || { echo "FAIL gcc harness"; exit 1; }; \
-	  { echo '.syntax unified'; echo '.cpu cortex-m7'; echo '.thumb'; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -ffreestanding -O2 -c $$d/harness.c -o $$d/harness.o || { echo "FAIL gcc harness"; exit 1; }; \
+	  { echo '.syntax unified'; echo '.cpu cortex-m7'; echo '.fpu fpv5-d16'; echo '.thumb'; \
 	    echo '.section .vectors,"a"'; echo '.word 0x20004000'; echo '.word _start+1'; \
 	    echo '.text'; echo '.thumb_func'; echo '.global _start'; echo '_start:'; \
+	    echo '  ldr r0, =0xE000ED88'; echo '  ldr r1, [r0]'; echo '  orr r1, r1, #0xF00000'; \
+	    echo '  str r1, [r0]'; echo '  dsb'; echo '  isb'; \
 	    echo '  bl run'; echo '  ldr r1, =0x20026'; echo '  push {r0}'; echo '  push {r1}'; \
 	    echo '  mov r1, sp'; echo '  movs r0, #0x20'; echo '  bkpt 0xAB'; echo '  b .'; } > $$d/start.S; \
 	  { echo 'MEMORY'; echo '{'; echo '  FLASH (rx) : ORIGIN = 0, LENGTH = 256K'; \
 	    echo '  RAM  (rwx) : ORIGIN = 0x20000000, LENGTH = 16K'; echo '}'; \
 	    echo 'SECTIONS'; echo '{'; echo '  .text : { KEEP(*(.vectors)) *(.text*) *(.rodata*) } > FLASH'; \
 	    echo '  .data : { *(.data*) } > RAM'; echo '  .bss : { *(.bss*) } > RAM'; echo '}'; } > $$d/link.ld; \
-	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -c $$d/start.S -o $$d/start.o || { echo "FAIL as start.S"; exit 1; }; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -c $$d/start.S -o $$d/start.o || { echo "FAIL as start.S"; exit 1; }; \
 	  arm-none-eabi-ld -T $$d/link.ld $$d/start.o $$d/harness.o $$d/lib.o -o $$d/t2.elf || { echo "FAIL ld thumb2 objects"; exit 1; }; \
 	  timeout 30 qemu-system-arm -M mps2-an500 -semihosting -nographic -kernel $$d/t2.elf </dev/null; a=$$?; \
 	  [ $$a -eq 180 ] || { echo "FAIL thumb2 -c link+run (got $$a, want 180 = fnptr 30+12 + 'Z' 90 + addacc 43 + static-fn 5; a missing thumb bit on the static fn faults the BLX, a bad section addend misreads the string)"; exit 1; }; \
 	  cp test/thumb2/lib64.c test/thumb2/harness64.c $$d/; \
 	  $(ho)/mooncc -t thumb2 -c $$d/lib64.c $$d/lib64.o || { echo "FAIL mooncc -t thumb2 -c lib64"; exit 1; }; \
-	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -ffreestanding -O2 -c $$d/harness64.c -o $$d/harness64.o || { echo "FAIL gcc harness64"; exit 1; }; \
-	  lg=`arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -print-libgcc-file-name`; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -ffreestanding -O2 -c $$d/harness64.c -o $$d/harness64.o || { echo "FAIL gcc harness64"; exit 1; }; \
+	  lg=`arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -print-libgcc-file-name`; \
 	  arm-none-eabi-ld -T $$d/link.ld $$d/start.o $$d/harness64.o $$d/lib64.o $$lg -o $$d/t2p.elf || { echo "FAIL ld thumb2 pair objects"; exit 1; }; \
 	  timeout 30 qemu-system-arm -M mps2-an500 -semihosting -nographic -kernel $$d/t2p.elf </dev/null; a=$$?; \
 	  [ $$a -eq 45 ] || { echo "FAIL thumb2 64-bit pairs (got $$a, want 45 = every differential check vs gcc; 100+n names the first miss -- see test/thumb2/harness64.c)"; exit 1; }; \
-	  echo "test_thumb2: mooncc -t thumb2 -c -> ELF32/EM_ARM (la + the 64-bit pair lanes: +,-,*,/,%,shifts,relations,clzll,pair args/returns -- 45 differential checks vs gcc: pairs + indexed arrays), ld binds, runs on qemu Cortex-M7"
+	  cp test/thumb2/libd.c test/thumb2/harnessd.c $$d/; \
+	  $(ho)/mooncc -t thumb2 -c $$d/libd.c $$d/libd.o || { echo "FAIL mooncc -t thumb2 -c libd"; exit 1; }; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -ffreestanding -O2 -c $$d/harnessd.c -o $$d/harnessd.o || { echo "FAIL gcc harnessd"; exit 1; }; \
+	  arm-none-eabi-ld -T $$d/link.ld $$d/start.o $$d/harnessd.o $$d/libd.o $$lg -o $$d/t2d.elf || { echo "FAIL ld thumb2 double objects"; exit 1; }; \
+	  timeout 30 qemu-system-arm -M mps2-an500 -semihosting -nographic -kernel $$d/t2d.elf </dev/null; a=$$?; \
+	  [ $$a -eq 45 ] || { echo "FAIL thumb2 VFP doubles (got $$a, want 45 = every differential check vs gcc -mfloat-abi=hard; 100+n names the first miss -- see test/thumb2/harnessd.c)"; exit 1; }; \
+	  cp test/thumb2/harnessam.c $$d/; \
+	  $(ho)/mooncc -t thumb2 -Icrew/moon/lib/math -Icrew/moon/include -c crew/moon/lib/math/am.c $$d/am.o || { echo "FAIL mooncc -t thumb2 -c am.c"; exit 1; }; \
+	  arm-none-eabi-gcc -mcpu=cortex-m7 -mthumb -mfloat-abi=hard -mfpu=fpv5-d16 -ffreestanding -O2 -c $$d/harnessam.c -o $$d/harnessam.o || { echo "FAIL gcc harnessam"; exit 1; }; \
+	  arm-none-eabi-ld -T $$d/link.ld $$d/start.o $$d/harnessam.o $$d/am.o $$lg -o $$d/t2am.elf || { echo "FAIL ld thumb2 am objects"; exit 1; }; \
+	  timeout 60 qemu-system-arm -M mps2-an500 -semihosting -nographic -kernel $$d/t2am.elf </dev/null; a=$$?; \
+	  [ $$a -eq 9 ] || { echo "FAIL thumb2 am.c (got $$a, want 9 = the seven transcendentals BIT-IDENTICAL to the host am floor, incl. the Payne-Hanek big-argument reduction)"; exit 1; }; \
+	  echo "test_thumb2: mooncc -t thumb2 -c -> ELF32/EM_ARM (la + 64-bit pairs + VFP doubles + am.c bit-exact: 45+45+9 differential checks), ld binds, runs on qemu Cortex-M7"
 # moon-tar -- the userland cousin of test_raw: build GNU tar 1.13 (a real third-
 # party GNU package) with mooncc + nolibc + the holo linker, no gcc/glibc/ld, and
 # prove the binary RUNS -- cf/xf + czf/xzf roundtrips byte-identical + system-tar

@@ -267,7 +267,7 @@
                  (stru? ty) (caup (peep (g 'stag) <>ty 0))
                  (|| (ty = 'char) (ty = 'uchar)) 1 (|| (ty = 'short) (ty = 'ushort)) 2
                  (|| (ty = 'int) (|| (ty = 'uint) (ty = 'float))) 4
-                 (llt? ty) 8                                  ; the t32 pair (parse only canons it there)
+                 (|| (llt? ty) (ty = 'double)) 8              ; 8-byte on EVERY target (t32's word is 4)
                  (wsize g))
    ; a member's (offset ty) off a struct type, | 'bad
    (fmem g ty name)
@@ -361,12 +361,19 @@
    ; the narrow scratch: x64 f2 (xmm2, caller-saved, never live here); arm64
    ; f16 -- v2 IS the third fp ARGUMENT (a param spill narrowing through it
    ; clobbered the still-unspilled param c), and v8..v15 carry a callee-saved
-   ; low half; v16+ are the pure temps.
-   (fsc g) (? (a64? g) 'f16 'f2)
+   ; low half; v16+ are the pure temps. t32 (fpv5-d16) has no register past
+   ; d15, so d15/f15 is RESERVED as the scratch (the backend's converters
+   ; already own its S30 half) -- moon never allocates it.
+   (fsc g) (? (a64? g) 'f16 (t32? g) 'f15 'f2)
    (fstf g ty base off val)                         ; store val (a double in an xmm) to [base+off] as ty (narrow if float)
     (? (ty = 'float) (: f9 (fsc g) `(`('cvtsd2ss f9 val) `('stss base off f9)))   ; scratch narrows (val untouched)
        `(`('stsd base off val)))
-   (asflo g r) (? (flo? (vty r)) (vfs r) ((tor0 g r) + `(`('cvtsi2sd 'f0 'r0))))   ; result -> f0 as a double
+   ; result -> f0 as a double. t32: an unsigned word rides the U-converter (no 64-bit widen
+   ; dodge on a 32-bit target); a pair source is the deferred cvtllsd (backend scares LOUD).
+   (asflo g r) (? (flo? (vty r)) (vfs r)
+                  (&& (t32? g) (llt? (vty r))) ((tor0 g r) + (cvtlld g (usg? (vty r))))
+                  (&& (t32? g) (usg? (vty r))) ((tor0 g r) + `(`('cvtui2sd 'f0 'r0)))
+                  ((tor0 g r) + `(`('cvtsi2sd 'f0 'r0))))
    (asint g r) (? (flo? (vty r)) ((vfs r) + `(`('cvttsd2si 'r0 'f0))) (tor0 g r))  ; result -> r0 as an int
    ; -- the environments: locals shadow globals --
    (vent g env name)                                ; -> ('regv rN ty) | ('loc off ty) | ('glo lbl ty) | 'bad
@@ -460,6 +467,11 @@
               (? (! (two? ps)) `(benv acc)
                  (: r (cgexpr g env <as)
                     (? (bad? r) 'bad
+                       (pair? g (caup (cap ps)))   ; a pair param: an 8-byte slot, both words
+                        (: off (ntmp g 'llong)
+                           (cbind >ps >as
+                                  (link `((cap (cap ps)) off (caup (cap ps))) benv)
+                                  (acc + (asll g r) + (pst 'r4 off))))
                        (: off (ntmp g 'long)
                           (cbind >ps >as
                                  (link `((cap (cap ps)) off (caup (cap ps))) benv)
@@ -542,13 +554,17 @@
             (: _ (vmflush g)
                a (cgexpr g env lhs)
                (? (bad? a) 'bad
-                  (: af (cat (asflo g a) (cat `(`('movqrx 'r0 'f0)) (spush 'r0)))
+                  (: af (? (t32? g)                      ; the gp shuttle moves the PAIR on t32
+                           (cat (asflo g a) (cat `(`('movqrx 'r0 'f0)) spush2))
+                           (cat (asflo g a) (cat `(`('movqrx 'r0 'f0)) (spush 'r0))))
                      b (cgexpr g env rhs)
                      (? (bad? b) 'bad
-                        (: mid (cat af (cat (asflo g b) (cat (spop 'r1) `(`('movqxr 'f1 'r1)))))
+                        (: mid (? (t32? g)
+                                  (cat af (cat (asflo g b) ((spop2 'r2 'r3) + `(`('movqxr 'f1 'r2)))))
+                                  (cat af (cat (asflo g b) (cat (spop 'r1) `(`('movqxr 'f1 'r1))))))
                            swp (member? op '(lt le))
                            cf `(`('ucomisd (? swp 'f0 'f1) (? swp 'f1 'f0)))
-                           ecc (? (a64? g)
+                           ecc (? (arm? g)               ; VCMP/FCMP flags: gt/ge unordered-false native
                                   (: t9 (? (member? op '(lt gt)) 'gt (member? op '(le ge)) 'ge op)
                                      (? (cc = 'ne) t9 (negrel t9)))
                                   (member? op '(lt gt)) (? (cc = 'ne) 'above 'be)
@@ -629,9 +645,11 @@
                     ; a bare double condition is d != 0.0, NaN-honest -- the
                     ; parity dance rides the branch pair (ctest's set/or
                     ; settle dies); arm64's fcmp ne/eq are honest whole
-                    (: fs (cat (vfs c) `(`('li 'r1 0) `('movqxr 'f1 'r1) `('ucomisd 'f0 'f1)))
+                    (: fs (cat (vfs c) (? (t32? g)           ; the zero pattern zeroes the r1:r2 pair
+                                          `(`('li 'r1 0) `('li 'r2 0) `('movqxr 'f1 'r1) `('ucomisd 'f0 'f1))
+                                          `(`('li 'r1 0) `('movqxr 'f1 'r1) `('ucomisd 'f0 'f1))))
                        _ (rfree g (vreg c))
-                       (? (a64? g) (fs + `(`('br cc lbl)))
+                       (? (arm? g) (fs + `(`('br cc lbl)))   ; VCMP/FCMP ne/eq are NaN-honest whole
                           (cc = 'ne) (fs + `(`('br 'p lbl) `('br 'ne lbl)))
                           (: sk (nlab g ".u")
                              _ (vmflush g)
@@ -733,6 +751,46 @@
        (`(`('cmp 'r2 32) `('br 'ae lb) `('cmp 'r2 0) `('br 'eq ld))
         + sm + `(`('jmp ld) `('label lb) `('sub 'r2 'r2 32))
         + one + `(`('label ld))))
+   ; the 64-bit float bridges (VFP on AArch32 converts only through 32 bits). llong -> double:
+   ; hi rides the U-converter and scales by 2^32 (exact -- hi*2^32 is representable), lo adds
+   ; exactly, ONE rounding total; the signed face negates the pair in, the double out (INT64_MIN
+   ; survives: its u64 face IS 2^63). value r0:r1 -> f0.
+   (cvtlld g sgn)
+    (: lu (nlab g ".lu") ld (nlab g ".ld")
+       _ (vmflush g)
+       u2d `(`('cvtui2sd 'f0 'r1)
+              `('li 'r2 0) `('li 'r3 1106247680) `('movqxr 'f1 'r2)   ; 2^32 (0x41F00000:0)
+              `('mulsd 'f0 'f1)
+              `('cvtui2sd 'f1 'r0) `('addsd 'f0 'f1))
+       (? sgn u2d                                    ; unsigned: straight through
+          (`(`('cmp 'r1 0) `('br 'ge lu)
+              `('li 'r2 0) `('li 'r3 0) `('subs 'r0 'r2 'r0) `('sbc 'r1 'r3 'r1))
+           + u2d
+           + `(`('li 'r2 0) `('li 'r3 0) `('movqxr 'f1 'r2)           ; 0.0 - d
+              `('subsd 'f1 'f0) `('movsd 'f0 'f1) `('jmp ld) `('label lu))
+           + u2d + `(`('label ld)))))
+   ; double -> llong, toward zero: peel sign/exponent off the PATTERN, rebuild the 53-bit
+   ; integer mantissa as a pair, shift it into place (the variable pair shifters), refix the
+   ; sign. |d| < 1 answers 0; out-of-range is UB and shifts to garbage like the hardware would.
+   (cvtdll g)
+    (: l1 (nlab g ".d1") lr (nlab g ".dr") ls (nlab g ".ds") ld (nlab g ".dd")
+       _ (vmflush g)
+       (`(`('movqrx 'r0 'f0)
+           `('mov 'r2 'r1) `('shr 'r2 31) `('sub 'sp 'sp 16) `('st 'sp 0 'r2)   ; park the sign
+           `('mov 'r2 'r1) `('shr 'r2 20) `('li 'r3 2047) `('and 'r2 'r2 'r3)   ; e
+           `('li 'r3 1048575) `('and 'r1 'r1 'r3)
+           `('li 'r3 1048576) `('or 'r1 'r1 'r3)                                ; mantissa | implicit bit
+           `('li 'r3 1023) `('cmp 'r2 'r3) `('br 'ge l1)
+           `('li 'r0 0) `('li 'r1 0) `('add 'sp 'sp 16) `('jmp ld)              ; |d| < 1 -> 0
+           `('label l1)
+           `('sub 'r2 'r2 1075) `('cmp 'r2 0) `('br 'lt lr))
+        + (pshiftv g 'shl)
+        + `(`('jmp ls) `('label lr) `('li 'r3 0) `('sub 'r2 'r3 'r2))
+        + (pshiftv g 'shr)
+        + `(`('label ls) `('ld 'r2 'sp 0) `('add 'sp 'sp 16)
+           `('cmp 'r2 0) `('br 'eq ld)
+           `('li 'r2 0) `('li 'r3 0) `('subs 'r0 'r2 'r0) `('sbc 'r1 'r3 'r1)
+           `('label ld))))
 
    ; a fresh frame temp of type ty -> its (negative) offset. bumps the frame's
    ; high-water like a local; used to give a compound literal a home.
@@ -812,11 +870,22 @@
               (? (bad? ty) 'bad (mkv 'ulong 'r0 `(`('li 'r0 (tsz g ty))))))
           (k = 'num)
            (? (&& (t32? g) (! (&& (-2147483648 <= <>e) (<>e <= 4294967295))))
-              ; a literal past the 32-bit word: the pair (C99 decimal picks long long)
-              (mkv (? (<>e < 0) 'llong 'ullong) 'r0
-                   `(`('li 'r0 (& <>e 4294967295)) `('li 'r1 (& (>> <>e 32) 4294967295))))
+              ; a literal past the 32-bit word: the pair (C99 decimal picks long long).
+              ; split by // and % -- a big literal has no bitwise ops (the imnum lesson)
+              (: u (? (<>e < 0) (<>e + 18446744073709551616) <>e)
+                 (mkv (? (<>e < 0) 'llong 'ullong) 'r0
+                      `(`('li 'r0 (% u 4294967296)) `('li 'r1 (// u 4294967296)))))
+              (&& (t32? g) (2147483647 < <>e))
+              ; bit 31 set on the 32-bit word: UNSIGNED (0xffffffff reads uint), so a
+              ; pair-widen zero-extends -- a signed 'long here sign-smeared the cast
+              (: W (? wnt wnt 'r0) (mkv 'ulong W `(`('li W <>e))))
               (: W (? wnt wnt 'r0) (mkv 'long W `(`('li W <>e)))))
-          (k = 'flo) (mkv 'double 'r0 `(`('li 'r0 (fbits <>e)) `('movqxr 'f0 'r0)))
+          (k = 'flo)
+           (? (t32? g)                                  ; the 64-bit pattern splits over the r0:r1 pair
+              (: v (fbits <>e)
+                 (mkv 'double 'r0 `(`('li 'r0 (& v 4294967295)) `('li 'r1 (& (>> v 32) 4294967295))
+                                     `('movqxr 'f0 'r0))))
+              (mkv 'double 'r0 `(`('li 'r0 (fbits <>e)) `('movqxr 'f0 'r0))))
           (k = 'str)
            (: lbl (nlab g ".S")
               _ (pin g 'strs (link `(lbl <>e) (g 'strs)))
@@ -1051,7 +1120,10 @@
               (? (bad? r) 'bad
                  (&& (flo? tgt) (! (flo? (vty r)))) (mkv 'double 'r0 (asflo g r))  ; int -> double
                  (&& (! (flo? tgt)) (flo? (vty r)))                              ; double -> int, then narrow
-                  (? (pair? g tgt) 'bad                                          ; double -> llong: the VFP rung
+                  (? (pair? g tgt)                                               ; double -> llong: the pattern peel
+                      (mkv tgt 'r0 ((vfs r) + (cvtdll g)))
+                     (&& (t32? g) (usg? tgt))                                    ; t32 unsigned: the U-converter
+                      (mkv tgt 'r0 ((vfs r) + `(`('cvttsd2ui 'r0 'f0)) + (cvt tgt 'r0)))
                      (mkv tgt 'r0 ((asint g r) + (cvt tgt 'r0))))
                  (flo? tgt) (mkv 'double 'r0 (vfs r))                            ; double -> double
                  (&& (pair? g tgt) (! (llt? (vty r))))                           ; widen to the pair (source signedness)
@@ -1062,14 +1134,14 @@
            (: r (cgexpr g env <>>e)
               (? (bad? r) 'bad
                  (flo? (vty r))                        ; unary on a double
-                  (? (<>e = 'neg)                 ; -d = 0.0 - d
-                      (mkv 'double 'r0 (cat (vfs r) `(`('li 'r0 0) `('movqxr 'f1 'r0)
-                                                       `('subsd 'f1 'f0) `('movsd 'f0 'f1))))
-                     (<>e = 'not)                 ; !d = (d == 0.0), NaN-honest: !NaN is false (eq AND ordered)
-                      (mkv 'long 'r0 (cat (vfs r) `(`('li 'r0 0) `('movqxr 'f1 'r0)
-                                                     `('ucomisd 'f0 'f1) `('set 'eq 'r0)
-                                                     `('set 'np 'r1) `('and 'r0 'r0 'r1))))
-                     'bad)                             ; ~ on a double is invalid
+                  (: z1 (? (t32? g) `(`('li 'r0 0) `('li 'r1 0) `('movqxr 'f1 'r0))   ; 0.0 (the t32 pair)
+                           `(`('li 'r0 0) `('movqxr 'f1 'r0)))
+                     (? (<>e = 'neg)                 ; -d = 0.0 - d
+                         (mkv 'double 'r0 (cat (vfs r) (z1 + `(`('subsd 'f1 'f0) `('movsd 'f0 'f1)))))
+                        (<>e = 'not)                 ; !d = (d == 0.0), NaN-honest: !NaN is false (eq AND ordered)
+                         (mkv 'long 'r0 (cat (vfs r) (z1 + `(`('ucomisd 'f0 'f1) `('set 'eq 'r0)
+                                                             `('set 'np 'r1) `('and 'r0 'r0 'r1)))))
+                        'bad))                           ; ~ on a double is invalid
                  (pair? g (vty r))                     ; unary on the pair
                   (? (<>e = 'neg)
                       (mkv (vty r) 'r0 ((tor0 g r) + `(`('li 'r2 0) `('li 'r3 0)
@@ -1211,11 +1283,14 @@
                  ; bits<<1 == inf<<1; the overflow trio = the op + the overflow
                  ; flag (seto / set vs, mul via mulo's smulh check), result
                  ; stored through arg3, the flag the value.
-                 (bi = "__builtin_trap") (? (a64? g) (mkv 'long 'r0 `(`('trap)))
+                 (bi = "__builtin_trap") (? (arm? g) (mkv 'long 'r0 `(`('trap)))
                                             (mkv 'long 'r0 `(`('raw `(15 11)))))
-                 (bi = "__builtin_inf")  (mkv 'double 'r0 `(`('li 'r0 9218868437227405312) `('movqxr 'f0 'r0)))
+                 (bi = "__builtin_inf")
+                  (? (t32? g) (mkv 'double 'r0 `(`('li 'r0 0) `('li 'r1 2146435072) `('movqxr 'f0 'r0)))
+                     (mkv 'double 'r0 `(`('li 'r0 9218868437227405312) `('movqxr 'f0 'r0))))
                  (|| (bi = "__builtin_nanf") (bi = "__builtin_nan"))   ; both take a (ignored) tag string; one quiet-NaN pattern
-                  (mkv 'double 'r0 `(`('li 'r0 9221120237041090560) `('movqxr 'f0 'r0)))
+                  (? (t32? g) (mkv 'double 'r0 `(`('li 'r0 0) `('li 'r1 2146959360) `('movqxr 'f0 'r0)))
+                     (mkv 'double 'r0 `(`('li 'r0 9221120237041090560) `('movqxr 'f0 'r0))))
                  (bi = "__builtin_expect") (cgexpr g env <args)
                  (bi = "__builtin___clear_cache")
                   ; x86 keeps I-cache coherent with D-cache: nothing to do. arm64
@@ -1288,7 +1363,11 @@
                   (: e1 (cgexpr g env <args)
                      (? (bad? e1) 'bad
                         (mkv 'long 'r0 (cat (asflo g e1)
-                                  (? (a64? g)
+                                  (? (t32? g)                 ; |hi| == 0x7FF00000 and lo == 0, over the pair
+                                     `(`('movqrx 'r0 'f0) `('li 'r2 2147483647) `('and 'r1 'r1 'r2)
+                                        `('li 'r2 2146435072) `('subs 'r12 'r1 'r2)
+                                        `('ors 'r12 'r12 'r0) `('set 'eq 'r0))
+                                     (a64? g)
                                      `(`('movqrx 'r0 'f0) `('shl 'r0 1) `('li 'r1 18437736874454810624)
                                         `('cmp 'r0 'r1) `('set 'eq 'r0))
                                      (cat `(`('movqrx 'r0 'f0) `('raw `(72 209 224)) `('li 'r1 18437736874454810624))   ; shl rax,1; rcx = inf<<1
@@ -1305,10 +1384,13 @@
                             (bi = "__builtin_sub_overflow") `(72 41 200)     ; sub rax,rcx
                             `(72 15 175 193))                                ; imul rax,rcx
                      ; the op leaves r0 the result, r1 the overflow bit
-                     ovf (? (! (a64? g))
+                     ovf (? (! (arm? g))
                             `(`('raw (opb + `(15 144 193 72 15 182 201))))          ; op; seto cl; movzx rcx,cl
                             (! (bi = "__builtin_mul_overflow"))
                              `(`((? (bi = "__builtin_add_overflow") 'adds 'subs) 'r0 'r0 'r1) `('set 'vs 'r1))
+                            (t32? g)                          ; SMULL, then hi vs lo>>31 (no 64-bit regs)
+                             `(`('smull 'r0 'r2 'r0 'r1) `('mov 'r12 'r0) `('sar 'r12 31)
+                                `('subs 'r1 'r2 'r12) `('set 'ne 'r1))
                             (: lo (nlab g ".vo") l2 (nlab g ".vd")
                                `(`('mulo 'r0 'r0 'r1 'r2 lo) `('li 'r1 0) `('jmp l2)
                                   `('label lo) `('li 'r1 1) `('label l2))))
@@ -1319,7 +1401,7 @@
                      ; boot, the raw-arm64 stack gone). the address is consumed
                      ; by the splice's own store, so it reads lean here; x64 IR
                      ; stays untouched (byte-identity).
-                     e3f (? (a64? g) (relean (tor0 g e3)) (tor0 g e3))
+                     e3f (? (arm? g) (relean (tor0 g e3)) (tor0 g e3))
                      _ (vmflush g)                    ; the a64 mulo lane's labels join
                      (? (|| (bad? e1) (|| (bad? e2) (bad? e3))) 'bad
                         (mkv 'long 'r0 (cat (asint g e1) (cat (spush 'r0)
@@ -1448,7 +1530,8 @@
                  (: pty (nthty pts i)
                     aty (? pty pty (vty a))                ; classify by the param type if known, else the arg's
                     wd (flo? aty)
-                    (? (sse2? g aty)                       ; a two-double struct arg: push its pair (re on top), an xmm PAIR target
+                    (? (&& (t32? g) (stru? aty)) 'bad      ; t32 by-value struct args: refuse LOUD (AAPCS32 composites deferred)
+                       (sse2? g aty)                       ; a two-double struct arg: push its pair (re on top), an xmm PAIR target
                         (? (6 < xmmc) 'bad
                            (kls >as (i + 1) gpc (xmmc + 2) ovc
                                 (link `(`('x2 xmmc)
@@ -1501,7 +1584,7 @@
                           ; overflow arg keeps its 8-byte push -- the callee reads the
                           ; overflow block packed, and its target is love-internal (never
                           ; a libc movaps-on-rbp path), so a stray eval-time skew is moot.
-                          rpush (aval + (spush 'r0))
+                          rpush (aval + (? (&& (t32? g) wd) spush2 (spush 'r0)))   ; a t32 double is the r0:r1 pair
                           ; an overflow arg: x64 pushes 8 bytes (deepest first); arm64
                           ; stores into the pre-allocated packed block at its own slot
                           ; (sp sits at the block base whenever an arg evaluates)
@@ -1540,6 +1623,8 @@
                                                            `(`('ld (nthr (argr g) <>kc) 'sp 0)
                                                               `('ld (nthr (argr g) (<>kc + 1)) 'sp 4)
                                                               `('add 'sp 'sp 16))
+                                                          (&& (t32? g) (<kc = 'x))   ; a t32 double pops STRAIGHT into its d-reg
+                                                           `(`('ldsd (xmmreg <>kc) 'sp 0) `('add 'sp 'sp 16))
                                                           (<kc = 'x2)   ; the struct pair: re then im (a natural 16-byte cell)
                                                            (? (a64? g)
                                                               `(`('ld px 'sp 0) `('movqxr (xmmreg <>kc) px)
@@ -1752,8 +1837,11 @@
                             (|| (flo? ta) (flo? tb))
                              ; the double lane: either operand double -> both to double (f1=left,
                              ; f0=right through the gp stack), then the scalar-double op or ucomisd.
-                             (: mid (cat (asflo g av) (cat (`(`('movqrx 'r0 'f0)) + (spush 'r0))
-                                         ((asflo g b) + (spop 'r1) + `(`('movqxr 'f1 'r1)))))
+                             (: mid (? (t32? g)               ; the gp stack moves PAIRS on t32
+                                       (cat (asflo g av) (cat (`(`('movqrx 'r0 'f0)) + spush2)
+                                            ((asflo g b) + (spop2 'r2 'r3) + `(`('movqxr 'f1 'r2)))))
+                                       (cat (asflo g av) (cat (`(`('movqrx 'r0 'f0)) + (spush 'r0))
+                                            ((asflo g b) + (spop 'r1) + `(`('movqxr 'f1 'r1))))))
                                 (? (op = '+) (mkv 'double 'r0 (mid + `(`('addsd 'f0 'f1))))
                                    (op = '*) (mkv 'double 'r0 (mid + `(`('mulsd 'f0 'f1))))
                                    (op = '-) (mkv 'double 'r0 (mid + `(`('subsd 'f1 'f0) `('movsd 'f0 'f1))))
@@ -1767,11 +1855,11 @@
                                    ; p/np alias vs/vc in the backend, so eq/ne ride whole.
                                    (member? op '(lt le))
                                     (mkv 'long 'r0 (cat mid `(`('ucomisd 'f0 'f1)
-                                                               `('set (? (a64? g) (? (op = 'lt) 'gt 'ge)
+                                                               `('set (? (arm? g) (? (op = 'lt) 'gt 'ge)
                                                                          (? (op = 'lt) 'above 'ae)) 'r0))))
                                    (member? op '(gt ge))
                                     (mkv 'long 'r0 (cat mid `(`('ucomisd 'f1 'f0)
-                                                               `('set (? (a64? g) (? (op = 'gt) 'gt 'ge)
+                                                               `('set (? (arm? g) (? (op = 'gt) 'gt 'ge)
                                                                          (? (op = 'gt) 'above 'ae)) 'r0))))
                                    (op = 'eq)
                                     (mkv 'long 'r0 (cat mid `(`('ucomisd 'f1 'f0) `('set 'eq 'r0)
@@ -2869,9 +2957,15 @@
    ; a fixup is ONE list item but eight bytes, so lengths go through imbytelen. --
    (fixit? x) (&& (two? x) (<x = 'fix))
    (imbytelen l) (foldl (\ a x (a + (? (fixit? x) <>x 1))) 0 l)
-   (imnum g ty val) (: n (tsz g ty) (go i acc) (? (n <= i) (rev acc)
-                                                   (go (i + 1) (link (& (>> val (* 8 i)) 255) acc)))
-                       (go 0 ()))
+   ; bytes via // and % (not & and >>): a constant past the charm range is a BIG, and the
+   ; bitwise ops are undefined there (a 2/pi table imaged as ff.. before this); division is
+   ; exact at every rung. a negative wraps into the type's unsigned range first.
+   (imnum g ty val) (: n (tsz g ty)
+                       (pw k acc) (? (k < 1) acc (pw (k - 1) (acc * 256)))
+                       u0 (? (val < 0) (val + (pw n 1)) val)
+                       (go i v acc) (? (n <= i) (rev acc)
+                                       (go (i + 1) (v // 256) (link (% v 256) acc)))
+                       (go 0 u0 ()))
    (iminsert x l) (? (! (two? l)) `(x)                 ; insert (off items) keeping offsets ascending
                      (<x < (cap (cap l))) (link x l)
                      (link <l (iminsert x >l)))
@@ -3539,6 +3633,7 @@
                          (cap (peep (g 'sigs) (g 'fn) `('long ()))))    ; else the current function's
                    (? (bad? r) 'bad
                       (flo? rt) ((asflo g r) + epj)                    ; a double return leaves f0 (xmm0; never inline -- gated)
+                      (&& (t32? g) (|| (stru? rt) (stru? (vty r)))) 'bad   ; t32 by-value struct returns: refuse LOUD
                       (sse2? g rt)                                       ; a two-double struct returns as the xmm PAIR
                        (cat (tor0 g r) (cat (fldf 'double (xmmreg 0) 'r0 0)
                                        ((fldf 'double (xmmreg 1) 'r0 8) + epj)))
@@ -3767,6 +3862,11 @@
         (? (! (two? ps)) `(benv acc)
            (: r (cgexpr g env <as)
               (? (bad? r) 'bad
+                 (pair? g (caup (cap ps)))           ; a pair param: an 8-byte slot, both words land
+                  (: off (ntmp g 'llong)
+                     (bind >ps >as
+                           (link `((cap (cap ps)) off (caup (cap ps))) benv)
+                           (acc + (asll g r) + (pst 'r4 off))))
                  (: off (ntmp g 'long)
                     (bind >ps >as
                           (link `((cap (cap ps)) off (caup (cap ps))) benv)
@@ -3810,7 +3910,8 @@
        (spill ps gpi xmmi ovi env acc)
         (? (! (two? ps)) `(acc env)
            (: p <ps pty <>p
-              (? (&& (stru? pty) (two? (aeb2 g pty)))   ; a 9..16B struct param: two eightbytes into a 16-byte slot, each from a gp or an xmm reg
+              (? (&& (t32? g) (stru? pty)) 'bad         ; t32 by-value struct params: refuse LOUD (AAPCS32 composites deferred)
+                 (&& (stru? pty) (two? (aeb2 g pty)))   ; a 9..16B struct param: two eightbytes into a 16-byte slot, each from a gp or an xmm reg
                   (: cls (aeb2 g pty) c0 <cls c1 <>cls
                      ; the register FILE per eightbyte -- 'g gp / 'x xmm. SysV (x64) picks
                      ; by the eightbyte's class; AAPCS64 (arm64) sends a non-HFA composite
@@ -4176,7 +4277,11 @@
                              (mk >l >hp t)))
            (? (two? cs) `((mk cs hpool (tablet 0)) (dropn hpool (tally cs))) ()))
        n0 (peep g 'n 0) strs0 (g 'strs)             ; snapshot the accumulators for a possible regen
-       _ (pin g 'pool0 opool) _ (pin g 'pool opool)
+       ; the operand pool is EMPTY on t32: AAPCS32 keeps r4-r11 callee-saved and the thumb2
+       ; frame saves only lr+fp, while r0-r3/r12 are args and the scratch -- there is no free
+       ; caller-saved register to pool (a pooled r6 clobbered gcc callers SILENTLY).
+       tpool (? (t32? g) () opool)
+       _ (pin g 'pool0 tpool) _ (pin g 'pool tpool)
        _ (pin g 'vuniv ()) _ (vmflush g)            ; vmap off for the ir1 build (no universe yet)
        _ (pin g 'hasasm ())                         ; fresh per fn: an asm statement pins it (homing off)
        _ (pin g 'argseal 0)                         ; fresh per fn: the vmap's staging seal depth
@@ -4188,7 +4293,7 @@
        _ (pin g 'ride ride)                          ; spillr reads it: a rideable param binds to its arrival
        hpool (: rh (map (\ k (homereg k)) ride)      ; the freed homes rejoin the pool for locals
                 uh (filter (\ q (! (member? q rh))) (uhomes params 0 ()))
-                (filter (\ q (! (member? q uh))) opool))
+                (filter (\ q (! (member? q uh))) tpool))
        hm (&& (! vararg) (&& (! (peep g 'hasasm ())) (&& (! (anyop? ir1 'sys)) (homes? params 0))))
        ; the alive pass runs once per homing-eligible fn: lpick reads cross/
        ; univ (a zero-crossing local homes through calls), the regens pin its

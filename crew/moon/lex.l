@@ -46,9 +46,16 @@
        ; digit, so the whole-span scan is safe for decimal and hex integers alike)
        (hasu? i j) (: (go k) (? (j <= k) () (|| ((src k) = 117) ((src k) = 85)) 1 (go (k + 1))) (go i))
        (hasl? i j) (: (go k) (? (j <= k) () (|| ((src k) = 108) ((src k) = 76)) 1 (go (k + 1))) (go i))
+       ; a DOUBLED l/L (the ll/LL suffix): its own kinds -- on the 32-bit thumb targets
+       ; `long long` is a distinct 8-byte type and 1ull<<40 must ride it (parse types them).
+       (hasll? i j) (: (l? c) (|| (c = 108) (c = 76))
+                       (go k) (? ((j - 1) <= k) () (&& (l? (src k)) (l? (src (k + 1)))) 1 (go (k + 1)))
+                       (go i))
        ; the token kind of an integer literal: u alone reads unsigned INT (-1u
-       ; wraps at 32 bits), u with l/L -- or a value past 32 bits -- unsigned LONG
-       (ukind i j v) (? (! (hasu? i j)) 'num
+       ; wraps at 32 bits), u with l/L -- or a value past 32 bits -- unsigned LONG;
+       ; the ll/LL pairs get their own kinds (ullnum/llnum).
+       (ukind i j v) (? (! (hasu? i j)) (? (hasll? i j) 'llnum 'num)
+                        (hasll? i j) 'ullnum
                         (|| (hasl? i j) (4294967296 <= v)) 'ulnum
                         'unum)
        (escv d) (? (d = 110) 10 (d = 116) 9 (d = 114) 13 (d = 97) 7 (d = 98) 8            ; \n \t \r \a \b

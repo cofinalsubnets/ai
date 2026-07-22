@@ -214,7 +214,7 @@
                   (bitf? ty) (tsz ps <>ty)          ; the unit's size (a bitfield rides its declared type)
                   (|| (ty = 'char) (ty = 'uchar)) 1 (|| (ty = 'short) (ty = 'ushort)) 2
                   (|| (ty = 'int) (|| (ty = 'uint) (ty = 'float))) 4
-                  (|| (ty = 'llong) (ty = 'ullong)) 8         ; the t32 register pair (only canon'd there)
+                  (|| (ty = 'llong) (|| (ty = 'ullong) (ty = 'double))) 8   ; 8-byte on EVERY target
                   (psword ps))
    (talign ps ty) (? (ptr? ty) (psword ps)
                      (arr? ty) (talign ps <>ty)
@@ -479,8 +479,14 @@
           (? ((tkk t) = 'num) `(`('num (tkv t)) >ts)
              ((tkk t) = 'unum)                        ; a u-suffixed literal wears its unsignedness (neg/div/shift go unsigned):
               `(`('cast 'uint `('num (tkv t))) >ts)     ; 1u an unsigned INT (-1u wraps at 32 bits),
-             ((tkk t) = 'ulnum)                                 ; 1UL/1ULL an unsigned LONG
-              `(`('cast 'ulong `('num (tkv t))) >ts)
+             ((tkk t) = 'ulnum)                                 ; 1UL an unsigned LONG -- and on t32, a
+              (: v (tkv t)                                      ; value past the 32-bit word promotes to
+                 uty (? (&& (pst32? ps) (|| (v < 0) (4294967295 < v))) 'ullong 'ulong)   ; ullong (C99 6.4.4.1)
+                 `(`('cast uty `('num v)) >ts))
+             ((tkk t) = 'ullnum)                                ; 1ULL: the suffix FORCES 64 bits on t32
+              `(`('cast (? (pst32? ps) 'ullong 'ulong) `('num (tkv t))) >ts)
+             ((tkk t) = 'llnum)                                 ; 1LL: llong on t32, plain elsewhere
+              (? (pst32? ps) `(`('cast 'llong `('num (tkv t))) >ts) `(`('num (tkv t)) >ts))
              ((tkk t) = 'flo) `(`('flo (tkv t)) >ts)
              ((tkk t) = 'str) `(`('str (tkv t)) >ts)
              ; the varargs builtins (my stdarg.h maps va_* onto these): va_arg's

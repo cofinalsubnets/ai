@@ -230,13 +230,29 @@ t32 ≥8-byte struct-copy stride. 43 differential checks vs gcc ride `make test_
 write), with LDR/LDRB register-offset fusing ldx/ldxb at disp 0; indexed-array differential
 checks ride the test_thumb2 gate. thumb1's leax-call range gap remains (below).
 
+**VFP doubles are real on thumb2** (rung 4): the SSE-named IR ops lower to fpv5-d16
+scalar-double VFP (f0..f15 -> d0..d15, S[2n] the single views, d15/f15 the reserved
+converter scratch); movqxr/movqrx move the gp PAIR in one VMOV; VCMP+VMRS gives the
+a64-flavored NaN-honest flags, so the flo compare lanes ride the `arm?` cc branch. The
+64-bit float bridges are gen sequences: llong->double exact (hi rides the U-converter and
+scales by 2^32, one rounding; the signed face negates through, INT64_MIN survives) and
+double->llong via mantissa peel + the pair shifters. u32<->double ride the U-converters.
+`am.c` — the whole math floor — compiles and runs BIT-IDENTICAL to the host on the M7
+(the seven transcendentals + Payne-Hanek, the test_thumb2 am leg). The same hunt fixed
+four deeper t32 holes: sizeof(double) said 4 (tsz defaulted to the word), the operand
+pool handed out callee-saved r5-r10 the frame never saved (pool now empty on t32),
+[2^31,2^32) literals sign-smeared under pair-widening (now 'ulong), and `imnum` imaged
+big-constant initializers as ff.. (bitwise ops are undefined on love bignums — bytes now
+come off // and %). The lexer grew 'llnum/'ullnum: the LL/ULL suffixes force the pair
+type on t32 (1ull << 40 works); UL literals past 32 bits promote per C99.
+
 What remains, all loud scares (never silent):
 
+- **by-value structs on t32** (`cgfn refuses zn` is love.c's wall): args, params, and
+  returns of aggregates refuse; AAPCS32 composites (incl. the {double,double} HFA that
+  `struct ai_zn` needs) are the next rung.
 - **signed 64-bit `/` and `%`** refuse (`cgfn refuses`) — love.c's lane is unsigned; wrap
   the unsigned expansion in an abs/refix sleeve when needed.
-- **`1234ULL`-style suffixed literals past 32 bits** type as 'ulong (the lexer folds
-  UL/ULL into one token kind) — a plain or hex literal past the word types 'llong/'ullong
-  correctly. love.c has no such literal; the lexer split is the fix.
 - **t32 varargs** — vaspill still emits the SysV shapes; a variadic t32 fn scares at the
   backend (`bad-op stsd`).
 

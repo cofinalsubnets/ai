@@ -441,6 +441,28 @@
       `("t2.ldx"     "51f82200"          '((ldx r0 r1 r2 4 0)))        ; ldr.w r0, [r1, r2, lsl #2]
       `("t2.ldxb"    "11f80250"          '((ldxb r5 r1 r2 1 0)))       ; ldrb.w r5, [r1, r2]
       `("t2.ldx.d"   "00eb0300d0f80400"  '((ldx r0 r0 r3 1 4)))        ; disp!=0: add.w r0,r0,r3 ; ldr.w r0,[r0,#4]
+      ;; the scalar-double VFP lane (moon rung 4): f0..f15 -> d0..d15, S[2n] the single views,
+      ;; movqxr/movqrx move a gp PAIR (named reg = lo, +1 = hi). llvm-mc (eabihf, +vfp4d16).
+      `("t2.addsd"   "30ee010b"          '((addsd f0 f1)))             ; vadd.f64 d0, d0, d1
+      `("t2.subsd"   "32ee432b"          '((subsd f2 f3)))             ; vsub.f64 d2, d2, d3
+      `("t2.mulsd"   "20ee010b"          '((mulsd f0 f1)))             ; vmul.f64 d0, d0, d1
+      `("t2.divsd"   "80ee010b"          '((divsd f0 f1)))             ; vdiv.f64 d0, d0, d1
+      `("t2.movsd"   "b0ee443b"          '((movsd f3 f4)))             ; vmov.f64 d3, d4
+      `("t2.ucomisd" "b4ee410bf1ee10fa"  '((ucomisd f0 f1)))           ; vcmp.f64 ; vmrs APSR_nzcv
+      `("t2.cvtsi2sd" "02ee100ab8eec22b" '((cvtsi2sd f2 r0)))          ; vmov s4, r0 ; vcvt.f64.s32 d2, s4
+      `("t2.cvtui2sd" "02ee100ab8ee422b" '((cvtui2sd f2 r0)))          ; vmov s4, r0 ; vcvt.f64.u32 d2, s4
+      `("t2.cvttsd2si" "bdeec1fb1fee100a" '((cvttsd2si r0 f1)))        ; vcvt.s32.f64 s30, d1 ; vmov r0, s30
+      `("t2.cvttsd2ui" "bceec1fb1fee100a" '((cvttsd2ui r0 f1)))        ; vcvt.u32.f64 s30, d1 ; vmov r0, s30
+      `("t2.movqxr"  "41ec150b"          '((movqxr f5 r0)))            ; vmov d5, r0, r1 (the pair in)
+      `("t2.movqrx"  "53ec152b"          '((movqrx r2 f5)))            ; vmov r2, r3, d5 (the pair out)
+      `("t2.ldsd"    "94ed021b"          '((ldsd f1 r4 8)))            ; vldr d1, [r4, #8]
+      `("t2.ldsd.n"  "14ed041b"          '((ldsd f1 r4 -16)))          ; vldr d1, [r4, #-16]
+      `("t2.stsd"    "80ed002b"          '((stsd r0 0 f2)))            ; vstr d2, [r0]
+      `("t2.ldss"    "94ed011a"          '((ldss f1 r4 4)))            ; vldr s2, [r4, #4]
+      `("t2.stss"    "04ed021a"          '((stss r4 -8 f1)))           ; vstr s2, [r4, #-8]
+      `("t2.cvtss2sd" "b7eec11a"         '((cvtss2sd f1 f1)))          ; vcvt.f64.f32 d1, s2
+      `("t2.cvtsd2ss" "b7eec11b"         '((cvtsd2ss f1 f1)))          ; vcvt.f32.f64 s2, d1
+      `("t2.smull"   "80fb0102"          '((smull r0 r2 r0 r1)))       ; smull r0, r2, r0, r1
       ;; the 64-bit unsigned divide/remainder expansions: dividend r2:r3 / divisor r0:r1 ->
       ;; r0:r1. 64-step restoring loop, fixed narrow branches (bhs +8 / blo +10 / bne -52),
       ;; r4-r7 saved. disassembly-verified whole (llvm-mc); the qemu gate proves the values.
